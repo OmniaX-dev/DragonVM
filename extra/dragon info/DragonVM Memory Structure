@@ -1,0 +1,79 @@
+0x0000
+    BIOS (1024 Bytes)
+0x03FF
+-------
+0x0400
+    CMOS (128 Bytes)
+        BootDisk: 0x0010
+0x047F
+-------
+0x0480
+    INTERRUPT VECTOR (512 Bytes)
+0x067F
+-------
+0x0680
+    KEYBOARD MAPPING (224 Bytes)
+0x075F
+-------
+0x0760
+    MOUSE MAPPING (32 Bytes)
+0x077F
+-------
+0x0780
+    BIOS VIDEO MEMORY (3840 Bytes)
+        0x000: Clear Color (1 Byte)
+        0x001: Palette (1 Byte)
+        0x002: UseTransparencyOn0x5 (1 Byte)
+        0x003: Signal (1 Byte)
+            0x00: Continue
+            0x01: Clear Screen
+        0x03C - 0xEFF: 3780 Bytes
+            Structure:
+                90x21 characters
+                1 Byte ascii
+                1 byte: 4 Bits background/4 bits foreground   
+0x167F
+-------
+0x1680
+    BOOTLOADER (512 Bytes)
+0x187F
+-------
+0x1880
+    DISK INTERFACE (128 Bytes)
+        Read/Write:
+            Signal: 1 Byte
+                0x00: Start Operation
+                0x01: Cancel Current Operation
+                0xFF: Ignore
+            Mode: 1 Byte
+                0x00: Read
+                0x01: Write
+            Disk: 1 Byte
+            Sector: 2 Bytes
+            Address: 2 Bytes
+            DataSize: 2 Bytes
+            DataAddress: 2 Byte
+        ReadOnly:
+            Status: 1 Byte
+                0x00: Free
+                0x01: Writing
+                0x02: Reading
+            CurrentDisk: 1 Byte
+            CurrentSector: 2 Bytes
+            CurrentAddress: 2 Bytes
+            RestDataSize: 2 Bytes
+            SourceData: 2 Bytes
+        Free: 107 Byte
+0x18FF
+-------
+0x1900
+    VIDEO CARD INTERFACE (256 Bytes)
+0x19FF
+-------
+0x1A00
+    GENERIC SERIAL INTERFACE (64 Bytes)
+0x1A3F
+-------
+0x1A40
+    RAM (58815 Bytes)
+0xFFFF

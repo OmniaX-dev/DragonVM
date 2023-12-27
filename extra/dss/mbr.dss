@@ -1,0 +1,7 @@
+.load 0x1680
+
+.code
+	jmp 0x1A40
+	hlt
+
+.fixed 512, 0x00

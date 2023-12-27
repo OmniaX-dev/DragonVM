@@ -1,0 +1,70 @@
+Software Interrupts:
+====================
+0x20: BIOS Interrupt (Uses R10 register for specific functionality)
+	0x00: Set Interrupt Handler
+	0x01: Clear Interrupt Handler
+	0x10: Disk Interface
+0x30: BIOS Video Interrupt (Uses R10 register for specific functionality)
+	0x00: Clear Screen
+
+
+Hardware Interrupts:
+====================
+0x80: Disk Interface Finished
+0x81: BiosVideo Screen Refreshed
+
+
+
+
+Default Palette BIOS Colors:
+====================
+0x0: Black
+	0, 0, 0
+	#000000
+0x1: Gray
+	157, 157, 157
+	#9D9D9D
+0x2: White
+	255, 255, 255
+	#FFFFFF
+0x3: Red
+	190, 38, 51
+	#BE2633
+0x4: Pimk
+	224, 111, 139
+	#E06F8B
+OLD -- 0x5: DarkBrown
+OLD -- 	73, 60, 43
+OLD -- 	#493C2B
+0x5: Transparent
+	--
+0x6: Brown
+	164, 100, 34
+	#A46422
+0x7: Orange
+	235, 137, 49
+	#EB8931
+0x8: Yellow
+	247, 226, 107
+	#F7E26B
+0x9: Dark Green
+	47, 80, 42
+	#2F502A
+0xA: Green
+	68, 137, 26
+	#44891A
+0xB: Slime Green
+	163, 206, 39
+	#A3CE27
+0xC: Night Blue
+	27, 38, 50
+	#1B2632
+0xD: Sea Blue
+	0, 87, 132
+	#005784
+0xE: Sky Blue
+	49, 162, 242
+	#31A2F2
+0xF: Cloud Blue
+	178, 220, 239
+	#B2DCEF

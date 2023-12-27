@@ -1,0 +1,13 @@
+#!/bin/bash
+
+green='\033[0;32m'
+clear='\033[0m'
+
+printf "\n${green}Reloading MBR Block...\n${clear}"
+cd ..
+cp ../extra/dss/mbr.dss ./dss/mbr.dss
+./dasm dss/mbr.dss -o dragon/mbr.bin --save-disassembly disassembly/mbr.dds
+./dtools load-program dragon/disk1.dr dragon/mbr.bin 0x00000000
+printf "\n"
+cp dragon/disk1.dr ../extra/dragon/disk1.dr
+rm dragon/mbr.bin

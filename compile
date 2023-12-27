@@ -1,0 +1,16 @@
+#!/bin/bash
+
+rm -r bin
+       
+if [ "$(expr substr $(uname -s) 1 5)" == "Linux" ]; then
+    cmake -B bin -S ./
+    cd bin
+    make
+    cd ..
+elif [ "$(expr substr $(uname -s) 1 10)" == "MINGW64_NT" ]; then
+    cmake -B bin -S ./ -G "MinGW Makefiles"
+    cd bin
+    mingw32-make.exe
+    cd ..
+	cp ../omnia-framework/bin/libostd.dll ./bin
+fi

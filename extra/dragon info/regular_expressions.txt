@@ -1,0 +1,10 @@
+Regex: Javascript
+
+Number Constants
+0x[0-9A-Fa-f]+|0b[0-1]+|(?<!\w)[0-9]+(?!\w)
+
+Labels
+\$\w+
+
+Registers (case-insensitive)
+(?<!\w)(r[1-9]|r10|fl|pp|rv|fp|sp|ip|acc)(?!\w)

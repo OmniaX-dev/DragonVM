@@ -1,0 +1,31 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "${default}",
+                "${workspaceRoot}/../omnia-framework/src"
+            ],
+            "defines": [],
+            "compilerPath": "/usr/bin/clang++",
+            "cStandard": "c17",
+            "cppStandard": "c++20",
+            "intelliSenseMode": "linux-clang-x64"
+                        //"compileCommands": "${workspaceFolder}/compile_commands.json"
+        },
+        {
+            "name": "Windows",
+            "includePath": [
+                "${default}",
+                "${workspaceRoot}/../omnia-framework/src"
+            ],
+            "defines": [],
+            "compilerPath": "C:\\msys64\\ucrt64\\bin\\clang++",
+            "cStandard": "c17",
+            "cppStandard": "c++20",
+            "intelliSenseMode": "windows-clang-x64"
+                        //"compileCommands": "${workspaceFolder}/compile_commands.json"
+        }
+    ],
+    "version": 4
+}

@@ -1,0 +1,8 @@
+.load 0x1A40
+
+.code
+	mov R1, 0xABCD
+	debug_break
+	hlt
+
+.fixed 512, 0x00

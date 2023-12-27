@@ -1,0 +1,10 @@
+#!/bin/bash
+
+green='\033[0;32m'
+clear='\033[0m'
+
+printf "${green}Reloading BIOS...\n${clear}"
+cd ..
+cp ../extra/dss/bios.dss ./dss/bios.dss
+./dasm dss/bios.dss -o dragon/bios.bin --save-disassembly disassembly/bios.dds
+cp dragon/bios.bin ../extra/dragon/bios.bin
