@@ -1,3 +1,10 @@
+#Variables
+#-----------------------------------------------------------------------------------------
+set(PROJ_NAME DragonVM)
+set(MAJOR_VER 0)
+set(MINOR_VER 1)
+#-----------------------------------------------------------------------------------------
+
 #Setup
 #-----------------------------------------------------------------------------------------
 set(CMAKE_CXX_COMPILER "clang++")
@@ -7,27 +14,15 @@ cmake_minimum_required(VERSION 3.18)
 project(${PROJ_NAME} LANGUAGES C CXX)
 set(CMAKE_BUILD_TYPE Debug)
 set(CMAKE_CXX_STANDARD 20)
-file(STRINGS "./tools/build.nr" BUILD_NUMBER)
+file(STRINGS "./build.nr" BUILD_NUMBER)
 #-----------------------------------------------------------------------------------------
-
-
-
-#Variables
-#-----------------------------------------------------------------------------------------
-set(PROJ_NAME DragonVM)
-set(MAJOR_VER 0)
-set(MINOR_VER 1)
 
 message("** Building ${PROJ_NAME} ${MAJOR_VER}.${MINOR_VER}.${BUILD_NUMBER}")
-#-----------------------------------------------------------------------------------------
-
-
 
 #Sources
 #-----------------------------------------------------------------------------------------
 list(APPEND INCLUDE_DIRS
 	${CMAKE_CURRENT_LIST_DIR}/src
-	${CMAKE_CURRENT_LIST_DIR}/../omnia-framework/src
 )
 list(APPEND RUNTIME_SOURCE_FILES
 	${CMAKE_CURRENT_LIST_DIR}/src/runtime/runtime_main.cpp
@@ -88,8 +83,6 @@ list(APPEND TOOLS_SOURCE_FILES
 )
 #-----------------------------------------------------------------------------------------
 
-
-
 #Targets
 #-----------------------------------------------------------------------------------------
 set(RUNTIME_TARGET dvm)
@@ -117,11 +110,10 @@ target_compile_definitions(${RUNTIME_TARGET} PUBLIC  BUILD_NR=${BUILD_NUMBER} MA
 add_compile_options(-O3 -m32 -MMD -MP -Wall -ggdb)
 if (UNIX)
 	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-rpath='$ORIGIN'")
-	#target_link_libraries(${RUNTIME_TARGET} X11 GL)
-	target_link_libraries(${RUNTIME_TARGET} xcb xcb-randr)
-	target_link_libraries(${ASSEMBLER_TARGET} xcb xcb-randr)
-	target_link_libraries(${TOOLS_TARGET} xcb xcb-randr)
-	target_link_libraries(${DEBUGGER_TARGET} xcb xcb-randr)
+	target_link_libraries(${RUNTIME_TARGET} xcb xcb-randr boost_regex)
+	target_link_libraries(${ASSEMBLER_TARGET} xcb xcb-randr boost_regex)
+	target_link_libraries(${TOOLS_TARGET} xcb xcb-randr boost_regex)
+	target_link_libraries(${DEBUGGER_TARGET} xcb xcb-randr boost_regex)
 endif (UNIX)
 if (WIN32)
 	target_link_libraries(${RUNTIME_TARGET} mingw32)
@@ -131,48 +123,15 @@ if (WIN32)
 endif (WIN32)
 target_link_libraries(${RUNTIME_TARGET} SDL2main SDL2 SDL2_mixer SDL2_image)
 target_link_libraries(${DEBUGGER_TARGET} SDL2main SDL2 SDL2_mixer SDL2_image)
-
-# target_link_libraries(${RUNTIME_TARGET} sfml-system sfml-window sfml-graphics)
 #-----------------------------------------------------------------------------------------
-
-
 
 #Linking 
 #-----------------------------------------------------------------------------------------
-find_library(OMNIA_STD_LIB
-	NAMES ostd
-	HINTS "${CMAKE_CURRENT_SOURCE_DIR}/../omnia-framework/bin/"
-	NO_CACHE
-)
-target_link_libraries(${RUNTIME_TARGET}  ${OMNIA_STD_LIB})
-target_link_libraries(${DEBUGGER_TARGET}  ${OMNIA_STD_LIB})
-target_link_libraries(${ASSEMBLER_TARGET}  ${OMNIA_STD_LIB})
-target_link_libraries(${TOOLS_TARGET}  ${OMNIA_STD_LIB})
+target_link_libraries(${RUNTIME_TARGET} ostd)
+target_link_libraries(${DEBUGGER_TARGET} ostd)
+target_link_libraries(${ASSEMBLER_TARGET} ostd)
+target_link_libraries(${TOOLS_TARGET} ostd)
 #-----------------------------------------------------------------------------------------
-
-
-
-#BuildNumber Target
-#-----------------------------------------------------------------------------------------
-if (WIN32)
-	add_custom_command ( OUTPUT ./tools/build.nr
-		COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tools/inc_bnr.exe
-		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tools/
-	)
-endif (WIN32)
-if (UNIX)
-	add_custom_command ( OUTPUT ./tools/build.nr
-		COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tools/inc_bnr
-		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tools/
-	)
-endif (UNIX)
-
-add_custom_target(
-  IncBnr ALL
-  DEPENDS ./tools/build.nr
-)
-#-----------------------------------------------------------------------------------------
-
 
 add_custom_command(TARGET ${RUNTIME_TARGET} POST_BUILD
 	COMMAND ${CMAKE_COMMAND} -E copy_directory

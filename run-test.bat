@@ -1,0 +1,1 @@
+ddb config/testMachine.dvm --force-load test.bin 0x00 --verbose-load --track-step-diff --hide-vdisplay

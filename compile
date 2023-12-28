@@ -12,5 +12,4 @@ elif [ "$(expr substr $(uname -s) 1 10)" == "MINGW64_NT" ]; then
     cd bin
     mingw32-make.exe
     cd ..
-	cp ../omnia-framework/bin/libostd.dll ./bin
 fi
