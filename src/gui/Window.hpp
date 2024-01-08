@@ -3,55 +3,105 @@
 #include "../tools/SDLInclude.hpp"
 #include <ostd/Utils.hpp>
 #include <ostd/Signals.hpp>
-#include "VirtualConsoleOutputHandler.hpp"
-#include "../tools/GlobalData.hpp"
-#include "../gui/widgets/Widget.hpp"
+#include <ostd/IOHandlers.hpp>
 
 namespace dragon
 {
-	class Window
+	class Window : public  ostd::BaseObject
 	{
 		public:
 			inline Window(void) {  }
+			~Window(void);
+			inline Window(int32_t width, int32_t height, const ostd::String& windowTitle, const ostd::String& fontPath) { initialize(width, height, windowTitle, fontPath); }
+			void initialize(int32_t width, int32_t height, const ostd::String& windowTitle, const ostd::String& fontPath);
+
+			void update(void);
+			void setSize(int32_t width, int32_t height);
+			void setTitle(const ostd::String& title);
+
+			inline virtual void onRender(void) {  }
+			inline virtual void onUpdate(void) {  }
+			inline virtual void onFixedUpdate(void) {  }
+			inline virtual void onSlowUpdate(void) {  }
+			inline virtual void onInitialize(void) {  }
+			inline virtual void onDestroy(void) {  }
+
 			inline bool isInitialized(void) const { return m_initialized; }
 			inline bool isRunning(void) const { return m_running; }
 			inline void hide(void) { SDL_HideWindow(m_window); }
 			inline void show(void) { SDL_ShowWindow(m_window); }
-			void initialize(int32_t width, int32_t height, const ostd::String& fontPath);
-			void update(void);
-			bool addWidget(Widget& widget);
-			void setSize(int32_t width, int32_t height);
+			inline ostd::String getTitle(void) const { return m_title; }
+			inline int32_t getFPS(void) const { return m_fps; }
+			inline int32_t getWindowWidth(void) const { return m_windowWidth; }
+			inline int32_t getWindowHeight(void) const { return m_windowHeight; }
+			inline SDL_Renderer* getSDLRenderer(void) const { return m_renderer; }
+			inline bool isMouseDragEventEnabled(void) const { return m_deagEventEnabled; }
+			inline void enableMouseDragEvent(bool enable = true) { m_deagEventEnabled = enable; }
 
 		private:
 			void handleEvents(void);
-			void finalizeRender(void);
 
-		private:
+		protected:
 			ostd::ConsoleOutputHandler out;
-
-			std::vector<Widget*> m_widgets;
 
 			SDL_Window* m_window { nullptr };
 			SDL_Renderer* m_renderer { nullptr };
-			// SDL_Texture* m_screenTexture { nullptr };
 			SDL_Surface* m_fontSurface { nullptr };
+			uint32_t* m_fontPixels { nullptr };
 
+		private:
 			int32_t m_windowWidth { 0 };
 			int32_t m_windowHeight { 0 };
-
-			uint32_t* m_fontPixels { nullptr };
-			// uint32_t* m_screenPixels { nullptr };
+			ostd::String m_title { "" };
+			int32_t m_fps { 0 };
 
 			float m_timeAccumulator { 0.0f };
-			bool m_running { false };
-
-			ostd::StringEditor m_title { "" };
 			float m_redrawAccumulator { 0.0f };
+
+			bool m_deagEventEnabled { false };
+			bool m_running { false };
 			bool m_initialized { false };
 
+		public:
 			//Signals
-			inline static const uint32_t Signal_OnMousePressed = ostd::SignalHandler::newCustomSignal(4096);
+			inline static const uint32_t Signal_OnMousePressed = ostd::SignalHandler::newCustomSignal(1000);
+			inline static const uint32_t Signal_OnMouseReleased = ostd::SignalHandler::newCustomSignal(1001);
+			inline static const uint32_t Signal_OnMouseMoved = ostd::SignalHandler::newCustomSignal(1002);
+			inline static const uint32_t Signal_OnMouseDragged = ostd::SignalHandler::newCustomSignal(1003);
 
-		friend class VirtualConsoleWidtget;
+			inline static const uint32_t Signal_OnWindowClosed = ostd::SignalHandler::newCustomSignal(2000);
+			inline static const uint32_t Signal_OnWindowResized = ostd::SignalHandler::newCustomSignal(2001);
+	};
+	class WindowResizedData : public ostd::BaseObject
+	{
+		public:
+			inline WindowResizedData(Window& parent, int32_t _oldx, int32_t _oldy, int32_t _newx, int32_t _newy) : parentWindow(parent), old_width(_oldx), old_height(_oldy), new_width(_newx), new_height(_newy)
+			{
+				setTypeName("lspp::app::WindowResizedData");
+				validate();
+			} 
+		
+		public:
+			int32_t new_width;
+			int32_t new_height;
+			int32_t old_width;
+			int32_t old_height;
+			Window& parentWindow;
+	};
+	class MouseEventData : public ostd::BaseObject
+	{
+		public: enum class eButton { None = 0, Left, Middle, Right };
+		public:
+			inline MouseEventData(Window& parent, int32_t mousex, int32_t mousey, eButton btn) : parentWindow(parent), position_x(mousex), position_y(mousey), button(btn)
+			{
+				setTypeName("lspp::app::MouseEventData");
+				validate();
+			}
+
+		public:
+			int32_t position_x;
+			int32_t position_y;
+			eButton button;
+			Window& parentWindow;
 	};
 }

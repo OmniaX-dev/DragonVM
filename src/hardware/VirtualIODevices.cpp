@@ -15,22 +15,22 @@ namespace dragon
 			bool loaded = ostd::Utils::loadByteStreamFromFile(biosFilePath, m_bios);
 			if (!loaded)
 				data::ErrorHandler::pushError(data::ErrorCodes::BIOS_FailedToLoad, "Failed to load BIOS data.");
-			if (m_bios.size() != 1024)
-				data::ErrorHandler::pushError(data::ErrorCodes::BIOS_InvalidSize, ostd::StringEditor("Invalid BIOS size: ").add(ostd::Utils::getHexStr(m_bios.size(), true, 2)).str());
+			if (m_bios.size() != 4096) //TODO: Hardcoded
+				data::ErrorHandler::pushError(data::ErrorCodes::BIOS_InvalidSize, ostd::String("Invalid BIOS size: ").add(ostd::Utils::getHexStr(m_bios.size(), true, 2)));
 			m_initialized = true;
 		}
 
 		int8_t VirtualBIOS::read8(uint16_t addr)
 		{
 			if (addr >= m_bios.size())
-				data::ErrorHandler::pushError(data::ErrorCodes::BIOS_InvalidAddress, ostd::StringEditor("Invalid Byte BIOS location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)).str());
+				data::ErrorHandler::pushError(data::ErrorCodes::BIOS_InvalidAddress, ostd::String("Invalid Byte BIOS location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)));
 			return m_bios[addr];
 		}
 
 		int16_t VirtualBIOS::read16(uint16_t addr)
 		{
 			if (addr >= m_bios.size() - 1)
-				data::ErrorHandler::pushError(data::ErrorCodes::BIOS_InvalidAddress, ostd::StringEditor("Invalid Word BIOS location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)).str());
+				data::ErrorHandler::pushError(data::ErrorCodes::BIOS_InvalidAddress, ostd::String("Invalid Word BIOS location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)));
 			return ((m_bios[addr + 0] <<  8) & 0xFF00U)
 				 | ( m_bios[addr + 1]        & 0x00FFU);
 		}
@@ -66,14 +66,14 @@ namespace dragon
 		int8_t InterruptVector::read8(uint16_t addr)
 		{
 			if (addr >= m_data.size())
-				data::ErrorHandler::pushError(data::ErrorCodes::IntVector_InvalidAddress, ostd::StringEditor("Invalid Byte IntVector location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)).str());
+				data::ErrorHandler::pushError(data::ErrorCodes::IntVector_InvalidAddress, ostd::String("Invalid Byte IntVector location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)));
 			return m_data[addr];
 		}
 
 		int16_t InterruptVector::read16(uint16_t addr)
 		{
 			if (addr >= m_data.size() - 1)
-				data::ErrorHandler::pushError(data::ErrorCodes::IntVector_InvalidAddress, ostd::StringEditor("Invalid Word IntVector location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)).str());
+				data::ErrorHandler::pushError(data::ErrorCodes::IntVector_InvalidAddress, ostd::String("Invalid Word IntVector location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)));
 			return ((m_data[addr + 0] <<  8) & 0xFF00U)
 				 | ( m_data[addr + 1]        & 0x00FFU);
 		}
@@ -81,7 +81,7 @@ namespace dragon
 		int8_t InterruptVector::write8(uint16_t addr, int8_t value)
 		{
 			if (addr >= m_data.size())
-				data::ErrorHandler::pushError(data::ErrorCodes::IntVector_InvalidAddress, ostd::StringEditor("Invalid Word IntVector location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)).str());
+				data::ErrorHandler::pushError(data::ErrorCodes::IntVector_InvalidAddress, ostd::String("Invalid Word IntVector location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)));
 			m_data[addr] = value;
 			return value;
 		}
@@ -89,7 +89,7 @@ namespace dragon
 		int16_t InterruptVector::write16(uint16_t addr, int16_t value)
 		{
 			if (addr >= m_data.size() - 1)
-				data::ErrorHandler::pushError(data::ErrorCodes::IntVector_InvalidAddress, ostd::StringEditor("Invalid Word IntVector location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)).str());
+				data::ErrorHandler::pushError(data::ErrorCodes::IntVector_InvalidAddress, ostd::String("Invalid Word IntVector location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)));
 			m_data[addr + 0] = (value >> 8) & 0xFF;
 			m_data[addr + 1] = value & 0xFF;
 			return value;
@@ -179,14 +179,14 @@ namespace dragon
 		int8_t VirtualBootloader::read8(uint16_t addr)
 		{
 			if (addr >= m_mbr.size())
-				data::ErrorHandler::pushError(data::ErrorCodes::BIOS_InvalidAddress, ostd::StringEditor("Invalid Byte MBR location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)).str());
+				data::ErrorHandler::pushError(data::ErrorCodes::BIOS_InvalidAddress, ostd::String("Invalid Byte MBR location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)));
 			return m_mbr[addr];
 		}
 
 		int16_t VirtualBootloader::read16(uint16_t addr)
 		{
 			if (addr >= m_mbr.size() - 1)
-				data::ErrorHandler::pushError(data::ErrorCodes::BIOS_InvalidAddress, ostd::StringEditor("Invalid Word MBR location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)).str());
+				data::ErrorHandler::pushError(data::ErrorCodes::BIOS_InvalidAddress, ostd::String("Invalid Word MBR location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)));
 			return ((m_mbr[addr + 0] <<  8) & 0xFF00U)
 				 | ( m_mbr[addr + 1]        & 0x00FFU);
 		}
@@ -194,7 +194,7 @@ namespace dragon
 		int8_t VirtualBootloader::write8(uint16_t addr, int8_t value)
 		{
 			if (addr >= m_mbr.size())
-				data::ErrorHandler::pushError(data::ErrorCodes::IntVector_InvalidAddress, ostd::StringEditor("Invalid Word IntVector location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)).str());
+				data::ErrorHandler::pushError(data::ErrorCodes::IntVector_InvalidAddress, ostd::String("Invalid Word IntVector location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)));
 			m_mbr[addr] = value;
 			return value;
 		}
@@ -202,7 +202,7 @@ namespace dragon
 		int16_t VirtualBootloader::write16(uint16_t addr, int16_t value)
 		{
 			if (addr >= m_mbr.size() - 1)
-				data::ErrorHandler::pushError(data::ErrorCodes::IntVector_InvalidAddress, ostd::StringEditor("Invalid Word IntVector location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)).str());
+				data::ErrorHandler::pushError(data::ErrorCodes::IntVector_InvalidAddress, ostd::String("Invalid Word IntVector location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)));
 			m_mbr[addr + 0] = (value >> 8) & 0xFF;
 			m_mbr[addr + 1] = value & 0xFF;
 			return value;
@@ -215,57 +215,6 @@ namespace dragon
 
 
 
-
-		
-		VirtualBIOSVideo::VirtualBIOSVideo(VirtualRAM& memory) : m_memory(memory)
-		{
-			intptr_t iMemPtr = reinterpret_cast<intptr_t>(memory.getByteStream()->data());
-			iMemPtr += data::MemoryMapAddresses::BIOSVideo_Start;
-			m_dataPtr = reinterpret_cast<ostd::Byte*>(iMemPtr);
-		}
-
-		int8_t VirtualBIOSVideo::read8(uint16_t addr)
-		{
-			if (addr >= m_size)
-				data::ErrorHandler::pushError(data::ErrorCodes::BIOSVideo_InvalidAddress, ostd::StringEditor("Invalid read Byte BiosVideo location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)).str());
-			return m_dataPtr[addr];
-		}
-
-		int16_t VirtualBIOSVideo::read16(uint16_t addr)
-		{
-			if (addr >= m_size - 1)
-				data::ErrorHandler::pushError(data::ErrorCodes::BIOSVideo_InvalidAddress, ostd::StringEditor("Invalid read Word BiosVideo location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)).str());
-			return ((m_dataPtr[addr + 0] <<  8) & 0xFF00U)
-				 | ( m_dataPtr[addr + 1]        & 0x00FFU);
-		}
-
-		int8_t VirtualBIOSVideo::write8(uint16_t addr, int8_t value)
-		{
-			if (addr >= m_size)
-				data::ErrorHandler::pushError(data::ErrorCodes::BIOSVideo_InvalidAddress, ostd::StringEditor("Invalid read Byte BiosVideo location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)).str());
-			m_dataPtr[addr] = value;
-			return value;
-		}
-
-		int16_t VirtualBIOSVideo::write16(uint16_t addr, int16_t value)
-		{
-			if (addr >= m_size - 1)
-				data::ErrorHandler::pushError(data::ErrorCodes::BIOSVideo_InvalidAddress, ostd::StringEditor("Invalid read Word BiosVideo location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)).str());
-			m_dataPtr[addr + 0] = (value >> 8) & 0xFF;
-			m_dataPtr[addr + 1] = value & 0xFF;
-			return value;
-		}
-
-		ostd::ByteStream* VirtualBIOSVideo::getByteStream(void)
-		{
-			m_dataCopy.clear();
-			m_dataCopy.insert(m_dataCopy.end(), &m_dataPtr[0], &m_dataPtr[m_size]);
-			return &m_dataCopy;
-		}
-
-
-
-		
 
 		namespace interface
 		{
@@ -556,7 +505,7 @@ namespace dragon
 			void CMOS::init(const ostd::String& cmosFilePath)
 			{
 				m_size = data::MemoryMapAddresses::CMOS_End - data::MemoryMapAddresses::CMOS_Start + 1;
-				m_dataFile.open(cmosFilePath, std::ios::out | std::ios::in | std::ios::binary);
+				m_dataFile.open(cmosFilePath.cpp_str(), std::ios::out | std::ios::in | std::ios::binary);
 				if(!m_dataFile)
 				{
 					data::ErrorHandler::pushError(data::ErrorCodes::CMOS_UnableToMount, "Unable to mount virtual CMOS chip.");
@@ -568,7 +517,7 @@ namespace dragon
 				m_dataFile.seekg( 0, std::ios::beg );
 				if (m_fileSize != m_size)
 				{
-					data::ErrorHandler::pushError(data::ErrorCodes::CMOS_InvalidSize, ostd::StringEditor("Invalid virtual CMOS chhip size: ").addi(m_fileSize).str());
+					data::ErrorHandler::pushError(data::ErrorCodes::CMOS_InvalidSize, ostd::String("Invalid virtual CMOS chhip size: ").add(m_fileSize));
 					return;
 				}
 				m_initialized = true;
@@ -583,7 +532,7 @@ namespace dragon
 				}
 				if (addr >= m_size)
 				{
-					data::ErrorHandler::pushError(data::ErrorCodes::CMOS_InvalidAddress, ostd::StringEditor("Invalid Byte CMOS location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)).str());
+					data::ErrorHandler::pushError(data::ErrorCodes::CMOS_InvalidAddress, ostd::String("Invalid Byte CMOS location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)));
 					return false;
 				}
 				int8_t value = 0;
@@ -601,7 +550,7 @@ namespace dragon
 				}
 				if (addr >= m_size - 1)
 				{
-					data::ErrorHandler::pushError(data::ErrorCodes::CMOS_InvalidAddress, ostd::StringEditor("Invalid Word CMOS location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)).str());
+					data::ErrorHandler::pushError(data::ErrorCodes::CMOS_InvalidAddress, ostd::String("Invalid Word CMOS location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)));
 					return 0;
 				}
 				int8_t b1 = read8(addr);
@@ -619,7 +568,7 @@ namespace dragon
 				}
 				if (addr >= m_size)
 				{
-					data::ErrorHandler::pushError(data::ErrorCodes::CMOS_InvalidAddress, ostd::StringEditor("Invalid Byte CMOS location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)).str());
+					data::ErrorHandler::pushError(data::ErrorCodes::CMOS_InvalidAddress, ostd::String("Invalid Byte CMOS location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)));
 					return 0;
 				}
 				m_dataFile.seekp(addr);
@@ -636,7 +585,7 @@ namespace dragon
 				}
 				if (addr >= m_size - 1)
 				{
-					data::ErrorHandler::pushError(data::ErrorCodes::CMOS_InvalidAddress, ostd::StringEditor("Invalid Word CMOS location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)).str());
+					data::ErrorHandler::pushError(data::ErrorCodes::CMOS_InvalidAddress, ostd::String("Invalid Word CMOS location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)));
 					return 0;
 				}
 				int8_t b1 = (value >> 8) & 0xFF;

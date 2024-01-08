@@ -18,11 +18,11 @@ constexpr int ErrorLoadProgUnableToLoadDataFile = 8;
 
 constexpr int ErrorNoError = 0;
 
-ostd::legacy::ConsoleOutputHandler out;
+ostd::ConsoleOutputHandler out;
 
 bool createVirtualHardDrive(uint32_t sizeInBytes, const ostd::String& dataFilePath)
 {
-	std::ofstream rf(dataFilePath, std::ios::out | std::ios::binary);
+	std::ofstream rf(dataFilePath.cpp_str(), std::ios::out | std::ios::binary);
 	if(!rf) return false;
 	ostd::ByteStream stream;
 	for (int32_t i = 0; i < sizeInBytes; i++)
@@ -36,46 +36,46 @@ int main(int argc, char** argv)
 {
 	if (argc < 2)
 	{
-		out.col("red").p("Error: too few arguments.").nl();
-		out.col("red").p("  Usage: ./dtools <tool_name> [...arguments...]").resetColors().nl();
+		out.fg("red").p("Error: too few arguments.").nl();
+		out.fg("red").p("  Usage: ./dtools <tool_name> [...arguments...]").reset().nl();
 		return ErrorTopLevelTooFewArgs;
 	}
-	ostd::StringEditor tool = argv[1];
+	ostd::String tool = argv[1];
 	tool = tool.trim().toLower();
 
 	//Nex Virtual Disk
-	if (tool.str() == "new-vdisk")
+	if (tool == "new-vdisk")
 	{
 		if (argc < 4)
 		{
-			out.col("red").p("Error: too few arguments.").nl();
-			out.col("red").p("  Usage: ./dtools new-vdisk <destination_file> <size_in_bytes>").resetColors().nl();
+			out.fg("red").p("Error: too few arguments.").nl();
+			out.fg("red").p("  Usage: ./dtools new-vdisk <destination_file> <size_in_bytes>").reset().nl();
 			return ErrorNewVDiskTooFewArgs;
 		}
 		ostd::String dest = argv[2];
 		ostd::String str_size = argv[3];
 		if (!ostd::Utils::isInt(str_size))
 		{
-			out.col("red").p("Error: <size_in_bytes> parameter must be integer.").resetColors().nl();
+			out.fg("red").p("Error: <size_in_bytes> parameter must be integer.").reset().nl();
 			return ErrorNewVDiskNonIntSize;
 		}
 		bool result = createVirtualHardDrive(ostd::Utils::strToInt(str_size), dest);
 		if (!result)
 		{
-			out.col("red").p("Error: Unable to create virtual disk.").resetColors().nl();
+			out.fg("red").p("Error: Unable to create virtual disk.").reset().nl();
 			return ErrorNewVDiskUnable;
 		}
-		out.col("green").p("Success. Virtual disk created:").nl();
-		out.p("  Path: ").p(dest).nl();
-		out.p("  Size: ").p(str_size).resetColors().nl();
+		out.fg("green").p("Success. Virtual disk created:").nl();
+		out.p("  Path: ").p(dest.cpp_str()).nl();
+		out.p("  Size: ").p(str_size.cpp_str()).reset().nl();
 	}
 	//Load Program
-	else if (tool.str() == "load-program")
+	else if (tool == "load-program")
 	{
 		if (argc < 5)
 		{
-			out.col("red").p("Error: too few arguments.").nl();
-			out.col("red").p("  Usage: ./dtools load-program <virtual_disk_file> <data_file> <destination_address>").resetColors().nl();
+			out.fg("red").p("Error: too few arguments.").nl();
+			out.fg("red").p("  Usage: ./dtools load-program <virtual_disk_file> <data_file> <destination_address>").reset().nl();
 			return ErrorLoadProgTooFewArgs;
 		}
 		ostd::String vdisk_file = argv[2];
@@ -83,19 +83,19 @@ int main(int argc, char** argv)
 		ostd::String str_addr = argv[4];
 		if (!ostd::Utils::isInt(str_addr))
 		{
-			out.col("red").p("Error: <destination_address> parameter must be integer.").resetColors().nl();
+			out.fg("red").p("Error: <destination_address> parameter must be integer.").reset().nl();
 			return ErrorLoadProgNonIntAddr;
 		}
 		dragon::hw::VirtualHardDrive vHDD(vdisk_file);
 		if (!vHDD.isInitialized())
 		{
-			out.col("red").p("Error: Unable to load virtual disk.").resetColors().nl();
+			out.fg("red").p("Error: Unable to load virtual disk.").reset().nl();
 			return ErrorLoadProgUnableToLoadVDisk;
 		}
 		ostd::ByteStream code;
 		if (!ostd::Utils::loadByteStreamFromFile(data_file, code))
 		{
-			out.col("red").p("Error: Unable to load data file.").resetColors().nl();
+			out.fg("red").p("Error: Unable to load data file.").reset().nl();
 			return ErrorLoadProgUnableToLoadDataFile;
 		}
 		int16_t index = 0;
@@ -106,16 +106,16 @@ int main(int argc, char** argv)
 			index++;
 		}
 		vHDD.unmount();
-		out.col("green").p("Success. Data writte to Virtual Disk:").nl();
-		out.p("  Data Path: ").p(data_file).nl();
-		out.p("  Disk Path: ").p(vdisk_file).nl();
-		out.p("  Data Address: ").p(ostd::Utils::getHexStr(addr, true, 4)).nl();
-		out.p("  Size: ").pi(code.size()).resetColors().nl();
+		out.fg("green").p("Success. Data writte to Virtual Disk:").nl();
+		out.p("  Data Path: ").p(data_file.cpp_str()).nl();
+		out.p("  Disk Path: ").p(vdisk_file.cpp_str()).nl();
+		out.p("  Data Address: ").p(ostd::Utils::getHexStr(addr, true, 4).cpp_str()).nl();
+		out.p("  Size: ").p(code.size()).reset().nl();
 	}
 	//Unknown
 	else
 	{
-		out.col("red").p("Error: Unknown tool.").resetColors().nl();
+		out.fg("red").p("Error: Unknown tool.").reset().nl();
 		return ErrorTopLevelUnknownTool;
 	}
 	return ErrorNoError;

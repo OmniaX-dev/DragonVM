@@ -79,36 +79,33 @@ namespace dragon
 		{
 			public:
 				inline static constexpr uint16_t BIOS_Start = 0x0000;
-				inline static constexpr uint16_t BIOS_End   = 0x03FF;
+				inline static constexpr uint16_t BIOS_End   = 0x0FFF;
 
-				inline static constexpr uint16_t CMOS_Start = 0x0400;
-				inline static constexpr uint16_t CMOS_End   = 0x047F;
+				inline static constexpr uint16_t CMOS_Start = 0x1000;
+				inline static constexpr uint16_t CMOS_End   = 0x107F;
 
-				inline static constexpr uint16_t IntVector_Start = 0x0480;
-				inline static constexpr uint16_t IntVector_End   = 0x067F;
+				inline static constexpr uint16_t IntVector_Start = 0x1080;
+				inline static constexpr uint16_t IntVector_End   = 0x127F;
 
-				inline static constexpr uint16_t Keyboard_Start = 0x0680;
-				inline static constexpr uint16_t Keyboard_End   = 0x075F;
+				inline static constexpr uint16_t Keyboard_Start = 0x1280;
+				inline static constexpr uint16_t Keyboard_End   = 0x135F;
 
-				inline static constexpr uint16_t Mouse_Start = 0x0760;
-				inline static constexpr uint16_t Mouse_End   = 0x077F;
+				inline static constexpr uint16_t Mouse_Start = 0x1360;
+				inline static constexpr uint16_t Mouse_End   = 0x137F;
 
-				inline static constexpr uint16_t BIOSVideo_Start = 0x0780;
-				inline static constexpr uint16_t BIOSVideo_End   = 0x167F;
+				inline static constexpr uint16_t MBR_Start = 0x1380;
+				inline static constexpr uint16_t MBR_End   = 0x157F;
 
-				inline static constexpr uint16_t MBR_Start = 0x1680;
-				inline static constexpr uint16_t MBR_End   = 0x187F;
+				inline static constexpr uint16_t DiskInterface_Start = 0x1580;
+				inline static constexpr uint16_t DiskInterface_End   = 0x15FF;
 
-				inline static constexpr uint16_t DiskInterface_Start = 0x1880;
-				inline static constexpr uint16_t DiskInterface_End   = 0x18FF;
+				inline static constexpr uint16_t VideoCardInterface_Start = 0x1600;
+				inline static constexpr uint16_t VideoCardInterface_End   = 0x16FF;
 
-				inline static constexpr uint16_t VideoCardInterface_Start = 0x1900;
-				inline static constexpr uint16_t VideoCardInterface_End   = 0x19FF;
+				inline static constexpr uint16_t SerialInterface_Start = 0x1700;
+				inline static constexpr uint16_t SerialInterface_End   = 0x173F;
 
-				inline static constexpr uint16_t SerialInterface_Start = 0x1A00;
-				inline static constexpr uint16_t SerialInterface_End   = 0x1A3F;
-
-				inline static constexpr uint16_t Memory_Start = 0x1A40;
+				inline static constexpr uint16_t Memory_Start = 0x1740;
 				inline static constexpr uint16_t Memory_End   = 0xFFFF;
 		};
 
@@ -190,9 +187,9 @@ namespace dragon
 				inline static constexpr uint8_t Keyboard = 0x10;
 				inline static constexpr uint8_t Mouse = 0x11;
 				inline static constexpr uint8_t BiosInterrupt = 0x20;
+				inline static constexpr uint8_t BiosVideoInterrupt = 0x30;
 
 				inline static constexpr uint8_t DiskInterfaceFFinished = 0x80;
-				inline static constexpr uint8_t BiosVideoScreenRefresh = 0x81;
 		};
 
 		class OpCodes

@@ -5,6 +5,8 @@
 
 #include "../tools/Utils.hpp"
 
+#include <algorithm>
+
 namespace dragon
 {
 	const DisassemblyTable DisassemblyTable::DefaultObject;
@@ -31,24 +33,14 @@ namespace dragon
 		ostd::String header_string = "";
 		serializer.r_NullTerminatedString(0, header_string);
 		if (header_string != "{ DRAGON_DEBUG_DISASSEMBLY }") return;
-		addr += (header_string.length() + 1) * ostd::tTypeSize::BYTE;
+		addr += (header_string.len() + 1) * ostd::tTypeSize::BYTE;
 		while (addr < serializer.size())
 		{
 			serializer.r_DWord(addr, line_addr);
 			addr += ostd::tTypeSize::DWORD;
-			// ostd::ByteStream str_stream;
-			// serializer.r_Byte(addr, line_code_char);
-			// addr += ostd::tTypeSize::BYTE;
-			// do
-			// {
-			// 	str_stream.push_back(line_code_char);
-			// 	serializer.r_Byte(addr, line_code_char);
-			// 	addr += ostd::tTypeSize::BYTE;
-			// } while(line_code_char != 0);
-			// ostd::String code_line = ostd::Utils::byteStreamToString(str_stream);
 			ostd::String code_line = "";
 			serializer.r_NullTerminatedString(addr, code_line);
-			addr += (code_line.length() + 1) * ostd::tTypeSize::BYTE;
+			addr += (code_line.len() + 1) * ostd::tTypeSize::BYTE;
 			if (code_line == "{ DATA }")
 			{
 				mode = MODE_DATA;
@@ -69,19 +61,19 @@ namespace dragon
 			line.code = code_line;
 			if (mode == MODE_CODE)
 			{
-				ostd::StringEditor codeEdit(line.code);
+				ostd::String codeEdit(line.code);
 				codeEdit.trim();
 				if (codeEdit.contains(" "))
 				{
-					ostd::StringEditor part1 = codeEdit.substr(0, codeEdit.indexOf(" "));
-					ostd::StringEditor part2 = codeEdit.substr(codeEdit.indexOf(" ") + 1);
+					ostd::String part1 = codeEdit.new_substr(0, codeEdit.indexOf(" "));
+					ostd::String part2 = codeEdit.new_substr(codeEdit.indexOf(" ") + 1);
 					part1.trim();
 					part2.trim();
 					int32_t opCodeLen = 10;
 					if (part1.len() < opCodeLen)
 					{
-						codeEdit = part1.str() + ostd::Utils::duplicateChar(' ', opCodeLen - part1.len()) + part2.str();
-						line.code = codeEdit.str();
+						codeEdit = part1 + ostd::Utils::duplicateChar(' ', opCodeLen - part1.len()) + part2;
+						line.code = codeEdit;
 					}
 				}
 				m_code.push_back(line);
@@ -116,6 +108,7 @@ namespace dragon
 		std::vector<code::Assembler::tDisassemblyLine> fullTable;
 		for (auto& table : m_tables)
 			fullTable.insert(fullTable.end(), table.getCodeTable().begin(), table.getCodeTable().end());
+		std::sort(fullTable.begin(), fullTable.end());
 		return fullTable;
 	}
 
@@ -124,6 +117,7 @@ namespace dragon
 		std::vector<code::Assembler::tDisassemblyLine> fullTable;
 		for (auto& table : m_tables)
 			fullTable.insert(fullTable.end(), table.getDataTable().begin(), table.getDataTable().end());
+		std::sort(fullTable.begin(), fullTable.end());
 		return fullTable;
 	}
 
@@ -132,6 +126,7 @@ namespace dragon
 		std::vector<code::Assembler::tDisassemblyLine> fullTable;
 		for (auto& table : m_tables)
 			fullTable.insert(fullTable.end(), table.getLabelTable().begin(), table.getLabelTable().end());
+		std::sort(fullTable.begin(), fullTable.end());
 		return fullTable;
 	}
 }

@@ -13,11 +13,11 @@ namespace dragon
 
 	bool RawTextRenderer::drawString(ostd::String str, uint32_t column, uint32_t row, uint32_t* screenPixels, int32_t screenWidth, int32_t screenHeight, uint32_t* fontPixels,  ostd::Color color, ostd::Color background)
 	{
-		ostd::StringEditor se(str);
-		if (se.str() == "") return false;
+		ostd::String se(str);
+		if (se == "") return false;
 		if (row >= CONSOLE_CHARS_V) return false;
 		if (column >= CONSOLE_CHARS_H) return false;
-		if (column + str.length() > CONSOLE_CHARS_H) return false;
+		if (column + str.len() > CONSOLE_CHARS_H) return false;
 		int32_t x = column * FONT_CHAR_W;
 		int32_t y = row * FONT_CHAR_H;
 		for (auto& c : str)

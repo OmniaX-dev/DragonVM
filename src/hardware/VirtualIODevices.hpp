@@ -86,34 +86,6 @@ namespace dragon
 			private:
 				ostd::ByteStream m_mbr;
 		};
-		class VirtualBIOSVideo : public IMemoryDevice
-		{
-			public: struct tRegisters
-			{
-				inline static constexpr uint16_t ClearColor = 0x00;
-				inline static constexpr uint16_t Palette = 0x01;
-				inline static constexpr uint16_t UseTransparencyOn0x5 = 0x02;
-				inline static constexpr uint16_t Signal = 0x03;
-
-				inline static constexpr uint16_t VideoMemoryStart = 0x003C;
-			};
-
-			public:
-				VirtualBIOSVideo(VirtualRAM& memory);
-				int8_t read8(uint16_t addr) override;
-				int16_t read16(uint16_t addr) override;
-				int8_t write8(uint16_t addr, int8_t value) override;
-				int16_t write16(uint16_t addr, int16_t value) override;
-
-				ostd::ByteStream* getByteStream(void) override;
-
-			private:
-				uint16_t m_baseAddress { data::MemoryMapAddresses::BIOSVideo_Start };
-				uint16_t m_size { (data::MemoryMapAddresses::BIOSVideo_End + 1) - data::MemoryMapAddresses::BIOSVideo_Start };
-				ostd::Byte* m_dataPtr { nullptr };
-				ostd::ByteStream m_dataCopy;
-				VirtualRAM& m_memory;
-		};
 
 		namespace interface
 		{

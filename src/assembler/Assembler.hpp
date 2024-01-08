@@ -16,6 +16,8 @@ namespace dragon
 			public: struct tDisassemblyLine {
 				uint32_t addr = 0;
 				ostd::String code = "";
+				inline bool operator<(const tDisassemblyLine& second) const { return addr < second.addr; }
+				inline bool operator>(const tDisassemblyLine& second) const { return addr > second.addr; }
 			};
 			public: struct tSymbol
 			{

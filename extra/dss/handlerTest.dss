@@ -1,4 +1,4 @@
-.load 0x1A40
+.load 0x1740
 
 ##@struct Rectangle {
 ##	width:2,
@@ -20,14 +20,12 @@
 	## $rect => Rectangle
 
 .code
-	debug_break
 infinite_loop:
 	push 0
 	call $clear_screen
 
 	## mov $rect.x, 200
 
-	## debug_break
 
 	push $string
 	push 1

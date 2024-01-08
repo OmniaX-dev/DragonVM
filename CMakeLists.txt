@@ -30,10 +30,7 @@ list(APPEND RUNTIME_SOURCE_FILES
 	${CMAKE_CURRENT_LIST_DIR}/src/runtime/ConfigLoader.cpp
 
 	${CMAKE_CURRENT_LIST_DIR}/src/gui/Window.cpp
-	${CMAKE_CURRENT_LIST_DIR}/src/gui/widgets/VirtualConsoleWidget.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/gui/RawTextRenderer.cpp
-	${CMAKE_CURRENT_LIST_DIR}/src/gui/VirtualConsoleOutputHandler.cpp
-	${CMAKE_CURRENT_LIST_DIR}/src/gui/VirtualConsole.cpp
 
 	${CMAKE_CURRENT_LIST_DIR}/src/hardware/VirtualCPU.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/hardware/VirtualRAM.cpp
@@ -48,11 +45,8 @@ list(APPEND DEBUGGER_SOURCE_FILES
 	${CMAKE_CURRENT_LIST_DIR}/src/debugger/DisassemblyLoader.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/debugger/Debugger.cpp
 
-	${CMAKE_CURRENT_LIST_DIR}/src/gui/DebuggerWindow.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/gui/Window.cpp
-	${CMAKE_CURRENT_LIST_DIR}/src/gui/widgets/VirtualConsoleWidget.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/gui/RawTextRenderer.cpp
-	${CMAKE_CURRENT_LIST_DIR}/src/gui/VirtualConsoleOutputHandler.cpp
 
 	${CMAKE_CURRENT_LIST_DIR}/src/hardware/VirtualCPU.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/hardware/VirtualRAM.cpp

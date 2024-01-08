@@ -1,25 +1,21 @@
 ## ============================= Memory Mapped Devices and Registers =============================
-@define MBR_START_ADDRESS 0x1680
-@define INT_VEC_START_ADDRESS 0x0480
-@define DISK_INTERFACE_START_ADDRESS 0x1880
-@define MEMORY_START_ADDRESS 0x1A40
-@define CMOS_START_ADDRESS 0x0400
-@define BIOS_VIDEO_START_ADDRESS 0x0780
-@define BIOS_VIDEO_MEMORY_START_ADDRESS 0x07BC
-@define BIOS_VIDEO_MEMORY_END_ADDRESS 0x167F
-
-@define _BIOS_VIDEO_REG_CLEAR_COLOR {BIOS_VIDEO_START_ADDRESS + 0x0000}
-@define _BIOS_VIDEO_REG_SIGNAL {BIOS_VIDEO_START_ADDRESS + 0x0003}
+@define MBR_START_ADDRESS 0x1380
+@define INT_VEC_START_ADDRESS 0x1080
+@define DISK_INTERFACE_START_ADDRESS 0x1580
+@define MEMORY_START_ADDRESS 0x1740
+@define CMOS_START_ADDRESS 0x1000
 ## ===============================================================================================
 
 @define _CMOS_REG_BOOT_DISK {CMOS_START_ADDRESS + 0x0010}
 
 .load 0x0000           															## BIOS is mapped to address 0x0000 in memory
 .data
-	$bios_version_number 0x00, 0x01												## BIOS Version stored in memory
+	$bios_version_number 0x04, 0x01												## BIOS Version stored in memory
 
 ## ============================= BIOS Program =============================
 .code
+	## mov FL, 0
+	## jmp 0x1740
 	mov FL, 0b0000000000000001													## Zero the FL Register and enable interrupts
 	movb [{INT_VEC_START_ADDRESS + (0x20 * 3)}], 0xFF 							## Setting up int 0x20 handler
 	mov [{INT_VEC_START_ADDRESS + (0x20 * 3) + 1}], $_int_20_handler			## --
@@ -38,6 +34,7 @@
 	call $_load_mbr_data_block
 	## ----
 
+	debug_break
 	jmp MBR_START_ADDRESS         												## Jump to start of MBR in memory
 	hlt                															## Just in case somehow execution reaches this point
 ## ========================================================================
@@ -89,7 +86,7 @@ _int_30_handler:
 	jeq $_int_30_clear_screen, 0x0000
 	jmp $_int_30_end
 _int_30_clear_screen:
-	movb [_BIOS_VIDEO_REG_SIGNAL], 0x01															## Signal = ClearScreen
+	nop
 _int_30_end:
 	rti
 ## ==================================================================================
@@ -101,8 +98,7 @@ _load_mbr_data_block:
 	movb [{DISK_INTERFACE_START_ADDRESS + 0x2}], R1												## Disk = Default
 	mov  [{DISK_INTERFACE_START_ADDRESS + 0x3}],0x0000											## Sector = 0x0000
 	mov  [{DISK_INTERFACE_START_ADDRESS + 0x5}],0x0000											## Address = 0x0000 (Start of Disk)
-	##//TODO: currently set to 20 instead of 512, for debugging purposes
-	mov  [{DISK_INTERFACE_START_ADDRESS + 0x7}], 20												## Size = 512 (Size of MBR is 512 bytes)
+	mov  [{DISK_INTERFACE_START_ADDRESS + 0x7}], 20											## Size = 512 (Size of MBR is 512 bytes)
 	mov  [{DISK_INTERFACE_START_ADDRESS + 0x9}], MBR_START_ADDRESS								## MemoryAddress = MBR Address in memory
 	movb [DISK_INTERFACE_START_ADDRESS], 0x00													## Signal = Start
 _load_mbr_data_block_wait_loop:
@@ -137,4 +133,4 @@ _set_interrupt_vector_entry_end:
 	mov *R1, ACC
 	ret
 
-.fixed 1024, 0x00      ## BIOS Needs to be 1024 Bytes exactly
+.fixed 4096, 0x00      ## BIOS Needs to be 4096 Bytes exactly

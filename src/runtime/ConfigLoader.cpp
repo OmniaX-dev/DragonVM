@@ -12,13 +12,13 @@ namespace dragon
 		auto lines = file.getLines();
 		for (auto& line : lines)
 		{
-			ostd::StringEditor lineEdit = line;
+			ostd::String lineEdit = line;
 			if (!lineEdit.contains("=")) continue; //TODO: Warning
 			auto tokens = lineEdit.tokenize("=");
 			if (tokens.count() != 2) continue; //TODO: Warning
 			lineEdit = tokens.next();
 			lineEdit = lineEdit.toLower();
-			if (lineEdit.str() == "disks")
+			if (lineEdit == "disks")
 			{
 				lineEdit = tokens.next();
 				tokens = lineEdit.tokenize(",");
@@ -27,18 +27,18 @@ namespace dragon
 				while (tokens.hasNext())
 				{
 					lineEdit = tokens.next();
-					config.vdisk_paths[disk_nr++] = lineEdit.str();
+					config.vdisk_paths[disk_nr++] = lineEdit;
 				}
 			}
-			else if (lineEdit.str() == "bios")
+			else if (lineEdit == "bios")
 			{
 				lineEdit = tokens.next();
-				config.bios_path = lineEdit.str();
+				config.bios_path = lineEdit;
 			}
-			else if (lineEdit.str() == "cmos")
+			else if (lineEdit == "cmos")
 			{
 				lineEdit = tokens.next();
-				config.cmos_path = lineEdit.str();
+				config.cmos_path = lineEdit;
 			}
 			else continue; //TODO: Warning
 		}

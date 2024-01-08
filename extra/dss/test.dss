@@ -1,4 +1,4 @@
-.load 0x1A40
+.load 0x1740
 
 .code
 	mov R1, 0xABCD

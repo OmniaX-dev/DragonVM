@@ -52,7 +52,7 @@ namespace dragon
 		void Assembler::loadSource(ostd::String source)
 		{
 			m_rawSource = source;
-			m_lines = ostd::StringEditor(source).tokenize("\n").getRawData();
+			m_lines = ostd::String(source).tokenize("\n").getRawData();
 		}
 
 		ostd::ByteStream Assembler::assembleToFile(ostd::String sourceFileName, ostd::String binaryFileName)
@@ -77,21 +77,21 @@ namespace dragon
 			if (m_code.size() == 0 || m_disassembly.size() == 0) return false;
 			ostd::String header_string = "{ DRAGON_DEBUG_DISASSEMBLY }";
 			uint64_t da_size = 0;
-			da_size += (header_string.length() + 1) * ostd::tTypeSize::BYTE;
+			da_size += (header_string.len() + 1) * ostd::tTypeSize::BYTE;
 			da_size += m_disassembly.size() * ostd::tTypeSize::DWORD; //Addresses
 			da_size += m_disassembly.size() * ostd::tTypeSize::BYTE; //Null Termination
 			for (auto& da : m_disassembly)
-				da_size += da.code.length() * ostd::tTypeSize::BYTE; //Code Strings
+				da_size += da.code.len() * ostd::tTypeSize::BYTE; //Code Strings
 			ostd::serial::SerialIO serializer(da_size, ostd::serial::SerialIO::tEndianness::BigEndian);
 			ostd::StreamIndex stream_addr = 0;
 			serializer.w_String(stream_addr, header_string);
-			stream_addr += (header_string.length() + 1) * ostd::tTypeSize::BYTE;
+			stream_addr += (header_string.len() + 1) * ostd::tTypeSize::BYTE;
 			for (auto& da : m_disassembly)
 			{
 				serializer.w_DWord(stream_addr, da.addr);
 				stream_addr += ostd::tTypeSize::DWORD;
 				serializer.w_String(stream_addr, da.code);
-				stream_addr += (da.code.length() + 1) * ostd::tTypeSize::BYTE;
+				stream_addr += (da.code.len() + 1) * ostd::tTypeSize::BYTE;
 				// ostd::ByteStream code_stream = ostd::Utils::stringToByteStream(da.code);
 				// for (int32_t i = 0; i < code_stream.size(); i++)
 				// {
@@ -107,7 +107,7 @@ namespace dragon
 		void Assembler::removeComments(void)
 		{
 			std::vector<ostd::String> newLines;
-			ostd::StringEditor lineEdit;
+			ostd::String lineEdit;
 			for (auto& line : m_lines)
 			{
 				lineEdit = line;
@@ -119,7 +119,7 @@ namespace dragon
 					lineEdit = lineEdit.substr(0, lineEdit.indexOf("##"));
 					lineEdit.trim();
 				}
-				newLines.push_back(lineEdit.str());
+				newLines.push_back(lineEdit);
 			}
 			m_lines.clear();
 			m_lines = newLines;
@@ -141,8 +141,8 @@ namespace dragon
 			};
 			std::vector<tDefine> defines;
 			std::vector<ostd::String> newLines;
-			ostd::StringEditor lineEdit;
-			ostd::StringEditor tmpLineEdit;
+			ostd::String lineEdit;
+			ostd::String tmpLineEdit;
 			for (auto& line : m_lines)
 			{
 				lineEdit = line;
@@ -157,9 +157,9 @@ namespace dragon
 						std::cout << "Invalid @define directive: " << line << "\n";
 						return;
 					}
-					ostd::String define_name = lineEdit.substr(0, lineEdit.indexOf(" "));
-					define_name = ostd::StringEditor(define_name).trim().str();
-					ostd::String define_value = lineEdit.substr(lineEdit.indexOf(" ") + 1);
+					ostd::String define_name = lineEdit.new_substr(0, lineEdit.indexOf(" "));
+					define_name = ostd::String(define_name).trim();
+					ostd::String define_value = lineEdit.new_substr(lineEdit.indexOf(" ") + 1);
 					if (listContainsDefine(defines, define_name))
 					{
 						std::cout << "Redefinition of @define value: " << line << "\n";
@@ -169,14 +169,14 @@ namespace dragon
 					// std::cout << define_name << ": " << define_value << "\n";
 					continue;
 				}
-				newLines.push_back(lineEdit.str());
+				newLines.push_back(lineEdit);
 			}
 			for (auto& line : newLines)
 			{
-				ostd::StringEditor lineEdit(line);
+				ostd::String lineEdit(line);
 				for (int32_t i = defines.size() - 1; i >= 0; i--)
 					lineEdit.replaceAll(defines[i].name, defines[i].value);
-				line = lineEdit.str();
+				line = lineEdit;
 			}
 			m_lines.clear();
 			m_lines = newLines;
@@ -191,7 +191,7 @@ namespace dragon
 
 			for (auto& line : m_lines)
 			{
-				ostd::StringEditor lineEdit(line);
+				ostd::String lineEdit(line);
 				if (lineEdit.startsWith(".data"))
 					currentSection = DATA_SECTION;
 				else if (lineEdit.startsWith(".code"))
@@ -212,7 +212,7 @@ namespace dragon
 						std::cout << "Invalid .fixed value: " << lineEdit << "\n";
 						return;
 					}
-					ostd::StringEditor fixedSizeEdit = lineEdit.substr(0, lineEdit.indexOf(","));
+					ostd::String fixedSizeEdit = lineEdit.new_substr(0, lineEdit.indexOf(","));
 					fixedSizeEdit.trim();
 					lineEdit = lineEdit.substr(lineEdit.indexOf(",") + 1);
 					lineEdit.trim();
@@ -278,14 +278,14 @@ namespace dragon
 		{
 			for (auto& line : m_rawDataSection)
 			{
-				ostd::StringEditor lineEdit(line);
+				ostd::String lineEdit(line);
 				tSymbol symbol;
 				if (!lineEdit.startsWith("$") || lineEdit.indexOf(" ") < 2)
 				{
 					std::cout << "Invalid data entry: " << lineEdit << "\n";
 					continue;
 				}
-				ostd::StringEditor symbolName = lineEdit.substr(0, lineEdit.indexOf(" "));
+				ostd::String symbolName = lineEdit.new_substr(0, lineEdit.indexOf(" "));
 				symbolName.trim();
 				lineEdit = lineEdit.substr(lineEdit.indexOf(" ") + 1);
 				lineEdit.trim();
@@ -304,18 +304,18 @@ namespace dragon
 					symbol.bytes.push_back(value);
 					symbol.address = m_currentDataAddr;
 					m_currentDataAddr += 1;
-					m_symbolTable[symbolName.str()] = symbol;
+					m_symbolTable[symbolName] = symbol;
 					continue;
 				}
 				else if (lineEdit.startsWith("\"") && lineEdit.endsWith("\"") && lineEdit.len() > 2)
 				{
 					lineEdit = lineEdit.substr(1, lineEdit.len() - 1);
-					for (auto c : lineEdit.str())
+					for (auto c : lineEdit)
 						symbol.bytes.push_back((uint8_t)c);
 					symbol.bytes.push_back((uint8_t)0);   //NULL Termination
 					symbol.address = m_currentDataAddr;
 					m_currentDataAddr += lineEdit.len();
-					m_symbolTable[symbolName.str()] = symbol;
+					m_symbolTable[symbolName] = symbol;
 					continue;
 				}
 				else if (lineEdit.contains(","))
@@ -338,7 +338,7 @@ namespace dragon
 					}
 					symbol.address = m_currentDataAddr;
 					m_currentDataAddr += symbol.bytes.size();
-					m_symbolTable[symbolName.str()] = symbol;
+					m_symbolTable[symbolName] = symbol;
 					continue;
 				}
 				else
@@ -358,14 +358,14 @@ namespace dragon
 		{
 			for (auto& line : m_rawCodeSection)
 			{
-				ostd::StringEditor lineEdit(line);
+				ostd::String lineEdit(line);
 				uint32_t commaCount = lineEdit.count(",");
 				uint32_t spaceCount = lineEdit.count(" ");
 				if (lineEdit.endsWith(":") && commaCount == 0 && spaceCount == 0) //Labels
 				{
 					lineEdit = lineEdit.substr(0, lineEdit.len() - 1);
 					lineEdit.trim();
-					m_labelTable["$" + lineEdit.str()] = { { }, 0x0000 };
+					m_labelTable["$" + lineEdit] = { { }, 0x0000 };
 					continue;
 				}
 			}
@@ -373,55 +373,55 @@ namespace dragon
 			tDisassemblyLine _disassembly_line;
 			for (auto& line : m_rawCodeSection)
 			{
-				ostd::StringEditor lineEdit(line);
+				ostd::String lineEdit(line);
 				uint32_t commaCount = lineEdit.count(",");
 				uint32_t spaceCount = lineEdit.count(" ");
 				if (lineEdit.endsWith(":") && commaCount == 0 && spaceCount == 0) //Labels
 				{
 					// _disassembly_line.addr = m_dataSize + m_loadAddress + m_code.size() + 3;
-					// _disassembly_line.code = lineEdit.str();
+					// _disassembly_line.code = lineEdit;
 					// m_disassembly.push_back(_disassembly_line);
 					lineEdit = lineEdit.substr(0, lineEdit.len() - 1);
 					lineEdit.trim();
-					m_labelTable["$" + lineEdit.str()].address = m_dataSize + m_loadAddress + m_code.size() + 3;
+					m_labelTable["$" + lineEdit].address = m_dataSize + m_loadAddress + m_code.size() + 3;
 					continue;
 				}
 				else if (commaCount == 0 && spaceCount <= 0) //0 Operands
 				{
 					_disassembly_line.addr = m_dataSize + m_loadAddress + m_code.size() + 3;
-					ostd::StringEditor _tmp_edit(lineEdit.str());
+					ostd::String _tmp_edit(lineEdit);
 					if (_tmp_edit.toLower().trim().startsWith("debug_"))
-						parseDebugOperands(lineEdit.str());
+						parseDebugOperands(lineEdit);
 					else
-						parse0Operand(lineEdit.str());
-					_disassembly_line.code = lineEdit.str();
+						parse0Operand(lineEdit);
+					_disassembly_line.code = lineEdit;
 					m_disassembly.push_back(_disassembly_line);
 					continue;
 				}
 				else if (commaCount == 0) //1 Operands
 				{
 					_disassembly_line.addr = m_dataSize + m_loadAddress + m_code.size() + 3;
-					lineEdit = replaceSymbols(lineEdit.str());
-					parse1Operand(lineEdit.str());
-					_disassembly_line.code = lineEdit.str();
+					lineEdit = replaceSymbols(lineEdit);
+					parse1Operand(lineEdit);
+					_disassembly_line.code = lineEdit;
 					m_disassembly.push_back(_disassembly_line);
 					continue;
 				}
 				else if (commaCount == 1) //2 Operands
 				{
 					_disassembly_line.addr = m_dataSize + m_loadAddress + m_code.size() + 3;
-					lineEdit = replaceSymbols(lineEdit.str());
-					parse2Operand(lineEdit.str());
-					_disassembly_line.code = lineEdit.str();
+					lineEdit = replaceSymbols(lineEdit);
+					parse2Operand(lineEdit);
+					_disassembly_line.code = lineEdit;
 					m_disassembly.push_back(_disassembly_line);
 					continue;
 				}
 				else if (commaCount == 2) // 3 Operands
 				{
 					_disassembly_line.addr = m_dataSize + m_loadAddress + m_code.size() + 3;
-					lineEdit = replaceSymbols(lineEdit.str());
-					parse3Operand(lineEdit.str());
-					_disassembly_line.code = lineEdit.str();
+					lineEdit = replaceSymbols(lineEdit);
+					parse3Operand(lineEdit);
+					_disassembly_line.code = lineEdit;
 					m_disassembly.push_back(_disassembly_line);
 					continue;
 				}
@@ -435,22 +435,22 @@ namespace dragon
 
 		void Assembler::parse0Operand(ostd::String line)
 		{
-			if (ostd::StringEditor(line).toLower().startsWith("nop"))
+			if (ostd::String(line).toLower().startsWith("nop"))
 			{
 				m_code.push_back(data::OpCodes::NoOp);
 				return;
 			}
-			else if (ostd::StringEditor(line).toLower().startsWith("ret"))
+			else if (ostd::String(line).toLower().startsWith("ret"))
 			{
 				m_code.push_back(data::OpCodes::Ret);
 				return;
 			}
-			else if (ostd::StringEditor(line).toLower().startsWith("rti"))
+			else if (ostd::String(line).toLower().startsWith("rti"))
 			{
 				m_code.push_back(data::OpCodes::RetInt);
 				return;
 			}
-			else if (ostd::StringEditor(line).toLower().startsWith("hlt"))
+			else if (ostd::String(line).toLower().startsWith("hlt"))
 			{
 				m_code.push_back(data::OpCodes::Halt);
 				return;
@@ -459,7 +459,7 @@ namespace dragon
 
 		void Assembler::parseDebugOperands(ostd::String line)
 		{
-			if (ostd::StringEditor(line).toLower().startsWith("debug_break"))
+			if (ostd::String(line).toLower().startsWith("debug_break"))
 			{
 				m_code.push_back(data::OpCodes::DEBUG_Break);
 				return;
@@ -468,15 +468,15 @@ namespace dragon
 
 		void Assembler::parse1Operand(ostd::String line)
 		{
-			ostd::StringEditor lineEdit(line);
-			ostd::StringEditor instEdit(lineEdit.substr(0, lineEdit.indexOf(" ")));
+			ostd::String lineEdit(line);
+			ostd::String instEdit(lineEdit.new_substr(0, lineEdit.indexOf(" ")));
 			instEdit.trim().toLower();
-			ostd::StringEditor opEdit(lineEdit.substr(lineEdit.indexOf(" ") + 1));
+			ostd::String opEdit(lineEdit.new_substr(lineEdit.indexOf(" ") + 1));
 			opEdit.trim();
 			int16_t word = 0x0000;
-			if (instEdit.str() == "inc")
+			if (instEdit == "inc")
 			{
-				eOperandType opType = parseOperand(opEdit.str(), word);
+				eOperandType opType = parseOperand(opEdit, word);
 				if (opType != eOperandType::Register)
 				{
 					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Register required\n";
@@ -487,9 +487,9 @@ namespace dragon
 				m_code.push_back((uint8_t)word);
 				return;
 			}
-			else if (instEdit.str() == "dec")
+			else if (instEdit == "dec")
 			{
-				eOperandType opType = parseOperand(opEdit.str(), word);
+				eOperandType opType = parseOperand(opEdit, word);
 				if (opType != eOperandType::Register)
 				{
 					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Register required\n";
@@ -500,9 +500,9 @@ namespace dragon
 				m_code.push_back((uint8_t)word);
 				return;
 			}
-			else if (instEdit.str() == "push")
+			else if (instEdit == "push")
 			{
-				eOperandType opType = parseOperand(opEdit.str(), word);
+				eOperandType opType = parseOperand(opEdit, word);
 				if (opType == eOperandType::Immediate || opType == eOperandType::Label)
 				{
 					m_code.push_back(data::OpCodes::PushImm);
@@ -521,9 +521,9 @@ namespace dragon
 				}
 				return;
 			}
-			else if (instEdit.str() == "pop")
+			else if (instEdit == "pop")
 			{
-				eOperandType opType = parseOperand(opEdit.str(), word);
+				eOperandType opType = parseOperand(opEdit, word);
 				if (opType != eOperandType::Register)
 				{
 					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Register required\n";
@@ -534,10 +534,10 @@ namespace dragon
 				m_code.push_back((uint8_t)word);
 				return;
 			}
-			else if (instEdit.str() == "call")
+			else if (instEdit == "call")
 			{
 				m_code.push_back(0x00);
-				eOperandType opType = parseOperand(opEdit.str(), word);
+				eOperandType opType = parseOperand(opEdit, word);
 				if (opType == eOperandType::Immediate || opType == eOperandType::Label)
 				{
 					m_code[m_code.size() - 1] = data::OpCodes::CallImm;
@@ -556,9 +556,9 @@ namespace dragon
 				}
 				return;
 			}
-			else if (instEdit.str() == "not")
+			else if (instEdit == "not")
 			{
-				eOperandType opType = parseOperand(opEdit.str(), word);
+				eOperandType opType = parseOperand(opEdit, word);
 				if (opType != eOperandType::Register)
 				{
 					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Register required\n";
@@ -569,10 +569,10 @@ namespace dragon
 				m_code.push_back((uint8_t)word);
 				return;
 			}
-			else if (instEdit.str() == "jmp")
+			else if (instEdit == "jmp")
 			{
 				m_code.push_back(data::OpCodes::Jmp);
-				eOperandType opType = parseOperand(opEdit.str(), word);
+				eOperandType opType = parseOperand(opEdit, word);
 				if (opType != eOperandType::Label && opType != eOperandType::Immediate)
 				{
 					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Immediate (or label) required\n";
@@ -583,9 +583,9 @@ namespace dragon
 				m_code.push_back((uint8_t)(word & 0x00FF));
 				return;
 			}
-			else if (instEdit.str() == "int")
+			else if (instEdit == "int")
 			{
-				eOperandType opType = parseOperand(opEdit.str(), word);
+				eOperandType opType = parseOperand(opEdit, word);
 				if (opType != eOperandType::Immediate)
 				{
 					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Immediate required\n";
@@ -605,14 +605,14 @@ namespace dragon
 
 		void Assembler::parse2Operand(ostd::String line)
 		{
-			ostd::StringEditor lineEdit(line);
-			ostd::StringEditor instEdit(lineEdit.substr(0, lineEdit.indexOf(" ")));
+			ostd::String lineEdit(line);
+			ostd::String instEdit(lineEdit.new_substr(0, lineEdit.indexOf(" ")));
 			instEdit.trim().toLower();
-			ostd::StringEditor opEdit(lineEdit.substr(lineEdit.indexOf(" ") + 1));
+			ostd::String opEdit(lineEdit.new_substr(lineEdit.indexOf(" ") + 1));
 			opEdit.trim();
 			int16_t word = 0x0000;
 			auto st = opEdit.tokenize(",");
-			if (instEdit.str() == "mov")
+			if (instEdit == "mov")
 			{
 				m_code.push_back(0x00);
 				int16_t word1 = 0x0000;
@@ -711,7 +711,7 @@ namespace dragon
 				}
 				return;
 			}
-			else if (instEdit.str() == "movb")
+			else if (instEdit == "movb")
 			{
 				m_code.push_back(0x00);
 				int16_t word1 = 0x0000;
@@ -800,7 +800,7 @@ namespace dragon
 				}
 				return;
 			}
-			else if (instEdit.str() == "add" || instEdit.str() == "sub" || instEdit.str() == "mul")
+			else if (instEdit == "add" || instEdit == "sub" || instEdit == "mul")
 			{
 				m_code.push_back(0x00);
 				eOperandType opType = parseOperand(st.next(), word);
@@ -815,17 +815,17 @@ namespace dragon
 
 				if (opType == eOperandType::Immediate)
 				{
-					if (instEdit.str() == "add") m_code[m_code.size() - 2] = data::OpCodes::AddImmReg;
-					else if (instEdit.str() == "sub") m_code[m_code.size() - 2] = data::OpCodes::SubImmReg;
-					else if (instEdit.str() == "mul") m_code[m_code.size() - 2] = data::OpCodes::MulImmReg;
+					if (instEdit == "add") m_code[m_code.size() - 2] = data::OpCodes::AddImmReg;
+					else if (instEdit == "sub") m_code[m_code.size() - 2] = data::OpCodes::SubImmReg;
+					else if (instEdit == "mul") m_code[m_code.size() - 2] = data::OpCodes::MulImmReg;
 					m_code.push_back((uint8_t)((word & 0xFF00) >> 8));
 					m_code.push_back((uint8_t)(word & 0x00FF));
 				}
 				else if (opType == eOperandType::Register)
 				{
-					if (instEdit.str() == "add") m_code[m_code.size() - 2] = data::OpCodes::AddRegReg;
-					else if (instEdit.str() == "sub") m_code[m_code.size() - 2] = data::OpCodes::SubRegReg;
-					else if (instEdit.str() == "mul") m_code[m_code.size() - 2] = data::OpCodes::MulRegReg;
+					if (instEdit == "add") m_code[m_code.size() - 2] = data::OpCodes::AddRegReg;
+					else if (instEdit == "sub") m_code[m_code.size() - 2] = data::OpCodes::SubRegReg;
+					else if (instEdit == "mul") m_code[m_code.size() - 2] = data::OpCodes::MulRegReg;
 					m_code.push_back((uint8_t)word);
 				}
 				else
@@ -836,7 +836,7 @@ namespace dragon
 				}
 				return;
 			}
-			else if (instEdit.str() == "lsh" || instEdit.str() == "rsh" || instEdit.str() == "and" || instEdit.str() == "or" || instEdit.str() == "xor")
+			else if (instEdit == "lsh" || instEdit == "rsh" || instEdit == "and" || instEdit == "or" || instEdit == "xor")
 			{
 				eOperandType opType = parseOperand(st.next(), word);
 				if (opType != eOperandType::Register)
@@ -849,22 +849,22 @@ namespace dragon
 				opType = parseOperand(st.next(), word);
 				if (opType == eOperandType::Immediate)
 				{
-					if (instEdit.str() == "lsh") m_code.push_back(data::OpCodes::LShiftRegImm);
-					else if (instEdit.str() == "rsh") m_code.push_back(data::OpCodes::RShiftRegImm);
-					else if (instEdit.str() == "and") m_code.push_back(data::OpCodes::AndRegImm);
-					else if (instEdit.str() == "or") m_code.push_back(data::OpCodes::OrRegImm);
-					else if (instEdit.str() == "xor") m_code.push_back(data::OpCodes::XorRegImm);
+					if (instEdit == "lsh") m_code.push_back(data::OpCodes::LShiftRegImm);
+					else if (instEdit == "rsh") m_code.push_back(data::OpCodes::RShiftRegImm);
+					else if (instEdit == "and") m_code.push_back(data::OpCodes::AndRegImm);
+					else if (instEdit == "or") m_code.push_back(data::OpCodes::OrRegImm);
+					else if (instEdit == "xor") m_code.push_back(data::OpCodes::XorRegImm);
 					m_code.push_back((uint8_t)((word & 0xFF00) >> 8));
 					m_code.push_back((uint8_t)(word & 0x00FF));
 					m_code.push_back((uint8_t)regAddr);
 				}
 				else if (opType == eOperandType::Register)
 				{
-					if (instEdit.str() == "lsh") m_code.push_back(data::OpCodes::LShiftRegReg);
-					else if (instEdit.str() == "rsh") m_code.push_back(data::OpCodes::RShiftRegReg);
-					else if (instEdit.str() == "and") m_code.push_back(data::OpCodes::AndRegReg);
-					else if (instEdit.str() == "or") m_code.push_back(data::OpCodes::OrRegReg);
-					else if (instEdit.str() == "xor") m_code.push_back(data::OpCodes::XorRegReg);
+					if (instEdit == "lsh") m_code.push_back(data::OpCodes::LShiftRegReg);
+					else if (instEdit == "rsh") m_code.push_back(data::OpCodes::RShiftRegReg);
+					else if (instEdit == "and") m_code.push_back(data::OpCodes::AndRegReg);
+					else if (instEdit == "or") m_code.push_back(data::OpCodes::OrRegReg);
+					else if (instEdit == "xor") m_code.push_back(data::OpCodes::XorRegReg);
 					m_code.push_back((uint8_t)word);
 					m_code.push_back((uint8_t)regAddr);
 				}
@@ -876,7 +876,7 @@ namespace dragon
 				}
 				return;
 			}
-			else if (instEdit.str() == "jne" || instEdit.str() == "jeq" || instEdit.str() == "jgr" || instEdit.str() == "jls" || instEdit.str() == "jge" || instEdit.str() == "jle")
+			else if (instEdit == "jne" || instEdit == "jeq" || instEdit == "jgr" || instEdit == "jls" || instEdit == "jge" || instEdit == "jle")
 			{
 				m_code.push_back(0x00);
 				eOperandType opType = parseOperand(st.next(), word);
@@ -893,23 +893,23 @@ namespace dragon
 
 				if (opType == eOperandType::Immediate)
 				{
-					if (instEdit.str() == "jeq") m_code[m_code.size() - 3] = data::OpCodes::JmpEqImm;
-					else if (instEdit.str() == "jne") m_code[m_code.size() - 3] = data::OpCodes::JmpNotEqImm;
-					else if (instEdit.str() == "jgr") m_code[m_code.size() - 3] = data::OpCodes::JmpGrImm;
-					else if (instEdit.str() == "jls") m_code[m_code.size() - 3] = data::OpCodes::JmpLessImm;
-					else if (instEdit.str() == "jge") m_code[m_code.size() - 3] = data::OpCodes::JmpGeImm;
-					else if (instEdit.str() == "jle") m_code[m_code.size() - 3] = data::OpCodes::JmpLeImm;
+					if (instEdit == "jeq") m_code[m_code.size() - 3] = data::OpCodes::JmpEqImm;
+					else if (instEdit == "jne") m_code[m_code.size() - 3] = data::OpCodes::JmpNotEqImm;
+					else if (instEdit == "jgr") m_code[m_code.size() - 3] = data::OpCodes::JmpGrImm;
+					else if (instEdit == "jls") m_code[m_code.size() - 3] = data::OpCodes::JmpLessImm;
+					else if (instEdit == "jge") m_code[m_code.size() - 3] = data::OpCodes::JmpGeImm;
+					else if (instEdit == "jle") m_code[m_code.size() - 3] = data::OpCodes::JmpLeImm;
 					m_code.push_back((uint8_t)((word & 0xFF00) >> 8));
 					m_code.push_back((uint8_t)(word & 0x00FF));
 				}
 				else if (opType == eOperandType::Register)
 				{
-					if (instEdit.str() == "jeq") m_code[m_code.size() - 3] = data::OpCodes::JmpEqReg;
-					else if (instEdit.str() == "jne") m_code[m_code.size() - 3] = data::OpCodes::JmpNotEqReg;
-					else if (instEdit.str() == "jgr") m_code[m_code.size() - 3] = data::OpCodes::JmpGrReg;
-					else if (instEdit.str() == "jls") m_code[m_code.size() - 3] = data::OpCodes::JmpLessReg;
-					else if (instEdit.str() == "jge") m_code[m_code.size() - 3] = data::OpCodes::JmpGeReg;
-					else if (instEdit.str() == "jle") m_code[m_code.size() - 3] = data::OpCodes::JmpLeReg;
+					if (instEdit == "jeq") m_code[m_code.size() - 3] = data::OpCodes::JmpEqReg;
+					else if (instEdit == "jne") m_code[m_code.size() - 3] = data::OpCodes::JmpNotEqReg;
+					else if (instEdit == "jgr") m_code[m_code.size() - 3] = data::OpCodes::JmpGrReg;
+					else if (instEdit == "jls") m_code[m_code.size() - 3] = data::OpCodes::JmpLessReg;
+					else if (instEdit == "jge") m_code[m_code.size() - 3] = data::OpCodes::JmpGeReg;
+					else if (instEdit == "jle") m_code[m_code.size() - 3] = data::OpCodes::JmpLeReg;
 					m_code.push_back((uint8_t)word);
 				}
 				else
@@ -929,13 +929,13 @@ namespace dragon
 
 		void Assembler::parse3Operand(ostd::String line)
 		{
-			ostd::StringEditor lineEdit(line);
-			ostd::StringEditor instEdit(lineEdit.substr(0, lineEdit.indexOf(" ")));
+			ostd::String lineEdit(line);
+			ostd::String instEdit(lineEdit.new_substr(0, lineEdit.indexOf(" ")));
 			instEdit.trim().toLower();
-			ostd::StringEditor opEdit(lineEdit.substr(lineEdit.indexOf(" ") + 1));
+			ostd::String opEdit(lineEdit.new_substr(lineEdit.indexOf(" ") + 1));
 			opEdit.trim();
 			int16_t word = 0x0000;
-			if (instEdit.str() == "mov")
+			if (instEdit == "mov")
 			{
 				auto st = opEdit.tokenize(",");
 				eOperandType opType = parseOperand(st.next(), word);
@@ -983,7 +983,7 @@ namespace dragon
 			newCode.push_back((uint8_t)(entryAddr & 0x00FF));
 			if (m_dataSize > 0)
 				m_disassembly.insert(m_disassembly.begin(), { (uint16_t)(m_loadAddress + 3), "[----------DATA_SECTION----------]" });
-			m_disassembly.insert(m_disassembly.begin(), { m_loadAddress, ostd::StringEditor("jmp ").add(ostd::Utils::getHexStr(entryAddr, true, 2)).str() });
+			m_disassembly.insert(m_disassembly.begin(), { m_loadAddress, ostd::String("jmp ").add(ostd::Utils::getHexStr(entryAddr, true, 2)) });
 			for (auto& d : m_symbolTable)
 				symbols.push_back(d.second);
 			for (int32_t i = symbols.size() - 1; i >= 0; i--)
@@ -1009,10 +1009,10 @@ namespace dragon
 
 		ostd::String Assembler::replaceSymbols(ostd::String line)
 		{
-			ostd::StringEditor lineEdit(line);
+			ostd::String lineEdit(line);
 			for (auto& symbol : m_symbolTable)
 				lineEdit.replaceAll(symbol.first, ostd::Utils::getHexStr(symbol.second.address, true, 2));
-			return lineEdit.str();
+			return lineEdit;
 		}
 
 		void Assembler::replaceLabelRefs(void)
@@ -1029,7 +1029,7 @@ namespace dragon
 
 		Assembler::eOperandType Assembler::parseOperand(ostd::String op, int16_t& outOp)
 		{
-			ostd::StringEditor opEdit(op);
+			ostd::String opEdit(op);
 			bool derefReg = false;
 			if (opEdit.startsWith("*"))
 			{
@@ -1037,7 +1037,7 @@ namespace dragon
 				opEdit.trim();
 				derefReg = true;
 			}
-			int8_t reg = parseRegister(opEdit.str());
+			int8_t reg = parseRegister(opEdit);
 			if (reg != data::Registers::Last)
 			{
 				outOp = (int16_t)reg;
@@ -1057,14 +1057,14 @@ namespace dragon
 			}
 			if (opEdit.startsWith("$"))
 			{
-				if (m_labelTable.count(opEdit.str()) == 0)
+				if (m_labelTable.count(opEdit) == 0)
 				{
 					std::cout << "Unknown symbol: " << opEdit << "\n";
 					return eOperandType::Error;
 				}
-				uint16_t labelAddr = m_labelTable[opEdit.str()].address;
+				uint16_t labelAddr = m_labelTable[opEdit].address;
 				if (labelAddr == 0x0000)
-					m_labelTable[opEdit.str()].references.push_back(m_code.size());
+					m_labelTable[opEdit].references.push_back(m_code.size());
 				outOp = (int16_t)labelAddr;
 				return eOperandType::Label;
 			}
@@ -1072,7 +1072,7 @@ namespace dragon
 			{
 				opEdit = opEdit.substr(1, opEdit.len() - 1);
 				opEdit.trim();
-				outOp = (int16_t)ostd::Utils::solveIntegerExpression(opEdit.str());
+				outOp = (int16_t)ostd::Utils::solveIntegerExpression(opEdit);
 				return eOperandType::Immediate;
 			}
 			if (opEdit.startsWith("[") && opEdit.endsWith("]"))
@@ -1083,7 +1083,7 @@ namespace dragon
 				{
 					opEdit = opEdit.substr(1, opEdit.len() - 1);
 					opEdit.trim();
-					outOp = (int16_t)ostd::Utils::solveIntegerExpression(opEdit.str());
+					outOp = (int16_t)ostd::Utils::solveIntegerExpression(opEdit);
 					return eOperandType::DerefMemory;
 				}
 				if (!opEdit.isNumeric())
@@ -1099,25 +1099,25 @@ namespace dragon
 
 		uint8_t Assembler::parseRegister(ostd::String op)
 		{
-			ostd::StringEditor opEdit(op);
+			ostd::String opEdit(op);
 			opEdit.trim().toLower();
-			if (opEdit.str() == "r1") return data::Registers::R1;
-			if (opEdit.str() == "r2") return data::Registers::R2;
-			if (opEdit.str() == "r3") return data::Registers::R3;
-			if (opEdit.str() == "r4") return data::Registers::R4;
-			if (opEdit.str() == "r5") return data::Registers::R5;
-			if (opEdit.str() == "r6") return data::Registers::R6;
-			if (opEdit.str() == "r7") return data::Registers::R7;
-			if (opEdit.str() == "r8") return data::Registers::R8;
-			if (opEdit.str() == "r9") return data::Registers::R9;
-			if (opEdit.str() == "r10") return data::Registers::R10;
-			if (opEdit.str() == "acc") return data::Registers::ACC;
-			if (opEdit.str() == "fp") return data::Registers::FP;
-			if (opEdit.str() == "sp") return data::Registers::SP;
-			if (opEdit.str() == "ip") return data::Registers::IP;
-			if (opEdit.str() == "pp") return data::Registers::PP;
-			if (opEdit.str() == "rv") return data::Registers::RV;
-			if (opEdit.str() == "fl") return data::Registers::FL;
+			if (opEdit == "r1") return data::Registers::R1;
+			if (opEdit == "r2") return data::Registers::R2;
+			if (opEdit == "r3") return data::Registers::R3;
+			if (opEdit == "r4") return data::Registers::R4;
+			if (opEdit == "r5") return data::Registers::R5;
+			if (opEdit == "r6") return data::Registers::R6;
+			if (opEdit == "r7") return data::Registers::R7;
+			if (opEdit == "r8") return data::Registers::R8;
+			if (opEdit == "r9") return data::Registers::R9;
+			if (opEdit == "r10") return data::Registers::R10;
+			if (opEdit == "acc") return data::Registers::ACC;
+			if (opEdit == "fp") return data::Registers::FP;
+			if (opEdit == "sp") return data::Registers::SP;
+			if (opEdit == "ip") return data::Registers::IP;
+			if (opEdit == "pp") return data::Registers::PP;
+			if (opEdit == "rv") return data::Registers::RV;
+			if (opEdit == "fl") return data::Registers::FL;
 			return data::Registers::Last;
 		}
 

@@ -2,7 +2,7 @@
 #include <ostd/Utils.hpp>
 #include <ostd/IOHandlers.hpp>
 
-ostd::legacy::ConsoleOutputHandler out;
+ostd::ConsoleOutputHandler out;
 
 
 struct tCommandLineArgs
@@ -19,8 +19,8 @@ int main(int argc, char** argv)
 	tCommandLineArgs args;
 	if (argc < 4)
 	{
-		out.col("red").p("Error: too few arguments.").nl();
-		out.col("red").p("  Usage: ./dasm <source> -o <destination> [...options...]").resetColors().nl();
+		out.fg("red").p("Error: too few arguments.").nl();
+		out.fg("red").p("  Usage: ./dasm <source> -o <destination> [...options...]").reset().nl();
 		return 1;
 	}
 	else
@@ -28,15 +28,15 @@ int main(int argc, char** argv)
 		args.source_file_path = argv[1];
 		for (int32_t i = 2; i < argc; i++)
 		{
-			ostd::StringEditor edit(argv[i]);
-			if (edit.str() == "-o")
+			ostd::String edit(argv[i]);
+			if (edit == "-o")
 			{
 				if (i == argc - 1)
 					break; //TODO: Warning
 				i++;
 				args.dest_file_path = argv[i];
 			}
-			else if (edit.str() == "--save-disassembly")
+			else if (edit == "--save-disassembly")
 			{
 				if (i == argc - 1)
 					break; //TODO: Warning
@@ -44,7 +44,7 @@ int main(int argc, char** argv)
 				args.disassembly_file_path = argv[i];
 				args.save_disassembly = true;
 			}
-			else if (edit.str() == "--verbose")
+			else if (edit == "--verbose")
 				args.verbose = true;
 		}
 	}

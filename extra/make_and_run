@@ -1,13 +1,11 @@
 #!/bin/bash
 
-
 printf "${green}\n============================================[ Building Application ]============================================\n\n${clear}"
 \cp -r ../extra/* ./
 if [ "$(expr substr $(uname -s) 1 5)" == "Linux" ]; then
     make
 elif [ "$(expr substr $(uname -s) 1 10)" == "MINGW64_NT" ]; then
     mingw32-make.exe
-    cp ../../omnia-framework/bin/libostd.dll ./
 fi
 printf "${green}\n=================================================================================================================\n\n"
 if [ $? -eq 0 ]; then
@@ -16,10 +14,10 @@ if [ $? -eq 0 ]; then
     /bin/bash ./load_mbr
     cd ..
     printf "${green}Compiling Test Program...\n"
-    ./dasm dss/handlerTest.dss -o handlerTest.bin --save-disassembly disassembly/handlerTest.dds
+    ./dasm dss/newTest.dss -o newTest.bin --save-disassembly disassembly/newTest.dds
     printf "\n${green}Running Application...\n\n${clear}"
-    ./ddb config/testMachine.dvm --force-load handlerTest.bin 0x00 --verbose-load --track-step-diff --hide-vdisplay
-    #./dvm config/testMachine.dvm --debug --force-load newTest.bin 0x00 --verbose-load
+    ./ddb config/testMachine.dvm --force-load newTest.bin 0x00 --verbose-load --hide-vdisplay
+    # ./dvm config/testMachine.dvm --debug --force-load newTest.bin 0x00 --verbose-load
     cp dragon/disk1.dr ../extra/dragon/disk1.dr
     cp dragon/cmos.dr ../extra/dragon/cmos.dr
 fi

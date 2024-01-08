@@ -68,7 +68,7 @@ namespace dragon
 				if (address >= region.startAddress && address <= region.endAddress)
 					return &region;
 			}
-			data::ErrorHandler::pushError(data::ErrorCodes::MM_RegionNotFound, ostd::StringEditor("Memory device not found for address: ").add(ostd::Utils::getHexStr(address, true, 2)).str());
+			data::ErrorHandler::pushError(data::ErrorCodes::MM_RegionNotFound, ostd::String("Memory device not found for address: ").add(ostd::Utils::getHexStr(address, true, 2)));
 			return nullptr; //TODO: Error
 		}
 	}

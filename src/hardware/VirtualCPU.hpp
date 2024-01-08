@@ -5,6 +5,8 @@
 #include <ostd/Bitfields.hpp>
 #include "IMemoryDevice.hpp"
 
+#include "../debugger/Debugger.hpp"
+
 namespace dragon
 {
 	class DragonRuntime;
@@ -36,6 +38,11 @@ namespace dragon
 				inline bool isHalted(void) const { return m_halt; }
 				inline uint8_t getCurrentInstruction(void) const { return m_currentInst; }
 				inline bool isInDebugBreakPoint(void) const { return m_isDebugBreakPoint; }
+				inline bool isInSubRoutine(void) const { return m_subroutineCounter > 0; }
+				inline int32_t getSubRoutineCounter(void) const { return m_subroutineCounter; }
+
+			private:
+				void __debug_store_stack_frame_string_on_push(void);
 
 			private:
 				int16_t m_registers[20];
@@ -47,8 +54,14 @@ namespace dragon
 				bool m_biosMode { true };
 				bool m_isInInterruptHandler { false };
 				bool m_isDebugBreakPoint { false };
+				bool m_debugModeEnabled { false };
+				int32_t m_subroutineCounter { 0 };
+
+				std::vector<ostd::String> m_debug_stackFrameStrings;
 
 			friend class dragon::DragonRuntime;
+			friend class dragon::Debugger::Display;
+			friend class dragon::Debugger;
 		};
 	}
 }

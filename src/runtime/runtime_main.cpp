@@ -29,14 +29,14 @@ int main(int argc, char** argv)
 		args.machine_config_path = argv[1];
 		for (int32_t i = 2; i < argc; i++)
 		{
-			ostd::StringEditor edit(argv[i]);
-			if (edit.str() == "--debug")
+			ostd::String edit(argv[i]);
+			if (edit == "--debug")
 				args.basic_debug = true;
-			else if (edit.str() == "--step")
+			else if (edit == "--step")
 				args.step_exec = true;
-			else if (edit.str() == "--verbose-load")
+			else if (edit == "--verbose-load")
 				args.verbose_load = true;
-			else if (edit.str() == "--limit-cycles")
+			else if (edit == "--limit-cycles")
 			{
 				if (i == argc - 1)
 					break; //TODO: Warning
@@ -46,7 +46,7 @@ int main(int argc, char** argv)
 					continue; //TODO: Error
 				args.cycle_limit = (int32_t)edit.toInt();
 			}
-			else if (edit.str() == "--force-load")
+			else if (edit == "--force-load")
 			{
 				if ((argc - 1) - i < 2)
 					break; //TODO: Warning

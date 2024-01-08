@@ -9,10 +9,10 @@ namespace dragon
 	{
 		void VirtualHardDrive::init(const ostd::String& dataFilePath)
 		{
-			m_dataFile.open(dataFilePath, std::ios::out | std::ios::in | std::ios::binary);
+			m_dataFile.open(dataFilePath.cpp_str(), std::ios::out | std::ios::in | std::ios::binary);
 			if(!m_dataFile)
 			{
-				data::ErrorHandler::pushError(data::ErrorCodes::HardDrive_UnableToMount, ostd::StringEditor("Unable to mount virtual HardDrive: ").add(dataFilePath).str());
+				data::ErrorHandler::pushError(data::ErrorCodes::HardDrive_UnableToMount, ostd::String("Unable to mount virtual HardDrive: ").add(dataFilePath));
 				return;
 			}
 			m_fileSize = m_dataFile.tellg();
