@@ -1,74 +1,24 @@
 #include <ostd/Utils.hpp>
-
 #include "DragonRuntime.hpp"
-
-ostd::ConsoleOutputHandler out;
-
-struct tCommandLineArgs
-{
-	ostd::String machine_config_path = "";
-	bool basic_debug = false;
-	bool step_exec = false;
-	bool verbose_load = false;
-	int32_t cycle_limit = 0;
-	bool force_load = false;
-	ostd::String force_load_file = "";
-	uint16_t force_load_mem_offset = 0x00;
-};
 
 int main(int argc, char** argv)
 {
-	tCommandLineArgs args;
-	if (argc < 2)
-	{
-		out.fg(ostd::ConsoleColors::Red).p("Error, too few arguments.").reset().nl();
-		return 128;
-	}
-	else
-	{
-		args.machine_config_path = argv[1];
-		for (int32_t i = 2; i < argc; i++)
-		{
-			ostd::String edit(argv[i]);
-			if (edit == "--debug")
-				args.basic_debug = true;
-			else if (edit == "--step")
-				args.step_exec = true;
-			else if (edit == "--verbose-load")
-				args.verbose_load = true;
-			else if (edit == "--limit-cycles")
-			{
-				if (i == argc - 1)
-					break; //TODO: Warning
-				i++;
-				edit = argv[i];
-				if (!edit.isNumeric())
-					continue; //TODO: Error
-				args.cycle_limit = (int32_t)edit.toInt();
-			}
-			else if (edit == "--force-load")
-			{
-				if ((argc - 1) - i < 2)
-					break; //TODO: Warning
-				i++;
-				args.force_load_file = argv[i];
-				i++;
-				edit = argv[i];
-				if (!edit.isNumeric())
-					continue; //TODO: Error
-				args.force_load_mem_offset = (uint16_t)edit.toInt();
-				args.force_load = true;
-			}
-		}
-	}
+	//Loading commandline arguments
+	dragon::DragonRuntime::tCommandLineArgs args;
+	int32_t rValue = dragon::DragonRuntime::loadArguments(argc, argv, args);
+	if (rValue == dragon::DragonRuntime::RETURN_VAL_CLOSE_RUNTIME)
+		return 0;
+	if (rValue != 0) return rValue;
 
-	int32_t init_state = dragon::DragonRuntime::initMachine(args.machine_config_path, args.verbose_load);
-	if (init_state != 0) return init_state; //TODO: Error
+	//Initializing the runtime
+	rValue = dragon::DragonRuntime::initMachine(args.machine_config_path, args.verbose_load);
+	if (rValue == dragon::DragonRuntime::RETURN_VAL_CLOSE_RUNTIME)
+		return 0;
+	if (rValue != 0) return rValue;
 
+	//Executing the runtime
 	if (args.force_load)
 		dragon::DragonRuntime::forceLoad(args.force_load_file, args.force_load_mem_offset);
-
 	dragon::DragonRuntime::runMachine(args.cycle_limit, args.basic_debug, args.step_exec);
-
-	return 0;
+	return dragon::DragonRuntime::RETURN_VAL_EXIT_SUCCESS;
 }

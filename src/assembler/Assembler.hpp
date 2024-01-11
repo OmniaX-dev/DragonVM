@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ostd/Utils.hpp>
+#include <ostd/IOHandlers.hpp>
 #include <unordered_map>
 
 namespace dragon
@@ -13,9 +14,11 @@ namespace dragon
 	{
 		class Assembler
 		{
-			public: struct tDisassemblyLine {
+			public: struct tDisassemblyLine
+			{
 				uint32_t addr = 0;
 				ostd::String code = "";
+				uint16_t size = 1;
 				inline bool operator<(const tDisassemblyLine& second) const { return addr < second.addr; }
 				inline bool operator>(const tDisassemblyLine& second) const { return addr > second.addr; }
 			};
@@ -29,7 +32,22 @@ namespace dragon
 				std::vector<uint16_t> references;
 				uint16_t address { 0 };
 			};
-			public: enum class eOperandType {
+			public: struct tStructMember
+			{
+				ostd::String name;
+				std::vector<uint8_t> data;
+				int32_t position;
+				inline bool operator<(const tStructMember& second) const { return position < second.position; }
+				inline bool operator>(const tStructMember& second) const { return position > second.position; }
+			};
+			public: struct tStructDefinition
+			{
+				ostd::String name;
+				std::vector<tStructMember> members;
+				int32_t size;
+			};
+			public: enum class eOperandType
+			{
 				Register = 0,
 				Immediate,
 				DerefMemory,
@@ -39,6 +57,30 @@ namespace dragon
 				Error
 			};
 
+			public: class Application
+			{
+				public: struct tCommandLineArgs
+				{
+					inline tCommandLineArgs(void) {  }
+					ostd::String source_file_path { "" };
+					ostd::String dest_file_path = { "" };
+					bool save_disassembly = { false };
+					bool verbose = { false };
+					ostd::String disassembly_file_path = { "" };
+				};
+
+				public:
+					static int32_t loadArguments(int argc, char** argv);
+					static void print_application_help(void);
+
+				public:
+					inline static tCommandLineArgs args;
+					inline static const int32_t RETURN_VAL_EXIT_SUCCESS = 0;
+					inline static const int32_t RETURN_VAL_CLOSE_PROGRAM = 512;
+					inline static const int32_t RETURN_VAL_TOO_FEW_ARGUMENTS = 1;
+					inline static const int32_t RETURN_VAL_MISSING_PARAM = 2;
+			};
+
 			public:
 				static ostd::ByteStream assembleFromFile(ostd::String fileName);
 				static void loadSource(ostd::String source);
@@ -46,12 +88,15 @@ namespace dragon
 				static ostd::ByteStream assembleToVirtualDisk(ostd::String fileName, hw::VirtualHardDrive& vhdd, uint32_t address);
 				static bool saveDisassemblyToFile(ostd::String fileName);
 
-				static void tempPrint(void);
+				static void printProgramInfo(void);
 
 			private:
 				static void removeComments(void);
 				static void replaceDefines(void);
+				static void replaceGroupDefines(void);
 				static void parseSections(void);
+				static void parseStructInstances(void);
+				static void parseStructures(void);
 				static void parseDataSection(void);
 				static void parseCodeSection(void);
 				static void parseDebugOperands(ostd::String line);
@@ -80,8 +125,11 @@ namespace dragon
 				inline static uint16_t m_currentDataAddr { 0x0000 };
 				inline static uint16_t m_dataSize { 0x0000 };
 				inline static uint16_t m_programSize { 0x0000 };
+				inline static std::vector<tStructDefinition> m_structDefs;
 
 				inline static std::vector<tDisassemblyLine> m_disassembly;
+
+				inline static ostd::ConsoleOutputHandler out;
 		};
 	}
 }

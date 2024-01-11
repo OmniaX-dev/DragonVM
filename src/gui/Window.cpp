@@ -8,7 +8,7 @@ namespace dragon
 		SDL_FreeSurface(m_fontSurface);
 		SDL_DestroyRenderer(m_renderer);
 		SDL_DestroyWindow(m_window);
-		IMG_Quit();
+		// IMG_Quit();
 		SDL_Quit();
 	}
 
@@ -23,12 +23,12 @@ namespace dragon
 			printf( "SDL could not initialize! Error: %s\n", SDL_GetError() );
 			exit(1);
 		}
-		int imgFlags = IMG_INIT_PNG;
-		if (!(IMG_Init(imgFlags) & imgFlags))
-		{
-			printf( "SDL_image could not initialize! SDL_image Error: %s\n", IMG_GetError() );
-			exit(2);
-		}
+		// int imgFlags = IMG_INIT_PNG;
+		// if (!(IMG_Init(imgFlags) & imgFlags))
+		// {
+		// 	printf( "SDL_image could not initialize! SDL_image Error: %s\n", IMG_GetError() );
+		// 	exit(2);
+		// }
 		m_window = SDL_CreateWindow("", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, m_windowWidth, m_windowHeight, SDL_WINDOW_RESIZABLE);
 		SDL_SetWindowResizable(m_window, SDL_FALSE);
 		m_renderer = SDL_CreateRenderer(m_window, -1, SDL_RENDERER_ACCELERATED);
@@ -122,7 +122,7 @@ namespace dragon
 					SDL_GetWindowSize(m_window, &m_windowWidth, &m_windowHeight);
 					wrd.new_width = m_windowWidth;
 					wrd.new_height = m_windowHeight;
-					ostd::SignalHandler::emitSignal(Signal_OnWindowResized, ostd::tSignalPriority::RealTime, wrd);
+					ostd::SignalHandler::emitSignal(ostd::tBuiltinSignals::WindowResized, ostd::tSignalPriority::RealTime, wrd);
 				}
 			}
 			else if (event.type == SDL_MOUSEMOTION)
@@ -131,17 +131,17 @@ namespace dragon
 				if (isMouseDragEventEnabled() && mmd.button != MouseEventData::eButton::None)
 					ostd::SignalHandler::emitSignal(Signal_OnMouseDragged, ostd::tSignalPriority::RealTime, mmd);
 				else
-					ostd::SignalHandler::emitSignal(Signal_OnMouseMoved, ostd::tSignalPriority::RealTime, mmd);
+					ostd::SignalHandler::emitSignal(ostd::tBuiltinSignals::MouseMoved, ostd::tSignalPriority::RealTime, mmd);
 			}
 			else if (event.type == SDL_MOUSEBUTTONDOWN)
 			{
 				MouseEventData mmd = l_getMouseState();
-				ostd::SignalHandler::emitSignal(Signal_OnMousePressed, ostd::tSignalPriority::RealTime, mmd);
+				ostd::SignalHandler::emitSignal(ostd::tBuiltinSignals::MousePressed, ostd::tSignalPriority::RealTime, mmd);
 			}
 			else if (event.type == SDL_MOUSEBUTTONUP)
 			{
 				MouseEventData mmd = l_getMouseState();
-				ostd::SignalHandler::emitSignal(Signal_OnMouseReleased, ostd::tSignalPriority::RealTime, mmd);
+				ostd::SignalHandler::emitSignal(ostd::tBuiltinSignals::MouseReleased, ostd::tSignalPriority::RealTime, mmd);
 			}
 		}
 	}

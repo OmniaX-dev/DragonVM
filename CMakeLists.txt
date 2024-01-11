@@ -2,7 +2,7 @@
 #-----------------------------------------------------------------------------------------
 set(PROJ_NAME DragonVM)
 set(MAJOR_VER 0)
-set(MINOR_VER 1)
+set(MINOR_VER 2)
 #-----------------------------------------------------------------------------------------
 
 #Setup
@@ -72,6 +72,7 @@ list(APPEND ASSEMBLER_SOURCE_FILES
 list(APPEND TOOLS_SOURCE_FILES
 	${CMAKE_CURRENT_LIST_DIR}/src/tools/tools_main.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/tools/Utils.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/tools/Tools.cpp
 
 	${CMAKE_CURRENT_LIST_DIR}/src/hardware/VirtualHardDrive.cpp
 )
@@ -115,8 +116,8 @@ if (WIN32)
 	target_link_libraries(${TOOLS_TARGET} mingw32)
 	target_link_libraries(${DEBUGGER_TARGET} mingw32)
 endif (WIN32)
-target_link_libraries(${RUNTIME_TARGET} SDL2main SDL2 SDL2_mixer SDL2_image)
-target_link_libraries(${DEBUGGER_TARGET} SDL2main SDL2 SDL2_mixer SDL2_image)
+target_link_libraries(${RUNTIME_TARGET} SDL2main SDL2)
+target_link_libraries(${DEBUGGER_TARGET} SDL2main SDL2)
 #-----------------------------------------------------------------------------------------
 
 #Linking 

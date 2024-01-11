@@ -693,6 +693,16 @@ namespace dragon
 					m_subroutineCounter--;
 				}
 				break;
+				case data::OpCodes::ArgReg:
+				{
+					uint8_t regAddr = fetch8();
+					if (!isInSubRoutine()) break;
+					int16_t pp_val = readRegister(data::Registers::PP);
+					int16_t arg_data = m_memory.read16(pp_val);
+					writeRegister(data::Registers::PP, pp_val - 2);
+					writeRegister(regAddr, arg_data);
+				}
+				break;
 				case data::OpCodes::RetInt:
 				{
 					m_isInInterruptHandler = false;

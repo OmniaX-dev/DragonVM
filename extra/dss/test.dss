@@ -1,8 +1,101 @@
-.load 0x1740
+##=================================================================================================================================
+## This is the test program for the Dragon Virtual Machine. The example has two subroutines: One is the $strlen subroutine,
+## which calculates the length of the string passed as a parameter; The other calculates the fibonacci sequence up to the
+## Nth number (N being the parameter passed to the subroutine).
+## In the main part of the .code section, debug_break instructions are used in order to pause the debugger, so that the
+## results can be seen, since there is no Virtual Display implemented yet in the Dragon Runtime (that's the next thing to come).
+##=================================================================================================================================
 
+
+.load 0x1740					## The program is loaded at address 0x1740, which is the first address of normal RAM
+
+##=================================================================================================================================
+## This is the data section, used to declare variables that will be stored inside the application space
+##=================================================================================================================================
+.data
+	$hello_world_str "Hello World!!"		## In the data section only, you can declare a stream of bytes as a
+											## string literal between double-quotes. The assembler will convert
+											## it into the corresponding bytes, and will add a 0 byte at the end
+											## as the null termination.
+	$n1 0x00, 0x00							## Other data declared in the data section must be represented as a
+	$n2 0x00, 0x01							## comma-separated series of bytes (except for string literals - see
+	$n3 0x00, 0x01							## above). No size data is stored for byte streams.
+##=================================================================================================================================
+
+
+
+##=================================================================================================================================
+## This is the start of the .code section, and it acts as the entry point for the program
+##=================================================================================================================================
 .code
-	mov R1, 0xABCD
-	debug_break
-	hlt
+	push $hello_world_str					## Push the address of the first character of the $hello_world_str string to the stack
+	push 1									## Push the number 1 to the stack, as the number of arguments for the next call instruction
+	call $strlen							## Call the $strlen subroutine
+	mov R1, RV								## Load the return value into the R1 register
+	debug_break								## This debug break is here for the debugger to pause, in order to see the results of 
+											## the function call in the debugger, since the Virtual Display is not implemented yet.
+	push 25									## Push the number 25 as a parameter to the $fibonacci subroutine, so that it will
+											## calculate up to the 25th fibonacci value, which is the maximum for 16-bits.
+	push 1									## Push the number 1 to the stack, as the number of arguments for the next call instruction
+	call $fibonacci							## Call the $fibonacci subroutine
+	mov R2, RV								## Load the return value into the R2 register
+	debug_break								## This debug break is here for the debugger to pause, in order to see the results of 
+											## the function call in the debugger, since the Virtual Display is not implemented yet.
+	hlt										## This is the halt instruction, and it stops the CPU of the Virtual Machine.
+##=================================================================================================================================
 
-.fixed 512, 0x00
+
+
+##=================================================================================================================================
+## Subroutine to calculate the length of a null-terminated string
+##    It expects the address of the first character of the
+##    string, pushed onto the stack
+##=================================================================================================================================
+strlen:
+	arg R1						## Store the first argument (address of the string) into the R1 register
+	mov R2, 0					## Zero the R2 register, which will be used to store the length of the string
+_strlen_loop:
+	movb ACC, *R1				## Dereference the R1 register (pointer to the string), to get the first character of the string
+	inc R1						## Increment the R1 register (pointer to the string) so that it points to the next byte
+	jeq $_streln_loop_end, 0	## If the character ascii value is 0, we are done counting and we jump to the $_streln_loop_end label
+	inc R2						## Else, increment the R2 register, because the character is not a zero so we add 1 to the count
+	jmp $_strlen_loop			## Jump to the $_strlen_loop label (beginning of the loop)
+_streln_loop_end:
+	mov RV, R2					## Copy the value of the R2 register (length of the string) to the RV register (Return Value)
+	ret							## Return to the calling code
+##=================================================================================================================================
+
+
+
+##=================================================================================================================================
+## Subroutine to calculate the fibonacci sequence
+##    It expects Nth number (starting at 1) up to which
+##    to calculate, pushed onto the stack
+##=================================================================================================================================
+fibonacci:
+	mov R1, 0							## R1, R2, R3 Registers will be used as variables for the calculation
+	mov R2, 1							## --
+	mov R3, 1							## --
+	arg R4								## Store the first argument (Nth number of the fibonacci sequence) into the R4 register
+	mov ACC, 3							## --
+	jle $_fibonacci_loop_end, R4		## Compare the value passed as parameter and if less or equals to 3 (ACC Register) jump to the end
+	dec R4								## Decrement the R4 register by 1, to convert from index-1 to index-0 
+	mov R5, 2							## Load the numebr 2 into the R5 register, this will be used as the loop counter
+_fibonacci_loop:
+	add R1, R2							## Add R1 and R2 registers
+	mov R3, ACC							## andstore the result into the R3 register
+	##debug_break						## This commented debug_break can be uncommented in order to analyze every iteration of the loop in the debugger
+	mov R1, R2							## Swap the numbers around
+	mov R2, R3							## --
+	mov ACC, R5							## Load the value of the R5 register (used as the loop counter) into the ACC register
+	jeq $_fibonacci_loop_end, R4		## If the counter is equals to the R4 register (parameter passed from calling code) jump to the end of the loop
+	inc R5								## else increment the counter
+	jmp $_fibonacci_loop				## and jump to the beginning of the loop
+_fibonacci_loop_end:
+	mov Rv, R3							## Load the final result (stored in the R3 register) into the RV (Return Value) register
+	ret									## Return to the calling code
+##=================================================================================================================================
+
+
+.fixed 512, 0x00			## This directive is used to fill (with 0x00 bytes) the binary output file from the assembler,
+							## exactly to 512 bytes.

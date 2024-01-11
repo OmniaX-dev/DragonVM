@@ -1,5 +1,8 @@
 #!/bin/bash
 
+green='\033[0;32m'
+clear='\033[0m'
+
 printf "${green}\n============================================[ Building Application ]============================================\n\n${clear}"
 \cp -r ../extra/* ./
 if [ "$(expr substr $(uname -s) 1 5)" == "Linux" ]; then
@@ -14,7 +17,7 @@ if [ $? -eq 0 ]; then
     /bin/bash ./load_mbr
     cd ..
     printf "${green}Compiling Test Program...\n"
-    ./dasm dss/newTest.dss -o newTest.bin --save-disassembly disassembly/newTest.dds
+    ./dasm dss/newTest.dss -o newTest.bin --save-disassembly disassembly/newTest.dds --verbose
     printf "\n${green}Running Application...\n\n${clear}"
     ./ddb config/testMachine.dvm --force-load newTest.bin 0x00 --verbose-load --hide-vdisplay
     # ./dvm config/testMachine.dvm --debug --force-load newTest.bin 0x00 --verbose-load

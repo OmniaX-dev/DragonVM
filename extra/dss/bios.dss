@@ -1,41 +1,42 @@
 ## ============================= Memory Mapped Devices and Registers =============================
-@define MBR_START_ADDRESS 0x1380
-@define INT_VEC_START_ADDRESS 0x1080
-@define DISK_INTERFACE_START_ADDRESS 0x1580
-@define MEMORY_START_ADDRESS 0x1740
-@define CMOS_START_ADDRESS 0x1000
-## ===============================================================================================
+@group MemoryAddresses
+	MBR 0x1380
+	INT_VEC 0x1080
+	DISK_INTERFACE 0x1580
+	RAM 0x1740
+	CMOS 0x1000
+@end
 
-@define _CMOS_REG_BOOT_DISK {CMOS_START_ADDRESS + 0x0010}
+@group CMOS_Settings
+	BOOT_DISK {MemoryAddresses.CMOS + 0x0010}
+@end
+## ===============================================================================================
 
 .load 0x0000           															## BIOS is mapped to address 0x0000 in memory
 .data
-	$bios_version_number 0x04, 0x01												## BIOS Version stored in memory
+	$bios_version_number 0x00, 0x01												## BIOS Version stored in memory
 
 ## ============================= BIOS Program =============================
 .code
 	## mov FL, 0
 	## jmp 0x1740
 	mov FL, 0b0000000000000001													## Zero the FL Register and enable interrupts
-	movb [{INT_VEC_START_ADDRESS + (0x20 * 3)}], 0xFF 							## Setting up int 0x20 handler
-	mov [{INT_VEC_START_ADDRESS + (0x20 * 3) + 1}], $_int_20_handler			## --
+	movb [{MemoryAddresses.INT_VEC + (0x20 * 3)}], 0xFF 						## Setting up int 0x20 handler
+	mov [{MemoryAddresses.INT_VEC + (0x20 * 3) + 1}], $_int_20_handler			## --
 	
 	mov R10, 0x00																## Setting up int 0x30 handler by using int 0x20 functionality
 	mov R9, $_int_30_handler													##  -Passing the handler's address
 	mov R8, 0x30																##  -Passing the interrupt's code to setup
 	int 0x20																	##  -Calling int 0x20 with 0x00 as parameter, to set new handler up
 
-	## TODO: Probably move this code before interrupts are enabled
-	##       to prevent an interrupt being fired while loading MBR
-	##       data from disk
-	## ----
 	## MBR Loading
+	and FL, 0b1111111111111110													## Disable interrupts
 	push 0
 	call $_load_mbr_data_block
+	or FL, 0b0000000000000001													## Enable interrupts
 	## ----
 
-	debug_break
-	jmp MBR_START_ADDRESS         												## Jump to start of MBR in memory
+	jmp MemoryAddresses.MBR         											## Jump to start of MBR in memory
 	hlt                															## Just in case somehow execution reaches this point
 ## ========================================================================
 
@@ -49,21 +50,21 @@ _int_20_handler:
 	jeq $_int_20_clear_interrupt, 0x0001
 	jmp $_int_20_end
 _int_20_disk_interface:
-	movb [{DISK_INTERFACE_START_ADDRESS + 0x1}], *R9     										## Mode
+	movb [{MemoryAddresses.DISK_INTERFACE + 0x1}], *R9     										## Mode
 	inc R9
-	movb [{DISK_INTERFACE_START_ADDRESS + 0x2}], *R9     										## Disk
+	movb [{MemoryAddresses.DISK_INTERFACE + 0x2}], *R9     										## Disk
 	inc R9
-	mov  [{DISK_INTERFACE_START_ADDRESS + 0x3}], *R9     										## Sector
-	inc R9
-	inc R9
-	mov  [{DISK_INTERFACE_START_ADDRESS + 0x5}], *R9     										## Address
+	mov  [{MemoryAddresses.DISK_INTERFACE + 0x3}], *R9     										## Sector
 	inc R9
 	inc R9
-	mov  [{DISK_INTERFACE_START_ADDRESS + 0x7}], *R9     										## Size
+	mov  [{MemoryAddresses.DISK_INTERFACE + 0x5}], *R9     										## Address
 	inc R9
 	inc R9
-	mov  [{DISK_INTERFACE_START_ADDRESS + 0x9}], *R9     										## Memory Address
-	movb [DISK_INTERFACE_START_ADDRESS], 0x00    												## Signal set to "Start Operation"
+	mov  [{MemoryAddresses.DISK_INTERFACE + 0x7}], *R9     										## Size
+	inc R9
+	inc R9
+	mov  [{MemoryAddresses.DISK_INTERFACE + 0x9}], *R9     										## Memory Address
+	movb [MemoryAddresses.DISK_INTERFACE], 0x00    												## Signal set to "Start Operation"
 	jmp $_int_20_end
 _int_20_set_new_interrupt_handler:
 	push R8															## Interrupt Code
@@ -93,36 +94,34 @@ _int_30_end:
 
 
 _load_mbr_data_block:
-	movb [{DISK_INTERFACE_START_ADDRESS + 0x1}], 0x00											## Mode = Read
-	movb R1, [_CMOS_REG_BOOT_DISK]
-	movb [{DISK_INTERFACE_START_ADDRESS + 0x2}], R1												## Disk = Default
-	mov  [{DISK_INTERFACE_START_ADDRESS + 0x3}],0x0000											## Sector = 0x0000
-	mov  [{DISK_INTERFACE_START_ADDRESS + 0x5}],0x0000											## Address = 0x0000 (Start of Disk)
-	mov  [{DISK_INTERFACE_START_ADDRESS + 0x7}], 20											## Size = 512 (Size of MBR is 512 bytes)
-	mov  [{DISK_INTERFACE_START_ADDRESS + 0x9}], MBR_START_ADDRESS								## MemoryAddress = MBR Address in memory
-	movb [DISK_INTERFACE_START_ADDRESS], 0x00													## Signal = Start
+	movb [{MemoryAddresses.DISK_INTERFACE + 0x1}], 0x00											## Mode = Read
+	movb R1, [CMOS_Settings.BOOT_DISK]
+	movb [{MemoryAddresses.DISK_INTERFACE + 0x2}], R1											## Disk = Default
+	mov  [{MemoryAddresses.DISK_INTERFACE + 0x3}],0x0000										## Sector = 0x0000
+	mov  [{MemoryAddresses.DISK_INTERFACE + 0x5}],0x0000										## Address = 0x0000 (Start of Disk)
+	mov  [{MemoryAddresses.DISK_INTERFACE + 0x7}], 512											## Size = 512 (Size of MBR is 512 bytes)
+	mov  [{MemoryAddresses.DISK_INTERFACE + 0x9}], MemoryAddresses.MBR 							## MemoryAddress = MBR Address in memory
+	movb [MemoryAddresses.DISK_INTERFACE], 0x00													## Signal = Start
 _load_mbr_data_block_wait_loop:
-	mov ACC, [{DISK_INTERFACE_START_ADDRESS + 0xB}]												## Moving <Status> register into ACC
+	mov ACC, [{MemoryAddresses.DISK_INTERFACE + 0xB}]											## Moving <Status> register into ACC
 	jne $_load_mbr_data_block_wait_loop, 0x00													## If <Status> register not Free, loop around and wait
 	ret
 
 _calc_interrupt_vector_address:
-	mov R1, *PP
+	arg R1
 	mul R1, 0x03 																				## Multiply the interrupt code by 3 for memory alignment
 	mov R1, ACC													
-	add R1, INT_VEC_START_ADDRESS 																## Add Interrupt Vector base address to Interrupt code
+	add R1, MemoryAddresses.INT_VEC 															## Add Interrupt Vector base address to Interrupt code
 	mov RV, ACC
 	ret
 
 _set_interrupt_vector_entry:
-	mov R1, *PP
+	arg R1
 	push R1
 	push 1
 	call $_calc_interrupt_vector_address
 	mov R1, RV
-	dec PP
-	dec PP
-	mov ACC, *PP
+	arg ACC
 	jeq $_set_interrupt_vector_entry_disable, 0x0000
 	movb *R1, 0xFF
 	jmp $_set_interrupt_vector_entry_end

@@ -6,5 +6,5 @@ clear='\033[0m'
 printf "${green}Reloading BIOS...\n${clear}"
 cd ..
 cp ../extra/dss/bios.dss ./dss/bios.dss
-./dasm dss/bios.dss -o dragon/bios.bin --save-disassembly disassembly/bios.dds
+./dasm dss/bios.dss -o dragon/bios.bin --save-disassembly disassembly/bios.dds --verbose
 cp dragon/bios.bin ../extra/dragon/bios.bin

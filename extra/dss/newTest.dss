@@ -1,74 +1,80 @@
 .load 0x1740
 
-.data
-	$cursor_pos 0x00, 0x00
-	$color 0x02
-	$current_video_addr 0x07, 0xBC
+@struct Rectangle
+	width:2 > 0x11, 0x22
+	height:2 > 0x99 
+	x:2 
+	y:2 > 0xAA
+@end
 
+.data
 	$string "Hello World!!"
+	$rect <Rectangle> = (0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88)
+	$test_byte 0xAF
+	$super_long_variable_name 0x01, 0x02, 0x03, 0x04
 
 .code
-	debug_break
-infinite_loop:
+begin:
+	mov R10, Rectangle.SIZE
+	mov R9, [$rect.height]
+	mov R8, [$rect.width]
+	mov R7, [$rect.x]
+	mov R5, $strlen
+	push $string
+	push 1
+	call R5
 	push 0
-	call $clear_screen
-
-	jmp $infinite_loop
+	call $testinttest
+	debug_break
+	mov [$rect.y], 0x0000
+	## debug_break
+	jmp $begin
+	push $string
+	push 1
+	call $strlen
+	mov R1, RV
+	mov IP, 0x0001
+	mov R1, RV
 	hlt
 
 
-print_string:
-	mov R1, *PP
-	dec PP
-	dec PP
+testinttest:
+	push 0
+	call $inttest
+	ret
 
-	push R1
-	push 1
-	call $strlen
-	mov R2, RV
+inttest:
+	push 0
+	call $testint
+	ret
 
-	push 65
-	push 1
-	call $print_char
+testint:
+	push 0
+	call $test_int
+	ret
+
+test_int:
+	push 0
+	call $int_test
+	ret
+
+int_test:
+	nop
 	ret
 
 
 strlen:
-	mov R1, *PP
-	dec PP
-	dec PP
+	arg R1
 	mov R2, 0
-_strlen_loop:
+loop:
 	movb ACC, *R1
-	jeq $_strlen_end_loop, 0
+	inc R1
+	jeq $loop_end, 0
+not_zero:
 	inc R2
-	inc R1
-	jmp $_strlen_loop
-_strlen_end_loop:
+	jmp $loop
+loop_end:
 	mov RV, R2
-	ret
-
-print_char:
-	mov R2, *PP
-	dec PP
-	dec PP
-	mov R1, [$current_video_addr]
-	mov R3, [$cursor_pos]
-	mul R3, 2
-	mov R3, ACC
-	add R1, R3
-	mov R1, ACC
-	movb *R1, R2
-	inc R1
-	movb *R1, [$color]
-	mov R3, [$cursor_pos]
-	inc R3
-	mov [$cursor_pos], R3
-	ret
-
-clear_screen:
-	mov R10, 0x00
-	int 0x30
 	ret
 
 .fixed 512, 0x00

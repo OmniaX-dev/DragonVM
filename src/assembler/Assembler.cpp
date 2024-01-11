@@ -14,6 +14,77 @@ namespace dragon
 {
 	namespace code
 	{
+		int32_t Assembler::Application::loadArguments(int argc, char** argv)
+		{
+			if (argc < 2)
+			{
+				out.fg(ostd::ConsoleColors::Red).p("Error: too few arguments.").nl();
+				out.fg(ostd::ConsoleColors::Red).p("Use the --help option for more info.").reset().nl();
+				return RETURN_VAL_TOO_FEW_ARGUMENTS;
+			}
+			else
+			{
+				args.source_file_path = argv[1];
+				if (args.source_file_path == "--help")
+				{
+					print_application_help();
+					return RETURN_VAL_CLOSE_PROGRAM;
+				}
+				for (int32_t i = 2; i < argc; i++)
+				{
+					ostd::String edit(argv[i]);
+					if (edit == "-o")
+					{
+						if (i == argc - 1)
+							return RETURN_VAL_MISSING_PARAM;
+						i++;
+						args.dest_file_path = argv[i];
+					}
+					else if (edit == "--save-disassembly")
+					{
+						if (i == argc - 1)
+							return RETURN_VAL_MISSING_PARAM;
+						i++;
+						args.disassembly_file_path = argv[i];
+						args.save_disassembly = true;
+					}
+					else if (edit == "--help")
+					{
+						print_application_help();
+						return RETURN_VAL_CLOSE_PROGRAM;
+					}
+					else if (edit == "--verbose")
+						args.verbose = true;
+				}
+			}
+			return RETURN_VAL_EXIT_SUCCESS;
+		}
+
+		void Assembler::Application::print_application_help(void)
+		{
+			int32_t commandLength = 46;
+
+			out.nl().fg(ostd::ConsoleColors::Yellow).p("List of available parameters:").reset().nl();
+			ostd::String tmpCommand = "--save-disassembly <destination-directory>";
+			tmpCommand.addRightPadding(commandLength);
+			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Saves debug information in the destination directory.").reset().nl();
+			tmpCommand = "--verbose";
+			tmpCommand.addRightPadding(commandLength);
+			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Shows more information about the assembled program.").reset().nl();
+			tmpCommand = "-o <destination-binary-file>";
+			tmpCommand.addRightPadding(commandLength);
+			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Used to specify the output binary file.").reset().nl();
+			tmpCommand = "--help";
+			tmpCommand.addRightPadding(commandLength);
+			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Displays this help message.").reset().nl();
+			
+			out.nl().fg(ostd::ConsoleColors::Magenta).p("Usage: ./dasm <source> -o <destination> [...options...]").reset().nl();
+			out.nl();
+		}
+
+
+
+
 		ostd::ByteStream Assembler::assembleFromFile(ostd::String fileName)
 		{
 			m_rawSource = "";
@@ -24,6 +95,7 @@ namespace dragon
 			m_symbolTable.clear();
 			m_labelTable.clear();
 			m_disassembly.clear();
+			m_structDefs.clear();
 			m_fixedSize = 0;
 			m_fixedFillValue = 0x00;
 			m_loadAddress = 0x0000;
@@ -32,8 +104,12 @@ namespace dragon
 			ostd::TextFileBuffer file(fileName);
 			loadSource(file.rawContent());
 			removeComments();
+			replaceGroupDefines();
+			replaceDefines();
+			parseStructures();
 			replaceDefines();
 			parseSections();
+			parseStructInstances();
 			parseDataSection();
 			parseCodeSection();
 			replaceLabelRefs();
@@ -79,6 +155,7 @@ namespace dragon
 			uint64_t da_size = 0;
 			da_size += (header_string.len() + 1) * ostd::tTypeSize::BYTE;
 			da_size += m_disassembly.size() * ostd::tTypeSize::DWORD; //Addresses
+			da_size += m_disassembly.size() * ostd::tTypeSize::WORD; //Data Size
 			da_size += m_disassembly.size() * ostd::tTypeSize::BYTE; //Null Termination
 			for (auto& da : m_disassembly)
 				da_size += da.code.len() * ostd::tTypeSize::BYTE; //Code Strings
@@ -90,16 +167,10 @@ namespace dragon
 			{
 				serializer.w_DWord(stream_addr, da.addr);
 				stream_addr += ostd::tTypeSize::DWORD;
+				serializer.w_Word(stream_addr, (int16_t)da.size);
+				stream_addr += ostd::tTypeSize::WORD;
 				serializer.w_String(stream_addr, da.code);
 				stream_addr += (da.code.len() + 1) * ostd::tTypeSize::BYTE;
-				// ostd::ByteStream code_stream = ostd::Utils::stringToByteStream(da.code);
-				// for (int32_t i = 0; i < code_stream.size(); i++)
-				// {
-				// 	serializer.w_Byte(stream_addr, code_stream[i]);
-				// 	stream_addr += ostd::tTypeSize::BYTE;
-				// }
-				// serializer.w_Byte(stream_addr, 0x00); //NULL Termination
-				// stream_addr += ostd::tTypeSize::BYTE;
 			}
 			return serializer.saveToFile(fileName);
 		}
@@ -166,7 +237,6 @@ namespace dragon
 						return;
 					}
 					defines.push_back({ define_name, define_value });
-					// std::cout << define_name << ": " << define_value << "\n";
 					continue;
 				}
 				newLines.push_back(lineEdit);
@@ -177,6 +247,61 @@ namespace dragon
 				for (int32_t i = defines.size() - 1; i >= 0; i--)
 					lineEdit.replaceAll(defines[i].name, defines[i].value);
 				line = lineEdit;
+			}
+			m_lines.clear();
+			m_lines = newLines;
+		}
+
+		void Assembler::replaceGroupDefines(void)
+		{
+			std::vector<ostd::String> newLines;
+			ostd::String lineEdit;
+			bool in_group = false;
+			ostd::String group_name = "";
+			for (auto& line : m_lines)
+			{
+				lineEdit = line;
+				lineEdit.trim();
+				if (lineEdit.new_toLower().startsWith("@group "))
+				{
+					if (in_group)
+					{
+						std::cout << "Nested define groups not allowed: " << line << "\n";
+						return;
+					}
+					lineEdit.substr(6).trim();
+					if (lineEdit == "")
+					{
+						std::cout << "Group name cannot be empty: " << line << "\n";
+						return;
+					}
+					group_name = lineEdit;
+					in_group = true;
+					continue;
+				}
+				else if (in_group && lineEdit.new_toLower() == "@end")
+				{
+					if (!in_group)
+					{
+						std::cout << "Missing group declaration for @end directive: " << line << "\n";
+						return;
+					}
+					in_group = false;
+					continue;
+				}
+				if (!in_group)
+				{
+					newLines.push_back(lineEdit);
+					continue;
+				}
+				if (!lineEdit.contains(" "))
+				{
+					std::cout << "Invalid definition inside group: " << line << "\n";
+					return;
+				}
+				ostd::String newLine = "@define ";
+				newLine.add(group_name).add(".").add(lineEdit);
+				newLines.push_back(newLine);
 			}
 			m_lines.clear();
 			m_lines = newLines;
@@ -274,6 +399,258 @@ namespace dragon
 			}
 		}
 
+		void Assembler::parseStructInstances(void)
+		{
+			std::vector<ostd::String> newLines;
+			ostd::String lineEdit;
+			bool in_group = false;
+			ostd::String group_name = "";
+			for (auto& line : m_rawDataSection)
+			{
+				lineEdit = line;
+				lineEdit.trim();
+				if (!lineEdit.startsWith("$") || lineEdit.indexOf(" ") < 2)
+				{
+					std::cout << "Invalid data entry: " << lineEdit << "\n";
+					return;
+				}
+				ostd::String symbolName = lineEdit.new_substr(0, lineEdit.indexOf(" "));
+				symbolName.trim();
+				lineEdit.substr(lineEdit.indexOf(" ") + 1);
+				lineEdit.trim();
+				ostd::String initialization_data = "";
+				bool has_init_data = false;
+				if (lineEdit.startsWith("<") && lineEdit.contains("="))
+				{
+					initialization_data = lineEdit.new_substr(lineEdit.indexOf("=") + 1).trim();
+					if (initialization_data.startsWith("(") && initialization_data.endsWith(")"))
+					{
+						initialization_data.substr(1, initialization_data.len() - 1).trim();
+						has_init_data = initialization_data != "";
+					}
+					else
+					{
+						std::cout << "Invalid initialization data: " << lineEdit << "\n";
+						return;
+					}
+					lineEdit.substr(0, lineEdit.indexOf("=")).trim();
+				}
+				if (lineEdit.startsWith("<") && lineEdit.endsWith(">") && lineEdit.len() > 2)
+				{
+					lineEdit = lineEdit.substr(1, lineEdit.len() - 1);
+					std::vector<uint8_t> init_data;
+					if (has_init_data)
+					{
+						auto tokens = initialization_data.tokenize(",");
+						while (tokens.hasNext())
+						{
+							ostd::String tok = tokens.next();
+							if (!tok.isNumeric())
+							{
+								std::cout << "Invalid initialization data: " << lineEdit << "\n";
+								return;
+							}
+							init_data.push_back((uint8_t)tok.toInt());
+						}
+					}
+					tStructDefinition struct_def;
+					bool found = false;
+					for (auto& _struct : m_structDefs)
+					{
+						if (_struct.name == lineEdit)
+						{
+							struct_def = _struct;
+							found = true;
+							break;
+						}
+					}
+					if (!found)
+					{
+						std::cout << "Unknown Structure name: " << lineEdit << "\n";
+						return;
+					}
+					if (has_init_data && struct_def.size != init_data.size())
+					{
+						std::cout << "Structure size must match initialization data size: " << lineEdit << "\n";
+						return;
+					}
+					int32_t data_index = 0;
+					for (auto& member : struct_def.members)
+					{
+						ostd::String newLine = symbolName;
+						newLine.add(".").add(member.name).add(" ");
+						for (int32_t i = 0; i < member.data.size(); i++, data_index++)
+						{
+							if (has_init_data)
+								newLine.add(ostd::Utils::getHexStr(init_data[data_index], true, 2));
+							else
+								newLine.add(ostd::Utils::getHexStr(member.data[i], true, 2));
+							newLine.add(",");
+						}
+						newLine.substr(0, newLine.len() - 1);
+						newLines.push_back(newLine);
+					}
+					continue;
+				}
+				newLines.push_back(line);
+			}
+			m_rawDataSection.clear();
+			m_rawDataSection = newLines;
+		}
+
+		void Assembler::parseStructures(void)
+		{
+			std::vector<ostd::String> newLines;
+			ostd::String lineEdit;
+			bool in_struct = false;
+			ostd::String struct_name = "";
+			tStructDefinition struct_def;
+			int32_t member_index = 0;
+			for (auto& line : m_lines)
+			{
+				lineEdit = line;
+				lineEdit.trim();
+				if (lineEdit.new_toLower().startsWith("@struct "))
+				{
+					if (in_struct)
+					{
+						std::cout << "Nested structs not allowed: " << line << "\n";
+						return;
+					}
+					lineEdit.substr(7).trim();
+					if (lineEdit == "")
+					{
+						std::cout << "Struct name cannot be empty: " << line << "\n";
+						return;
+					}
+					struct_name = lineEdit;
+					struct_def.members.clear();
+					struct_def.name = struct_name;
+					member_index = 0;
+					in_struct = true;
+					continue;
+				}
+				else if (in_struct && lineEdit.new_toLower() == "@end")
+				{
+					if (!in_struct)
+					{
+						std::cout << "Missing struct declaration for @end directive: " << line << "\n";
+						return;
+					}
+					struct_def.size = 0;
+					for (auto& data : struct_def.members)
+						struct_def.size += data.data.size();
+					std::sort(struct_def.members.begin(), struct_def.members.end());
+					m_structDefs.push_back(struct_def);
+					ostd::String size_def = "@define ";
+					size_def.add(struct_def.name).add(".").add("SIZE").add(" ");
+					size_def.add(ostd::Utils::getHexStr(struct_def.size, true, 2));
+					newLines.push_back(size_def);
+					in_struct = false;
+					continue;
+				}
+				if (!in_struct)
+				{
+					newLines.push_back(lineEdit);
+					continue;
+				}
+				if (!lineEdit.contains(":"))
+				{
+					std::cout << "Invalid definition inside struct. Size specification missing: " << line << "\n";
+					return;
+				}
+				ostd::String member_name = lineEdit.new_substr(0, lineEdit.indexOf(":")).trim();
+				ostd::String member_data = "";
+				lineEdit.substr(lineEdit.indexOf(":") + 1).trim();
+				if (member_name.contains(" "))
+				{
+					std::cout << "Invalid definition inside struct. Member name cannot contain spaces: " << line << "\n";
+					return;
+				}
+				if (lineEdit.contains(">"))
+				{
+					member_data = lineEdit.new_substr(lineEdit.indexOf(">") + 1).trim();
+					lineEdit.substr(0, lineEdit.indexOf(">")).trim();
+				}
+				if (!lineEdit.isNumeric())
+				{
+					std::cout << "Invalid definition inside struct. Member size must be numeric: " << line << "\n";
+					return;
+				}
+				int32_t bytes = lineEdit.toInt();
+				if (bytes < 1)
+				{
+					std::cout << "Invalid definition inside struct. Member must be at least 1 Byte: " << line << "\n";
+					return;
+				}
+				tStructMember member;
+				member.position = member_index++;
+				member.name = member_name;
+				if (member_data == "")
+				{
+					for (int32_t i = 0; i < bytes; i++)
+						member.data.push_back(0x00);
+				}
+				else
+				{
+					auto tokens = member_data.tokenize(",");
+					if (tokens.count() == 1)
+					{
+						ostd::String tok = tokens.next();
+						if (tok.isNumeric())
+						{
+							uint8_t data = (uint8_t)tok.toInt();
+							for (int32_t i = 0; i < bytes; i++)
+								member.data.push_back(data);
+						}
+						else
+						{
+							std::cout << "Invalid definition inside struct. Member data must be numeric: " << line << "\n";
+							return;
+						}
+					}
+					else
+					{
+						if (tokens.count() != bytes)
+						{
+							std::cout << "Invalid definition inside struct. Member data count and size mismatch: " << line << "\n";
+							return;
+						}
+						while (tokens.hasNext())
+						{
+							ostd::String tok = tokens.next();
+							if (tok.isNumeric())
+							{
+								uint8_t data = (uint8_t)tok.toInt();
+								member.data.push_back(data);
+							}
+							else
+							{
+								std::cout << "Invalid definition inside struct. Member data must be numeric: " << line << "\n";
+								return;
+							}
+						}
+					}
+				}
+				struct_def.members.push_back(member);
+			}
+			m_lines.clear();
+			m_lines = newLines;
+
+			// for (auto& str : m_structDefs)
+			// {
+			// 	std::cout << str.name << "\n";
+			// 	for(auto& d : str.memberData)
+			// 	{
+			// 		std::cout << "  " << d.first << "  ";
+			// 		for (auto& b : d.second)
+			// 			std::cout << ostd::Utils::getHexStr(b) << " "; 
+			// 	}
+			// 	std::cout << "\n";
+			// }
+			// std::cin.get();
+		}
+
 		void Assembler::parseDataSection(void)
 		{
 			for (auto& line : m_rawDataSection)
@@ -287,7 +664,7 @@ namespace dragon
 				}
 				ostd::String symbolName = lineEdit.new_substr(0, lineEdit.indexOf(" "));
 				symbolName.trim();
-				lineEdit = lineEdit.substr(lineEdit.indexOf(" ") + 1);
+				lineEdit.substr(lineEdit.indexOf(" ") + 1);
 				lineEdit.trim();
 				if (lineEdit.isNumeric())
 				{
@@ -314,7 +691,7 @@ namespace dragon
 						symbol.bytes.push_back((uint8_t)c);
 					symbol.bytes.push_back((uint8_t)0);   //NULL Termination
 					symbol.address = m_currentDataAddr;
-					m_currentDataAddr += lineEdit.len();
+					m_currentDataAddr += symbol.bytes.size();
 					m_symbolTable[symbolName] = symbol;
 					continue;
 				}
@@ -497,6 +874,19 @@ namespace dragon
 					return;
 				}
 				m_code.push_back(data::OpCodes::DecReg);
+				m_code.push_back((uint8_t)word);
+				return;
+			}
+			else if (instEdit == "arg")
+			{
+				eOperandType opType = parseOperand(opEdit, word);
+				if (opType != eOperandType::Register)
+				{
+					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Register required\n";
+					exit(0);
+					return;
+				}
+				m_code.push_back(data::OpCodes::ArgReg);
 				m_code.push_back((uint8_t)word);
 				return;
 			}
@@ -998,7 +1388,7 @@ namespace dragon
 			m_disassembly.push_back({ 0xFFFFFF00, "{ DATA }" });
 			for (auto& d : m_symbolTable)
 			{
-				m_disassembly.push_back({ d.second.address, d.first });
+				m_disassembly.push_back({ d.second.address, d.first, (uint16_t)d.second.bytes.size() });
 			}
 			m_disassembly.push_back({ 0xFFFFFF01, "{ LABELS }" });
 			for (auto& l : m_labelTable)
@@ -1121,32 +1511,55 @@ namespace dragon
 			return data::Registers::Last;
 		}
 
-		void Assembler::tempPrint(void)
+		void Assembler::printProgramInfo(void)
 		{
+			int32_t symbol_len = 30;
+			out.nl();
+
+			if (m_symbolTable.size() > 0)
+				out.fg(ostd::ConsoleColors::Yellow).p("Symbols:").nl();
 			for (auto& symbol : m_symbolTable)
 			{
-				std::cout << symbol.first << "\n";
-				std::cout << ostd::Utils::getHexStr(symbol.second.address, true, 2) << "\n";
+				out.fg(ostd::ConsoleColors::Red).p(ostd::Utils::getHexStr(symbol.second.address, true, 2));
+				out.fg(ostd::ConsoleColors::Magenta).p("  ").p(symbol.first);
+				out.fg(ostd::ConsoleColors::Blue).nl().p("  ");
 				for (auto& b : symbol.second.bytes)
-					std::cout << ostd::Utils::getHexStr(b, true, 1) << "  ";
-				std::cout << "\n\n";
+					out.p(ostd::Utils::getHexStr(b, false, 1)).p(".");
+				out.nl();
 			}
-
-			std::cout << "Fixed Size: " << (int)m_fixedSize << "\n";
-			std::cout << "Fixed Fill: " << ostd::Utils::getHexStr(m_fixedFillValue, true, 1) << "\n";
-			std::cout << "Load Address: " << ostd::Utils::getHexStr(m_loadAddress, true, 2) << "\n";
-			std::cout << "Data Size: " << (int)m_dataSize << "\n";
-			std::cout << "Code Start Address: " << ostd::Utils::getHexStr(m_dataSize + m_loadAddress + 3, true, 2) << "\n";
-			std::cout << "Program Size: " << (int)m_programSize << "\n";
-
+			if (m_symbolTable.size() > 0)
+				out.nl();
+			
+			if (m_labelTable.size() > 0)
+				out.fg(ostd::ConsoleColors::Yellow).p("Labels:").nl();
 			for (auto& label : m_labelTable)
 			{
-				std::cout << label.first << "  " << ostd::Utils::getHexStr(label.second.address, true, 2) << "\n";
+				out.fg(ostd::ConsoleColors::Magenta).p(label.first.new_fixedLength(symbol_len));
+				out.fg(ostd::ConsoleColors::Red).p(ostd::Utils::getHexStr(label.second.address, true, 2)).nl();
 			}
+			if (m_labelTable.size() > 0)
+				out.nl();
+			
+			if (m_structDefs.size() > 0)
+				out.fg(ostd::ConsoleColors::Yellow).p("Structures:").nl();
+			for (auto& str : m_structDefs)
+			{
+				out.fg(ostd::ConsoleColors::Magenta).p(str.name.new_fixedLength(symbol_len));
+				out.fg(ostd::ConsoleColors::Red).p(str.size).p(" bytes").nl();
+			}
+			if (m_structDefs.size() > 0)
+				out.nl();
 
-			ostd::ConsoleOutputHandler out;
-			ostd::Utils::printByteStream(m_code, 0x0000, 16, 8, out);
-			std::cout << "\n\n\n\n";
+
+			out.fg(ostd::ConsoleColors::Yellow).p("Program data:").nl();
+			out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Fixed Size:  ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p((int)m_fixedSize).p(" bytes").nl();
+			out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Program Size:").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p((int)m_programSize).p(" bytes").nl();
+			out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Data Size:   ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p((int)m_dataSize).p(" bytes").nl();
+			out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Fixed Fill:  ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p(ostd::Utils::getHexStr(m_fixedFillValue, true, 1)).nl();
+			out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Load Address:").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p(ostd::Utils::getHexStr(m_loadAddress, true, 2)).nl();
+			out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Entry Point: ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p(ostd::Utils::getHexStr(m_dataSize + m_loadAddress + 3, true, 2)).nl();
+
+			out.nl();
 		}
 	}
 }

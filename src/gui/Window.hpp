@@ -63,14 +63,9 @@ namespace dragon
 			bool m_initialized { false };
 
 		public:
-			//Signals
-			inline static const uint32_t Signal_OnMousePressed = ostd::SignalHandler::newCustomSignal(1000);
-			inline static const uint32_t Signal_OnMouseReleased = ostd::SignalHandler::newCustomSignal(1001);
-			inline static const uint32_t Signal_OnMouseMoved = ostd::SignalHandler::newCustomSignal(1002);
+			//Signals //TODO: Add theese to the builtin signals in ostd::SignalHandler
 			inline static const uint32_t Signal_OnMouseDragged = ostd::SignalHandler::newCustomSignal(1003);
-
 			inline static const uint32_t Signal_OnWindowClosed = ostd::SignalHandler::newCustomSignal(2000);
-			inline static const uint32_t Signal_OnWindowResized = ostd::SignalHandler::newCustomSignal(2001);
 	};
 	class WindowResizedData : public ostd::BaseObject
 	{

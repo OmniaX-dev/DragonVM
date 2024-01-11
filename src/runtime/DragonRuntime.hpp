@@ -16,12 +16,25 @@ namespace dragon
 {
 	class DragonRuntime
 	{
-		public: struct tCallInfo {
+		public: struct tCallInfo
+		{
 			ostd::String info;
 			uint16_t addr;
+			uint16_t inst_addr;
 		};
-
-		public: struct tMachineDebugInfo {
+		public: struct tCommandLineArgs
+		{
+			ostd::String machine_config_path = "";
+			bool basic_debug = false;
+			bool step_exec = false;
+			bool verbose_load = false;
+			int32_t cycle_limit = 0;
+			bool force_load = false;
+			ostd::String force_load_file = "";
+			uint16_t force_load_mem_offset = 0x00;
+		};
+		public: struct tMachineDebugInfo
+		{
 			inline tMachineDebugInfo(void) {  }
 
 			uint16_t previousInstructionAddress { 0x0000 };
@@ -63,6 +76,7 @@ namespace dragon
 			static void printRegisters(dragon::hw::VirtualCPU& cpu);
 			static void processErrors(void);
 			static std::vector<data::ErrorHandler::tError> getErrorList(void);
+			static int32_t loadArguments(int argc, char** argv, tCommandLineArgs& args);
 			static int32_t initMachine(const ostd::String& configFilePath,
 										bool verbose = false,
 										bool trackMachineInfoDiff = false, 
@@ -75,10 +89,12 @@ namespace dragon
 
 			inline static const tMachineDebugInfo& getMachineInfoDiff(void) { return s_machineInfo; }
 			inline static bool hasError(void) { return data::ErrorHandler::hasError(); }
+			inline static ostd::ConsoleOutputHandler& output(void) { return out; }
 
 		private:
 			static void __get_machine_footprint(tMachineDebugInfo* machineInfo, std::vector<uint16_t> trackedAddresses, bool previous);
 			static void __track_call_stack(tMachineDebugInfo* machineInfo);
+			static void __print_application_help(void);
 
 		public:
 			inline static ostd::ConsoleOutputHandler out;
@@ -106,5 +122,15 @@ namespace dragon
 			inline static tMachineDebugInfo s_machineInfo;
 			inline static bool s_trackMachineInfo { false };
 			inline static bool s_trackCallStack { false };
+
+		public:
+			inline static const int32_t RETURN_VAL_CLOSE_DEBUGGER = 128;
+			inline static const int32_t RETURN_VAL_CLOSE_RUNTIME = 256;
+			inline static const int32_t RETURN_VAL_INVALID_MACHINE_CONFIG = 1;
+			inline static const int32_t RETURN_VAL_NO_DISK = 2;
+			inline static const int32_t RETURN_VAL_TOO_FEW_ARGUMENTS = 3;
+			inline static const int32_t RETURN_VAL_MISSING_PARAM = 4;
+			inline static const int32_t RETURN_VAL_PARAMETER_NOT_NUMERIC = 5;
+			inline static const int32_t RETURN_VAL_EXIT_SUCCESS = 0;
 	};
 }

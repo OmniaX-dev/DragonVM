@@ -239,6 +239,7 @@ namespace dragon
 				inline static constexpr uint8_t CallImm = 0x53;
 				inline static constexpr uint8_t CallReg = 0x54;
 				inline static constexpr uint8_t Ret = 0x55;
+				inline static constexpr uint8_t ArgReg = 0x56;
 
 				inline static constexpr uint8_t LShiftRegImm = 0x60;
 				inline static constexpr uint8_t LShiftRegReg = 0x61;
@@ -337,6 +338,7 @@ namespace dragon
 						case data::OpCodes::CallImm: return "CallImm";
 						case data::OpCodes::CallReg: return "CallReg";
 						case data::OpCodes::Ret: return "Ret";
+						case data::OpCodes::ArgReg: return "ArgReg";
 						case data::OpCodes::RetInt: return "RetInt";
 						case data::OpCodes::Int: return "Int";
 						default: return "UNKNOWN_INST";
@@ -410,6 +412,7 @@ namespace dragon
 						case data::OpCodes::CallImm: return 3;
 						case data::OpCodes::CallReg: return 2;
 						case data::OpCodes::Ret: return 1;
+						case data::OpCodes::ArgReg: return 2;
 						case data::OpCodes::RetInt: return 1;
 						case data::OpCodes::Int: return 2;
 						default: return 0;

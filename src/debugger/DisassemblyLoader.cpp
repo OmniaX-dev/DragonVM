@@ -29,6 +29,7 @@ namespace dragon
 		ostd::serial::SerialIO serializer(stream, ostd::serial::SerialIO::tEndianness::BigEndian);
 		ostd::StreamIndex addr = 0;
 		int32_t line_addr = 0;
+		int16_t data_size = 1;
 		int8_t line_code_char = 0;
 		ostd::String header_string = "";
 		serializer.r_NullTerminatedString(0, header_string);
@@ -38,6 +39,8 @@ namespace dragon
 		{
 			serializer.r_DWord(addr, line_addr);
 			addr += ostd::tTypeSize::DWORD;
+			serializer.r_Word(addr, data_size);
+			addr += ostd::tTypeSize::WORD;
 			ostd::String code_line = "";
 			serializer.r_NullTerminatedString(addr, code_line);
 			addr += (code_line.len() + 1) * ostd::tTypeSize::BYTE;
@@ -59,6 +62,7 @@ namespace dragon
 			code::Assembler::tDisassemblyLine line;
 			line.addr = line_addr;
 			line.code = code_line;
+			line.size = data_size;
 			if (mode == MODE_CODE)
 			{
 				ostd::String codeEdit(line.code);
