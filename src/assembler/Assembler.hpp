@@ -12,6 +12,22 @@ namespace dragon
 	}
 	namespace code
 	{
+		class IncludePreprocessor
+        {
+            public:
+                static std::vector<ostd::String> loadEntryFile(const ostd::String& filePath);
+
+            private:
+                static bool __can_file_be_included(std::vector<ostd::String>& lines);
+                static bool __include_loop(void);
+                static std::vector<ostd::String> __load_file(const ostd::String& filePath);
+
+            private:
+                inline static std::vector<ostd::String> m_lines;
+                inline static std::vector<ostd::String> m_guards;
+                inline static ostd::String m_directory { "" };
+        }; 
+
 		class Assembler
 		{
 			public: struct tDisassemblyLine
@@ -83,7 +99,6 @@ namespace dragon
 
 			public:
 				static ostd::ByteStream assembleFromFile(ostd::String fileName);
-				static void loadSource(ostd::String source);
 				static ostd::ByteStream assembleToFile(ostd::String sourceFileName, ostd::String binaryFileName);
 				static ostd::ByteStream assembleToVirtualDisk(ostd::String fileName, hw::VirtualHardDrive& vhdd, uint32_t address);
 				static bool saveDisassemblyToFile(ostd::String fileName);

@@ -1,0 +1,51 @@
+.load 0x0000           															## BIOS is mapped to address 0x0000 in memory
+
+@include <data.dss>
+
+## ============================= BIOS Program =============================
+.code
+	movb [VGA_Registers.VIDEO_MODE], VGA_VideoModes.TEXT_SINGLE_COLOR			## Enable Text_Single_Color graphics mode
+	mov FL, 0b0000000000000001													## Zero the FL Register and enable interrupts
+	movb [{MemoryAddresses.INT_VEC + (0x20 * 3)}], 0xFF 						## Setting up int 0x20 handler
+	mov [{MemoryAddresses.INT_VEC + (0x20 * 3) + 1}], $_int_20_handler			## --
+	
+	mov R10, 0x00																## Setting up int 0x30 handler by using int 0x20 functionality
+	mov R9, $_int_30_handler													##  -Passing the handler's address
+	mov R8, 0x30																##  -Passing the interrupt's code to setup
+	int 0x20																	##  -Calling int 0x20 with 0x00 as parameter, to set new handler up
+
+	mov R10, 0x03
+	mov R9, $_bios_name
+	int 0x30
+	mov R10, 0x01
+	mov R9, 32
+	int 0x30
+	mov R10, 0x04
+	mov R9, [$_bios_version_number_maj]
+	int 0x30
+	mov R10, 0x01
+	mov R9, 46
+	int 0x30
+	mov R10, 0x04
+	mov R9, [$_bios_version_number_min]
+	int 0x30
+	mov R10, 0x02
+	int 0x30
+
+	## MBR Loading 
+	and FL, 0b1111111111111110													## Disable interrupts
+	mov FL, ACC
+	push 0
+	call $_load_mbr_data_block
+	or FL, 0b0000000000000001													## Enable interrupts
+	mov FL, ACC
+	## ----
+
+	jmp MemoryAddresses.MBR         											## Jump to start of MBR in memory
+	hlt                															## Just in case somehow execution reaches this point
+## ========================================================================
+
+@include <drivers.dss>
+@include <utils.dss>
+
+.fixed 4096, 0x00      ## BIOS Needs to be 4096 Bytes exactly

@@ -1416,6 +1416,7 @@ namespace dragon
 			else if (data().command.startsWith("p ") || data().command.startsWith("print "))
 			{
 				data().command.substr(data().command.indexOf(" ") + 1).trim();
+				const uint8_t TYPE_STRING = 0;
 				const uint8_t TYPE_BYTE = 1;
 				const uint8_t TYPE_WORD = 2;
 				const uint8_t TYPE_DWORD = 4;
@@ -1429,9 +1430,12 @@ namespace dragon
 					else if (size_str == "word") type = TYPE_WORD;
 					else if (size_str == "dword") type = TYPE_DWORD;
 					else if (size_str == "qword") type = TYPE_QWORD;
+					else if (size_str == "string") type = TYPE_STRING;
 				}
 				if (data().command.isNumeric())
 				{
+					if (type == TYPE_STRING)
+						type = TYPE_WORD;
 					uint16_t addr = data().command.toInt();
 					uint16_t end_addr = addr;
 					ostd::String tmp = "";
@@ -1474,7 +1478,6 @@ namespace dragon
 					{
 						ostd::String tmp = "";
 						tmp.add("*(").add(ostd::Utils::getHexStr(addr, true, 2));
-						if (type != TYPE_BYTE)
 						if (size > 1)
 							tmp.add("-").add(ostd::Utils::getHexStr((uint16_t)(addr + size - 1), true, 2));
 						tmp.add(")");
@@ -1485,13 +1488,22 @@ namespace dragon
 						output().pStyled(rgx);
 						output().fg(ostd::ConsoleColors::White).p(" = ");
 						output().fg(ostd::ConsoleColors::Gray).p("[");
+						if (type == TYPE_STRING)
+							output().fg(ostd::ConsoleColors::BrightRed).p("\"");
 						for (uint16_t a = addr; a < addr + size; a++)
 						{
 							uint8_t value = DragonRuntime::memMap.read8(a);
+							if (type == TYPE_STRING)
+							{
+								output().fg(ostd::ConsoleColors::BrightRed).pChar((char)value);
+								continue;
+							}
 							output().fg(ostd::ConsoleColors::BrightRed).p(ostd::Utils::getHexStr(value, true, 1));
 							if (a < addr + size - 1)
 								output().p(" ");
 						}
+						if (type == TYPE_STRING)
+							output().fg(ostd::ConsoleColors::BrightRed).p("\"");
 						output().fg(ostd::ConsoleColors::Gray).p("]");
 						output().reset().nl();
 					}

@@ -1,0 +1,118 @@
+@guard _DRIVERS_DSS_
+
+## ============================= BIOS Interrupt handler =============================
+_int_20_handler:
+	mov ACC, R10
+	jeq $_int_20_disk_interface, 0x0010
+	jeq $_int_20_set_new_interrupt_handler, 0x0000
+	jeq $_int_20_clear_interrupt, 0x0001
+	jmp $_int_20_end
+_int_20_disk_interface:
+	movb [{MemoryAddresses.DISK_INTERFACE + 0x1}], *R9     										## Mode
+	inc R9
+	movb [{MemoryAddresses.DISK_INTERFACE + 0x2}], *R9     										## Disk
+	inc R9
+	mov  [{MemoryAddresses.DISK_INTERFACE + 0x3}], *R9     										## Sector
+	inc R9
+	inc R9
+	mov  [{MemoryAddresses.DISK_INTERFACE + 0x5}], *R9     										## Address
+	inc R9
+	inc R9
+	mov  [{MemoryAddresses.DISK_INTERFACE + 0x7}], *R9     										## Size
+	inc R9
+	inc R9
+	mov  [{MemoryAddresses.DISK_INTERFACE + 0x9}], *R9     										## Memory Address
+	movb [MemoryAddresses.DISK_INTERFACE], 0x00    												## Signal set to "Start Operation"
+	jmp $_int_20_end
+_int_20_set_new_interrupt_handler:
+	push R8															## Interrupt Code
+	push R9															## Handler Address
+	push 2
+	call $_set_interrupt_vector_entry
+	jmp $_int_20_end
+_int_20_clear_interrupt:
+	push R9
+	push 0x0000
+	push 2
+	call $_set_interrupt_vector_entry
+_int_20_end:
+	rti
+## ==================================================================================
+
+## ==========================  BIOS Video Interrupt handler =========================
+_int_30_handler:
+	mov ACC, R10
+	jeq $_int_30_direct_print_char_text_single, 0x0001
+	jeq $_int_30_direct_new_line_text_single, 0x0002
+	jeq $_int_30_direct_print_string_text_single, 0x0003
+	jeq $_int_30_direct_print_integer_text_single, 0x0004
+	jeq $_int_30_store_integer_text_single, 0x0005
+	jeq $_int_30_store_char_text_single, 0x0006
+	jeq $_int_30_print_buffer_no_flush_text_single, 0x0007
+	jeq $_int_30_print_buffer_and_flush_text_single, 0x0008
+	jeq $_int_30_flush_buffer_text_single, 0x0009
+	jeq $_int_30_store_string_text_single, 0x000A
+	jeq $_int_30_clear_screen, 0x00E0
+	jeq $_int_30_refresh_screen, 0x00E1
+	jmp $_int_30_end
+
+
+_int_30_direct_print_char_text_single:
+	movb [VGA_Registers.TEXT_SINGLE_CHAR], R9
+	movb [VGA_Registers.SIGNAL], Sig_VGA_Text_Single_Color.PRINT_CHAR
+	jmp $_int_30_end
+_int_30_direct_new_line_text_single:
+	movb [VGA_Registers.TEXT_SINGLE_CHAR], 10  ## New line char code
+	movb [VGA_Registers.SIGNAL], Sig_VGA_Text_Single_Color.STORE_CHAR
+	jmp $_int_30_end
+_int_30_direct_print_string_text_single:
+	movb R1, *R9
+	movb [VGA_Registers.TEXT_SINGLE_CHAR], R1
+	movb [VGA_Registers.SIGNAL], Sig_VGA_Text_Single_Color.PRINT_CHAR
+	inc R9
+	movb ACC, *R9
+	jne $_int_30_direct_print_string_text_single, 0
+	jmp $_int_30_end
+_int_30_direct_print_integer_text_single:
+	mov reg(S_REG_1), Sig_VGA_Text_Single_Color.PRINT_CHAR
+	push R9
+	push 1
+	call $_print_integer
+	jmp $_int_30_end
+_int_30_store_integer_text_single:
+	mov reg(S_REG_1), Sig_VGA_Text_Single_Color.STORE_CHAR
+	push R9
+	push 1
+	call $_print_integer
+	jmp $_int_30_end
+_int_30_store_char_text_single:
+	movb [VGA_Registers.TEXT_SINGLE_CHAR], R9
+	movb [VGA_Registers.SIGNAL], Sig_VGA_Text_Single_Color.STORE_CHAR
+	jmp $_int_30_end
+_int_30_print_buffer_no_flush_text_single:
+	movb [VGA_Registers.SIGNAL], Sig_VGA_Text_Single_Color.PRINT_BUFF
+_int_30_print_buffer_and_flush_text_single:
+	movb [VGA_Registers.SIGNAL], Sig_VGA_Text_Single_Color.PRINT_FLUSH_BUFF
+	jmp $_int_30_end
+_int_30_flush_buffer_text_single:
+	movb [VGA_Registers.SIGNAL], Sig_VGA_Text_Single_Color.FLUSH_BUFF
+	jmp $_int_30_end
+_int_30_store_string_text_single:
+	movb R1, *R9
+	movb [VGA_Registers.TEXT_SINGLE_CHAR], R1
+	movb [VGA_Registers.SIGNAL], Sig_VGA_Text_Single_Color.STORE_CHAR
+	inc R9
+	movb ACC, *R9
+	jne $_int_30_store_string_text_single, 0
+	jmp $_int_30_end
+
+
+_int_30_clear_screen:
+	movb [VGA_Registers.SIGNAL], Sig_VGA_Text_Single_Color.CLEAR_SCREEN
+	jmp $_int_30_end
+_int_30_refresh_screen:
+	movb [VGA_Registers.SIGNAL], Sig_VGA_Text_Single_Color.REFRESH_SCREEN
+	jmp $_int_30_end
+_int_30_end:
+	rti
+## ==================================================================================

@@ -1,0 +1,102 @@
+@guard _UTILS_DSS_
+
+@include <data.dss>
+
+_load_mbr_data_block:
+	movb [{MemoryAddresses.DISK_INTERFACE + 0x1}], 0x00											## Mode = Read
+	movb R1, [CMOS_Settings.BOOT_DISK]
+	movb [{MemoryAddresses.DISK_INTERFACE + 0x2}], R1											## Disk = Default
+	mov  [{MemoryAddresses.DISK_INTERFACE + 0x3}],0x0000										## Sector = 0x0000
+	mov  [{MemoryAddresses.DISK_INTERFACE + 0x5}],0x0000										## Address = 0x0000 (Start of Disk)
+	mov  [{MemoryAddresses.DISK_INTERFACE + 0x7}], 512											## Size = 512 (Size of MBR is 512 bytes)
+	mov  [{MemoryAddresses.DISK_INTERFACE + 0x9}], MemoryAddresses.MBR 							## MemoryAddress = MBR Address in memory
+	movb [MemoryAddresses.DISK_INTERFACE], 0x00													## Signal = Start
+_load_mbr_data_block_wait_loop:
+	mov ACC, [{MemoryAddresses.DISK_INTERFACE + 0xB}]											## Moving <Status> register into ACC
+	jne $_load_mbr_data_block_wait_loop, 0x00													## If <Status> register not Free, loop around and wait
+	ret
+
+_calc_interrupt_vector_address:
+	arg R1
+	mul R1, 0x03 																				## Multiply the interrupt code by 3 for memory alignment
+	mov R1, ACC													
+	add R1, MemoryAddresses.INT_VEC 															## Add Interrupt Vector base address to Interrupt code
+	mov RV, ACC
+	ret
+
+_set_interrupt_vector_entry:
+	arg R1
+	push R1
+	push 1
+	call $_calc_interrupt_vector_address
+	mov R1, RV
+	arg ACC
+	jeq $_set_interrupt_vector_entry_disable, 0x0000
+	movb *R1, 0xFF
+	jmp $_set_interrupt_vector_entry_end
+_set_interrupt_vector_entry_disable:
+	movb *R1, 0x00
+_set_interrupt_vector_entry_end:
+	inc R1
+	mov *R1, ACC
+	ret
+
+
+_print_integer:
+	mov R1, 0
+	arg ACC
+	mov R3, 0  ## Used as boolean, 0 = positive, 1 = negative
+	jle $_print_integer_not_negative, 0
+	mov R3, 1
+	jeq $_print_integer_overflow_case, 0x8000
+	neg ACC
+	jmp $_print_integer_loop
+_print_integer_overflow_case:  ## Hardcoded for -32768 (0x8000)
+	push 56
+	push 54
+	push 55
+	push 50
+	push 51
+	mov R1, 5
+	jmp $_print_integer_loop_end
+_print_integer_not_negative:
+	jne $_print_integer_loop, 0
+	push 48  ## '0' ASCII is 48
+	inc R1
+	jmp $_print_integer_loop_end
+_print_integer_loop:
+	jeq $_print_integer_loop_end, 0
+	div ACC, 10
+	mov R2, ACC
+	add RV, 48	## '0' ASCII is 48
+	push ACC
+	inc R1
+	mov ACC, R2
+	jmp $_print_integer_loop
+_print_integer_loop_end:
+	mov ACC, R3
+	jne $_print_integer_no_sign, 1
+	push 45  ## '-' ASCII is 45
+	inc R1
+_print_integer_no_sign:
+	pop R9
+	dec R1
+	movb [VGA_Registers.TEXT_SINGLE_CHAR], R9
+	movb [VGA_Registers.SIGNAL], reg(S_REG_1)
+	mov ACC, R1
+	jne $_print_integer_no_sign, 0
+	ret
+
+
+_strlen:
+	arg R1
+	mov R2, 0
+_strlen_loop:
+	movb ACC, *R1
+	inc R1
+	jeq $_strlen_loop_end, 0
+	inc R2
+	jmp $_strlen_loop
+_strlen_loop_end:
+	mov RV, R2
+	ret
