@@ -546,6 +546,22 @@ namespace dragon
 					writeRegister(data::Registers::ACC, ~value);
 				}
 				break;
+				case data::OpCodes::NegReg:
+				{
+					uint8_t regAddr = fetch8();
+					int16_t value = readRegister(regAddr);
+					value *= -1;
+					writeRegister(regAddr, value);
+				}
+				break;
+				case data::OpCodes::NegByteReg:
+				{
+					uint8_t regAddr = fetch8();
+					int8_t value = (int8_t)readRegister(regAddr);
+					value *= -1;
+					writeRegister(regAddr, (int16_t)(0x00FF & value));
+				}
+				break;
 				case data::OpCodes::JmpNotEqImm:
 				{
 					uint16_t addr = fetch16();

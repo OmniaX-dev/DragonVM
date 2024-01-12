@@ -77,12 +77,14 @@
 	mov R10, 0x02
 	int 0x30
 
-	## MBR Loading //TODO: Figure out why and is not working
+	## MBR Loading 
 	and FL, 0b1111111111111110													## Disable interrupts
+	mov FL, ACC
 	push 0
 	call $_load_mbr_data_block
 	or FL, 0b0000000000000001													## Enable interrupts
-	## ---- //TODO: Figure out why or is not working
+	mov FL, ACC
+	## ----
 
 	jmp MemoryAddresses.MBR         											## Jump to start of MBR in memory
 	hlt                															## Just in case somehow execution reaches this point
@@ -194,7 +196,6 @@ _int_30_store_string_text_single:
 	inc R9
 	movb ACC, *R9
 	jne $_int_30_store_string_text_single, 0
-	debug_break
 	jmp $_int_30_end
 
 
@@ -252,6 +253,21 @@ _set_interrupt_vector_entry_end:
 _print_integer:
 	mov R1, 0
 	arg ACC
+	mov R3, 0  ## Used as boolean, 0 = positive, 1 = negative
+	jle $_print_integer_not_negative, 0
+	mov R3, 1
+	jeq $_print_integer_overflow_case, 0x8000
+	neg ACC
+	jmp $_print_integer_loop
+_print_integer_overflow_case:  ## Hardcoded for -32768 (0x8000)
+	push 56
+	push 54
+	push 55
+	push 50
+	push 51
+	mov R1, 5
+	jmp $_print_integer_loop_end
+_print_integer_not_negative:
 	jne $_print_integer_loop, 0
 	push 48  ## '0' ASCII is 48
 	inc R1
@@ -266,12 +282,17 @@ _print_integer_loop:
 	mov ACC, R2
 	jmp $_print_integer_loop
 _print_integer_loop_end:
+	mov ACC, R3
+	jne $_print_integer_no_sign, 1
+	push 45  ## '-' ASCII is 45
+	inc R1
+_print_integer_no_sign:
 	pop R9
 	dec R1
 	movb [VGA_Registers.TEXT_SINGLE_CHAR], R9
 	movb [VGA_Registers.SIGNAL], reg(S_REG_1)
 	mov ACC, R1
-	jne $_print_integer_loop_end, 0
+	jne $_print_integer_no_sign, 0
 	ret
 
 

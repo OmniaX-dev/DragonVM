@@ -959,6 +959,32 @@ namespace dragon
 				m_code.push_back((uint8_t)word);
 				return;
 			}
+			else if (instEdit == "neg")
+			{
+				eOperandType opType = parseOperand(opEdit, word);
+				if (opType != eOperandType::Register)
+				{
+					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Register required\n";
+					exit(0);
+					return;
+				}
+				m_code.push_back(data::OpCodes::NegReg);
+				m_code.push_back((uint8_t)word);
+				return;
+			}
+			else if (instEdit == "negb")
+			{
+				eOperandType opType = parseOperand(opEdit, word);
+				if (opType != eOperandType::Register)
+				{
+					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Register required\n";
+					exit(0);
+					return;
+				}
+				m_code.push_back(data::OpCodes::NegByteReg);
+				m_code.push_back((uint8_t)word);
+				return;
+			}
 			else if (instEdit == "jmp")
 			{
 				m_code.push_back(data::OpCodes::Jmp);

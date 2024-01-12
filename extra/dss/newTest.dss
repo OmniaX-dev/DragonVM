@@ -10,7 +10,7 @@
 	$string "Hello World!!"
 
 .code
-	mov R1, 99					## Zero the counter 
+	mov R1, 0x7FF0				## Zero the counter 
 infinite_loop:
 	inc R1						## Increment the counter
 	div R1, 10					## Divide the counter by 10

@@ -161,7 +161,9 @@ namespace dragon
 				inline static constexpr uint8_t PP = 0x04;
 				inline static constexpr uint8_t FL = 0x05;
 				inline static constexpr uint8_t ACC = 0x06;
-				//0x07, 0x08, 0x09 Are hidden registers used internally, but can be normally accessed by address
+				inline static constexpr uint8_t S1 = 0x07;
+				inline static constexpr uint8_t S2 = 0x08;
+				inline static constexpr uint8_t S3 = 0x09;
 				inline static constexpr uint8_t R1 = 0x0A;
 				inline static constexpr uint8_t R2 = 0x0B;
 				inline static constexpr uint8_t R3 = 0x0C;
@@ -250,6 +252,8 @@ namespace dragon
 				inline static constexpr uint8_t XorRegImm = 0x68;
 				inline static constexpr uint8_t XorRegReg = 0x69;
 				inline static constexpr uint8_t NotReg = 0x6A;
+				inline static constexpr uint8_t NegReg = 0x6B;
+				inline static constexpr uint8_t NegByteReg = 0x6C;
 				
 				inline static constexpr uint8_t JmpNotEqImm = 0x70;
 				inline static constexpr uint8_t JmpNotEqReg = 0x71;
@@ -318,6 +322,8 @@ namespace dragon
 						case data::OpCodes::XorRegImm: return "XorRegImm";
 						case data::OpCodes::XorRegReg: return "XorRegReg";
 						case data::OpCodes::NotReg: return "NotReg";
+						case data::OpCodes::NegReg: return "NegReg";
+						case data::OpCodes::NegByteReg: return "NegByteReg";
 						case data::OpCodes::JmpNotEqImm: return "JmpNotEqImm";
 						case data::OpCodes::JmpNotEqReg: return "JmpNotEqReg";
 						case data::OpCodes::JmpEqImm: return "JmpEqImm";
@@ -394,6 +400,8 @@ namespace dragon
 						case data::OpCodes::XorRegImm: return 4;
 						case data::OpCodes::XorRegReg: return 3;
 						case data::OpCodes::NotReg: return 2;
+						case data::OpCodes::NegReg: return 2;
+						case data::OpCodes::NegByteReg: return 2;
 						case data::OpCodes::JmpNotEqImm: return 5;
 						case data::OpCodes::JmpNotEqReg: return 4;
 						case data::OpCodes::JmpEqImm: return 5;

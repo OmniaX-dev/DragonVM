@@ -1,0 +1,49 @@
+@guard _DATA_DSS_
+
+## ============================= Memory Mapped Devices and Registers =============================
+@group MemoryAddresses
+	MBR 			0x1380
+	INT_VEC 		0x1080
+	DISK_INTERFACE 	0x1580
+	RAM 			0x1740
+	CMOS 			0x1000
+	VGA 			0x1600
+@end
+
+@group CMOS_Settings
+	BOOT_DISK 				{ MemoryAddresses.CMOS + 0x0010 }
+@end
+
+@group VGA_Registers
+	VIDEO_MODE 				{ MemoryAddresses.VGA + 0x0000 }
+	SIGNAL					{ MemoryAddresses.VGA + 0x0003 }
+	TEXT_SINGLE_CHAR		{ MemoryAddresses.VGA + 0x0004 }
+
+	BUFF_START				{ MemoryAddresses.VGA + 0x00E0 }
+@end
+
+@group VGA_VideoModes
+	TEXT_SINGLE_COLOR			0x00
+@end
+
+@group Sig_VGA_Text_Single_Color
+	CONTINUE 			0x00
+	PRINT_CHAR			0x02
+	STORE_CHAR			0x03
+	PRINT_FLUSH_BUFF	0x04
+	FLUSH_BUFF			0x05
+	PRINT_BUFF			0x06
+
+	REFRESH_SCREEN 		0xE0
+	CLEAR_SCREEN 		0xE1
+@end
+
+@define S_REG_1 0x07
+@define S_REG_2 0x08
+@define S_REG_3 0x09
+## ===============================================================================================
+
+.data
+	$_bios_name "DragonBIOS"
+	$_bios_version_number_maj 0x00, 0x00
+	$_bios_version_number_min 0x00, 0x03

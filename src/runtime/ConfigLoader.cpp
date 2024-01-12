@@ -7,7 +7,7 @@ namespace dragon
 	const tMachineConfig MachineConfigLoader::loadConfig(const ostd::String& configFilePath)
 	{
 		tMachineConfig config;
-		ostd::TextFileBuffer file(configFilePath);
+		ostd::TextFileBuffer file(configFilePath.cpp_str());
 		if (!file.exists()) return config;
 		auto lines = file.getLines();
 		for (auto& line : lines)

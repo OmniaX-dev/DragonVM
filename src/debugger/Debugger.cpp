@@ -190,7 +190,7 @@ namespace dragon
 
 	void Debugger::Display::printPrompt(void)
 	{
-		out.fg(ostd::ConsoleColors::Magenta).p(" (ddb) #/> ").fg(ostd::ConsoleColors::White);
+		out.fg(ostd::ConsoleColors::Magenta).p(" (ddb) #/> ").fg(ostd::ConsoleColors::White).flush();
 	}
 
 	void Debugger::Display::printStep(void)
@@ -275,17 +275,17 @@ namespace dragon
 		str.add("\n");
 		str.add("|---------------|------------------------------------|------------------------------------|=====|===========|===========|");
 		str.add("\n");
-		str.add("|    RV:        |*%PREV_RV%**************************|**%CURR_RV%*************************|");
+		str.add("|    RV:        |*%PREV_RV%**************************|**%CURR_RV%*************************| S1  |*%PREV_S1%*|*%CURR_S1*%|");
 		str.add("\n");
-		str.add("|---------------|------------------------------------|------------------------------------|");
+		str.add("|---------------|------------------------------------|------------------------------------|-----|-----------|-----------|");
 		str.add("\n");
-		str.add("|    PP:        |*%PREV_PP%**************************|**%CURR_PP%*************************|");
+		str.add("|    PP:        |*%PREV_PP%**************************|**%CURR_PP%*************************| S2  |*%PREV_S2%*|*%CURR_S2%*|");
 		str.add("\n");
-		str.add("|---------------|------------------------------------|------------------------------------|");
+		str.add("|---------------|------------------------------------|------------------------------------|-----|-----------|-----------|");
 		str.add("\n");
-		str.add("|    FL:        |*%PREV_FL%**************************|**%CURR_FL%*************************|");
+		str.add("|    FL:        |*%PREV_FL%**************************|**%CURR_FL%*************************| S3  |*%PREV_S3%*|*%CURR_S3%*|");
 		str.add("\n");
-		str.add("|---------------|------------------------------------|------------------------------------|");
+		str.add("|---------------|------------------------------------|------------------------------------|=====|===========|===========|");
 		str.add("\n");
 		str.add("|    ACC:       |*%PREV_ACC%*************************|**%CURR_ACC%************************|");
 		str.add("\n");
@@ -788,12 +788,71 @@ namespace dragon
 			str.replaceAll("%CURR_R10%", tmpStyle);
 		}
 
+		//Special Registers
+		{
+			tmp = " ", tmpStyle = "";
+			tmp.add(ostd::Utils::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::S1], true, 2));
+			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmpStyle = "[@@style foreground:Blue]";
+			tmpStyle.add(tmp).add("[@@/]");
+			str.replaceAll("%PREV_S1%", tmpStyle);
 
+			tmp = " ";
+			tmp.add(ostd::Utils::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::S1], true, 2));
+			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			if (minfo.currentInstructionRegisters[dragon::data::Registers::S1] != minfo.previousInstructionRegisters[dragon::data::Registers::S1])
+				tmpStyle = "[@@style foreground:Black,background:BrightRed]";
+			else
+				tmpStyle = "[@@style foreground:Blue]";
+			tmpStyle.add(tmp).add("[@@/]");
+			str.replaceAll("%CURR_S1%", tmpStyle);
+
+
+
+			
+			tmp = " ", tmpStyle = "";
+			tmp.add(ostd::Utils::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::S2], true, 2));
+			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmpStyle = "[@@style foreground:Blue]";
+			tmpStyle.add(tmp).add("[@@/]");
+			str.replaceAll("%PREV_S2%", tmpStyle);
+
+			tmp = " ";
+			tmp.add(ostd::Utils::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::S2], true, 2));
+			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			if (minfo.currentInstructionRegisters[dragon::data::Registers::S2] != minfo.previousInstructionRegisters[dragon::data::Registers::S2])
+				tmpStyle = "[@@style foreground:Black,background:BrightRed]";
+			else
+				tmpStyle = "[@@style foreground:Blue]";
+			tmpStyle.add(tmp).add("[@@/]");
+			str.replaceAll("%CURR_S2%", tmpStyle);
+
+
+
+			
+			tmp = " ", tmpStyle = "";
+			tmp.add(ostd::Utils::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::S3], true, 2));
+			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmpStyle = "[@@style foreground:Blue]";
+			tmpStyle.add(tmp).add("[@@/]");
+			str.replaceAll("%PREV_S3%", tmpStyle);
+
+			tmp = " ";
+			tmp.add(ostd::Utils::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::S3], true, 2));
+			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			if (minfo.currentInstructionRegisters[dragon::data::Registers::S3] != minfo.previousInstructionRegisters[dragon::data::Registers::S3])
+				tmpStyle = "[@@style foreground:Black,background:BrightRed]";
+			else
+				tmpStyle = "[@@style foreground:Blue]";
+			tmpStyle.add(tmp).add("[@@/]");
+			str.replaceAll("%CURR_S3%", tmpStyle);
+		}
 		
 		ostd::RegexRichString rgxstr(str);
 		rgxstr.fg("InstAddr|Code|StackFrame|DBG BRK|INT Handler|BIOS Mode|SubRoutine", "Magenta");
 		rgxstr.fg("IP|SP|FP|RV|PP|FL|ACC", "Cyan");
 		rgxstr.fg("R10|R2|R3|R4|R5|R6|R7|R8|R9|R1", "BrightGreen");
+		rgxstr.fg("S1|S2|S3", "BrightRed");
 		rgxstr.fg("PREV", "Red");
 		rgxstr.fg("CURR", "Green");
 		out.pStyled(rgxstr);
