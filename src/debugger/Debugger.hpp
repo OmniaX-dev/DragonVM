@@ -19,7 +19,7 @@ namespace dragon
 			bool step_exec = false;
 			bool track_step_diff = true;
 			bool auto_start_debug = false;
-			bool hide_virtual_display = false;
+			bool hide_virtual_display = true;
 			bool track_call_stack = true;
 			bool auto_track_all_data_symbols = true;
 			ostd::String force_load_file = "";

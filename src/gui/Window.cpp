@@ -54,8 +54,9 @@ namespace dragon
 		if (!m_initialized) return;
 		Uint64 start = SDL_GetPerformanceCounter();
 		handleEvents();
+		if (m_refreshScreen)
+			SDL_RenderClear(m_renderer);
 		onUpdate();
-		SDL_RenderClear(m_renderer);
 		onRender();
 		SDL_RenderPresent(m_renderer);
 		Uint64 end = SDL_GetPerformanceCounter();
@@ -81,6 +82,7 @@ namespace dragon
 	{
 		if (!isInitialized()) return;
 		SDL_SetWindowSize(m_window, width, height);
+		ostd::SignalHandler::emitSignal(ostd::tBuiltinSignals::WindowResized, ostd::tSignalPriority::RealTime);
 	}
 
 	void Window::setTitle(const ostd::String& title)
@@ -113,7 +115,7 @@ namespace dragon
 			if (event.type == SDL_QUIT)
 			{
 				m_running = false;
-				ostd::SignalHandler::emitSignal(Signal_OnWindowClosed, ostd::tSignalPriority::Normal, *this);
+				ostd::SignalHandler::emitSignal(ostd::tBuiltinSignals::WindowClosed, ostd::tSignalPriority::Normal, *this);
 			}
 			else if (event.type == SDL_WINDOWEVENT)
 			{
@@ -129,7 +131,7 @@ namespace dragon
 			{
 				MouseEventData mmd = l_getMouseState();
 				if (isMouseDragEventEnabled() && mmd.button != MouseEventData::eButton::None)
-					ostd::SignalHandler::emitSignal(Signal_OnMouseDragged, ostd::tSignalPriority::RealTime, mmd);
+					ostd::SignalHandler::emitSignal(ostd::tBuiltinSignals::WindowClosed, ostd::tSignalPriority::RealTime, mmd);
 				else
 					ostd::SignalHandler::emitSignal(ostd::tBuiltinSignals::MouseMoved, ostd::tSignalPriority::RealTime, mmd);
 			}

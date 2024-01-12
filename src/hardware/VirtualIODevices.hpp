@@ -170,6 +170,7 @@ namespace dragon
 					ostd::ByteStream* getByteStream(void) override;
 
 				private:
+					ostd::serial::SerialIO m_videoMemory;
 			};
 			class SerialPort : public IMemoryDevice
 			{

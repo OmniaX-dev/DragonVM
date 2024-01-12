@@ -40,6 +40,16 @@ namespace dragon
 				lineEdit = tokens.next();
 				config.cmos_path = lineEdit;
 			}
+			else if (lineEdit == "singlecolor_foreground")
+			{
+				lineEdit = tokens.next();
+				config.singleColor_foreground.set(lineEdit);
+			}
+			else if (lineEdit == "singlecolor_background")
+			{
+				lineEdit = tokens.next();
+				config.singleColor_background.set(lineEdit);
+			}
 			else continue; //TODO: Warning
 		}
 		return validate_machine_config(config);

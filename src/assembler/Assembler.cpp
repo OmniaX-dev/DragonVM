@@ -128,7 +128,7 @@ namespace dragon
 		void Assembler::loadSource(ostd::String source)
 		{
 			m_rawSource = source;
-			m_lines = ostd::String(source).tokenize("\n").getRawData();
+			m_lines = ostd::String(source.replaceAll("\t", "    ")).tokenize("\n").getRawData();
 		}
 
 		ostd::ByteStream Assembler::assembleToFile(ostd::String sourceFileName, ostd::String binaryFileName)
@@ -245,7 +245,7 @@ namespace dragon
 			{
 				ostd::String lineEdit(line);
 				for (int32_t i = defines.size() - 1; i >= 0; i--)
-					lineEdit.replaceAll(defines[i].name, defines[i].value);
+					lineEdit.replaceAll(defines[i].name, defines[i].value.new_trim());
 				line = lineEdit;
 			}
 			m_lines.clear();
@@ -1190,7 +1190,7 @@ namespace dragon
 				}
 				return;
 			}
-			else if (instEdit == "add" || instEdit == "sub" || instEdit == "mul")
+			else if (instEdit == "add" || instEdit == "sub" || instEdit == "mul" || instEdit == "div")
 			{
 				m_code.push_back(0x00);
 				eOperandType opType = parseOperand(st.next(), word);
@@ -1208,6 +1208,7 @@ namespace dragon
 					if (instEdit == "add") m_code[m_code.size() - 2] = data::OpCodes::AddImmReg;
 					else if (instEdit == "sub") m_code[m_code.size() - 2] = data::OpCodes::SubImmReg;
 					else if (instEdit == "mul") m_code[m_code.size() - 2] = data::OpCodes::MulImmReg;
+					else if (instEdit == "div") m_code[m_code.size() - 2] = data::OpCodes::DivImmReg;
 					m_code.push_back((uint8_t)((word & 0xFF00) >> 8));
 					m_code.push_back((uint8_t)(word & 0x00FF));
 				}
@@ -1216,6 +1217,7 @@ namespace dragon
 					if (instEdit == "add") m_code[m_code.size() - 2] = data::OpCodes::AddRegReg;
 					else if (instEdit == "sub") m_code[m_code.size() - 2] = data::OpCodes::SubRegReg;
 					else if (instEdit == "mul") m_code[m_code.size() - 2] = data::OpCodes::MulRegReg;
+					else if (instEdit == "div") m_code[m_code.size() - 2] = data::OpCodes::DivRegReg;
 					m_code.push_back((uint8_t)word);
 				}
 				else
@@ -1431,6 +1433,26 @@ namespace dragon
 			if (reg != data::Registers::Last)
 			{
 				outOp = (int16_t)reg;
+				if (derefReg)
+					return eOperandType::DerefRegister;
+				return eOperandType::Register;
+			}
+			else if (opEdit.startsWith("reg(") && opEdit.endsWith(")"))
+			{
+				opEdit.substr(4, opEdit.len() - 1);
+				opEdit.trim();
+				if (!opEdit.isNumeric())
+				{
+					std::cout << "Invalid numeric value: " << opEdit << "\n";
+					return eOperandType::Error;
+				}
+				uint8_t _reg = opEdit.toInt();
+				if (_reg >= data::Registers::Last)
+				{
+					std::cout << "Invalid Register: " << opEdit << "\n";
+					return eOperandType::Error;
+				}
+				outOp = (int16_t)_reg;
 				if (derefReg)
 					return eOperandType::DerefRegister;
 				return eOperandType::Register;

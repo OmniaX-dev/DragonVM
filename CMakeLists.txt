@@ -31,12 +31,14 @@ list(APPEND RUNTIME_SOURCE_FILES
 
 	${CMAKE_CURRENT_LIST_DIR}/src/gui/Window.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/gui/RawTextRenderer.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/gui/Renderer.cpp
 
 	${CMAKE_CURRENT_LIST_DIR}/src/hardware/VirtualCPU.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/hardware/VirtualRAM.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/hardware/MemoryMapper.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/hardware/VirtualIODevices.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/hardware/VirtualHardDrive.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/hardware/VirtualDisplay.cpp
 
 	${CMAKE_CURRENT_LIST_DIR}/src/tools/Utils.cpp
 )
@@ -47,12 +49,14 @@ list(APPEND DEBUGGER_SOURCE_FILES
 
 	${CMAKE_CURRENT_LIST_DIR}/src/gui/Window.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/gui/RawTextRenderer.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/gui/Renderer.cpp
 
 	${CMAKE_CURRENT_LIST_DIR}/src/hardware/VirtualCPU.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/hardware/VirtualRAM.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/hardware/MemoryMapper.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/hardware/VirtualIODevices.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/hardware/VirtualHardDrive.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/hardware/VirtualDisplay.cpp
 
 	${CMAKE_CURRENT_LIST_DIR}/src/runtime/DragonRuntime.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/runtime/ConfigLoader.cpp

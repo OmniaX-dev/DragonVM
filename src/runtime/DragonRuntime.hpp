@@ -7,6 +7,7 @@
 #include "../hardware/VirtualRAM.hpp"
 #include "../hardware/VirtualIODevices.hpp"
 #include "../hardware/VirtualHardDrive.hpp"
+#include "../hardware/VirtualDisplay.hpp"
 
 #include "../tools/GlobalData.hpp"
 
@@ -73,7 +74,7 @@ namespace dragon
 			std::vector<tCallInfo> callStack;
 		};
 		public:
-			static void printRegisters(dragon::hw::VirtualCPU& cpu);
+			static void printRegisters(hw::VirtualCPU& cpu);
 			static void processErrors(void);
 			static std::vector<data::ErrorHandler::tError> getErrorList(void);
 			static int32_t loadArguments(int argc, char** argv, tCommandLineArgs& args);
@@ -99,24 +100,24 @@ namespace dragon
 		public:
 			inline static ostd::ConsoleOutputHandler out;
 
-			inline static dragon::hw::MemoryMapper memMap;
-			inline static dragon::hw::VirtualCPU cpu { memMap };
-			inline static dragon::hw::VirtualRAM ram;
-			inline static dragon::hw::InterruptVector intVec;
-			inline static dragon::hw::VirtualBIOS vBIOS;
-			inline static dragon::hw::interface::CMOS vCMOS;
-			inline static dragon::hw::VirtualBootloader vMBR;
-			inline static dragon::hw::VirtualKeyboard vKeyboard;
-			inline static dragon::hw::VirtualMouse vMouse;
-			inline static dragon::hw::interface::Disk vDiskInterface { memMap, cpu };
-			inline static dragon::hw::interface::Graphics vGraphicsInterface;
-			inline static dragon::hw::interface::SerialPort vSerialInterface;
+			inline static hw::MemoryMapper memMap;
+			inline static hw::VirtualCPU cpu { memMap };
+			inline static hw::VirtualRAM ram;
+			inline static hw::InterruptVector intVec;
+			inline static hw::VirtualBIOS vBIOS;
+			inline static hw::interface::CMOS vCMOS;
+			inline static hw::VirtualBootloader vMBR;
+			inline static hw::VirtualKeyboard vKeyboard;
+			inline static hw::VirtualMouse vMouse;
+			inline static hw::interface::Disk vDiskInterface { memMap, cpu };
+			inline static hw::interface::Graphics vGraphicsInterface;
+			inline static hw::interface::SerialPort vSerialInterface;
 
-			inline static std::unordered_map<int32_t, dragon::hw::VirtualHardDrive> vDisks;
+			inline static std::unordered_map<int32_t, hw::VirtualHardDrive> vDisks;
 
-			inline static dragon::Window vDisplay;
+			inline static hw::VirtualDisplay vDisplay;
 
-			inline static dragon::tMachineConfig machine_config;
+			inline static tMachineConfig machine_config;
 
 		private:
 			inline static tMachineDebugInfo s_machineInfo;

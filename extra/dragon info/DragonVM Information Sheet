@@ -1,0 +1,122 @@
+#==========================================================================================================================================
+# Memory Map
+#==========================================================================================================================================
+
+
+0x0000 BIOS (4096 Bytes)
+0x0FFF
+-------
+0x1000 CMOS (128 Bytes)
+    BootDisk: 0x0010
+0x107F
+-------
+0x1080 INTERRUPT VECTOR (512 Bytes)
+    Status: 1 Byte
+        0xFF: Enabled
+        0x00: Disabled
+    Handler Address: 2 Byte
+    ...Repeat...
+0x127F
+-------
+0x1280 KEYBOARD MAPPING (224 Bytes)
+0x135F
+-------
+0x1360 MOUSE MAPPING (32 Bytes)
+0x137F
+-------
+0x1380 BOOTLOADER (512 Bytes)
+0x157F
+-------
+0x1580 DISK INTERFACE (128 Bytes)
+    Read/Write:
+        Signal: 1 Byte
+            0x00: Start Operation
+            0x01: Cancel Current Operation
+            0xFF: Ignore
+        Mode: 1 Byte
+            0x00: Read
+            0x01: Write
+        Disk: 1 Byte
+        Sector: 2 Bytes
+        Address: 2 Bytes
+        DataSize: 2 Bytes
+        DataAddress: 2 Byte
+    ReadOnly:
+        Status: 1 Byte
+            0x00: Free
+            0x01: Writing
+            0x02: Reading
+        CurrentDisk: 1 Byte
+        CurrentSector: 2 Bytes
+        CurrentAddress: 2 Bytes
+        RestDataSize: 2 Bytes
+        SourceData: 2 Bytes
+    Free: 107 Byte
+0x15FF
+-------
+0x1600 VIDEO CARD INTERFACE (256 Bytes)
+    0x00:  Video Mode (1 Byte)
+        0x00: Text Single Color
+        # 0x01: Text 16-color
+        # 0x02: Text 256-color
+        # 0x03: Text True Color Mode
+        # 0x04: GFX Single Color
+        # 0x05: GFX 16-color
+        # 0x06: GFX 256-color
+        # 0x07: GFX True Color Mode
+    # 0x01: Clear Color (1 Byte)
+    # 0x02: Palette (1 Byte)
+    0x03: Signal (1 Byte)
+        0x00: Continue
+
+        0x02: Text Single Color - Direct Print Character
+        0x03: Text Single Color - Store character in buffer
+        0x04: Text SIngle Color - Direct Print buffer & Flush Buffer
+        0x05: Text Single Color - Flush Buffer
+        0x06: Text Single Color - Print Buffer Without Flushing
+
+        0xE0: Refresh Screen
+        0xE1: Clear Screen
+    0x04: Text Single Color Character
+0x16FF
+-------
+0x1700 GENERIC SERIAL INTERFACE (64 Bytes)
+0x173F
+-------
+0x1740 RAM (59583 Bytes)
+0xFFFF
+
+
+
+#==========================================================================================================================================
+# INTERRUPTS
+#==========================================================================================================================================
+
+
+
+
+BIOS Specific - Software Interrupts:
+====================================
+0x20: BIOS Interrupt (Uses R10 register for specific functionality)
+	0x00: Set Interrupt Handler
+	0x01: Clear Interrupt Handler
+	0x10: Disk Interface
+0x30: BIOS Video Interrupt (Uses R10 register for specific functionality)
+	0x01: Print Char in Text Single Mode (char stored in R9 register)
+	0x02: New Line in Text Single Mode
+	0x03: Print Null-Terminated String in Text Single Mode (string address stored in R9 register)
+	0x04: Print Integer in Text Single Mode (integer stored in R9 register)
+	0x05: Store Integer in buffer in Text Single Mode (integer stored in R9 register)
+	0x06: Store character in buffer in Text Single Mode (integer stored in R9 register)
+	0x07: Print buffer no flush in Text Single Mode
+	0x08: Print buffer and flush in Text Single Mode
+	0x09: Flush buffer in Text Single Mode
+	0x0A: Store Null-Terminated String in buffer in Text Single Mode (string address stored in R9 register)
+
+	0xE0: Refresh Screen
+	0xE1: Clear Screen
+
+
+Machine Specific - Hardware Interrupts:
+=======================================
+0x80: Disk Interface Finished

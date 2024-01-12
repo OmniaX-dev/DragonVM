@@ -49,6 +49,8 @@ namespace dragon
 			SDL_Surface* m_fontSurface { nullptr };
 			uint32_t* m_fontPixels { nullptr };
 
+			bool m_refreshScreen { true };
+
 		private:
 			int32_t m_windowWidth { 0 };
 			int32_t m_windowHeight { 0 };
@@ -61,11 +63,6 @@ namespace dragon
 			bool m_deagEventEnabled { false };
 			bool m_running { false };
 			bool m_initialized { false };
-
-		public:
-			//Signals //TODO: Add theese to the builtin signals in ostd::SignalHandler
-			inline static const uint32_t Signal_OnMouseDragged = ostd::SignalHandler::newCustomSignal(1003);
-			inline static const uint32_t Signal_OnWindowClosed = ostd::SignalHandler::newCustomSignal(2000);
 	};
 	class WindowResizedData : public ostd::BaseObject
 	{

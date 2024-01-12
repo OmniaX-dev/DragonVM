@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ostd/String.hpp>
+#include <ostd/Color.hpp>
 #include <map>
 
 namespace dragon
@@ -10,6 +10,8 @@ namespace dragon
 		std::map<int32_t, ostd::String> vdisk_paths;
 		ostd::String bios_path;
 		ostd::String cmos_path;
+		ostd::Color singleColor_background;
+		ostd::Color singleColor_foreground;
 		
 		inline bool isValid(void) const { return m_valid; }
 

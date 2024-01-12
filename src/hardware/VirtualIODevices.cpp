@@ -438,31 +438,54 @@ namespace dragon
 
 			Graphics::Graphics(void)
 			{
+				m_videoMemory.init(0xFFFF);
 			}
 
 			int8_t Graphics::read8(uint16_t addr)
 			{
-				return 0x00;
+				int8_t outVal = 0;
+				if (!m_videoMemory.r_Byte(addr, outVal))
+				{
+					data::ErrorHandler::pushError(data::ErrorCodes::Graphics_MemoryReadFailed, "Failed to read byte from Graphics Memory");
+					return 0;
+				}
+				return outVal;
 			}
 
 			int16_t Graphics::read16(uint16_t addr)
 			{
-				return 0x0000;
+				int16_t outVal = 0;
+				if (!m_videoMemory.r_Word(addr, outVal))
+				{
+					data::ErrorHandler::pushError(data::ErrorCodes::Graphics_MemoryReadFailed, "Failed to read word from Graphics Memory");
+					return 0;
+				}
+				return outVal;
 			}
 
 			int8_t Graphics::write8(uint16_t addr, int8_t value)
 			{
-				return 0x00;
+				if (!m_videoMemory.w_Byte(addr, value))
+				{
+					data::ErrorHandler::pushError(data::ErrorCodes::Graphics_MemoryWriteFailed, "Failed to write byte to Graphics Memory");
+					return 0;
+				}
+				return value;
 			}
 
 			int16_t Graphics::write16(uint16_t addr, int16_t value)
 			{
-				return 0x0000;
+				if (!m_videoMemory.w_Word(addr, value))
+				{
+					data::ErrorHandler::pushError(data::ErrorCodes::Graphics_MemoryWriteFailed, "Failed to word byte to Graphics Memory");
+					return 0;
+				}
+				return value;
 			}
 
 			ostd::ByteStream* Graphics::getByteStream(void)
 			{
-				return nullptr;
+				return &m_videoMemory.getData();
 			}
 
 

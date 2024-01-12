@@ -136,10 +136,9 @@ namespace dragon
 
 		if (verbose)
 			out.fg(ostd::ConsoleColors::Magenta).p("  Initializing virtual display:").nl();
-		vDisplay.initialize(800, 600, "DragonVM", "font.bmp");
 		int32_t w = RawTextRenderer::CONSOLE_CHARS_H * RawTextRenderer::FONT_CHAR_W; //60 * 16;
 		int32_t h = RawTextRenderer::CONSOLE_CHARS_V * RawTextRenderer::FONT_CHAR_H; //60 * 9;
-		vDisplay.setSize(w, h);
+		vDisplay.initialize(w, h, "DragonVM", "font.bmp");
 		if (hideVirtualDisplay)
 			vDisplay.hide();
 		if (verbose)

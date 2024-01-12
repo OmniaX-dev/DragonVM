@@ -1,5 +1,5 @@
 ##=================================================================================================================================
-## This is the test program for the Dragon Virtual Machine. The example has two subroutines: One is the $strlen subroutine,
+## This is the test1 program for the Dragon Virtual Machine. The example has two subroutines: One is the $strlen subroutine,
 ## which calculates the length of the string passed as a parameter; The other calculates the fibonacci sequence up to the
 ## Nth number (N being the parameter passed to the subroutine).
 ## In the main part of the .code section, debug_break instructions are used in order to pause the debugger, so that the

@@ -1,25 +1,55 @@
 ## ============================= Memory Mapped Devices and Registers =============================
 @group MemoryAddresses
-	MBR 0x1380
-	INT_VEC 0x1080
-	DISK_INTERFACE 0x1580
-	RAM 0x1740
-	CMOS 0x1000
+	MBR 			0x1380
+	INT_VEC 		0x1080
+	DISK_INTERFACE 	0x1580
+	RAM 			0x1740
+	CMOS 			0x1000
+	VGA 			0x1600
 @end
 
 @group CMOS_Settings
-	BOOT_DISK {MemoryAddresses.CMOS + 0x0010}
+	BOOT_DISK 				{ MemoryAddresses.CMOS + 0x0010 }
 @end
+
+@group VGA_Registers
+	VIDEO_MODE 				{ MemoryAddresses.VGA + 0x0000 }
+	SIGNAL					{ MemoryAddresses.VGA + 0x0003 }
+	TEXT_SINGLE_CHAR		{ MemoryAddresses.VGA + 0x0004 }
+
+	BUFF_START				{ MemoryAddresses.VGA + 0x00E0 }
+@end
+
+@group VGA_VideoModes
+	TEXT_SINGLE_COLOR			0x00
+@end
+
+@group Sig_VGA_Text_Single_Color
+	CONTINUE 			0x00
+	PRINT_CHAR			0x02
+	STORE_CHAR			0x03
+	PRINT_FLUSH_BUFF	0x04
+	FLUSH_BUFF			0x05
+	PRINT_BUFF			0x06
+
+	REFRESH_SCREEN 		0xE0
+	CLEAR_SCREEN 		0xE1
+@end
+
+@define S_REG_1 0x07
+@define S_REG_2 0x08
+@define S_REG_3 0x09
 ## ===============================================================================================
 
 .load 0x0000           															## BIOS is mapped to address 0x0000 in memory
 .data
-	$bios_version_number 0x00, 0x01												## BIOS Version stored in memory
+	$_bios_name "DragonBIOS"
+	$_bios_version_number_maj 0x00, 0x00
+	$_bios_version_number_min 0x00, 0x03
 
 ## ============================= BIOS Program =============================
 .code
-	## mov FL, 0
-	## jmp 0x1740
+	movb [VGA_Registers.VIDEO_MODE], VGA_VideoModes.TEXT_SINGLE_COLOR			## Enable Text_Single_Color graphics mode
 	mov FL, 0b0000000000000001													## Zero the FL Register and enable interrupts
 	movb [{MemoryAddresses.INT_VEC + (0x20 * 3)}], 0xFF 						## Setting up int 0x20 handler
 	mov [{MemoryAddresses.INT_VEC + (0x20 * 3) + 1}], $_int_20_handler			## --
@@ -29,12 +59,30 @@
 	mov R8, 0x30																##  -Passing the interrupt's code to setup
 	int 0x20																	##  -Calling int 0x20 with 0x00 as parameter, to set new handler up
 
-	## MBR Loading
+	mov R10, 0x03
+	mov R9, $_bios_name
+	int 0x30
+	mov R10, 0x01
+	mov R9, 32
+	int 0x30
+	mov R10, 0x04
+	mov R9, [$_bios_version_number_maj]
+	int 0x30
+	mov R10, 0x01
+	mov R9, 46
+	int 0x30
+	mov R10, 0x04
+	mov R9, [$_bios_version_number_min]
+	int 0x30
+	mov R10, 0x02
+	int 0x30
+
+	## MBR Loading //TODO: Figure out why and is not working
 	and FL, 0b1111111111111110													## Disable interrupts
 	push 0
 	call $_load_mbr_data_block
 	or FL, 0b0000000000000001													## Enable interrupts
-	## ----
+	## ---- //TODO: Figure out why or is not working
 
 	jmp MemoryAddresses.MBR         											## Jump to start of MBR in memory
 	hlt                															## Just in case somehow execution reaches this point
@@ -84,10 +132,78 @@ _int_20_end:
 ## ==========================  BIOS Video Interrupt handler =========================
 _int_30_handler:
 	mov ACC, R10
-	jeq $_int_30_clear_screen, 0x0000
+	jeq $_int_30_direct_print_char_text_single, 0x0001
+	jeq $_int_30_direct_new_line_text_single, 0x0002
+	jeq $_int_30_direct_print_string_text_single, 0x0003
+	jeq $_int_30_direct_print_integer_text_single, 0x0004
+	jeq $_int_30_store_integer_text_single, 0x0005
+	jeq $_int_30_store_char_text_single, 0x0006
+	jeq $_int_30_print_buffer_no_flush_text_single, 0x0007
+	jeq $_int_30_print_buffer_and_flush_text_single, 0x0008
+	jeq $_int_30_flush_buffer_text_single, 0x0009
+	jeq $_int_30_store_string_text_single, 0x000A
+	jeq $_int_30_clear_screen, 0x00E0
+	jeq $_int_30_refresh_screen, 0x00E1
 	jmp $_int_30_end
+
+
+_int_30_direct_print_char_text_single:
+	movb [VGA_Registers.TEXT_SINGLE_CHAR], R9
+	movb [VGA_Registers.SIGNAL], Sig_VGA_Text_Single_Color.PRINT_CHAR
+	jmp $_int_30_end
+_int_30_direct_new_line_text_single:
+	movb [VGA_Registers.TEXT_SINGLE_CHAR], 10  ## New line char code
+	movb [VGA_Registers.SIGNAL], Sig_VGA_Text_Single_Color.STORE_CHAR
+	jmp $_int_30_end
+_int_30_direct_print_string_text_single:
+	movb R1, *R9
+	movb [VGA_Registers.TEXT_SINGLE_CHAR], R1
+	movb [VGA_Registers.SIGNAL], Sig_VGA_Text_Single_Color.PRINT_CHAR
+	inc R9
+	movb ACC, *R9
+	jne $_int_30_direct_print_string_text_single, 0
+	jmp $_int_30_end
+_int_30_direct_print_integer_text_single:
+	mov reg(S_REG_1), Sig_VGA_Text_Single_Color.PRINT_CHAR
+	push R9
+	push 1
+	call $_print_integer
+	jmp $_int_30_end
+_int_30_store_integer_text_single:
+	mov reg(S_REG_1), Sig_VGA_Text_Single_Color.STORE_CHAR
+	push R9
+	push 1
+	call $_print_integer
+	jmp $_int_30_end
+_int_30_store_char_text_single:
+	movb [VGA_Registers.TEXT_SINGLE_CHAR], R9
+	movb [VGA_Registers.SIGNAL], Sig_VGA_Text_Single_Color.STORE_CHAR
+	jmp $_int_30_end
+_int_30_print_buffer_no_flush_text_single:
+	movb [VGA_Registers.SIGNAL], Sig_VGA_Text_Single_Color.PRINT_BUFF
+_int_30_print_buffer_and_flush_text_single:
+	movb [VGA_Registers.SIGNAL], Sig_VGA_Text_Single_Color.PRINT_FLUSH_BUFF
+	jmp $_int_30_end
+_int_30_flush_buffer_text_single:
+	movb [VGA_Registers.SIGNAL], Sig_VGA_Text_Single_Color.FLUSH_BUFF
+	jmp $_int_30_end
+_int_30_store_string_text_single:
+	movb R1, *R9
+	movb [VGA_Registers.TEXT_SINGLE_CHAR], R1
+	movb [VGA_Registers.SIGNAL], Sig_VGA_Text_Single_Color.STORE_CHAR
+	inc R9
+	movb ACC, *R9
+	jne $_int_30_store_string_text_single, 0
+	debug_break
+	jmp $_int_30_end
+
+
 _int_30_clear_screen:
-	nop
+	movb [VGA_Registers.SIGNAL], Sig_VGA_Text_Single_Color.CLEAR_SCREEN
+	jmp $_int_30_end
+_int_30_refresh_screen:
+	movb [VGA_Registers.SIGNAL], Sig_VGA_Text_Single_Color.REFRESH_SCREEN
+	jmp $_int_30_end
 _int_30_end:
 	rti
 ## ==================================================================================
@@ -130,6 +246,46 @@ _set_interrupt_vector_entry_disable:
 _set_interrupt_vector_entry_end:
 	inc R1
 	mov *R1, ACC
+	ret
+
+
+_print_integer:
+	mov R1, 0
+	arg ACC
+	jne $_print_integer_loop, 0
+	push 48  ## '0' ASCII is 48
+	inc R1
+	jmp $_print_integer_loop_end
+_print_integer_loop:
+	jeq $_print_integer_loop_end, 0
+	div ACC, 10
+	mov R2, ACC
+	add RV, 48	## '0' ASCII is 48
+	push ACC
+	inc R1
+	mov ACC, R2
+	jmp $_print_integer_loop
+_print_integer_loop_end:
+	pop R9
+	dec R1
+	movb [VGA_Registers.TEXT_SINGLE_CHAR], R9
+	movb [VGA_Registers.SIGNAL], reg(S_REG_1)
+	mov ACC, R1
+	jne $_print_integer_loop_end, 0
+	ret
+
+
+_strlen:
+	arg R1
+	mov R2, 0
+_strlen_loop:
+	movb ACC, *R1
+	inc R1
+	jeq $_strlen_loop_end, 0
+	inc R2
+	jmp $_strlen_loop
+_strlen_loop_end:
+	mov RV, R2
 	ret
 
 .fixed 4096, 0x00      ## BIOS Needs to be 4096 Bytes exactly

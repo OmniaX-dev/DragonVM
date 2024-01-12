@@ -19,7 +19,7 @@ if [ $? -eq 0 ]; then
     printf "${green}Compiling Test Program...\n"
     ./dasm dss/newTest.dss -o newTest.bin --save-disassembly disassembly/newTest.dds --verbose
     printf "\n${green}Running Application...\n\n${clear}"
-    ./dvm config/testMachine.dvm --force-load newTest.bin 0x00
+    ./ddb config/testMachine.dvm --force-load newTest.bin 0x00 --verbose-load
     cp dragon/disk1.dr ../extra/dragon/disk1.dr
     cp dragon/cmos.dr ../extra/dragon/cmos.dr
 fi

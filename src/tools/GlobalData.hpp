@@ -49,6 +49,9 @@ namespace dragon
 
 				inline static constexpr uint64_t IntVector_InvalidAddress 			= 			0x7000000000000000;
 
+				inline static constexpr uint64_t Graphics_MemoryReadFailed			= 			0x8000000000000000;
+				inline static constexpr uint64_t Graphics_MemoryWriteFailed			= 			0x8000000000000001;
+
 		};
 
 		class ErrorHandler
@@ -158,9 +161,7 @@ namespace dragon
 				inline static constexpr uint8_t PP = 0x04;
 				inline static constexpr uint8_t FL = 0x05;
 				inline static constexpr uint8_t ACC = 0x06;
-
-				//TODO: Either add general purpose registers in this space or check when read/write registers
-				
+				//0x07, 0x08, 0x09 Are hidden registers used internally, but can be normally accessed by address
 				inline static constexpr uint8_t R1 = 0x0A;
 				inline static constexpr uint8_t R2 = 0x0B;
 				inline static constexpr uint8_t R3 = 0x0C;
@@ -184,11 +185,6 @@ namespace dragon
 		class InterruptCodes
 		{
 			public:
-				inline static constexpr uint8_t Keyboard = 0x10;
-				inline static constexpr uint8_t Mouse = 0x11;
-				inline static constexpr uint8_t BiosInterrupt = 0x20;
-				inline static constexpr uint8_t BiosVideoInterrupt = 0x30;
-
 				inline static constexpr uint8_t DiskInterfaceFFinished = 0x80;
 		};
 
@@ -229,6 +225,8 @@ namespace dragon
 				inline static constexpr uint8_t SubImmReg = 0x33;
 				inline static constexpr uint8_t MulRegReg = 0x34;
 				inline static constexpr uint8_t MulImmReg = 0x35;
+				inline static constexpr uint8_t DivRegReg = 0x36;
+				inline static constexpr uint8_t DivImmReg = 0x37;
 
 				inline static constexpr uint8_t IncReg = 0x40;
 				inline static constexpr uint8_t DecReg = 0x41;
@@ -305,6 +303,8 @@ namespace dragon
 						case data::OpCodes::SubRegReg: return "SubRegReg";
 						case data::OpCodes::MulImmReg: return "MulImmReg";
 						case data::OpCodes::MulRegReg: return "MulRegReg";
+						case data::OpCodes::DivImmReg: return "DivImmReg";
+						case data::OpCodes::DivRegReg: return "DivRegReg";
 						case data::OpCodes::IncReg: return "IncReg";
 						case data::OpCodes::DecReg: return "DecReg";
 						case data::OpCodes::RShiftRegImm: return "RShiftRegImm";
@@ -379,6 +379,8 @@ namespace dragon
 						case data::OpCodes::SubRegReg: return 3;
 						case data::OpCodes::MulImmReg: return 4;
 						case data::OpCodes::MulRegReg: return 3;
+						case data::OpCodes::DivImmReg: return 4;
+						case data::OpCodes::DivRegReg: return 3;
 						case data::OpCodes::IncReg: return 2;
 						case data::OpCodes::DecReg: return 2;
 						case data::OpCodes::RShiftRegImm: return 4;

@@ -13,12 +13,12 @@ namespace dragon
 	{
 		validate();
 		enableSignals();
-		connectSignal(dragon::Window::Signal_OnWindowClosed);
+		connectSignal(ostd::tBuiltinSignals::WindowClosed);
 	}
 
 	void Debugger::tCloseEventListener::handleSignal(ostd::tSignal& signal)
 	{
-		m_mainWindowClosed = signal.ID == dragon::Window::Signal_OnWindowClosed;
+		m_mainWindowClosed = signal.ID == ostd::tBuiltinSignals::WindowClosed;
 	}
 
 
@@ -1290,6 +1290,11 @@ namespace dragon
 					data().args.step_exec = !data().args.step_exec;
 					output().p("Step execution = ").p(STR_BOOL(data().args.step_exec)).nl();
 				}
+				else if (data().command == "display")
+				{
+					data().args.hide_virtual_display = !data().args.hide_virtual_display;
+					output().p("Virtual Display Hidden = ").p(STR_BOOL(data().args.hide_virtual_display)).nl();
+				}
 			}
 		}
 
@@ -1526,6 +1531,9 @@ namespace dragon
 		tmpCommand = "(t)rack <address[bytes=1]/symbol>";
 		tmpCommand.addRightPadding(commandLength);
 		out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Used to track specific addresses during execution.").reset().nl();
+		tmpCommand = "display";
+		tmpCommand.addRightPadding(commandLength);
+		out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Used to enable/disable the Virtual Display for the runtime.").reset().nl();
 		
 		out.nl().fg(ostd::ConsoleColors::Cyan).p("The letters in parenthesis can be used as the short version of the command.").nl();
 		out.p("Square brackets represent optional parameters. If they have an '=' and a value, that is the default if not specified.").reset().nl();

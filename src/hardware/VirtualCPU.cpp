@@ -413,6 +413,29 @@ namespace dragon
 					writeRegister(data::Registers::ACC, regValue1 * regValue2);
 				}
 				break;
+				case data::OpCodes::DivImmReg: //TODO: Division by zero is unhandled
+				{
+					uint8_t regAddr = fetch8();
+					int16_t literal = fetch16();
+					int16_t regValue = readRegister(regAddr);
+					int16_t quotient = regValue / literal;
+					int16_t reminder = regValue % literal;
+					writeRegister(data::Registers::ACC, quotient);
+					writeRegister(data::Registers::RV, reminder);
+				}
+				break;
+				case data::OpCodes::DivRegReg: //TODO: Division by zero is unhandled
+				{
+					uint8_t regAddr1 = fetch8();
+					uint8_t regAddr2 = fetch8();
+					int16_t regValue1 = readRegister(regAddr1);
+					int16_t regValue2 = readRegister(regAddr2);
+					int16_t quotient = regValue1 / regValue2;
+					int16_t reminder = regValue1 % regValue2;
+					writeRegister(data::Registers::ACC, quotient);
+					writeRegister(data::Registers::RV, reminder);
+				}
+				break;
 				case data::OpCodes::IncReg:
 				{
 					uint8_t regAddr = fetch8();
