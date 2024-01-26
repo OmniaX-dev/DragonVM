@@ -14,7 +14,6 @@ namespace dragon
 		class VirtualCPU;
 		class VirtualRAM;
 
-
 		class VirtualBIOS : public IMemoryDevice
 		{
 			public:
@@ -48,8 +47,184 @@ namespace dragon
 		};
 		class VirtualKeyboard : public IMemoryDevice
 		{
+			public: enum class eKeys
+			{
+				Delete								= (int16_t)'\x7F',
+				Return								= (int16_t)'\r',
+				Escape								= (int16_t)'\x1B',
+				Backspace							= (int16_t)'\b',
+				Tab									= (int16_t)'\t',
+				Spacebar							= (int16_t)' ',
+				ExclamationMark						= (int16_t)'!',
+				DoubleQuote							= (int16_t)'"',
+				Hash								= (int16_t)'#',
+				Percent								= (int16_t)'%',
+				DollarSign							= (int16_t)'$',
+				Ampersand							= (int16_t)'&',
+				SingleQuote							= (int16_t)'\'',
+				LeftParenthesis						= (int16_t)'(',
+				RightParenthesis					= (int16_t)')',
+				Asterisk							= (int16_t)'*',
+				Plus								= (int16_t)'+',
+				Comma								= (int16_t)',',
+				Minus								= (int16_t)'-',
+				Period								= (int16_t)'.',
+				ForwardSlash						= (int16_t)'/',
+				Num0								= (int16_t)'0',
+				Num1								= (int16_t)'1',
+				Num2								= (int16_t)'2',
+				Num3								= (int16_t)'3',
+				Num4								= (int16_t)'4',
+				Num5								= (int16_t)'5',
+				Num6								= (int16_t)'6',
+				Num7								= (int16_t)'7',
+				Num8								= (int16_t)'8',
+				Num9								= (int16_t)'9',
+				Colon								= (int16_t)':',
+				Semicolon							= (int16_t)';',
+				LessThan							= (int16_t)'<',
+				Equals								= (int16_t)'=',
+				GreaterThan							= (int16_t)'>',
+				QuestionMark						= (int16_t)'?',
+				AtSign								= (int16_t)'@',
+
+				UpperCase_A							= (int16_t)'A',
+				UpperCase_B							= (int16_t)'B',
+				UpperCase_C							= (int16_t)'C',
+				UpperCase_D							= (int16_t)'D',
+				UpperCase_E							= (int16_t)'E',
+				UpperCase_F							= (int16_t)'F',
+				UpperCase_G							= (int16_t)'G',
+				UpperCase_H							= (int16_t)'H',
+				UpperCase_I							= (int16_t)'I',
+				UpperCase_J							= (int16_t)'J',
+				UpperCase_K							= (int16_t)'K',
+				UpperCase_L							= (int16_t)'L',
+				UpperCase_M							= (int16_t)'M',
+				UpperCase_N							= (int16_t)'N',
+				UpperCase_O							= (int16_t)'O',
+				UpperCase_P							= (int16_t)'P',
+				UpperCase_Q							= (int16_t)'Q',
+				UpperCase_R							= (int16_t)'R',
+				UpperCase_S							= (int16_t)'S',
+				UpperCase_T							= (int16_t)'T',
+				UpperCase_U							= (int16_t)'U',
+				UpperCase_V							= (int16_t)'V',
+				UpperCase_W							= (int16_t)'W',
+				UpperCase_X							= (int16_t)'X',
+				UpperCase_Y							= (int16_t)'Y',
+				UpperCase_Z							= (int16_t)'Z',
+
+				LeftBracket							= (int16_t)'[',
+				BackSlash							= (int16_t)'\\',
+				RightBracket						= (int16_t)']',
+				Caret								= (int16_t)'^',
+				Underscore							= (int16_t)'_',
+				BackQuote							= (int16_t)'`',
+				LowerCase_a							= (int16_t)'a',
+				LowerCase_b							= (int16_t)'b',
+				LowerCase_c							= (int16_t)'c',
+				LowerCase_d							= (int16_t)'d',
+				LowerCase_e							= (int16_t)'e',
+				LowerCase_f							= (int16_t)'f',
+				LowerCase_g							= (int16_t)'g',
+				LowerCase_h							= (int16_t)'h',
+				LowerCase_i							= (int16_t)'i',
+				LowerCase_j							= (int16_t)'j',
+				LowerCase_k							= (int16_t)'k',
+				LowerCase_l							= (int16_t)'l',
+				LowerCase_m							= (int16_t)'m',
+				LowerCase_n							= (int16_t)'n',
+				LowerCase_o							= (int16_t)'o',
+				LowerCase_p							= (int16_t)'p',
+				LowerCase_q							= (int16_t)'q',
+				LowerCase_r							= (int16_t)'r',
+				LowerCase_s							= (int16_t)'s',
+				LowerCase_t							= (int16_t)'t',
+				LowerCase_u							= (int16_t)'u',
+				LowerCase_v							= (int16_t)'v',
+				LowerCase_w							= (int16_t)'w',
+				LowerCase_x							= (int16_t)'x',
+				LowerCase_y							= (int16_t)'y',
+				LowerCase_z							= (int16_t)'z',
+
+				LeftCTRL 							= (int16_t)0x0100,
+				RightCTRL 							= (int16_t)0x0101,
+				LeftALT 							= (int16_t)0x0102,
+				RightALT 							= (int16_t)0x0103,
+				LeftShift 							= (int16_t)0x0104,
+				RightShift 							= (int16_t)0x0105,
+
+				KeyPadDivide						= (int16_t)0x0106,
+				KeyPadMultiply						= (int16_t)0x0107,
+				KeyPadMinus							= (int16_t)0x0108,
+				KeyPadPlus							= (int16_t)0x0109,
+				KeyPadEnter							= (int16_t)0x010A,
+				KeyPad1								= (int16_t)0x010B,
+				KeyPad2								= (int16_t)0x010C,
+				KeyPad3								= (int16_t)0x010D,
+				KeyPad4								= (int16_t)0x010E,
+				KeyPad5								= (int16_t)0x010F,
+				KeyPad6								= (int16_t)0x0110,
+				KeyPad7								= (int16_t)0x0111,
+				KeyPad8								= (int16_t)0x0112,
+				KeyPad9								= (int16_t)0x0113,
+				KeyPad0								= (int16_t)0x0114,
+				KeyPadPeriod						= (int16_t)0x0115,
+
+				PrintScreen							= (int16_t)0x0116,
+				Insert								= (int16_t)0x0117,
+				Home								= (int16_t)0x0118,
+				PageUp								= (int16_t)0x0119,
+				End									= (int16_t)0x011A,
+				PageDown							= (int16_t)0x011B,
+				RightArrow							= (int16_t)0x011C,
+				LeftArrow							= (int16_t)0x011D,
+				DownArrow							= (int16_t)0x011E,
+				UpArrow								= (int16_t)0x011F,
+				CapsLock							= (int16_t)0x0120,
+				NumLock								= (int16_t)0x0121,
+				ScrollLock							= (int16_t)0x0122,
+
+				F1									= (int16_t)0x0123,
+				F2									= (int16_t)0x0124,
+				F3									= (int16_t)0x0125,
+				F4									= (int16_t)0x0126,
+				F5									= (int16_t)0x0127,
+				F6									= (int16_t)0x0128,
+				F7									= (int16_t)0x0129,
+				F8									= (int16_t)0x012A,
+				F9									= (int16_t)0x012B,
+				F10									= (int16_t)0x012C,
+				F11									= (int16_t)0x012D,
+				F12									= (int16_t)0x012E,
+
+				LeftSuper 							= (int16_t)0x012F,
+				RightSuper 							= (int16_t)0x0130,
+			};
+			public: struct tModifierBits
+			{
+				inline static constexpr uint8_t LeftShift = 0;
+				inline static constexpr uint8_t LeftControl = 1;
+				inline static constexpr uint8_t LeftAlt = 2;
+				inline static constexpr uint8_t LeftSuper = 3;
+				inline static constexpr uint8_t RightShift = 4;
+				inline static constexpr uint8_t RightControl = 5;
+				inline static constexpr uint8_t RightAlt = 6;
+				inline static constexpr uint8_t RightSuper = 7;
+				inline static constexpr uint8_t CapsLock = 8;
+				inline static constexpr uint8_t NumLock = 9;
+				inline static constexpr uint8_t ScrolLLock = 10;
+			};
+			public: struct tRegisters
+			{
+				inline static constexpr uint16_t Modifiers = 0x00;
+				inline static constexpr uint16_t KeyCode = 0x02;
+			};
+
 			public:
-				VirtualKeyboard(void);
+				inline VirtualKeyboard(void) {  }
+				void init(void);
 				int8_t read8(uint16_t addr) override;
 				int16_t read16(uint16_t addr) override;
 				int8_t write8(uint16_t addr, int8_t value) override;
@@ -57,7 +232,17 @@ namespace dragon
 
 				ostd::ByteStream* getByteStream(void) override;
 
+				void handleSignal(ostd::tSignal& signal) override;
+
 			private:
+				ostd::BitField_16 __construct_modifiers_bitfield(void);
+				int8_t __write8(uint16_t addr, int8_t value);
+				int16_t __write16(uint16_t addr, int16_t value);
+				int16_t __sdl_key_code_convert(int32_t keyCode);
+
+			private:
+				ostd::ByteStream m_data;
+				ostd::BitField_16 m_modifiersBitFiels;
 		};
 		class VirtualMouse : public IMemoryDevice
 		{

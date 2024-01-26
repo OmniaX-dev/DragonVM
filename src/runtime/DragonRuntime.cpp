@@ -4,6 +4,26 @@
 
 namespace dragon
 {
+	void DragonRuntime::SignalListener::init(void)
+	{
+		setTypeName("dragon::DragonRuntime::SignalListener");
+		validate();
+		enableSignals();
+		connectSignal(Signal_HardwareInterruptOccurred);
+	}
+
+	void DragonRuntime::SignalListener::handleSignal(ostd::tSignal& signal)
+	{
+		if (signal.ID == Signal_HardwareInterruptOccurred)
+		{
+			tCallInfo& interruptData = (tCallInfo&)signal.userData;
+			DragonRuntime::s_machineInfo.callStack.push_back(interruptData);
+		}
+	}
+
+
+
+
 	void DragonRuntime::printRegisters(dragon::hw::VirtualCPU& cpu)
 	{
 		out.fg("green").p("IP:  ").fg("white").p(ostd::Utils::getHexStr(cpu.readRegister(dragon::data::Registers::IP), true, 2).cpp_str());
@@ -129,6 +149,8 @@ namespace dragon
 										bool debugModeEnabled)
 	{
 		ostd::SignalHandler::init();
+		s_signalListener.init();
+		vKeyboard.init();
 		if (verbose)
 			out.fg(ostd::ConsoleColors::Magenta).p("Loading machine config: ").fg(ostd::ConsoleColors::BrightYellow).p(configFilePath.cpp_str()).nl();
 		machine_config = dragon::MachineConfigLoader::loadConfig(configFilePath);
@@ -210,7 +232,7 @@ namespace dragon
 			out.p(ostd::Utils::getHexStr(dragon::data::MemoryMapAddresses::Keyboard_End, true, 2).cpp_str());
 			out.p(" (remap=false)").nl();
 		}
-		memMap.mapDevice(vKeyboard, dragon::data::MemoryMapAddresses::Keyboard_Start, dragon::data::MemoryMapAddresses::Keyboard_End, false, "Keyb.");
+		memMap.mapDevice(vKeyboard, dragon::data::MemoryMapAddresses::Keyboard_Start, dragon::data::MemoryMapAddresses::Keyboard_End, true, "Keyb.");
 		if (verbose)
 		{
 			out.fg(ostd::ConsoleColors::Magenta).p("    vMouse: ");
@@ -290,10 +312,31 @@ namespace dragon
 			out.fg(ostd::ConsoleColors::BrightYellow).p("    Debug mode enabled: ").p(STR_BOOL(debugModeEnabled)).nl();
 		cpu.m_debugModeEnabled = debugModeEnabled;
 
+		if (verbose)
+			out.fg(ostd::ConsoleColors::BrightYellow).p("    BIOS mode enabled").nl();
+		cpu.m_biosMode = true;
+
+		if (machine_config.cpuext_list.size() > 0)
+		{
+			if (verbose)
+				out.fg(ostd::ConsoleColors::BrightYellow).p("    Loading CPU Extensions").nl();
+			for (auto& ext :  machine_config.cpuext_list)
+			{
+				cpu.m_extensions[ext.first] = ext.second;
+				if (verbose)
+					out.fg(ostd::ConsoleColors::BrightYellow).p("        ").p(ext.first + 1).p(": ").p(ext.second->m_name).nl();
+			}
+		}
+
 		out.nl().nl();
 		s_trackMachineInfo = trackMachineInfoDiff;
 		s_trackCallStack = trackCallStack;
 		return RETURN_VAL_EXIT_SUCCESS;
+	}
+
+	void DragonRuntime::shutdownMachine(void)
+	{
+		machine_config.destroy();
 	}
 
 	void DragonRuntime::runMachine(int32_t cycleLimit, bool basic_debug, bool step_exec)
@@ -412,7 +455,7 @@ namespace dragon
 
 
 		bool debugBreak = cpu.m_isDebugBreakPoint;
-		bool intHandler = cpu.m_isInInterruptHandler;
+		int32_t intHandlerCount = cpu.m_interruptHandlerCount;
 		bool biosMode = cpu.m_biosMode;
 		bool isInSubRoutine = cpu.isInSubRoutine();
 
@@ -434,7 +477,7 @@ namespace dragon
 				minfo.previousInstructionTrackedValues.push_back(memMap.read8(addr));
 
 			minfo.previousInstructionDebugBreak = debugBreak;
-			minfo.previousInstructionInterruptHandler = intHandler;
+			minfo.previousInstructionInterruptHandlerCount = intHandlerCount;
 			minfo.previousInstructionBiosMode = biosMode;
 			minfo.previousIsInSubRoutine = isInSubRoutine;
 		}
@@ -456,7 +499,7 @@ namespace dragon
 				minfo.currentInstructionTrackedValues.push_back(memMap.read8(addr));
 
 			minfo.currentInstructionDebugBreak = debugBreak;
-			minfo.currentInstructionInterruptHandler = intHandler;
+			minfo.currentInstructionInterruptHandlerCount = intHandlerCount;
 			minfo.currentInstructionBiosMode = biosMode;
 			minfo.currentIsInSubRoutine = isInSubRoutine;
 		}

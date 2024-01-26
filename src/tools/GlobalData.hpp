@@ -5,6 +5,7 @@
 
 namespace dragon
 {
+	namespace hw { class VirtualCPU; }
 	namespace data
 	{
 		typedef uint32_t VDiskID;
@@ -13,10 +14,12 @@ namespace dragon
 		{
 			public:
 				inline static constexpr uint64_t NoError 							= 			0x0000000000000000;
+				inline static constexpr uint64_t AccessViolation_BiosModeRequired	= 			0x0000000000000001;
 
 				inline static constexpr uint64_t MM_RegionNotFound 					= 			0x1000000000000000;
 
 				inline static constexpr uint64_t CPU_UnknownInstruction 			= 			0x2000000000000000;
+				inline static constexpr uint64_t CPU_UnsupportedExtension 			= 			0x2000000000000001;
 
 				inline static constexpr uint64_t BIOS_FailedToLoad 					= 			0x3000000000000000;
 				inline static constexpr uint64_t BIOS_InvalidSize 					= 			0x3000000000000001;
@@ -188,14 +191,31 @@ namespace dragon
 		{
 			public:
 				inline static constexpr uint8_t DiskInterfaceFFinished = 0x80;
+				inline static constexpr uint8_t KeyPressed = 0xA0;
+				inline static constexpr uint8_t KeyReleased = 0xA1;
+				inline static constexpr uint8_t TextEntered = 0xA2;
+		};
+
+		class CPUExtension
+		{
+			public:
+				inline virtual ~CPUExtension(void) {  }
+				inline CPUExtension(uint8_t code, ostd::String name) : m_code(code), m_name(name) {  }
+				virtual ostd::String getOpCodeString(uint8_t opCode) = 0;
+				virtual uint8_t getInstructionSIze(uint8_t opCode) = 0;
+				virtual bool execute(hw::VirtualCPU& vcpu) = 0;
+
+			public:
+				uint8_t m_code { 0x00 };
+				ostd::String m_name { "" };
 		};
 
 		class OpCodes
 		{
 			public:
 				inline static constexpr uint8_t NoOp = 0x00;
-
 				inline static constexpr uint8_t DEBUG_Break = 0x01;
+				inline static constexpr uint8_t BIOSModeImm = 0x02;
 			
 				inline static constexpr uint8_t MovImmReg = 0x10;
 				inline static constexpr uint8_t MovRegReg = 0x11;
@@ -268,17 +288,37 @@ namespace dragon
 				inline static constexpr uint8_t JmpLeImm = 0x7A;
 				inline static constexpr uint8_t JmpLeReg = 0x7B;
 				inline static constexpr uint8_t Jmp = 0x7C;
+
+				inline static constexpr uint8_t Ext01 = 0xE0;
+				inline static constexpr uint8_t Ext02 = 0xE1;
+				inline static constexpr uint8_t Ext03 = 0xE2;
+				inline static constexpr uint8_t Ext04 = 0xE3;
+				inline static constexpr uint8_t Ext05 = 0xE4;
+				inline static constexpr uint8_t Ext06 = 0xE5;
+				inline static constexpr uint8_t Ext07 = 0xE6;
+				inline static constexpr uint8_t Ext08 = 0xE7;
+				inline static constexpr uint8_t Ext09 = 0xE8;
+				inline static constexpr uint8_t Ext10 = 0xE9;
+				inline static constexpr uint8_t Ext11 = 0xEA;
+				inline static constexpr uint8_t Ext12 = 0xEB;
+				inline static constexpr uint8_t Ext13 = 0xEC;
+				inline static constexpr uint8_t Ext14 = 0xED;
+				inline static constexpr uint8_t Ext15 = 0xEE;
+				inline static constexpr uint8_t Ext16 = 0xEF;
 				
 				inline static constexpr uint8_t RetInt = 0xFD;
 				inline static constexpr uint8_t Int = 0xFE;
 				inline static constexpr uint8_t Halt = 0xFF;
 
-				inline static ostd::String getOpCodeString(uint8_t opCode)
+				inline static ostd::String getOpCodeString(uint8_t opCode, CPUExtension* ext = nullptr)
 				{
+					if (ext != nullptr)
+						return ext->getOpCodeString(opCode);
 					switch (opCode)
 					{
 						case data::OpCodes::NoOp: return "NoOp";
 						case data::OpCodes::DEBUG_Break: return "debug_break";
+						case data::OpCodes::BIOSModeImm: return "BIOSModeImm";
 						case data::OpCodes::MovImmReg: return "MovImmReg";
 						case data::OpCodes::MovImmMem: return "MovImmMem";
 						case data::OpCodes::MovRegReg: return "MovRegReg";
@@ -347,16 +387,35 @@ namespace dragon
 						case data::OpCodes::ArgReg: return "ArgReg";
 						case data::OpCodes::RetInt: return "RetInt";
 						case data::OpCodes::Int: return "Int";
+						case data::OpCodes::Ext01: return "Ext01";
+						case data::OpCodes::Ext02: return "Ext02";
+						case data::OpCodes::Ext03: return "Ext03";
+						case data::OpCodes::Ext04: return "Ext04";
+						case data::OpCodes::Ext05: return "Ext05";
+						case data::OpCodes::Ext06: return "Ext06";
+						case data::OpCodes::Ext07: return "Ext07";
+						case data::OpCodes::Ext08: return "Ext08";
+						case data::OpCodes::Ext09: return "Ext09";
+						case data::OpCodes::Ext10: return "Ext10";
+						case data::OpCodes::Ext11: return "Ext11";
+						case data::OpCodes::Ext12: return "Ext12";
+						case data::OpCodes::Ext13: return "Ext13";
+						case data::OpCodes::Ext14: return "Ext14";
+						case data::OpCodes::Ext15: return "Ext15";
+						case data::OpCodes::Ext16: return "Ext16";
 						default: return "UNKNOWN_INST";
 					}
 				}
 
-				inline static uint8_t getInstructionSIze(uint8_t opCode)
+				inline static uint8_t getInstructionSIze(uint8_t opCode, CPUExtension* ext = nullptr)
 				{
+					if (ext != nullptr)
+						return ext->getInstructionSIze(opCode);
 					switch (opCode)
 					{
 						case data::OpCodes::NoOp: return 1;
 						case data::OpCodes::DEBUG_Break: return 1;
+						case data::OpCodes::BIOSModeImm: return 2;
 						case data::OpCodes::MovImmReg: return 4;
 						case data::OpCodes::MovImmMem: return 5;
 						case data::OpCodes::MovRegReg: return 3;
@@ -425,6 +484,22 @@ namespace dragon
 						case data::OpCodes::ArgReg: return 2;
 						case data::OpCodes::RetInt: return 1;
 						case data::OpCodes::Int: return 2;
+						case data::OpCodes::Ext01: return 0;
+						case data::OpCodes::Ext02: return 0;
+						case data::OpCodes::Ext03: return 0;
+						case data::OpCodes::Ext04: return 0;
+						case data::OpCodes::Ext05: return 0;
+						case data::OpCodes::Ext06: return 0;
+						case data::OpCodes::Ext07: return 0;
+						case data::OpCodes::Ext08: return 0;
+						case data::OpCodes::Ext09: return 0;
+						case data::OpCodes::Ext10: return 0;
+						case data::OpCodes::Ext11: return 0;
+						case data::OpCodes::Ext12: return 0;
+						case data::OpCodes::Ext13: return 0;
+						case data::OpCodes::Ext14: return 0;
+						case data::OpCodes::Ext15: return 0;
+						case data::OpCodes::Ext16: return 0;
 						default: return 0;
 					}
 				}

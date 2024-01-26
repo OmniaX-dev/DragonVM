@@ -852,6 +852,25 @@ namespace dragon
 					m_labelTable["$" + lineEdit].address = m_dataSize + m_loadAddress + m_code.size() + 3;
 					continue;
 				}
+				else if (lineEdit.startsWith("%low ")) //Low level code injection
+				{
+					_disassembly_line.addr = m_dataSize + m_loadAddress + m_code.size() + 3;
+					lineEdit.substr(4).trim();
+					auto tok = lineEdit.tokenize();
+					for (auto& token : tok)
+					{
+						if (!token.isNumeric())
+						{
+							std::cout << "Invalid code in .low directive. Must be numeric byte strem, space-separated: " << line << "\n";
+							return;
+						}
+						m_code.push_back((int8_t)token.toInt());
+					}
+					_disassembly_line.code = lineEdit;
+					_disassembly_line.code.add(" (%low)");
+					m_disassembly.push_back(_disassembly_line);
+					continue;
+				}
 				else if (commaCount == 0 && spaceCount <= 0) //0 Operands
 				{
 					_disassembly_line.addr = m_dataSize + m_loadAddress + m_code.size() + 3;

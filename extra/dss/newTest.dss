@@ -10,6 +10,23 @@
 	$string "Hello World!!"
 
 .code
+	debug_break
+	%low 0xE0 0x01
+	mov R10, 0x00
+	mov R9, $_text_entered_handler
+	mov R8, 0xA2
+	int 0x20	
+	mov R10, 0x00
+	mov R9, $_key_pressed_handler
+	mov R8, 0xA0
+	int 0x20	
+
+	
+	mov R10, 0x01
+	mov R9, 62
+	int 0x30
+
+
 	mov R1, 0					## Zero the counter 
 infinite_loop:
 	inc R1						## Increment the counter
@@ -17,32 +34,57 @@ infinite_loop:
 	mov ACC, RV				
 	jne $no_clear_screen, 0 	## If reminder not zero, keep going
 	mov R10, 0xE0				## Else clear the screen (0x0E is for 'Clear Screen' functionality in int 0x30)
-	int 0x30					## BIOS Video Interrupt
+	##int 0x30					## BIOS Video Interrupt
 no_clear_screen:
 
 	## Print counter
 	mov R9, R1					## Pass the counter as parameter to int 0x30
 	mov R10, 0x05				## 0x05 is for 'Store Integer in buffer' functionality in int 0x30
-	int 0x30					## BIOS Video Interrupt
+	##int 0x30					## BIOS Video Interrupt
 
 	## Print a space
 	mov R9, 32					## Pass 32 (space character in ASCII) as parameter to int 0x30
 	mov R10, 0x06				## 0x06 is for 'Store Character in buffer' functionality in int 0x30
-	int 0x30					## BIOS Video Interrupt
+	##int 0x30					## BIOS Video Interrupt
 
 	## Print the string
 	mov R9, $string				## Pass the address of the string as parameter to int 0x30
 	mov R10, 0x0A				## 0x0A is for 'Store String in buffer' functionality in int 0x30
-	int 0x30					## BIOS Video Interrupt
+	##int 0x30					## BIOS Video Interrupt
 
 	## Print a new-line character
 	mov R10, 0x02				## 0x02 is for 'Print New-Line' functionality in int 0x30
 								## Printing a new line when in Text-Single-Color Mode also
 								## prints and flushes the buffer
-	int 0x30					## BIOS Video Interrupt
+	##int 0x30					## BIOS Video Interrupt
 
 	jmp $infinite_loop			## jump to the beginning of infinite loop
 	hlt
+
+
+_text_entered_handler:
+	mov R9, [0x1282]
+	mov R10, 0x01
+	int 0x30
+	rti
+
+_key_pressed_handler:
+	mov ACC, [0x1282]
+	jeq $_key_pressed_handler_backspace, 8
+	jne $_key_pressed_handler_end, 13
+	mov R10, 0x02
+	int 0x30
+	mov R10, 0x01
+	mov R9, 62
+	int 0x30
+	jmp $_key_pressed_handler_end
+_key_pressed_handler_backspace:
+	debug_break
+	mov R9, ACC
+	mov R10, 0x01
+	int 0x30
+_key_pressed_handler_end:
+	rti
 
 
 .fixed 512, 0x00

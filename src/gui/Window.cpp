@@ -42,7 +42,7 @@ namespace dragon
 		m_initialized = true;
 		m_running = true;
 
-		setTypeName("lspp::app::Window");
+		setTypeName("dragon::Window");
 		enableSignals(true);
 		validate();
 
@@ -144,6 +144,21 @@ namespace dragon
 			{
 				MouseEventData mmd = l_getMouseState();
 				ostd::SignalHandler::emitSignal(ostd::tBuiltinSignals::MouseReleased, ostd::tSignalPriority::RealTime, mmd);
+			}
+			else if (event.type == SDL_KEYDOWN)
+			{
+				KeyEventData ked(*this, (int32_t)event.key.keysym.sym, 0, KeyEventData::eKeyEvent::Pressed);
+				ostd::SignalHandler::emitSignal(ostd::tBuiltinSignals::KeyPressed, ostd::tSignalPriority::RealTime, ked);
+			}
+			else if (event.type == SDL_KEYUP)
+			{
+				KeyEventData ked(*this, (int32_t)event.key.keysym.sym, 0, KeyEventData::eKeyEvent::Released);
+				ostd::SignalHandler::emitSignal(ostd::tBuiltinSignals::KeyReleased, ostd::tSignalPriority::RealTime, ked);
+			}
+			else if (event.type == SDL_TEXTINPUT)
+			{
+				KeyEventData ked(*this, 0, event.text.text[0], KeyEventData::eKeyEvent::Text);
+				ostd::SignalHandler::emitSignal(ostd::tBuiltinSignals::TextEntered, ostd::tSignalPriority::RealTime, ked);
 			}
 		}
 	}

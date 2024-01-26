@@ -17,8 +17,20 @@ namespace dragon
 {
 	class DragonRuntime
 	{
-		public: struct tCallInfo
+		public: class SignalListener : public ostd::BaseObject
 		{
+			public:
+				inline SignalListener(void) {  }
+				void init(void);
+				void handleSignal(ostd::tSignal& signal) override;
+
+			public:
+				inline static const int32_t Signal_HardwareInterruptOccurred = ostd::SignalHandler::newCustomSignal(8129);
+		};
+		public: struct tCallInfo : public ostd::BaseObject
+		{
+			inline tCallInfo(void) {  }
+			inline tCallInfo(const ostd::String& _info, uint16_t _addr, uint16_t _inst_addr) : info(_info), addr(_addr), inst_addr(_inst_addr) {  }
 			ostd::String info;
 			uint16_t addr;
 			uint16_t inst_addr;
@@ -54,15 +66,15 @@ namespace dragon
 			int8_t currentInstructionFootprint[5] { 0x00, 0x00, 0x00, 0x00, 0x00 };
 			int16_t previousInstructionRegisters[20] { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 			int16_t currentInstructionRegisters[20] { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-		
+			int32_t previousInstructionInterruptHandlerCount { 0 };
+			int32_t currentInstructionInterruptHandlerCount { 0 };
+
 			std::vector<uint16_t> trackedAddresses;
 			std::vector<int8_t> previousInstructionTrackedValues;
 			std::vector<int8_t> currentInstructionTrackedValues;
 
 			bool previousInstructionDebugBreak { false };
 			bool currentInstructionDebugBreak { false };
-			bool previousInstructionInterruptHandler { false };
-			bool currentInstructionInterruptHandler { false };
 			bool previousInstructionBiosMode { false };
 			bool currentInstructionBiosMode { false };
 			bool previousIsInSubRoutine { false };
@@ -84,6 +96,7 @@ namespace dragon
 										bool hideVirtualDisplay = false,
 										bool rackCallStack = false,
 										bool debugModeEnabled = false);
+			static void shutdownMachine(void);
 			static void runMachine(int32_t cycleLimit, bool basic_debug, bool step_exec);
 			static bool runStep(std::vector<uint16_t> trackedAddresses = {  });
 			static void forceLoad(const ostd::String& filePath, uint16_t loadAddress);
@@ -123,6 +136,7 @@ namespace dragon
 			inline static tMachineDebugInfo s_machineInfo;
 			inline static bool s_trackMachineInfo { false };
 			inline static bool s_trackCallStack { false };
+			inline static SignalListener s_signalListener;
 
 		public:
 			inline static const int32_t RETURN_VAL_CLOSE_DEBUGGER = 128;
@@ -133,5 +147,7 @@ namespace dragon
 			inline static const int32_t RETURN_VAL_MISSING_PARAM = 4;
 			inline static const int32_t RETURN_VAL_PARAMETER_NOT_NUMERIC = 5;
 			inline static const int32_t RETURN_VAL_EXIT_SUCCESS = 0;
+
+		friend class SignalListener;
 	};
 }

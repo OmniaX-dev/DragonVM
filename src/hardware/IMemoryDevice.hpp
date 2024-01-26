@@ -1,12 +1,12 @@
 #pragma once
 
-#include <ostd/Types.hpp>
+#include <ostd/BaseObject.hpp>
 
 namespace dragon
 {
 	namespace hw
 	{
-		class IMemoryDevice
+		class IMemoryDevice : public ostd::BaseObject
 		{
 			public:
 				virtual int8_t read8(uint16_t addr) = 0;

@@ -21,7 +21,7 @@ namespace dragon
 		m_texture = SDL_CreateTexture(parent.getSDLRenderer(), SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STREAMING, parent.getWindowWidth(), parent.getWindowHeight());
 		m_windowWidth = parent.getWindowWidth();
 		m_windowHeight = parent.getWindowHeight();
-		setTypeName("lspp::gfx::Renderer");
+		setTypeName("dragon::Renderer");
 		enableSignals();
 		connectSignal(ostd::tBuiltinSignals::WindowResized);
 		validate();

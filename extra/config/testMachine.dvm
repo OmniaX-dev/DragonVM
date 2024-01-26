@@ -1,5 +1,7 @@
 Disks = dragon/disk1.dr
 Bios = dragon/bios.bin
 CMOS = dragon/cmos.dr
+cpuext = extmov
+
 SingleColor_foreground = #009900FF
 SingleColor_background = #111111FF

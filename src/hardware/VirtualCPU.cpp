@@ -5,6 +5,8 @@
 #include <ostd/Utils.hpp>
 #include <iostream>
 
+#include "../runtime/DragonRuntime.hpp"
+
 namespace dragon
 {
 	namespace hw
@@ -13,6 +15,9 @@ namespace dragon
 		{
 			writeRegister(data::Registers::SP, (uint16_t)(0xFFFF - 1));
 			writeRegister(data::Registers::FP, (uint16_t)(0xFFFF - 1));
+
+			for (int32_t i = 0; i < 16; i++)
+				m_extensions[i] = nullptr;
 		}
 
 		int16_t VirtualCPU::readRegister(uint8_t reg)
@@ -31,6 +36,7 @@ namespace dragon
 		int8_t VirtualCPU::fetch8(void)
 		{
 			uint16_t nextInstAddr = readRegister(data::Registers::IP);
+			m_currentAddr = nextInstAddr;
 			int8_t inst = m_memory.read8(nextInstAddr);
 			writeRegister(data::Registers::IP, nextInstAddr + 1);
 			return inst;
@@ -39,6 +45,7 @@ namespace dragon
 		int16_t VirtualCPU::fetch16(void)
 		{
 			uint16_t nextInstAddr = readRegister(data::Registers::IP);
+			m_currentAddr = nextInstAddr;
 			int16_t inst = m_memory.read16(nextInstAddr);
 			writeRegister(data::Registers::IP, nextInstAddr + 2);
 			return inst;
@@ -143,27 +150,53 @@ namespace dragon
 			writeRegister(data::Registers::FL, m_tempFlags.value);
 		}
 
-		void VirtualCPU::handleInterrupt(uint8_t intValue)
+		void VirtualCPU::handleInterrupt(uint8_t intValue, bool hardware)
 		{
 			uint16_t entryPointer = data::MemoryMapAddresses::IntVector_Start + (intValue * 3);
 			uint8_t interruptStatus = m_memory.read8(entryPointer);
 			if (interruptStatus != 0xFF) return;
 			uint16_t handlerAddress = m_memory.read16(entryPointer + 1);
-			if (!m_isInInterruptHandler)
-			{
-				pushToStack(0);
-				pushStackFrame();
-			}
-			m_isInInterruptHandler = true;
+			pushToStack(0);
+			pushStackFrame();
+			m_subroutineCounter++;
+			m_interruptHandlerCount++;
 			writeRegister(data::Registers::IP, handlerAddress);
+			if (m_debugModeEnabled && hardware)
+			{
+				DragonRuntime::tCallInfo interruptData;
+				interruptData.info = "HW INT";
+				interruptData.addr = intValue;
+				interruptData.inst_addr = 0x0000;
+				ostd::SignalHandler::emitSignal(DragonRuntime::SignalListener::Signal_HardwareInterruptOccurred, ostd::tSignalPriority::RealTime, interruptData);
+			}
+		}
+
+		bool VirtualCPU::loadExtension(void)
+		{
+			if (m_currentInst < data::OpCodes::Ext01 || m_currentInst > data::OpCodes::Ext16)
+				return false;
+			for (int32_t i = 0; i < 16; i++)
+			{
+				if (m_extensions[i] == nullptr)
+					continue;
+				if (m_extensions[i]->m_code == m_currentInst)
+				{
+					m_currentExtension = m_extensions[i];
+					return true;
+				}
+			}
+			return false;
 		}
 
 		bool VirtualCPU::execute(void)
 		{
 			if (m_halt) return false;
+			m_currentExtension = nullptr;
 			m_isDebugBreakPoint = false;
 			uint8_t inst = fetch8();
 			m_currentInst = inst;
+			if (loadExtension())
+				return m_currentExtension->execute(*this);
 			switch (inst)
 			{
 				case data::OpCodes::NoOp:
@@ -174,6 +207,16 @@ namespace dragon
 				case data::OpCodes::DEBUG_Break:
 				{
 					m_isDebugBreakPoint = true;
+				}
+				break;
+				case data::OpCodes::BIOSModeImm:
+				{
+					uint16_t tmpAddr = m_currentAddr;
+					int8_t value = fetch8();
+					if (tmpAddr >= data::MemoryMapAddresses::BIOS_End)
+						m_biosMode = false;
+					else
+						m_biosMode = value != 0;
 				}
 				break;
 				case data::OpCodes::MovImmReg:
@@ -744,7 +787,7 @@ namespace dragon
 				break;
 				case data::OpCodes::RetInt:
 				{
-					m_isInInterruptHandler = false;
+					m_interruptHandlerCount--;
 					popStackFrame();
 					// m_subroutineCounter = ZERO(m_subroutineCounter - 1);
 					m_subroutineCounter--;
@@ -755,8 +798,30 @@ namespace dragon
 					uint8_t intValue = fetch8();
 					if (!readFlag(data::Flags::InterruptsEnabled))
 						return true;
-					handleInterrupt(intValue);
+					handleInterrupt(intValue, false);
 					m_subroutineCounter++;
+				}
+				break;
+				case data::OpCodes::Ext01:
+				case data::OpCodes::Ext02:
+				case data::OpCodes::Ext03:
+				case data::OpCodes::Ext04:
+				case data::OpCodes::Ext05:
+				case data::OpCodes::Ext06:
+				case data::OpCodes::Ext07:
+				case data::OpCodes::Ext08:
+				case data::OpCodes::Ext09:
+				case data::OpCodes::Ext10:
+				case data::OpCodes::Ext11:
+				case data::OpCodes::Ext12:
+				case data::OpCodes::Ext13:
+				case data::OpCodes::Ext14:
+				case data::OpCodes::Ext15:
+				case data::OpCodes::Ext16:
+				{
+					data::ErrorHandler::pushError(data::ErrorCodes::CPU_UnsupportedExtension, ostd::String("Unsupported Extension: ").add(ostd::Utils::getHexStr(inst, true, 1)));
+					m_halt = true;
+					return false;
 				}
 				break;
 				default:

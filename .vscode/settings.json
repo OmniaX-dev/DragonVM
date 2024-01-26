@@ -1,5 +1,5 @@
 {
-	"C_Cpp.errorSquiggles": "Enabled",
+	"C_Cpp.errorSquiggles": "enabled",
 	"files.associations": {
 		"functional": "cpp",
 		"thread": "cpp",
@@ -105,7 +105,7 @@
 		"tab.inactiveBackground": "#000",
 		"tab.activeBackground": "#1b1b1b",
 		"tab.activeBorder": "#bb5400",
-		"editorIndentGuide.background": "#252525",
+		"editorIndentGuide.background1": "#252525",
 		"editorWhitespace.foreground": "#683700",
 		"editor.lineHighlightBorder": "#1a1a1a",
 		"editor.lineHighlightBackground": "#490050",

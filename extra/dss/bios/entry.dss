@@ -41,6 +41,7 @@
 	mov FL, ACC
 	## ----
 
+	%low INST_BIOS_NODE_TOGGLE 0x00												## Disable BIOS Mode before leaving the BIOS
 	jmp MemoryAddresses.MBR         											## Jump to start of MBR in memory
 	hlt                															## Just in case somehow execution reaches this point
 ## ========================================================================

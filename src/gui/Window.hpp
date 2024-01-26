@@ -69,7 +69,7 @@ namespace dragon
 		public:
 			inline WindowResizedData(Window& parent, int32_t _oldx, int32_t _oldy, int32_t _newx, int32_t _newy) : parentWindow(parent), old_width(_oldx), old_height(_oldy), new_width(_newx), new_height(_newy)
 			{
-				setTypeName("lspp::app::WindowResizedData");
+				setTypeName("dragon::WindowResizedData");
 				validate();
 			} 
 		
@@ -86,7 +86,7 @@ namespace dragon
 		public:
 			inline MouseEventData(Window& parent, int32_t mousex, int32_t mousey, eButton btn) : parentWindow(parent), position_x(mousex), position_y(mousey), button(btn)
 			{
-				setTypeName("lspp::app::MouseEventData");
+				setTypeName("dragon::MouseEventData");
 				validate();
 			}
 
@@ -94,6 +94,22 @@ namespace dragon
 			int32_t position_x;
 			int32_t position_y;
 			eButton button;
+			Window& parentWindow;
+	};
+	class KeyEventData : public ostd::BaseObject
+	{
+		public: enum class eKeyEvent { Pressed = 0, Released, Text };
+		public:
+			inline KeyEventData(Window& parent, int32_t key, char _text, eKeyEvent evt) : parentWindow(parent), keyCode(key), text(_text), eventType(evt)
+			{
+				setTypeName("dragon::KeyEventData");
+				validate();
+			}
+
+		public:
+			int32_t keyCode;
+			char text;
+			eKeyEvent eventType;
 			Window& parentWindow;
 	};
 }

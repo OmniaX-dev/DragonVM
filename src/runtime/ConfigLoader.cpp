@@ -1,6 +1,7 @@
 #include "ConfigLoader.hpp"
 #include <ostd/File.hpp>
 #include <ostd/Utils.hpp>
+#include "../hardware/CPUExtensions.hpp"
 
 namespace dragon
 {
@@ -28,6 +29,23 @@ namespace dragon
 				{
 					lineEdit = tokens.next();
 					config.vdisk_paths[disk_nr++] = lineEdit;
+				}
+			}
+			else if (lineEdit == "cpuext")
+			{
+				lineEdit = tokens.next();
+				tokens = lineEdit.tokenize(",");
+				if (tokens.count() == 0) continue; //TODO: Warning
+				int32_t ext_nr = 0;
+				while (tokens.hasNext())
+				{
+					if (ext_nr >= 16) break; //TODO: Warning
+					lineEdit = tokens.next();
+					if (lineEdit == "extmov")
+					{
+						config.cpuext_list[ext_nr++] = new hw::cpuext::ExtMov;
+					}
+					else continue; //TODO: Warning
 				}
 			}
 			else if (lineEdit == "bios")

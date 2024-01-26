@@ -136,6 +136,7 @@ namespace dragon
 		rgxrstr.fg("\\{|\\}|\\+|\\*|\\-|\\/|\\(|\\)|\\[|\\]", "Red"); //Operators
 		rgxrstr.fg("0x[0-9A-Fa-f]+|0b[0-1]+|(?<!\\w)[0-9]+(?!\\w)", "BrightYellow"); //Number Constants
 		rgxrstr.fg("(?<!\\w)(r[1-9]|r10|fl|pp|rv|fp|sp|ip|acc)(?!\\w)", "BrightGreen", true); //Registers
+		rgxrstr.fg("\\%low", "Magenta");
 		rgxrstr.col("\\$\\w+", "Cyan", "Black"); //Labels
 		ostd::String instEdit = rgxrstr.getRawString();
 		for (auto& label : labelList)
@@ -181,6 +182,8 @@ namespace dragon
 			out.fg(ostd::ConsoleColors::Red);
 		else if (instHead == "nop")
 			out.fg(ostd::ConsoleColors::Gray);
+		else if(instHead.isNumeric())
+			out.fg(ostd::ConsoleColors::Magenta);
 		else
 			out.fg(ostd::ConsoleColors::Blue);
 		out.p(instHead.cpp_str());
@@ -387,16 +390,16 @@ namespace dragon
 		//INT Handler
 		{
 			tmp = " ", tmpStyle = "";
-			tmp.add(STR_BOOL(minfo.previousInstructionInterruptHandler));
+			tmp.add(minfo.previousInstructionInterruptHandlerCount);
 			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
 			tmpStyle = "[@@style foreground:Blue]";
 			tmpStyle.add(tmp).add("[@@/]");
 			str.replaceAll("%PREV_INT_HANDLER%", tmpStyle);
 
 			tmp = " ";
-			tmp.add(STR_BOOL(minfo.currentInstructionInterruptHandler));
+			tmp.add(minfo.currentInstructionInterruptHandlerCount);
 			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
-			if (minfo.currentInstructionInterruptHandler != minfo.previousInstructionInterruptHandler)
+			if (minfo.currentInstructionInterruptHandlerCount != minfo.previousInstructionInterruptHandlerCount)
 				tmpStyle = "[@@style foreground:Black,background:BrightRed]";
 			else
 				tmpStyle = "[@@style foreground:Blue]";
@@ -1052,6 +1055,11 @@ namespace dragon
 				call_str = ch_ang_u + "int " + ostd::Utils::getHexStr(call.addr, true, 1);
 				level++;
 			}
+			else if (call_info == "hw int")
+			{
+				call_str = ch_ang_u + "hwi " + ostd::Utils::getHexStr(call.addr, true, 1);
+				level++;
+			}
 			else if (call_info == "ret")
 			{
 				call_str = ch_ang_d + "ret";
@@ -1067,9 +1075,9 @@ namespace dragon
 				if (call_info == "call reg")
 					subroutine_addr = "*" + subroutine_addr;
 				if (subroutine_name != "")
-					call_str = ch_ang_u + subroutine_name + " (" + subroutine_addr + ")";
+					call_str = ch_ang_u + "call " + subroutine_name + " (" + subroutine_addr + ")";
 				else
-					call_str = ch_ang_u + subroutine_addr;
+					call_str = ch_ang_u + "call " + subroutine_addr;
 				level++;
 			}
 
@@ -1081,7 +1089,8 @@ namespace dragon
 			ostd::RegexRichString rgx(line_str);
 			rgx.fg("\\(|\\)|\\*", "Cyan"); //Operators
 			rgx.fg("(?<![a-zA-Z\\_\\$\\.])int|rti(?! [a-zA-Z\\_\\$\\.])", "Blue");
-			rgx.fg("(?<![a-zA-Z\\_\\$\\.])ret(?! [a-zA-Z\\_\\$\\.])", "Red");
+			rgx.fg("(?<![a-zA-Z\\_\\$\\.])hwi(?! [a-zA-Z\\_\\$\\.])", "Magenta");
+			rgx.fg("(?<![a-zA-Z\\_\\$\\.])call|ret(?! [a-zA-Z\\_\\$\\.])", "Red");
 			rgx.fg("0x[0-9A-Fa-f]+|0b[0-1]+|(?<!\\w)[0-9]+(?!\\w)", "BrightYellow"); //Number Constants
 			rgx.fg(ostd::String("[\\").add(ch_ang_u).add("\\|\\").add(ch_ang_d).add("]"), "darkgray");
 			rgx.fg("\\$\\w+", "Green"); //Labels

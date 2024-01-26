@@ -6,6 +6,7 @@
 #include "IMemoryDevice.hpp"
 
 #include "../debugger/Debugger.hpp"
+#include  "../tools/GlobalData.hpp"
 
 namespace dragon
 {
@@ -31,13 +32,15 @@ namespace dragon
 				bool readFlag(uint8_t flg);
 				void setFlag(uint8_t flg, bool val = true);
 
-				void handleInterrupt(uint8_t intValue);
+				void handleInterrupt(uint8_t intValue, bool hardware);
 
+				bool loadExtension(void);
 				bool execute(void);
 
 				inline bool isHalted(void) const { return m_halt; }
 				inline uint8_t getCurrentInstruction(void) const { return m_currentInst; }
 				inline bool isInDebugBreakPoint(void) const { return m_isDebugBreakPoint; }
+				inline bool isInBIOSMOde(void) const { return m_biosMode; }
 				inline bool isInSubRoutine(void) const { return m_subroutineCounter > 0; }
 				inline int32_t getSubRoutineCounter(void) const { return m_subroutineCounter; }
 
@@ -51,11 +54,15 @@ namespace dragon
 				uint16_t m_stackFrameSize { 0 };
 				bool m_halt { false };
 				uint8_t m_currentInst { 0x00 };
+				uint8_t m_currentAddr { 0x00 };
 				bool m_biosMode { true };
-				bool m_isInInterruptHandler { false };
+				int32_t m_interruptHandlerCount { 0 };
 				bool m_isDebugBreakPoint { false };
 				bool m_debugModeEnabled { false };
 				int32_t m_subroutineCounter { 0 };
+
+				data::CPUExtension* m_extensions[16];
+				data::CPUExtension* m_currentExtension { nullptr };
 
 				std::vector<ostd::String> m_debug_stackFrameStrings;
 
