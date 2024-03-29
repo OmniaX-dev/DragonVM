@@ -448,11 +448,11 @@ namespace dragon
 		}
 
 		uint16_t instAddr = cpu.readRegister(data::Registers::IP);
-		uint8_t instSize = data::OpCodes::getInstructionSIze(memMap.read8(instAddr));
-		ostd::String opCode = data::OpCodes::getOpCodeString(memMap.read8(instAddr));
+		uint8_t int_op_code = memMap.read8(instAddr);
+		uint8_t instSize = data::OpCodes::getInstructionSIze(int_op_code);
+		ostd::String opCode = data::OpCodes::getOpCodeString(int_op_code);
 		uint16_t stackFrameSize = cpu.m_stackFrameSize;
 		int32_t subRoutineCounter = cpu.m_subroutineCounter;
-
 
 		bool debugBreak = cpu.m_isDebugBreakPoint;
 		int32_t intHandlerCount = cpu.m_interruptHandlerCount;
@@ -483,14 +483,17 @@ namespace dragon
 		}
 		else
 		{
-			minfo.currentInstructionAddress = instAddr;
+			//if (int_op_code >= data::OpCodes::Ext01 && int_op_code <= data::OpCodes::Ext16)
+			//	minfo.currentInstructionAddress = minfo.previousInstructionAddress;
+			//else
+				minfo.currentInstructionAddress = instAddr;
 			minfo.currentInstructionFootprintSize = instSize;
 			minfo.currentInstructionStackFrameSize = stackFrameSize;
 			minfo.currentInstructionOpCode = opCode;
 			minfo.currentSubRoutineCounter = subRoutineCounter;
 
 			for (int8_t i = 0; i < instSize; i++)
-				minfo.currentInstructionFootprint[i] = memMap.read8(instAddr + i);
+				minfo.currentInstructionFootprint[i] = memMap.read8(minfo.currentInstructionAddress + i);
 
 			for (int8_t i = 0; i < 20; i++)
 				minfo.currentInstructionRegisters[i] = cpu.readRegister(i);

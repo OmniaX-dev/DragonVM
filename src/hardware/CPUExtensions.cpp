@@ -1,5 +1,6 @@
 #include "CPUExtensions.hpp"
 #include "VirtualCPU.hpp"
+#include "../runtime/DragonRuntime.hpp"
 
 namespace dragon
 {

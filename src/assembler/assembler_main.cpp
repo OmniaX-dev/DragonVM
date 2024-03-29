@@ -8,6 +8,7 @@ int main(int argc, char** argv)
 	if (rValue != dragon::code::Assembler::Application::RETURN_VAL_EXIT_SUCCESS)
 		return rValue;
 	auto& args = dragon::code::Assembler::Application::args;
+	dragon::code::Assembler::saveExports = args.save_exports;
 	dragon::code::Assembler::assembleToFile(args.source_file_path, args.dest_file_path);
 	if (args.verbose)
 		dragon::code::Assembler::printProgramInfo();

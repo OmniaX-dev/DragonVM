@@ -1,5 +1,7 @@
 @guard _DATA_DSS_
 
+@export BIOS_API bios_api.dss
+
 ## ============================= Memory Mapped Devices and Registers =============================
 @group MemoryAddresses
 	MBR 			0x1380
@@ -14,19 +16,41 @@
 	BOOT_DISK 				{ MemoryAddresses.CMOS + 0x0010 }
 @end
 
-@group VGA_Registers
+
+
+@export_comment /BIOS_API "These are the Hardware Interrupt codes of this machine."
+@group /BIOS_API HW_Int
+	DISK_INTERFACE_FINISHED				0x80
+	KEY_PRESSED							0xA0
+	KEY_RELEASED						0xA1
+	TEXT_ENTERED						0xA2
+@end
+@export_comment /BIOS_API "\n"
+
+
+
+@export_comment /BIOS_API "These are the memory-mapped registers used to interact with the video card's interface."
+@group /BIOS_API VGA_Registers
 	VIDEO_MODE 				{ MemoryAddresses.VGA + 0x0000 }
 	SIGNAL					{ MemoryAddresses.VGA + 0x0003 }
 	TEXT_SINGLE_CHAR		{ MemoryAddresses.VGA + 0x0004 }
 
 	BUFF_START				{ MemoryAddresses.VGA + 0x00E0 }
 @end
+@export_comment /BIOS_API "\n"
 
-@group VGA_VideoModes
+
+
+@export_comment /BIOS_API "These are the different Video Modes that the video card supports."
+@group /BIOS_API VGA_VideoModes
 	TEXT_SINGLE_COLOR			0x00
 @end
+@export_comment /BIOS_API "\n"
 
-@group Sig_VGA_Text_Single_Color
+
+
+@export_comment /BIOS_API "These are signals used to comunicate with the video card's interface, when in TEXT_SINGLE_COLOR mode."
+@group /BIOS_API Sig_VGA_Text_Single_Color
 	CONTINUE 			0x00
 	PRINT_CHAR			0x02
 	STORE_CHAR			0x03
@@ -37,6 +61,9 @@
 	REFRESH_SCREEN 		0xE0
 	CLEAR_SCREEN 		0xE1
 @end
+@export_comment /BIOS_API "\n"
+
+
 
 @define S_REG_1 0x07
 @define S_REG_2 0x08

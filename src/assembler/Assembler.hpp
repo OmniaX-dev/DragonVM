@@ -30,6 +30,11 @@ namespace dragon
 
 		class Assembler
 		{
+			public: struct tDefine
+			{
+				ostd::String name;
+				ostd::String value;
+			};
 			public: struct tDisassemblyLine
 			{
 				uint32_t addr = 0;
@@ -62,6 +67,11 @@ namespace dragon
 				std::vector<tStructMember> members;
 				int32_t size;
 			};
+			public: struct tExportSpec
+			{
+				ostd::String fileName;
+				std::vector<tDefine> content;
+			};
 			public: enum class eOperandType
 			{
 				Register = 0,
@@ -79,10 +89,11 @@ namespace dragon
 				{
 					inline tCommandLineArgs(void) {  }
 					ostd::String source_file_path { "" };
-					ostd::String dest_file_path = { "" };
-					bool save_disassembly = { false };
-					bool verbose = { false };
-					ostd::String disassembly_file_path = { "" };
+					ostd::String dest_file_path { "" };
+					bool save_disassembly { false };
+					bool verbose { false };
+					bool save_exports { false };
+					ostd::String disassembly_file_path { "" };
 				};
 
 				public:
@@ -107,6 +118,8 @@ namespace dragon
 
 			private:
 				static void removeComments(void);
+				static void parseExportSpecs(void);
+				static void processExports(void);
 				static void replaceDefines(void);
 				static void replaceGroupDefines(void);
 				static void parseSections(void);
@@ -134,6 +147,7 @@ namespace dragon
 				inline static std::vector<ostd::String> m_rawCodeSection;
 				inline static std::unordered_map<ostd::String, tSymbol> m_symbolTable;
 				inline static std::unordered_map<ostd::String, tLabel> m_labelTable;
+				inline static std::unordered_map<ostd::String, tExportSpec> m_exportSpecifications;
 				inline static uint16_t m_fixedSize { 0 };
 				inline static uint8_t m_fixedFillValue { 0x00 };
 				inline static uint16_t m_loadAddress { 0x0000 };
@@ -141,10 +155,12 @@ namespace dragon
 				inline static uint16_t m_dataSize { 0x0000 };
 				inline static uint16_t m_programSize { 0x0000 };
 				inline static std::vector<tStructDefinition> m_structDefs;
-
 				inline static std::vector<tDisassemblyLine> m_disassembly;
-
 				inline static ostd::ConsoleOutputHandler out;
+				inline static uint32_t m_exportCommentCount { 0 };
+
+			public:
+				inline static bool saveExports { false };
 		};
 	}
 }

@@ -182,6 +182,7 @@ namespace dragon
 				if (m_extensions[i]->m_code == m_currentInst)
 				{
 					m_currentExtension = m_extensions[i];
+					m_currentExtInst = m_memory.read8(readRegister(data::Registers::IP));
 					return true;
 				}
 			}
@@ -192,6 +193,7 @@ namespace dragon
 		{
 			if (m_halt) return false;
 			m_currentExtension = nullptr;
+			m_currentExtInst = 0x00;
 			m_isDebugBreakPoint = false;
 			uint8_t inst = fetch8();
 			m_currentInst = inst;

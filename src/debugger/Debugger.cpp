@@ -234,7 +234,6 @@ namespace dragon
 	void Debugger::Display::printDiff(void)
 	{
 		out.clear();
-		
 		ostd::String str;
 		str.add("|===============|================PREV================|================CURR================|=====|===PREV====|===CURR====|");
 		str.add("\n");
@@ -242,7 +241,7 @@ namespace dragon
 		str.add("\n");
 		str.add("|---------------|------------------------------------|------------------------------------|-----|-----------|-----------|");
 		str.add("\n");
-		str.add("| Code:         |                ----                |*%CURR_CODE%************************| R2  |*%PREV_R2%*|*%CURR_R2%*|");
+		str.add("| Code:         |                -----               |*%CURR_CODE%************************| R2  |*%PREV_R2%*|*%CURR_R2%*|");
 		str.add("\n");
 		str.add("|---------------|------------------------------------|------------------------------------|-----|-----------|-----------|");
 		str.add("\n");
@@ -328,7 +327,7 @@ namespace dragon
 				prevCode.add(ostd::Utils::getHexStr(minfo.previousInstructionFootprint[i], false, 1)).add(" ");
 			tmp.add(prevCode);
 			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
-			tmpStyle = "[@@style foreground:Black,background:BrightGray]";
+			tmpStyle = "[@@style foreground:Blue]";
 			tmpStyle.add(tmp).add("[@@/]");
 			str.replaceAll("%CURR_CODE%", tmpStyle);
 
@@ -339,10 +338,10 @@ namespace dragon
 			// 	currCode.add(ostd::Utils::getHexStr(minfo.currentInstructionFootprint[i], false, 1)).add(" ");
 			// tmp.add(currCode);
 			// tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
-			// if (currCode != prevCode)
-			// 	tmpStyle = "[@@style foreground:Black,background:Yellow]";
-			// else
-			// 	tmpStyle = "[@@style foreground:Blue]";
+			// // if (currCode != prevCode)
+			// // 	tmpStyle = "[@@style foreground:Black,background:BrightRed]";
+			// // else
+			// tmpStyle = "[@@style foreground:Blue]";
 			// tmpStyle.add(tmp).add("[@@/]");
 			// str.replaceAll("%CURR_CODE%", tmpStyle);
 		}

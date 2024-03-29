@@ -43,6 +43,8 @@ namespace dragon
 				inline bool isInBIOSMOde(void) const { return m_biosMode; }
 				inline bool isInSubRoutine(void) const { return m_subroutineCounter > 0; }
 				inline int32_t getSubRoutineCounter(void) const { return m_subroutineCounter; }
+				inline data::CPUExtension* getCurrentCPUExtension(void) const { return m_currentExtension; }
+				inline uint8_t getCurrentCPUExtensionInstruction(void) const { return m_currentExtInst; }
 
 			private:
 				void __debug_store_stack_frame_string_on_push(void);
@@ -63,6 +65,7 @@ namespace dragon
 
 				data::CPUExtension* m_extensions[16];
 				data::CPUExtension* m_currentExtension { nullptr };
+				uint8_t m_currentExtInst { 0x00 };
 
 				std::vector<ostd::String> m_debug_stackFrameStrings;
 

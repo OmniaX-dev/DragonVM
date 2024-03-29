@@ -42,6 +42,7 @@ list(APPEND RUNTIME_SOURCE_FILES
 	${CMAKE_CURRENT_LIST_DIR}/src/hardware/CPUExtensions.cpp
 
 	${CMAKE_CURRENT_LIST_DIR}/src/tools/Utils.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/tools/GlobalData.cpp
 )
 list(APPEND DEBUGGER_SOURCE_FILES
 	${CMAKE_CURRENT_LIST_DIR}/src/debugger/debugger_main.cpp
@@ -66,6 +67,7 @@ list(APPEND DEBUGGER_SOURCE_FILES
 	${CMAKE_CURRENT_LIST_DIR}/src/assembler/Assembler.cpp
 	
 	${CMAKE_CURRENT_LIST_DIR}/src/tools/Utils.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/tools/GlobalData.cpp
 )
 list(APPEND ASSEMBLER_SOURCE_FILES
 	${CMAKE_CURRENT_LIST_DIR}/src/assembler/assembler_main.cpp
@@ -105,7 +107,10 @@ set(TOOLS_TARGET dtools)
 add_executable(${TOOLS_TARGET} ${TOOLS_SOURCE_FILES})
 target_include_directories(${TOOLS_TARGET} PUBLIC ${INCLUDE_DIRS})
 
-target_compile_definitions(${RUNTIME_TARGET} PUBLIC  BUILD_NR=${BUILD_NUMBER} MAJ_V=${MAJOR_VER} MIN_V=${MINOR_VER} VERSION_STR="${MAJOR_VER}.${MINOR_VER}.${BUILD_NUMBER} - Alpha")
+target_compile_definitions(${RUNTIME_TARGET} PUBLIC  BUILD_NR=${BUILD_NUMBER} MAJ_V=${MAJOR_VER} MIN_V=${MINOR_VER} VERSION_STR="${MAJOR_VER}.${MINOR_VER}.${BUILD_NUMBER}")
+target_compile_definitions(${DEBUGGER_TARGET} PUBLIC  BUILD_NR=${BUILD_NUMBER} MAJ_V=${MAJOR_VER} MIN_V=${MINOR_VER} VERSION_STR="${MAJOR_VER}.${MINOR_VER}.${BUILD_NUMBER}")
+target_compile_definitions(${ASSEMBLER_TARGET} PUBLIC  BUILD_NR=${BUILD_NUMBER} MAJ_V=${MAJOR_VER} MIN_V=${MINOR_VER} VERSION_STR="${MAJOR_VER}.${MINOR_VER}.${BUILD_NUMBER}")
+target_compile_definitions(${TOOLS_TARGET} PUBLIC  BUILD_NR=${BUILD_NUMBER} MAJ_V=${MAJOR_VER} MIN_V=${MINOR_VER} VERSION_STR="${MAJOR_VER}.${MINOR_VER}.${BUILD_NUMBER}")
 
 #TODO: Different flags for Release/Debug
 add_compile_options(-O3 -m32 -MMD -MP -Wall -ggdb)

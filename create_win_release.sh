@@ -7,7 +7,7 @@ rm -r ./win-release
 cd bin
 
 printf "${green}Compiling vBIOS...\n${clear}"
-./dasm dss/bios/entry.dss -o dragon/bios.bin --save-disassembly disassembly/bios.dds --verbose
+./dasm dss/bios/entry.dss -o dragon/bios.bin --save-disassembly disassembly/bios.dds --verbose --save-exports
 
 printf "\n${green}Creating Virtual Disk...\n${clear}"
 rm dragon/disk1.dr
@@ -44,7 +44,7 @@ cp -r ./bin/dragon ./win-release
 rm ./bin/disassembly/test1.dds
 rm ./bin/disassembly/test2.dds
 
-mkdir ./win-release/dss
+mkdir ./win-release/dss4
 mkdir ./win-release/dss/bios
 cp ./bin/dss/bios/* ./win-release/dss/bios
 cp ./bin/dss/mbr.dss ./win-release/dss
