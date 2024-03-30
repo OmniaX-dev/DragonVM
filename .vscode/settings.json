@@ -96,7 +96,11 @@
 		"stacktrace": "cpp",
 		"*.ipp": "cpp",
 		"format": "cpp",
-		"stdfloat": "cpp"
+		"stdfloat": "cpp",
+		"*.dss": "python"
+	},
+	"workbench.editorAssociations": {
+		"*.bin": "hexEditor.hexedit"
 	},
 
 	"workbench.colorCustomizations": {
@@ -112,7 +116,7 @@
 		"editorBracketMatch.background": "#444",
 		"editorBracketMatch.border": "#b80318",
 		"editor.selectionBackground": "#3b3b3b",
-		"editor.selectionHighlightBackground": "#702900",
+		"editor.selectionHighlightBackground": "#702900e8",
 		"statusBar.background": "#2e2850",
 		"minimap.background" : "#1b1b1b",
 		"sideBar.background": "#1b1b1b"
@@ -146,7 +150,7 @@
 	"workbench.editor.openPositioning": "last",
 	"workbench.editor.tabActionCloseVisibility": false,
 	"window.density.editorTabHeight": "compact",
-	"window.zoomLevel": 1,
+	"window.zoomLevel": 0,
 	"explorer.autoReveal": false,
 	"editor.stickyScroll.enabled": false,
 	"workbench.statusBar.visible": false,
@@ -156,5 +160,9 @@
 	"cmake.configureOnOpen": false,
 	"cmake.options.statusBarVisibility": "hidden",
 
-	"git.openRepositoryInParentFolders": "never"
+	"git.openRepositoryInParentFolders": "never",
+
+	"python.languageServer": "None",
+
+	"files.eol": "\r\n"
 }

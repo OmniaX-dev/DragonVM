@@ -22,7 +22,7 @@ namespace dragon
 				case data::OpCodes::MovMemReg: return "MovMemReg";
 				case data::OpCodes::MovDerefRegReg: return "MovDerefRegReg";
 				case data::OpCodes::MovDerefRegMem: return "MovDerefRegMem";
-				case data::OpCodes::MovImmRegOffReg: return "MovImmRegOffReg";
+				// case data::OpCodes::MovImmRegOffReg: return "MovImmRegOffReg";
 				case data::OpCodes::MovRegDerefReg: return "MovRegDerefReg";
 				case data::OpCodes::MovMemDerefReg: return "MovMemDerefReg";
 				case data::OpCodes::MovImmDerefReg: return "MovImmDerefReg";
@@ -107,7 +107,7 @@ namespace dragon
 		{
 			CPUExtension* ext = DragonRuntime::cpu.getCurrentCPUExtension();
 			if (ext != nullptr)
-				return ext->getInstructionSIze(DragonRuntime::cpu.getCurrentCPUExtensionInstruction());
+				return 1 + ext->getInstructionSIze(DragonRuntime::cpu.getCurrentCPUExtensionInstruction());
 			switch (opCode)
 			{
 				case data::OpCodes::NoOp: return 1;
@@ -120,7 +120,7 @@ namespace dragon
 				case data::OpCodes::MovMemReg: return 4;
 				case data::OpCodes::MovDerefRegReg: return 3;
 				case data::OpCodes::MovDerefRegMem: return 4;
-				case data::OpCodes::MovImmRegOffReg: return 5;
+				// case data::OpCodes::MovImmRegOffReg: return 5;
 				case data::OpCodes::MovRegDerefReg: return 3;
 				case data::OpCodes::MovMemDerefReg: return 4;
 				case data::OpCodes::MovImmDerefReg: return 4;

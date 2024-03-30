@@ -13,8 +13,8 @@ namespace dragon
 	{
 		VirtualCPU::VirtualCPU(IMemoryDevice& memory) : m_memory(memory)
 		{
-			writeRegister(data::Registers::SP, (uint16_t)(0xFFFF - 1));
-			writeRegister(data::Registers::FP, (uint16_t)(0xFFFF - 1));
+			writeRegister16(data::Registers::SP, (uint16_t)(0xFFFF - 1));
+			writeRegister16(data::Registers::FP, (uint16_t)(0xFFFF - 1));
 
 			for (int32_t i = 0; i < 16; i++)
 				m_extensions[i] = nullptr;
@@ -26,10 +26,17 @@ namespace dragon
 			return m_registers[reg];
 		}
 
-		int16_t VirtualCPU::writeRegister(uint8_t reg, int16_t value)
+		int16_t VirtualCPU::writeRegister16(uint8_t reg, int16_t value)
 		{
 			if (reg >= data::Registers::Last) return 0x0000; //TODO: Error
 			m_registers[reg] = value;
+			return value;
+		}
+
+		int8_t VirtualCPU::writeRegister8(uint8_t reg, int8_t value)
+		{
+			if (reg >= data::Registers::Last) return 0x0000; //TODO: Error
+			m_registers[reg] = value & 0x00FF;
 			return value;
 		}
 
@@ -38,7 +45,7 @@ namespace dragon
 			uint16_t nextInstAddr = readRegister(data::Registers::IP);
 			m_currentAddr = nextInstAddr;
 			int8_t inst = m_memory.read8(nextInstAddr);
-			writeRegister(data::Registers::IP, nextInstAddr + 1);
+			writeRegister16(data::Registers::IP, nextInstAddr + 1);
 			return inst;
 		}
 
@@ -47,7 +54,7 @@ namespace dragon
 			uint16_t nextInstAddr = readRegister(data::Registers::IP);
 			m_currentAddr = nextInstAddr;
 			int16_t inst = m_memory.read16(nextInstAddr);
-			writeRegister(data::Registers::IP, nextInstAddr + 2);
+			writeRegister16(data::Registers::IP, nextInstAddr + 2);
 			return inst;
 		}
 
@@ -55,14 +62,14 @@ namespace dragon
 		{
 			uint16_t stackAddr = readRegister(data::Registers::SP);
 			m_memory.write16(stackAddr, value);
-			writeRegister(data::Registers::SP, stackAddr - 2);
+			writeRegister16(data::Registers::SP, stackAddr - 2);
 			m_stackFrameSize += 2;
 		}
 
 		int16_t VirtualCPU::popFromStack(void)
 		{
 			uint16_t nextSP = readRegister(data::Registers::SP) + 2;
-			writeRegister(data::Registers::SP, nextSP);
+			writeRegister16(data::Registers::SP, nextSP);
 			int16_t value = m_memory.read16(nextSP);
 			m_stackFrameSize -= 2;
 			return value;
@@ -98,32 +105,32 @@ namespace dragon
 			pushToStack(readRegister(data::Registers::FP));
 			pushToStack(m_stackFrameSize);
 
-			writeRegister(data::Registers::PP, argStartAddr);
-			writeRegister(data::Registers::FP, readRegister(data::Registers::SP));
+			writeRegister16(data::Registers::PP, argStartAddr);
+			writeRegister16(data::Registers::FP, readRegister(data::Registers::SP));
 			m_stackFrameSize = 0;
 		}
 
 		void VirtualCPU::popStackFrame(void)
 		{
 			uint16_t framePointerAddr = readRegister(data::Registers::FP);
-			writeRegister(data::Registers::SP, framePointerAddr);
+			writeRegister16(data::Registers::SP, framePointerAddr);
 			m_stackFrameSize = popFromStack();
 			// uint16_t tmpStackFrameSize = m_stackFrameSize;
 
-			writeRegister(data::Registers::FP, popFromStack());
-			writeRegister(data::Registers::IP, popFromStack());
-			writeRegister(data::Registers::ACC, popFromStack());
-			writeRegister(data::Registers::PP, popFromStack());
-			writeRegister(data::Registers::R10, popFromStack());
-			writeRegister(data::Registers::R9, popFromStack());
-			writeRegister(data::Registers::R8, popFromStack());
-			writeRegister(data::Registers::R7, popFromStack());
-			writeRegister(data::Registers::R6, popFromStack());
-			writeRegister(data::Registers::R5, popFromStack());
-			writeRegister(data::Registers::R4, popFromStack());
-			writeRegister(data::Registers::R3, popFromStack());
-			writeRegister(data::Registers::R2, popFromStack());
-			writeRegister(data::Registers::R1, popFromStack());
+			writeRegister16(data::Registers::FP, popFromStack());
+			writeRegister16(data::Registers::IP, popFromStack());
+			writeRegister16(data::Registers::ACC, popFromStack());
+			writeRegister16(data::Registers::PP, popFromStack());
+			writeRegister16(data::Registers::R10, popFromStack());
+			writeRegister16(data::Registers::R9, popFromStack());
+			writeRegister16(data::Registers::R8, popFromStack());
+			writeRegister16(data::Registers::R7, popFromStack());
+			writeRegister16(data::Registers::R6, popFromStack());
+			writeRegister16(data::Registers::R5, popFromStack());
+			writeRegister16(data::Registers::R4, popFromStack());
+			writeRegister16(data::Registers::R3, popFromStack());
+			writeRegister16(data::Registers::R2, popFromStack());
+			writeRegister16(data::Registers::R1, popFromStack());
 
 			uint16_t nArgs = popFromStack();
 			for (int32_t i = 0; i < nArgs; i++)
@@ -147,7 +154,7 @@ namespace dragon
 			if (flg >= 16) return;
 			m_tempFlags.value = readRegister(data::Registers::FL);
 			ostd::Bits::val(m_tempFlags, flg, val);
-			writeRegister(data::Registers::FL, m_tempFlags.value);
+			writeRegister16(data::Registers::FL, m_tempFlags.value);
 		}
 
 		void VirtualCPU::handleInterrupt(uint8_t intValue, bool hardware)
@@ -160,7 +167,7 @@ namespace dragon
 			pushStackFrame();
 			m_subroutineCounter++;
 			m_interruptHandlerCount++;
-			writeRegister(data::Registers::IP, handlerAddress);
+			writeRegister16(data::Registers::IP, handlerAddress);
 			if (m_debugModeEnabled && hardware)
 			{
 				DragonRuntime::tCallInfo interruptData;
@@ -225,7 +232,7 @@ namespace dragon
 				{
 					uint8_t regAddr = fetch8();
 					int16_t literal = fetch16();
-					writeRegister(regAddr, literal);
+					writeRegister16(regAddr, literal);
 				}
 				break;
 				case data::OpCodes::MovImmMem:
@@ -240,7 +247,7 @@ namespace dragon
 					uint8_t destRegAddr = fetch8();
 					uint8_t srcRegAddr = fetch8();
 					int16_t value = readRegister(srcRegAddr);
-					writeRegister(destRegAddr, value);
+					writeRegister16(destRegAddr, value);
 				}
 				break;
 				case data::OpCodes::MovRegMem:
@@ -256,7 +263,7 @@ namespace dragon
 					uint8_t destRegAddr = fetch8();
 					uint16_t addr = fetch16();
 					int16_t value = m_memory.read16(addr);
-					writeRegister(destRegAddr, value);
+					writeRegister16(destRegAddr, value);
 				}
 				break;
 				case data::OpCodes::MovDerefRegReg:
@@ -265,7 +272,7 @@ namespace dragon
 					uint8_t srcRegAddr = fetch8();
 					uint16_t addr = readRegister(srcRegAddr);
 					int16_t value = m_memory.read16(addr); 
-					writeRegister(destRegAddr, value);
+					writeRegister16(destRegAddr, value);
 				}
 				break;
 				case data::OpCodes::MovDerefRegMem:
@@ -277,16 +284,16 @@ namespace dragon
 					m_memory.write16(destAddr, value);
 				}
 				break;
-				case data::OpCodes::MovImmRegOffReg:
-				{
-					uint8_t destRegAddr = fetch8();
-					uint16_t addr = fetch16();
-					uint8_t offRegAddr = fetch8();
-					int16_t offset = readRegister(offRegAddr);
-					int16_t value = m_memory.read16(addr + offset);
-					writeRegister(destRegAddr, value);
-				}
-				break;
+				// case data::OpCodes::MovImmRegOffReg:
+				// {
+				// 	uint8_t destRegAddr = fetch8();
+				// 	uint16_t addr = fetch16();
+				// 	uint8_t offRegAddr = fetch8();
+				// 	int16_t offset = readRegister(offRegAddr);
+				// 	int16_t value = m_memory.read16(addr + offset);
+				// 	writeRegister(destRegAddr, value);
+				// }
+				// break;
 				case data::OpCodes::MovRegDerefReg:
 				{
 					uint8_t destRegAddr = fetch8();
@@ -380,14 +387,14 @@ namespace dragon
 					uint8_t destRegAddr = fetch8();
 					uint16_t srcAddr = fetch16();
 					int8_t value = m_memory.read8(srcAddr);
-					writeRegister(destRegAddr, value);
+					writeRegister8(destRegAddr, value);
 				}
 				break;
 				case data::OpCodes::MovByteImmReg:
 				{
 					uint8_t destRegAddr = fetch8();
 					int8_t value = fetch8();
-					writeRegister(destRegAddr, value);
+					writeRegister8(destRegAddr, value);
 				}
 				break;
 				case data::OpCodes::MovByteDerefRegReg:
@@ -396,7 +403,7 @@ namespace dragon
 					uint8_t srcRegAddr = fetch8();
 					uint16_t srcAddr = readRegister(srcRegAddr);
 					int8_t value = m_memory.read8(srcAddr);
-					writeRegister(destRegAddr, value);
+					writeRegister8(destRegAddr, value);
 				}
 				break;
 				case data::OpCodes::MovByteRegMem:
@@ -412,7 +419,7 @@ namespace dragon
 					uint8_t regAddr = fetch8();
 					int16_t literal = fetch16();
 					int16_t regValue = readRegister(regAddr);
-					writeRegister(data::Registers::ACC, regValue + literal);
+					writeRegister16(data::Registers::ACC, regValue + literal);
 				}
 				break;
 				case data::OpCodes::AddRegReg:
@@ -421,7 +428,7 @@ namespace dragon
 					uint8_t regAddr2 = fetch8();
 					int16_t regValue1 = readRegister(regAddr1);
 					int16_t regValue2 = readRegister(regAddr2);
-					writeRegister(data::Registers::ACC, regValue1 + regValue2);
+					writeRegister16(data::Registers::ACC, regValue1 + regValue2);
 				}
 				break;
 				case data::OpCodes::SubImmReg:
@@ -429,7 +436,7 @@ namespace dragon
 					uint8_t regAddr = fetch8();
 					int16_t literal = fetch16();
 					int16_t regValue = readRegister(regAddr);
-					writeRegister(data::Registers::ACC, regValue - literal);
+					writeRegister16(data::Registers::ACC, regValue - literal);
 				}
 				break;
 				case data::OpCodes::SubRegReg:
@@ -438,7 +445,7 @@ namespace dragon
 					uint8_t regAddr2 = fetch8();
 					int16_t regValue1 = readRegister(regAddr1);
 					int16_t regValue2 = readRegister(regAddr2);
-					writeRegister(data::Registers::ACC, regValue1 - regValue2);
+					writeRegister16(data::Registers::ACC, regValue1 - regValue2);
 				}
 				break;
 				case data::OpCodes::MulImmReg:
@@ -446,7 +453,7 @@ namespace dragon
 					uint8_t regAddr = fetch8();
 					int16_t literal = fetch16();
 					int16_t regValue = readRegister(regAddr);
-					writeRegister(data::Registers::ACC, regValue * literal);
+					writeRegister16(data::Registers::ACC, regValue * literal);
 				}
 				break;
 				case data::OpCodes::MulRegReg:
@@ -455,7 +462,7 @@ namespace dragon
 					uint8_t regAddr2 = fetch8();
 					int16_t regValue1 = readRegister(regAddr1);
 					int16_t regValue2 = readRegister(regAddr2);
-					writeRegister(data::Registers::ACC, regValue1 * regValue2);
+					writeRegister16(data::Registers::ACC, regValue1 * regValue2);
 				}
 				break;
 				case data::OpCodes::DivImmReg: //TODO: Division by zero is unhandled
@@ -465,8 +472,8 @@ namespace dragon
 					int16_t regValue = readRegister(regAddr);
 					int16_t quotient = regValue / literal;
 					int16_t reminder = regValue % literal;
-					writeRegister(data::Registers::ACC, quotient);
-					writeRegister(data::Registers::RV, reminder);
+					writeRegister16(data::Registers::ACC, quotient);
+					writeRegister16(data::Registers::RV, reminder);
 				}
 				break;
 				case data::OpCodes::DivRegReg: //TODO: Division by zero is unhandled
@@ -477,22 +484,22 @@ namespace dragon
 					int16_t regValue2 = readRegister(regAddr2);
 					int16_t quotient = regValue1 / regValue2;
 					int16_t reminder = regValue1 % regValue2;
-					writeRegister(data::Registers::ACC, quotient);
-					writeRegister(data::Registers::RV, reminder);
+					writeRegister16(data::Registers::ACC, quotient);
+					writeRegister16(data::Registers::RV, reminder);
 				}
 				break;
 				case data::OpCodes::IncReg:
 				{
 					uint8_t regAddr = fetch8();
 					int16_t regValue = readRegister(regAddr);
-					writeRegister(regAddr, regValue + 1);
+					writeRegister16(regAddr, regValue + 1);
 				}
 				break;
 				case data::OpCodes::DecReg:
 				{
 					uint8_t regAddr = fetch8();
 					int16_t regValue = readRegister(regAddr);
-					writeRegister(regAddr, regValue - 1);
+					writeRegister16(regAddr, regValue - 1);
 				}
 				break;
 				case data::OpCodes::RShiftRegImm:
@@ -501,7 +508,7 @@ namespace dragon
 					uint8_t regAddr = fetch8();
 					int16_t regValue = readRegister(regAddr);
 					regValue = regValue >> literal;
-					writeRegister(regAddr, regValue);
+					writeRegister16(regAddr, regValue);
 				}
 				break;
 				case data::OpCodes::RShiftRegReg:
@@ -511,7 +518,7 @@ namespace dragon
 					int16_t shiftValue = readRegister(shiftRegAddr);
 					int16_t regValue = readRegister(regAddr);
 					regValue = regValue >> shiftValue;
-					writeRegister(regAddr, regValue);
+					writeRegister16(regAddr, regValue);
 				}
 				break;
 				case data::OpCodes::LShiftRegImm:
@@ -520,7 +527,7 @@ namespace dragon
 					uint8_t regAddr = fetch8();
 					int16_t regValue = readRegister(regAddr);
 					regValue = regValue << literal;
-					writeRegister(regAddr, regValue);
+					writeRegister16(regAddr, regValue);
 				}
 				break;
 				case data::OpCodes::LShiftRegReg:
@@ -530,7 +537,7 @@ namespace dragon
 					int16_t shiftValue = readRegister(shiftRegAddr);
 					int16_t regValue = readRegister(regAddr);
 					regValue = regValue << shiftValue;
-					writeRegister(regAddr, regValue);
+					writeRegister16(regAddr, regValue);
 				}
 				break;
 				case data::OpCodes::AndRegImm:
@@ -538,7 +545,7 @@ namespace dragon
 					int16_t literal = fetch16();
 					uint8_t regAddr = fetch8();
 					int16_t value = readRegister(regAddr);
-					writeRegister(data::Registers::ACC, value & literal);
+					writeRegister16(data::Registers::ACC, value & literal);
 				}
 				break;
 				case data::OpCodes::AndRegReg:
@@ -547,7 +554,7 @@ namespace dragon
 					uint8_t regAddr = fetch8();
 					int16_t value = readRegister(regAddr);
 					int16_t andValue = readRegister(andRegAddr);
-					writeRegister(data::Registers::ACC, value & andValue);
+					writeRegister16(data::Registers::ACC, value & andValue);
 				}
 				break;
 				case data::OpCodes::OrRegImm:
@@ -555,7 +562,7 @@ namespace dragon
 					int16_t literal = fetch16();
 					uint8_t regAddr = fetch8();
 					int16_t value = readRegister(regAddr);
-					writeRegister(data::Registers::ACC, value | literal);
+					writeRegister16(data::Registers::ACC, value | literal);
 				}
 				break;
 				case data::OpCodes::OrRegReg:
@@ -564,7 +571,7 @@ namespace dragon
 					uint8_t regAddr = fetch8();
 					int16_t value = readRegister(regAddr);
 					int16_t andValue = readRegister(andRegAddr);
-					writeRegister(data::Registers::ACC, value | andValue);
+					writeRegister16(data::Registers::ACC, value | andValue);
 				}
 				break;
 				case data::OpCodes::XorRegImm:
@@ -572,7 +579,7 @@ namespace dragon
 					int16_t literal = fetch16();
 					uint8_t regAddr = fetch8();
 					int16_t value = readRegister(regAddr);
-					writeRegister(data::Registers::ACC, value ^ literal);
+					writeRegister16(data::Registers::ACC, value ^ literal);
 				}
 				break;
 				case data::OpCodes::XorRegReg:
@@ -581,14 +588,14 @@ namespace dragon
 					uint8_t regAddr = fetch8();
 					int16_t value = readRegister(regAddr);
 					int16_t andValue = readRegister(andRegAddr);
-					writeRegister(data::Registers::ACC, value ^ andValue);
+					writeRegister16(data::Registers::ACC, value ^ andValue);
 				}
 				break;
 				case data::OpCodes::NotReg:
 				{
 					uint8_t regAddr = fetch8();
 					int16_t value = readRegister(regAddr);
-					writeRegister(data::Registers::ACC, ~value);
+					writeRegister16(data::Registers::ACC, ~value);
 				}
 				break;
 				case data::OpCodes::NegReg:
@@ -596,7 +603,7 @@ namespace dragon
 					uint8_t regAddr = fetch8();
 					int16_t value = readRegister(regAddr);
 					value *= -1;
-					writeRegister(regAddr, value);
+					writeRegister16(regAddr, value);
 				}
 				break;
 				case data::OpCodes::NegByteReg:
@@ -604,7 +611,7 @@ namespace dragon
 					uint8_t regAddr = fetch8();
 					int8_t value = (int8_t)readRegister(regAddr);
 					value *= -1;
-					writeRegister(regAddr, (int16_t)(0x00FF & value));
+					writeRegister8(regAddr, value);
 				}
 				break;
 				case data::OpCodes::JmpNotEqImm:
@@ -613,7 +620,7 @@ namespace dragon
 					int16_t value = fetch16();
 					int16_t accValue = readRegister(data::Registers::ACC);
 					if (value != accValue)
-						writeRegister(data::Registers::IP, addr);
+						writeRegister16(data::Registers::IP, addr);
 				}
 				break;
 				case data::OpCodes::JmpNotEqReg:
@@ -623,7 +630,7 @@ namespace dragon
 					int16_t value = readRegister(regAddr);
 					int16_t accValue = readRegister(data::Registers::ACC);
 					if (value != accValue)
-						writeRegister(data::Registers::IP, addr);
+						writeRegister16(data::Registers::IP, addr);
 				}
 				break;
 				case data::OpCodes::JmpEqImm:
@@ -632,7 +639,7 @@ namespace dragon
 					int16_t value = fetch16();
 					int16_t accValue = readRegister(data::Registers::ACC);
 					if (value == accValue)
-						writeRegister(data::Registers::IP, addr);
+						writeRegister16(data::Registers::IP, addr);
 				}
 				break;
 				case data::OpCodes::JmpEqReg:
@@ -642,7 +649,7 @@ namespace dragon
 					int16_t value = readRegister(regAddr);
 					int16_t accValue = readRegister(data::Registers::ACC);
 					if (value == accValue)
-						writeRegister(data::Registers::IP, addr);
+						writeRegister16(data::Registers::IP, addr);
 				}
 				break;
 				case data::OpCodes::JmpGrImm:
@@ -651,7 +658,7 @@ namespace dragon
 					int16_t value = fetch16();
 					int16_t accValue = readRegister(data::Registers::ACC);
 					if (value > accValue)
-						writeRegister(data::Registers::IP, addr);
+						writeRegister16(data::Registers::IP, addr);
 				}
 				break;
 				case data::OpCodes::JmpGrReg:
@@ -661,7 +668,7 @@ namespace dragon
 					int16_t value = readRegister(regAddr);
 					int16_t accValue = readRegister(data::Registers::ACC);
 					if (value > accValue)
-						writeRegister(data::Registers::IP, addr);
+						writeRegister16(data::Registers::IP, addr);
 				}
 				break;
 				case data::OpCodes::JmpLessImm:
@@ -670,7 +677,7 @@ namespace dragon
 					int16_t value = fetch16();
 					int16_t accValue = readRegister(data::Registers::ACC);
 					if (value < accValue)
-						writeRegister(data::Registers::IP, addr);
+						writeRegister16(data::Registers::IP, addr);
 				}
 				break;
 				case data::OpCodes::JmpLessReg:
@@ -680,7 +687,7 @@ namespace dragon
 					int16_t value = readRegister(regAddr);
 					int16_t accValue = readRegister(data::Registers::ACC);
 					if (value < accValue)
-						writeRegister(data::Registers::IP, addr);
+						writeRegister16(data::Registers::IP, addr);
 				}
 				break;
 				case data::OpCodes::JmpGeImm:
@@ -689,7 +696,7 @@ namespace dragon
 					int16_t value = fetch16();
 					int16_t accValue = readRegister(data::Registers::ACC);
 					if (value >= accValue)
-						writeRegister(data::Registers::IP, addr);
+						writeRegister16(data::Registers::IP, addr);
 				}
 				break;
 				case data::OpCodes::JmpGeReg:
@@ -699,7 +706,7 @@ namespace dragon
 					int16_t value = readRegister(regAddr);
 					int16_t accValue = readRegister(data::Registers::ACC);
 					if (value >= accValue)
-						writeRegister(data::Registers::IP, addr);
+						writeRegister16(data::Registers::IP, addr);
 				}
 				break;
 				case data::OpCodes::JmpLeImm:
@@ -708,7 +715,7 @@ namespace dragon
 					int16_t value = fetch16();
 					int16_t accValue = readRegister(data::Registers::ACC);
 					if (value <= accValue)
-						writeRegister(data::Registers::IP, addr);
+						writeRegister16(data::Registers::IP, addr);
 				}
 				break;
 				case data::OpCodes::JmpLeReg:
@@ -718,13 +725,13 @@ namespace dragon
 					int16_t value = readRegister(regAddr);
 					int16_t accValue = readRegister(data::Registers::ACC);
 					if (value <= accValue)
-						writeRegister(data::Registers::IP, addr);
+						writeRegister16(data::Registers::IP, addr);
 				}
 				break;
 				case data::OpCodes::Jmp:
 				{
 					uint16_t addr = fetch16();
-					writeRegister(data::Registers::IP, addr);
+					writeRegister16(data::Registers::IP, addr);
 				}
 				break;
 				case data::OpCodes::Halt:
@@ -750,14 +757,14 @@ namespace dragon
 				{
 					uint8_t regAddr = fetch8();
 					int16_t value = popFromStack();
-					writeRegister(regAddr, value);
+					writeRegister16(regAddr, value);
 				}
 				break;
 				case data::OpCodes::CallImm:
 				{
 					uint16_t subroutineAddr = fetch16();
 					pushStackFrame();
-					writeRegister(data::Registers::IP, subroutineAddr);
+					writeRegister16(data::Registers::IP, subroutineAddr);
 					m_subroutineCounter++;
 				}
 				break;
@@ -766,7 +773,7 @@ namespace dragon
 					uint8_t regAddr = fetch8();
 					uint16_t subroutineAddr = readRegister(regAddr);
 					pushStackFrame();
-					writeRegister(data::Registers::IP, subroutineAddr);
+					writeRegister16(data::Registers::IP, subroutineAddr);
 					m_subroutineCounter++;
 				}
 				break;
@@ -783,8 +790,8 @@ namespace dragon
 					if (!isInSubRoutine()) break;
 					int16_t pp_val = readRegister(data::Registers::PP);
 					int16_t arg_data = m_memory.read16(pp_val);
-					writeRegister(data::Registers::PP, pp_val - 2);
-					writeRegister(regAddr, arg_data);
+					writeRegister16(data::Registers::PP, pp_val - 2);
+					writeRegister16(regAddr, arg_data);
 				}
 				break;
 				case data::OpCodes::RetInt:
@@ -884,8 +891,8 @@ namespace dragon
 			pushToStack(m_stackFrameSize);
 			stackFrameString.add("StackFrame: ").add(m_stackFrameSize).add(", ");
 
-			writeRegister(data::Registers::PP, argStartAddr);
-			writeRegister(data::Registers::FP, readRegister(data::Registers::SP));
+			writeRegister16(data::Registers::PP, argStartAddr);
+			writeRegister16(data::Registers::FP, readRegister(data::Registers::SP));
 			stackFrameString.add("New FP: ").add(ostd::Utils::getHexStr(readRegister(data::Registers::FP), true, 2));
 			m_stackFrameSize = 0;
 

@@ -173,6 +173,9 @@ namespace dragon
 			tmpCommand = "--save-exports";
 			tmpCommand.addRightPadding(commandLength);
 			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Used to save any specified exports in the code.").reset().nl();
+			tmpCommand = "--extmov";
+			tmpCommand.addRightPadding(commandLength);
+			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Enables the <extmov> CPU extension.").reset().nl();
 			tmpCommand = "--help";
 			tmpCommand.addRightPadding(commandLength);
 			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Displays this help message.").reset().nl();
@@ -1616,48 +1619,48 @@ namespace dragon
 
 		void Assembler::parse3Operand(ostd::String line)
 		{
-			ostd::String lineEdit(line);
-			ostd::String instEdit(lineEdit.new_substr(0, lineEdit.indexOf(" ")));
-			instEdit.trim().toLower();
-			ostd::String opEdit(lineEdit.new_substr(lineEdit.indexOf(" ") + 1));
-			opEdit.trim();
-			int16_t word = 0x0000;
-			if (instEdit == "mov")
-			{
-				auto st = opEdit.tokenize(",");
-				eOperandType opType = parseOperand(st.next(), word);
-				if (opType != eOperandType::Register)
-				{
-					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Register required\n";
-					exit(0);
-					return;
-				}
-				m_code.push_back(data::OpCodes::MovImmRegOffReg);
-				m_code.push_back((uint8_t)word);
-				opType = parseOperand(st.next(), word);
-				if (opType != eOperandType::DerefMemory)
-				{
-					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Pointer required\n";
-					exit(0);
-					return;
-				}
-				m_code.push_back((uint8_t)((word & 0xFF00) >> 8));
-				m_code.push_back((uint8_t)(word & 0x00FF));
-				opType = parseOperand(st.next(), word);
-				if (opType != eOperandType::Register)
-				{
-					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Register required\n";
-					exit(0);
-					return;
-				}
-				m_code.push_back((uint8_t)word);
-				return;
-			}
-			else
-			{
-				std::cout << "Unknown instruction; " << line << " (" << instEdit << ")\n";
-				exit(0);
-			}
+			// ostd::String lineEdit(line);
+			// ostd::String instEdit(lineEdit.new_substr(0, lineEdit.indexOf(" ")));
+			// instEdit.trim().toLower();
+			// ostd::String opEdit(lineEdit.new_substr(lineEdit.indexOf(" ") + 1));
+			// opEdit.trim();
+			// int16_t word = 0x0000;
+			// if (instEdit == "mov")
+			// {
+			// 	auto st = opEdit.tokenize(",");
+			// 	eOperandType opType = parseOperand(st.next(), word);
+			// 	if (opType != eOperandType::Register)
+			// 	{
+			// 		std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Register required\n";
+			// 		exit(0);
+			// 		return;
+			// 	}
+			// 	m_code.push_back(data::OpCodes::MovImmRegOffReg);
+			// 	m_code.push_back((uint8_t)word);
+			// 	opType = parseOperand(st.next(), word);
+			// 	if (opType != eOperandType::DerefMemory)
+			// 	{
+			// 		std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Pointer required\n";
+			// 		exit(0);
+			// 		return;
+			// 	}
+			// 	m_code.push_back((uint8_t)((word & 0xFF00) >> 8));
+			// 	m_code.push_back((uint8_t)(word & 0x00FF));
+			// 	opType = parseOperand(st.next(), word);
+			// 	if (opType != eOperandType::Register)
+			// 	{
+			// 		std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Register required\n";
+			// 		exit(0);
+			// 		return;
+			// 	}
+			// 	m_code.push_back((uint8_t)word);
+			// 	return;
+			// }
+			// else
+			// {
+			// 	std::cout << "Unknown instruction; " << line << " (" << instEdit << ")\n";
+			// 	exit(0);
+			// }
 		}
 
 		void Assembler::combineDataAndCode(void)

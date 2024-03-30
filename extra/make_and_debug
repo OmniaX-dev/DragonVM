@@ -17,9 +17,11 @@ if [ $? -eq 0 ]; then
     /bin/bash ./load_mbr
     cd ..
     printf "${green}Compiling Test Program...\n"
-    ./dasm dss/newTest.dss -o newTest.bin --save-disassembly disassembly/newTest.dds --verbose
+    ./dasm dss/extmov_unit_tests.dss -o extmov_unit_tests.bin --save-disassembly disassembly/extmov_unit_tests.dds --verbose
+    # ./dasm dss/newTest.dss -o newTest.bin --save-disassembly disassembly/newTest.dds --verbose
     printf "\n${green}Running Application...\n\n${clear}"
-    ./ddb config/testMachine.dvm --force-load newTest.bin 0x00 --verbose-load
+    ./ddb config/testMachine.dvm --force-load extmov_unit_tests.bin 0x00 --verbose-load
+    # ./ddb config/testMachine.dvm --force-load newTest.bin 0x00 --verbose-load
     cp dragon/disk1.dr ../extra/dragon/disk1.dr
     cp dragon/cmos.dr ../extra/dragon/cmos.dr
 fi

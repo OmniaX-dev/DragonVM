@@ -223,7 +223,7 @@ namespace dragon
 				inline static constexpr uint8_t MovMemReg = 0x13;
 				inline static constexpr uint8_t MovImmMem = 0x14;
 				inline static constexpr uint8_t MovDerefRegReg = 0x15;
-				inline static constexpr uint8_t MovImmRegOffReg = 0x16;
+				// inline static constexpr uint8_t MovImmRegOffReg = 0x16;
 				inline static constexpr uint8_t MovDerefRegMem = 0x17;
 				inline static constexpr uint8_t MovRegDerefReg = 0x18;
 				inline static constexpr uint8_t MovMemDerefReg = 0x19;

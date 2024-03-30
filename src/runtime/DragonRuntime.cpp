@@ -306,7 +306,7 @@ namespace dragon
 		uint16_t reset_ip_addr = 0x0000;
 		if (verbose)
 			out.fg(ostd::ConsoleColors::BrightYellow).p("    Reset IP register: ").p(ostd::Utils::getHexStr(reset_ip_addr, true, 2).cpp_str()).nl();
-		cpu.writeRegister(dragon::data::Registers::IP, reset_ip_addr);
+		cpu.writeRegister16(dragon::data::Registers::IP, reset_ip_addr);
 
 		if (verbose)
 			out.fg(ostd::ConsoleColors::BrightYellow).p("    Debug mode enabled: ").p(STR_BOOL(debugModeEnabled)).nl();
