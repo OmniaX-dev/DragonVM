@@ -19,6 +19,6 @@ int main(int argc, char** argv)
 	//Executing the runtime
 	if (args.force_load)
 		dragon::DragonRuntime::forceLoad(args.force_load_file, args.force_load_mem_offset);
-	dragon::DragonRuntime::runMachine(args.cycle_limit, args.basic_debug, args.step_exec);
+	dragon::DragonRuntime::runMachine();
 	return dragon::DragonRuntime::RETURN_VAL_EXIT_SUCCESS;
 }

@@ -102,22 +102,8 @@ namespace dragon
 			for (int32_t i = 2; i < argc; i++)
 			{
 				ostd::String edit(argv[i]);
-				if (edit == "--debug")
-					args.basic_debug = true;
-				else if (edit == "--step")
-					args.step_exec = true;
-				else if (edit == "--verbose-load")
+				if (edit == "--verbose-load")
 					args.verbose_load = true;
-				else if (edit == "--limit-cycles")
-				{
-					if (i == argc - 1)
-						return RETURN_VAL_MISSING_PARAM;
-					i++;
-					edit = argv[i];
-					if (!edit.isNumeric())
-						return RETURN_VAL_PARAMETER_NOT_NUMERIC;
-					args.cycle_limit = (int32_t)edit.toInt();
-				}
 				else if (edit == "--force-load")
 				{
 					if ((argc - 1) - i < 2)
@@ -339,57 +325,35 @@ namespace dragon
 		machine_config.destroy();
 	}
 
-	void DragonRuntime::runMachine(int32_t cycleLimit, bool basic_debug, bool step_exec)
+	void DragonRuntime::runMachine(void)
 	{
-		int32_t cycleCounter = 0;
+		double clock_speed_us = 2000;
+		double acc = 0;
+		ostd::Timer clock_timer;
 		bool running = true;
-		uint8_t currentInst = 0x00;
-		uint32_t instSize = 0;
-		ostd::ByteStream& ramData = *ram.getByteStream();
-		// while ((running || vDiskInterface.isBusy()) && cycleCounter++ < 2048)
 		while (running || vDiskInterface.isBusy())
 		{
-			if (basic_debug)
-				out.clear();
+			clock_timer.startCount(ostd::eTimeUnits::Microseconds);
 			ostd::SignalHandler::refresh();
 			uint16_t addr = cpu.readRegister(dragon::data::Registers::IP);
 			uint16_t spAddr = cpu.readRegister(dragon::data::Registers::SP);
 			running = cpu.execute() && vDisplay.isRunning();
 			vDisplay.update();
-			currentInst = cpu.getCurrentInstruction();
+			cpu.getCurrentInstruction();
 			vDiskInterface.cycleStep();
-			ostd::ConsoleOutputHandler newOut; //TODO: This workaround is not good, this whole file needs to be updated to not use the legacy ConsoleOutputHandler
-			if ((cpu.isInDebugBreakPoint() || step_exec) && basic_debug)
+			if (dragon::data::ErrorHandler::hasError())
 			{
-				instSize = dragon::data::OpCodes::getInstructionSIze(currentInst);
-				ostd::Utils::printByteStream(ramData, dragon::data::MemoryMapAddresses::Memory_Start, 16, 10, newOut, addr, instSize, " MEMORY");
-				printRegisters(cpu);
-				out.nl().fg("yellow").p("Current Instruction: ").fg("white").p(ostd::Utils::getHexStr(currentInst, true, 1).cpp_str());
-				out.nl();
-				out.fg(ostd::ConsoleColors::Magenta).p("######### Reached Break Point at ");
-				out.p(ostd::Utils::getHexStr(addr, true, 2).cpp_str());
-				out.nl().reset();
-				std::cin.get();
-				continue;
-			}
-			else if (dragon::data::ErrorHandler::hasError())
-			{
-				if (!basic_debug)
-				{
-					processErrors();
-					continue;
-				}
-				instSize = dragon::data::OpCodes::getInstructionSIze(currentInst);
-				ostd::Utils::printByteStream(ramData, dragon::data::MemoryMapAddresses::Memory_Start, 16, 10, newOut, addr, instSize, " MEMORY");
-				printRegisters(cpu);
-				out.nl().fg("yellow").p("Current Instruction: ").fg("white").p(ostd::Utils::getHexStr(currentInst, true, 1).cpp_str());
-				out.nl();
-				out.fg(ostd::ConsoleColors::Red).p("######### Error occurred at ");
-				out.p(ostd::Utils::getHexStr(addr, true, 2).cpp_str());
-				out.nl().reset();
 				processErrors();
-				std::cin.get();
-				continue;
+				break;
+			}
+			uint64_t _time = clock_timer.endCount();
+			if (_time < clock_speed_us)
+				ostd::Utils::sleep(clock_speed_us - _time, ostd::eTimeUnits::Microseconds);
+			acc++;
+			if (acc == 500)
+			{
+				std::cout << _time << "\n";
+				acc = 0;
 			}
 		}
 	}
@@ -552,15 +516,6 @@ namespace dragon
 		ostd::String tmpCommand = "--verbose-load";
 		tmpCommand.addRightPadding(commandLength);
 		out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Used to show more information while loading the virtual machine.").reset().nl();
-		tmpCommand = "--step";
-		tmpCommand.addRightPadding(commandLength);
-		out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Launches the runtime in basic step-esecution mode.").reset().nl();
-		tmpCommand = "--debug";
-		tmpCommand.addRightPadding(commandLength);
-		out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Launches the runtime in basic debug mode.").reset().nl();
-		tmpCommand = "--limit-cycles <cycles>";
-		tmpCommand.addRightPadding(commandLength);
-		out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Sets the maximum amount of clock cycles the runtime can run.").reset().nl();
 		tmpCommand = "--force-load <binary-file> <ram-offset>";
 		tmpCommand.addRightPadding(commandLength);
 		out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Injects the specified binary into RAM at the specified offset.").reset().nl();

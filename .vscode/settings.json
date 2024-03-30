@@ -1,6 +1,7 @@
 {
 	"C_Cpp.errorSquiggles": "enabled",
 	"files.associations": {
+		"*.dss": "python",
 		"functional": "cpp",
 		"thread": "cpp",
 		"cctype": "cpp",
@@ -97,7 +98,7 @@
 		"*.ipp": "cpp",
 		"format": "cpp",
 		"stdfloat": "cpp",
-		"*.dss": "python"
+		"*.inc": "cpp"
 	},
 	"workbench.editorAssociations": {
 		"*.bin": "hexEditor.hexedit"

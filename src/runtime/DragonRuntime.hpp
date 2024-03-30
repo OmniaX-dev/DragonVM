@@ -38,10 +38,7 @@ namespace dragon
 		public: struct tCommandLineArgs
 		{
 			ostd::String machine_config_path = "";
-			bool basic_debug = false;
-			bool step_exec = false;
 			bool verbose_load = false;
-			int32_t cycle_limit = 0;
 			bool force_load = false;
 			ostd::String force_load_file = "";
 			uint16_t force_load_mem_offset = 0x00;
@@ -97,7 +94,7 @@ namespace dragon
 										bool rackCallStack = false,
 										bool debugModeEnabled = false);
 			static void shutdownMachine(void);
-			static void runMachine(int32_t cycleLimit, bool basic_debug, bool step_exec);
+			static void runMachine(void);
 			static bool runStep(std::vector<uint16_t> trackedAddresses = {  });
 			static void forceLoad(const ostd::String& filePath, uint16_t loadAddress);
 
