@@ -6,7 +6,7 @@ Add possibility to specify required instruction sets in dasm
 
 #***Add "Extended mov" instruction set
 #***Remove old offset mov
-Implelemnt Instructions in dasm:
+#***Implelemnt extmov mnemonics in dasm:
 
     ## Offset on first operand
 	## omov *R1, 0xFAAB, word 4		## Move word immediate into (deref reg + immediate offset word)
@@ -35,26 +35,26 @@ Implelemnt Instructions in dasm:
     
     
     ## Offset on second operand
-	movo *R1, *R2, word 4			## Move word (deref reg + immediate offset word) into deref reg
-    movo *R1, *R2, R10				## Move word (deref reg + reg offset) into deref reg
-	movo *R1, *R2, 4				## Move word (deref reg + immediate offset byte) into deref reg
+	## movo *R1, *R2, word 4			## Move word (deref reg + immediate offset word) into deref reg
+    ## movo *R1, *R2, R10				## Move word (deref reg + reg offset) into deref reg
+	## movo *R1, *R2, 4				## Move word (deref reg + immediate offset byte) into deref reg
 
-	movbo *R1, *R2, word 4			## Move byte (deref reg + immediate offset word) into deref reg
-	movbo *R1, *R2, R10				## Move byte (deref reg + reg offset) into deref reg
-	movbo *R1, *R2, 4				## Move byte (deref reg + immediate offset byte) into deref reg
+	## movbo *R1, *R2, word 4			## Move byte (deref reg + immediate offset word) into deref reg
+	## movbo *R1, *R2, R10				## Move byte (deref reg + reg offset) into deref reg
+	## movbo *R1, *R2, 4				## Move byte (deref reg + immediate offset byte) into deref reg
     
-	movo R1, [0xFAAB], word 4	    ## Move word (Memory + immediate offset word) into reg
-	movo R1, [0xFAAB], R10			## Move word (Memory + reg offset) into reg
-	movo R1, [0xFAAB], 4		    ## Move word (Memory + immediate offset byte) into reg
+	## movo R1, [0xFAAB], word 4	    ## Move word (Memory + immediate offset word) into reg
+	## movo R1, [0xFAAB], R10			## Move word (Memory + reg offset) into reg
+	## movo R1, [0xFAAB], 4		    ## Move word (Memory + immediate offset byte) into reg
 
-	movbo R1, [0xFAAB], word 4		## Move byte (Memory + immediate offset word) into reg
-	movbo R1, [0xFAAB], R10			## Move byte (Memory + reg offset) into reg
-	movbo R1, [0xFAAB], 4			## Move byte (Memory + immediate offset byte) into reg
+	## movbo R1, [0xFAAB], word 4		## Move byte (Memory + immediate offset word) into reg
+	## movbo R1, [0xFAAB], R10			## Move byte (Memory + reg offset) into reg
+	## movbo R1, [0xFAAB], 4			## Move byte (Memory + immediate offset byte) into reg
 
-	movo R1, *R2, word 4		    ## Move word (deref reg + immediate offset word) into reg
-	movo R1, *R2, R10				## Move word (deref reg + reg offset) into reg
-	movo R1, *R2, 4				    ## Move word (deref reg + immediate offset byte) into reg
+	## movo R1, *R2, word 4		    ## Move word (deref reg + immediate offset word) into reg
+	## movo R1, *R2, R10				## Move word (deref reg + reg offset) into reg
+	## movo R1, *R2, 4				    ## Move word (deref reg + immediate offset byte) into reg
 
-	movbo R1, *R2, word 4			## Move byte (deref reg + immediate offset word) into reg
-	movbo R1, *R2, R10				## Move byte (deref reg + reg offset) into reg
-	movbo R1, *R2, 4				## Move byte (deref reg + immediate offset byte) into reg
+	## movbo R1, *R2, word 4			## Move byte (deref reg + immediate offset word) into reg
+	## movbo R1, *R2, R10				## Move byte (deref reg + reg offset) into reg
+	## movbo R1, *R2, 4				## Move byte (deref reg + immediate offset byte) into reg

@@ -1946,9 +1946,305 @@ namespace dragon
 				}
 				else if (instEdit == "movo")
 				{
+					if (st.count() != 3)
+					{
+						std::cout << "Invalid operand number; " << line << "3  ->  3 required\n";
+						exit(0);
+						return;
+					}
+					eOperandType opType1 = parseOperand(st.next(), word1);
+					if (opType1 == eOperandType::Register)
+					{
+						m_code.push_back((uint8_t)word1);
+						code_offset++;
+						eOperandType opType2 = parseOperand(st.next(), word2);
+						ostd::String op3 = st.next();
+						bool word_offset = false;
+						if (op3.startsWith("word"))
+						{
+							op3.substr(4).trim();
+							word_offset = true;
+						}
+						eOperandType opType3 = parseOperand(op3, word3);
+						switch (opType2)
+						{
+							case eOperandType::DerefMemory:
+								m_code.push_back((uint8_t)((word2 & 0xFF00) >> 8));
+								m_code.push_back((uint8_t)(word2 & 0x00FF));
+								code_offset += 2;
+							break;
+							case eOperandType::DerefRegister:
+								m_code.push_back((uint8_t)word2);
+								code_offset++;
+							break;
+							default:
+								std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
+								exit(0);
+							break;
+						}
+						switch (opType3)
+						{
+							case eOperandType::Immediate:
+							case eOperandType::Label:
+								if (word_offset)
+								{
+									if (opType2 == eOperandType::DerefMemory)
+										m_code[m_code.size() - code_offset] = hw::cpuext::ExtMov::OpCodes::wmem_immoffw_in_reg;
+									else if (opType2 == eOperandType::DerefRegister)
+										m_code[m_code.size() - code_offset] = hw::cpuext::ExtMov::OpCodes::wdreg_immoffw_in_reg;
+									else
+									{
+										std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
+										exit(0);
+									}
+									m_code.push_back((uint8_t)((word3 & 0xFF00) >> 8));
+									m_code.push_back((uint8_t)(word3 & 0x00FF));
+									code_offset += 2;
+								}
+								else
+								{
+									if (opType2 == eOperandType::DerefMemory)
+										m_code[m_code.size() - code_offset] = hw::cpuext::ExtMov::OpCodes::wmem_immoffb_in_reg;
+									else if (opType2 == eOperandType::DerefRegister)
+										m_code[m_code.size() - code_offset] = hw::cpuext::ExtMov::OpCodes::wdreg_immoffb_in_reg;
+									else
+									{
+										std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
+										exit(0);
+									}
+									m_code.push_back((uint8_t)word3);
+									code_offset++;
+								}
+							break;
+							case eOperandType::Register:
+								if (opType2 == eOperandType::DerefMemory)
+									m_code[m_code.size() - code_offset] = hw::cpuext::ExtMov::OpCodes::wmem_regoff_in_reg;
+								else if (opType2 == eOperandType::DerefRegister)
+									m_code[m_code.size() - code_offset] = hw::cpuext::ExtMov::OpCodes::wdreg_regoff_in_reg;
+								else
+								{
+									std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
+									exit(0);
+								}
+								m_code.push_back((uint8_t)word3);
+								code_offset++;
+							break;
+							default:
+								std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
+								exit(0);
+							break;
+						}
+					}
+					else if (opType1 == eOperandType::DerefRegister)
+					{
+						m_code.push_back((uint8_t)word1);
+						code_offset++;
+						eOperandType opType2 = parseOperand(st.next(), word2);
+						ostd::String op3 = st.next();
+						bool word_offset = false;
+						if (op3.startsWith("word"))
+						{
+							op3.substr(4).trim();
+							word_offset = true;
+						}
+						eOperandType opType3 = parseOperand(op3, word3);
+						switch (opType2)
+						{
+							case eOperandType::DerefRegister:
+								m_code.push_back((uint8_t)word2);
+								code_offset++;
+							break;
+							default:
+								std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
+								exit(0);
+							break;
+						}
+						switch (opType3)
+						{
+							case eOperandType::Immediate:
+							case eOperandType::Label:
+								if (word_offset)
+								{
+									m_code[m_code.size() - code_offset] = hw::cpuext::ExtMov::OpCodes::wdreg_immoffw_in_dreg;
+									m_code.push_back((uint8_t)((word3 & 0xFF00) >> 8));
+									m_code.push_back((uint8_t)(word3 & 0x00FF));
+									code_offset += 2;
+								}
+								else
+								{
+									m_code[m_code.size() - code_offset] = hw::cpuext::ExtMov::OpCodes::wdreg_immoffb_in_dreg;
+									m_code.push_back((uint8_t)word3);
+									code_offset++;
+								}
+							break;
+							case eOperandType::Register:
+								m_code[m_code.size() - code_offset] = hw::cpuext::ExtMov::OpCodes::wdreg_regoff_in_dreg;
+								m_code.push_back((uint8_t)word3);
+								code_offset++;
+							break;
+							default:
+								std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
+								exit(0);
+							break;
+						}
+					}
+					else
+					{
+						std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  DerefRegister or Pointer required\n";
+						exit(0);
+						return;
+					}
 				}
 				else if (instEdit == "movbo")
 				{
+					if (st.count() != 3)
+					{
+						std::cout << "Invalid operand number; " << line << "3  ->  3 required\n";
+						exit(0);
+						return;
+					}
+					eOperandType opType1 = parseOperand(st.next(), word1);
+					if (opType1 == eOperandType::Register)
+					{
+						m_code.push_back((uint8_t)word1);
+						code_offset++;
+						eOperandType opType2 = parseOperand(st.next(), word2);
+						ostd::String op3 = st.next();
+						bool word_offset = false;
+						if (op3.startsWith("word"))
+						{
+							op3.substr(4).trim();
+							word_offset = true;
+						}
+						eOperandType opType3 = parseOperand(op3, word3);
+						switch (opType2)
+						{
+							case eOperandType::DerefMemory:
+								m_code.push_back((uint8_t)((word2 & 0xFF00) >> 8));
+								m_code.push_back((uint8_t)(word2 & 0x00FF));
+								code_offset += 2;
+							break;
+							case eOperandType::DerefRegister:
+								m_code.push_back((uint8_t)word2);
+								code_offset++;
+							break;
+							default:
+								std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
+								exit(0);
+							break;
+						}
+						switch (opType3)
+						{
+							case eOperandType::Immediate:
+							case eOperandType::Label:
+								if (word_offset)
+								{
+									if (opType2 == eOperandType::DerefMemory)
+										m_code[m_code.size() - code_offset] = hw::cpuext::ExtMov::OpCodes::bmem_immoffw_in_reg;
+									else if (opType2 == eOperandType::DerefRegister)
+										m_code[m_code.size() - code_offset] = hw::cpuext::ExtMov::OpCodes::bdreg_immoffw_in_reg;
+									else
+									{
+										std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
+										exit(0);
+									}
+									m_code.push_back((uint8_t)((word3 & 0xFF00) >> 8));
+									m_code.push_back((uint8_t)(word3 & 0x00FF));
+									code_offset += 2;
+								}
+								else
+								{
+									if (opType2 == eOperandType::DerefMemory)
+										m_code[m_code.size() - code_offset] = hw::cpuext::ExtMov::OpCodes::bmem_immoffb_in_reg;
+									else if (opType2 == eOperandType::DerefRegister)
+										m_code[m_code.size() - code_offset] = hw::cpuext::ExtMov::OpCodes::bdreg_immoffb_in_reg;
+									else
+									{
+										std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
+										exit(0);
+									}
+									m_code.push_back((uint8_t)word3);
+									code_offset++;
+								}
+							break;
+							case eOperandType::Register:
+								if (opType2 == eOperandType::DerefMemory)
+									m_code[m_code.size() - code_offset] = hw::cpuext::ExtMov::OpCodes::bmem_regoff_in_reg;
+								else if (opType2 == eOperandType::DerefRegister)
+									m_code[m_code.size() - code_offset] = hw::cpuext::ExtMov::OpCodes::bdreg_regoff_in_reg;
+								else
+								{
+									std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
+									exit(0);
+								}
+								m_code.push_back((uint8_t)word3);
+								code_offset++;
+							break;
+							default:
+								std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
+								exit(0);
+							break;
+						}
+					}
+					else if (opType1 == eOperandType::DerefRegister)
+					{
+						m_code.push_back((uint8_t)word1);
+						code_offset++;
+						eOperandType opType2 = parseOperand(st.next(), word2);
+						ostd::String op3 = st.next();
+						bool word_offset = false;
+						if (op3.startsWith("word"))
+						{
+							op3.substr(4).trim();
+							word_offset = true;
+						}
+						eOperandType opType3 = parseOperand(op3, word3);
+						switch (opType2)
+						{
+							case eOperandType::DerefRegister:
+								m_code.push_back((uint8_t)word2);
+								code_offset++;
+							break;
+							default:
+								std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
+								exit(0);
+							break;
+						}
+						switch (opType3)
+						{
+							case eOperandType::Immediate:
+							case eOperandType::Label:
+								if (word_offset)
+								{
+									m_code[m_code.size() - code_offset] = hw::cpuext::ExtMov::OpCodes::bdreg_immoffw_in_dreg;
+									m_code.push_back((uint8_t)((word3 & 0xFF00) >> 8));
+									m_code.push_back((uint8_t)(word3 & 0x00FF));
+									code_offset += 2;
+								}
+								else
+								{
+									m_code[m_code.size() - code_offset] = hw::cpuext::ExtMov::OpCodes::bdreg_immoffb_in_dreg;
+									m_code.push_back((uint8_t)word3);
+									code_offset++;
+								}
+							break;
+							case eOperandType::Register:
+								m_code[m_code.size() - code_offset] = hw::cpuext::ExtMov::OpCodes::bdreg_regoff_in_dreg;
+								m_code.push_back((uint8_t)word3);
+								code_offset++;
+							break;
+							default:
+								std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
+								exit(0);
+							break;
+						}
+					}
+					else
+					{
+						std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  DerefRegister or Pointer required\n";
+						exit(0);
+						return;
+					}
 				}
 				else
 				{

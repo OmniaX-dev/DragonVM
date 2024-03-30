@@ -6,6 +6,7 @@ if [ "$(expr substr $(uname -s) 1 5)" == "Linux" ]; then
     cmake -B bin -S ./
     cd bin
     make
+    mkdir disassembly
     if [ $? -eq 0 ]; then
         cd ..
         typeset -i build_number=$(cat build.nr)
@@ -19,6 +20,7 @@ elif [ "$(expr substr $(uname -s) 1 10)" == "MINGW64_NT" ]; then
     cmake -B bin -S ./ -G "MinGW Makefiles"
     cd bin
     mingw32-make.exe
+    mkdir disassembly
     if [ $? -eq 0 ]; then
         cd ..
         typeset -i build_number=$(cat build.nr)

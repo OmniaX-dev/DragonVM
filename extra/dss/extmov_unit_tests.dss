@@ -413,7 +413,8 @@ test_18_passed:
 	mov R1, 0x9000
 	mov R3, 0xA000
 	mov [0xA022], 0x66
-	%low EXT_MOV wdreg_immoffw_in_dreg _R1 _R3 0x00 0x22
+	movo *R1, *R3, word 0x22
+	## %low EXT_MOV wdreg_immoffw_in_dreg _R1 _R3 0x00 0x22
 	mov ACC, *R1
 	jeq $test_19_passed, 0x66
 	push 0
@@ -430,7 +431,8 @@ test_19_passed:
 	mov R3, 0xA000
 	mov [0xA033], 0x77
 	mov R2, 0x33
-	%low EXT_MOV wdreg_regoff_in_dreg _R1 _R3 _R2
+	movo *R1, *R3, R2
+	## %low EXT_MOV wdreg_regoff_in_dreg _R1 _R3 _R2
 	mov ACC, *R1
 	jeq $test_20_passed, 0x77
 	push 0
@@ -446,7 +448,8 @@ test_20_passed:
 	mov R1, 0x9000
 	mov R3, 0xA000
 	mov [0xA044], 0x88
-	%low EXT_MOV wdreg_immoffb_in_dreg _R1 _R3 0x44
+	movo *R1, *R3, 0x44
+	## %low EXT_MOV wdreg_immoffb_in_dreg _R1 _R3 0x44
 	mov ACC, *R1
 	jeq $test_21_passed, 0x88
 	push 0
@@ -462,7 +465,8 @@ test_21_passed:
 	mov R1, 0xA000
 	mov R3, 0xB000
 	movb [0xB055], 0x99
-	%low EXT_MOV bdreg_immoffw_in_dreg _R1 _R3 0x00 0x55
+	movbo *R1, *R3, word 0x55
+	## %low EXT_MOV bdreg_immoffw_in_dreg _R1 _R3 0x00 0x55
 	movb ACC, *R1
 	jeq $test_22_passed, 0x99
 	push 0
@@ -479,7 +483,8 @@ test_22_passed:
 	mov R3, 0xB000
 	movb [0xB066], 0xAA
 	mov R2, 0x66
-	%low EXT_MOV bdreg_regoff_in_dreg _R1 _R3 _R2
+	movbo *R1, *R3, R2
+	## %low EXT_MOV bdreg_regoff_in_dreg _R1 _R3 _R2
 	movb ACC, *R1
 	jeq $test_23_passed, 0xAA
 	push 0
@@ -495,7 +500,8 @@ test_23_passed:
 	mov R1, 0xA000
 	mov R3, 0xB000
 	movb [0xB077], 0xBB
-	%low EXT_MOV bdreg_immoffb_in_dreg _R1 _R3 0x77
+	movbo *R1, *R3, 0x77
+	## %low EXT_MOV bdreg_immoffb_in_dreg _R1 _R3 0x77
 	movb ACC, *R1
 	jeq $test_24_passed, 0xBB
 	push 0
@@ -509,7 +515,8 @@ test_24_passed:
 	## debug_break
 	inc R5
 	mov [0xC088], 0xCC
-	%low EXT_MOV wmem_immoffw_in_reg _R1 0xC0 0x00 0x00 0x88
+	movo R1, [0xC000], word 0x88
+	## %low EXT_MOV wmem_immoffw_in_reg _R1 0xC0 0x00 0x00 0x88
 	mov ACC, R1
 	jeq $test_25_passed, 0xCC
 	push 0
@@ -524,7 +531,8 @@ test_25_passed:
 	inc R5
 	mov [0xC099], 0xDD
 	mov R2, 0x99
-	%low EXT_MOV wmem_regoff_in_reg _R1 0xC0 0x00 _R2
+	movo R1, [0xC000], R2
+	## %low EXT_MOV wmem_regoff_in_reg _R1 0xC0 0x00 _R2
 	mov ACC, R1
 	jeq $test_26_passed, 0xDD
 	push 0
@@ -538,7 +546,8 @@ test_26_passed:
 	## debug_break
 	inc R5
 	mov [0xC0AA], 0xEE
-	%low EXT_MOV wmem_immoffb_in_reg _R1 0xC0 0x00 0xAA
+	movo R1, [0xC000], 0xAA
+	## %low EXT_MOV wmem_immoffb_in_reg _R1 0xC0 0x00 0xAA
 	mov ACC, R1
 	jeq $test_27_passed, 0xEE
 	push 0
@@ -552,7 +561,8 @@ test_27_passed:
 	## debug_break
 	inc R5
 	movb [0xD099], 0x11
-	%low EXT_MOV bmem_immoffw_in_reg _R1 0xD0 0x00 0x00 0x99
+	movbo R1, [0xD000], word 0x99
+	## %low EXT_MOV bmem_immoffw_in_reg _R1 0xD0 0x00 0x00 0x99
 	mov ACC, R1
 	jeq $test_28_passed, 0x11
 	push 0
@@ -567,7 +577,8 @@ test_28_passed:
 	inc R5
 	movb [0xD0AA], 0x22
 	mov R2, 0xAA
-	%low EXT_MOV bmem_regoff_in_reg _R1 0xD0 0x00 _R2
+	movbo R1, [0xD000], R2
+	## %low EXT_MOV bmem_regoff_in_reg _R1 0xD0 0x00 _R2
 	mov ACC, R1
 	jeq $test_29_passed, 0x22
 	push 0
@@ -581,7 +592,8 @@ test_29_passed:
 	## debug_break
 	inc R5
 	movb [0xD0BB], 0x33
-	%low EXT_MOV bmem_immoffb_in_reg _R1 0xD0 0x00 0xBB
+	movbo R1, [0xD000], 0xBB
+	## %low EXT_MOV bmem_immoffb_in_reg _R1 0xD0 0x00 0xBB
 	mov ACC, R1
 	jeq $test_30_passed, 0x33
 	push 0
@@ -596,7 +608,8 @@ test_30_passed:
 	inc R5
 	mov R3, 0x4000
 	mov [0x40CC], 0x44
-	%low EXT_MOV wdreg_immoffw_in_reg _R1 _R3 0x00 0xCC
+	movo R1, *R3, word 0xCC
+	## %low EXT_MOV wdreg_immoffw_in_reg _R1 _R3 0x00 0xCC
 	mov ACC, R1
 	jeq $test_31_passed, 0x44
 	push 0
@@ -612,7 +625,8 @@ test_31_passed:
 	mov R3, 0x4000
 	mov [0x40DD], 0x55
 	mov R2, 0xDD
-	%low EXT_MOV wdreg_regoff_in_reg _R1 _R3 _R2
+	movo R1, *R3, R2
+	## %low EXT_MOV wdreg_regoff_in_reg _R1 _R3 _R2
 	mov ACC, R1
 	jeq $test_32_passed, 0x55
 	push 0
@@ -627,7 +641,8 @@ test_32_passed:
 	inc R5
 	mov R3, 0x4000
 	mov [0x40EE], 0x66
-	%low EXT_MOV wdreg_immoffb_in_reg _R1 _R3 0xEE
+	movo R1, *R3, 0xEE
+	## %low EXT_MOV wdreg_immoffb_in_reg _R1 _R3 0xEE
 	mov ACC, R1
 	jeq $test_33_passed, 0x66
 	push 0
@@ -642,7 +657,8 @@ test_33_passed:
 	inc R5
 	mov R3, 0x5000
 	movb [0x5011], 0x77
-	%low EXT_MOV bdreg_immoffw_in_reg _R1 _R3 0x00 0x11
+	movbo R1, *R3, word 0x11
+	## %low EXT_MOV bdreg_immoffw_in_reg _R1 _R3 0x00 0x11
 	mov ACC, R1
 	jeq $test_34_passed, 0x77
 	push 0
@@ -658,7 +674,8 @@ test_34_passed:
 	mov R3, 0x5000
 	movb [0x5022], 0x88
 	mov R2, 0x22
-	%low EXT_MOV bdreg_regoff_in_reg _R1 _R3 _R2
+	movbo R1, *R3, R2
+	## %low EXT_MOV bdreg_regoff_in_reg _R1 _R3 _R2
 	mov ACC, R1
 	jeq $test_35_passed, 0x88
 	push 0
@@ -673,7 +690,8 @@ test_35_passed:
 	inc R5
 	mov R3, 0x5000
 	movb [0x5033], 0x99
-	%low EXT_MOV bdreg_immoffb_in_reg _R1 _R3 0x33
+	movbo R1, *R3, 0x33
+	## %low EXT_MOV bdreg_immoffb_in_reg _R1 _R3 0x33
 	mov ACC, R1
 	jeq $test_36_passed, 0x99
 	push 0

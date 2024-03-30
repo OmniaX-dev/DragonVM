@@ -10,8 +10,6 @@
 	$string "Hello World!!"
 
 .code
-	debug_break
-	%low 0xE0 0x01
 	mov R10, 0x00
 	mov R9, $_text_entered_handler
 	mov R8, 0xA2
