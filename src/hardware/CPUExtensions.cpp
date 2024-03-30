@@ -167,7 +167,7 @@ namespace dragon
 						uint8_t dest_dreg = vcpu.fetch8();
 						int16_t src_mem = vcpu.readRegister(vcpu.fetch8());
 						uint16_t offset = vcpu.fetch16();
-
+						
 						uint16_t dest_mem = vcpu.readRegister(dest_dreg);
 						mem.write16(dest_mem + offset, mem.read16(src_mem));
 					}
