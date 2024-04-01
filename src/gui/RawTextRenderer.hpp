@@ -26,5 +26,7 @@ namespace dragon
 			inline static constexpr int32_t FONT_H_CHARS = 16;
 			inline static constexpr int32_t CONSOLE_CHARS_H = 90;
 			inline static constexpr int32_t CONSOLE_CHARS_V = 21;
+
+			inline static int8_t s_cursor_pos_x = 0;
 	};
 }

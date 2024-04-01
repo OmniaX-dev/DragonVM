@@ -45,46 +45,26 @@ _set_interrupt_vector_entry_end:
 _print_integer:
 	mov R1, 0
 	arg ACC
-	mov R3, 0  ## Used as boolean, 0 = positive, 1 = negative
-	jle $_print_integer_not_negative, 0
-	mov R3, 1
-	jeq $_print_integer_overflow_case, 0x8000
-	neg ACC
-	jmp $_print_integer_loop
-_print_integer_overflow_case:  ## Hardcoded for -32768 (0x8000)
-	push 56
-	push 54
-	push 55
-	push 50
-	push 51
-	mov R1, 5
-	jmp $_print_integer_loop_end
-_print_integer_not_negative:
+	debug_break
 	jne $_print_integer_loop, 0
 	push 48  ## '0' ASCII is 48
 	inc R1
 	jmp $_print_integer_loop_end
 _print_integer_loop:
 	jeq $_print_integer_loop_end, 0
-	div ACC, 10
-	mov R2, ACC
-	add RV, 48	## '0' ASCII is 48
-	push ACC
+	divipu ACC, 10
+	addipu RV, 48
+	push RV
 	inc R1
-	mov ACC, R2
+	debug_break
 	jmp $_print_integer_loop
 _print_integer_loop_end:
-	mov ACC, R3
-	jne $_print_integer_no_sign, 1
-	push 45  ## '-' ASCII is 45
-	inc R1
-_print_integer_no_sign:
 	pop R9
 	dec R1
 	movb [VGA_Registers.TEXT_SINGLE_CHAR], R9
 	movb [VGA_Registers.SIGNAL], reg(S_REG_1)
 	mov ACC, R1
-	jne $_print_integer_no_sign, 0
+	jne $_print_integer_loop_end, 0
 	ret
 
 

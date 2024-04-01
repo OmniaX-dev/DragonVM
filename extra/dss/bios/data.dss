@@ -13,6 +13,9 @@
 @end
 
 @group CMOS_Settings
+	MEM_START				{ MemoryAddresses.CMOS + 0x0000 }
+	MEM_SIZE				{ MemoryAddresses.CMOS + 0x0002 }
+	CLOCK_SPEED				{ MemoryAddresses.CMOS + 0x0004 }
 	BOOT_DISK 				{ MemoryAddresses.CMOS + 0x0010 }
 @end
 
@@ -34,6 +37,7 @@
 	VIDEO_MODE 				{ MemoryAddresses.VGA + 0x0000 }
 	SIGNAL					{ MemoryAddresses.VGA + 0x0003 }
 	TEXT_SINGLE_CHAR		{ MemoryAddresses.VGA + 0x0004 }
+	TEXT_SIGNLE_INVERT		{ MemoryAddresses.VGA + 0x0005 }
 
 	BUFF_START				{ MemoryAddresses.VGA + 0x00E0 }
 @end
@@ -73,6 +77,39 @@
 ## ===============================================================================================
 
 .data
-	$_bios_name "DragonBIOS"
 	$_bios_version_number_maj 0x00, 0x00
 	$_bios_version_number_min 0x00, 0x03
+	$_bios_name " DragonBIOS "
+	$_clock_str " Clock: "
+	$_mem_str " Memory: "
+	$_hz_str " Hz"
+	$_byte_str " Bytes"
+
+	$_bios_logo_2_line_1  "|===================================================|"
+	$_bios_logo_2_line_2  "|     '$$$o.                                        |"
+	$_bios_logo_2_line_3  "|       '$$$$bo...       ..o:                       |"
+	$_bios_logo_2_line_4  "|         '$$$$$$$$booocS$$$    ..    ,.            |"
+	$_bios_logo_2_line_5  "|      '.    '*$$$$SP     V$o..o$$. .$$$b           |"
+	$_bios_logo_2_line_6  "|       '$$o. .$$$$$o. ...A$$$$$$$$$$$$$$b          |"
+	$_bios_logo_2_line_7  "| ''bo.   '*$$$$$$$$$$$$$$$$$$$$P*$$$$$$$$:         |"
+	$_bios_logo_2_line_8  "|    '$$.    V$$$$$$$$$P'**''*''   VP  * 'l         |"
+	$_bios_logo_2_line_9  "|      '$$$o.4$$$$$$$$X                             |"
+	$_bios_logo_2_line_10 "|       '*$$$$$$$$$$$$$AoA$o..oooooo..           .b |"
+	$_bios_logo_2_line_11 "|              .X$$$$$$$$$$$P''     ''*oo,,     ,$P |"
+	$_bios_logo_2_line_12 "|             $$P''V$$$$$$$:    .        ''*****'   |"
+	$_bios_logo_2_line_13 "|           .*'    A$$$$$$$$o.4;      .             |"
+	$_bios_logo_2_line_14 "|                .oP''   '$$$$$$b.  .$;             |"
+	$_bios_logo_2_line_15 "|                         A$$$$$$$$$$P              |"
+	$_bios_logo_2_line_16 "|                         '  '$$$$$P'               |"
+	$_bios_logo_2_line_17 "|                             $$P*'                 |"
+	$_bios_logo_2_line_18 "|                            .$'                    |"
+	$_bios_logo_2_line_19 "|===================================================|"
+
+	## $_bios_logo_line_1 "                _____                              ____ _____ ____   _____                "
+	## $_bios_logo_line_2 "               |  __ \                            |  _ \_   _/ __ \ / ____|               "
+	## $_bios_logo_line_3 "               | |  | |_ __ __ _  __ _  ___  _ __ | |_) || || |  | | (___                 "
+	## $_bios_logo_line_4 "               | |  | | '__/ _` |/ _` |/ _ \| '_ \|  _ < | || |  | |\___ \                "
+	## $_bios_logo_line_5 "               | |__| | | | (_| | (_| | (_) | | | | |_) || || |__| |____) |               "
+	## $_bios_logo_line_6 "               |_____/|_|  \__,_|\__, |\___/|_| |_|____/_____\____/|_____/                "
+	## $_bios_logo_line_7 "                                  __/ |                                                   "
+	## $_bios_logo_line_8 "                                 |___/                                                    "

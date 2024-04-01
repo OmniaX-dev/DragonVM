@@ -14,23 +14,8 @@
 	mov R8, 0x30																##  -Passing the interrupt's code to setup
 	int 0x20																	##  -Calling int 0x20 with 0x00 as parameter, to set new handler up
 
-	mov R10, 0x03
-	mov R9, $_bios_name
-	int 0x30
-	mov R10, 0x01
-	mov R9, 32
-	int 0x30
-	mov R10, 0x04
-	mov R9, [$_bios_version_number_maj]
-	int 0x30
-	mov R10, 0x01
-	mov R9, 46
-	int 0x30
-	mov R10, 0x04
-	mov R9, [$_bios_version_number_min]
-	int 0x30
-	mov R10, 0x02
-	int 0x30
+	push 0
+	call $_print_machine_info
 
 	## MBR Loading 
 	and FL, 0b1111111111111110													## Disable interrupts
@@ -48,5 +33,135 @@
 
 @include <drivers.dss>
 @include <utils.dss>
+
+_print_machine_info:
+	
+
+	mov R9, $_bios_logo_2_line_1
+	mov R10, 0x0A
+	int 0x30
+
+	mov R10, 0x08										## Print and flush buffer
+	int 0x30
+
+	mov R10, 0x02
+	int 0x30
+
+
+
+	mov R9, $_bios_logo_2_line_2
+	mov R10, 0x0A
+	int 0x30
+
+	mov R10, 0x08										## Print and flush buffer
+	int 0x30
+	
+	
+
+	mov R10, 0x0A
+	mov R9, $_bios_name
+	int 0x30											## Print BIOS Name
+
+	mov R10, 0x05
+	mov R9, [$_bios_version_number_maj]
+	int 0x30											## Print BIOS Version (Major)
+
+	mov R10, 0x06
+	mov R9, 46
+	int 0x30											## Print '.' character
+
+	mov R10, 0x05
+	mov R9, [$_bios_version_number_min]
+	int 0x30											## Print BIOS Version (Minor)
+
+	mov R10, 0x02
+	int 0x30											## Print New Line
+
+
+
+
+	
+
+	mov R9, $_bios_logo_2_line_3
+	mov R10, 0x0A
+	int 0x30
+
+	mov R10, 0x08										## Print and flush buffer
+	int 0x30
+
+	
+
+	mov R10, 0x0A
+	mov R9, $_clock_str
+	int 0x30											## Print Clock label
+
+	mov R10, 0x05
+	mov R9, [CMOS_Settings.CLOCK_SPEED]
+	int 0x30											## Print Clock speed
+
+	mov R10, 0x0A
+	mov R9, $_hz_str
+	int 0x30											## Print hz label
+
+	mov R10, 0x02
+	int 0x30											## Print New Line
+
+
+
+
+	
+
+	mov R9, $_bios_logo_2_line_4
+	mov R10, 0x0A
+	int 0x30
+
+	mov R10, 0x08										## Print and flush buffer
+	int 0x30
+
+	
+	
+	mov R10, 0x0A
+	mov R9, $_mem_str
+	int 0x30											## Print Memory label
+
+	mov R10, 0x05
+	mov R9, [CMOS_Settings.MEM_START]
+	int 0x30											## Print Memory start
+
+	mov R10, 0x06
+	mov R9, 47
+	int 0x30											## Print '/' character
+
+	mov R10, 0x05
+	mov R9, [CMOS_Settings.MEM_SIZE]
+	int 0x30											## Print Memory size
+
+	mov R10, 0x0A
+	mov R9, $_byte_str
+	int 0x30											## Print bytes label
+
+	mov R10, 0x02
+	int 0x30											## Print New Line
+
+
+
+
+	
+	mov R9, $_bios_logo_2_line_5
+	mov R7, 4
+	mov ACC, 19
+_print_machine_info_logo_loop:
+	inc R7
+	mov R10, 0x0A
+	int 0x30
+	addip R9, 54										## 90 is the length of a line
+	mov R10, 0x08
+	int 0x30
+	mov R10, 0x02
+	int 0x30
+	jls $_print_machine_info_logo_loop, R7
+	
+
+	ret
 
 .fixed 4096, 0x00      ## BIOS Needs to be 4096 Bytes exactly

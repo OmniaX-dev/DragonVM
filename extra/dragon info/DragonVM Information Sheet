@@ -7,7 +7,13 @@
 0x0FFF
 -------
 0x1000 CMOS (128 Bytes) (write to this section is only allowed in BIOS Mode)
+    MemStart: (2 bytes) 0x0000
+    MemSize: (2 bytes) 0x0002
+    ClockSpeed: (2 bytes) 0x0004
     BootDisk: 0x0010
+
+    ICC_
+    ICC_OutputAddr: (2 bytes) 0x007E
 0x107F
 -------
 0x1080 INTERRUPT VECTOR (512 Bytes)
@@ -90,7 +96,8 @@
 
         0xE0: Refresh Screen
         0xE1: Clear Screen
-    0x04: Text Single Color Character
+    0x04: Text Single Color Character (1 Byte)
+    0x05: Text Single Color Inverted colors (1 Byte)
 0x16FF
 -------
 0x1700 GENERIC SERIAL INTERFACE (64 Bytes)
@@ -125,6 +132,7 @@ BIOS Specific - Software Interrupts:
 	0x08: Print buffer and flush in Text Single Mode
 	0x09: Flush buffer in Text Single Mode
 	0x0A: Store Null-Terminated String in buffer in Text Single Mode (string address stored in R9 register)
+    0x0B: Toggles inverted colors in Text Single Mode
 
 	0xE0: Refresh Screen
 	0xE1: Clear Screen

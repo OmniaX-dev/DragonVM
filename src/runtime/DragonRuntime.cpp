@@ -280,14 +280,8 @@ namespace dragon
 		}
 		memMap.mapDevice(ram, dragon::data::MemoryMapAddresses::Memory_Start, dragon::data::MemoryMapAddresses::Memory_End, false, "RAM");
 
-		//Default VideoBios Colors
-		uint8_t default_bios_video_color = 0x4;
 		if (verbose)
-		{
 			out.fg(ostd::ConsoleColors::Magenta).p("  Initializing vCPU reset sequence:").nl();
-			// out.p("    BIOSVideo default colors: ").p(ostd::Utils::getHexStr(default_bios_video_color).cpp_str()).nl();
-		}
-		// memMap.write8(dragon::data::MemoryMapAddresses::BIOSVideo_Start, default_bios_video_color);
 
 		uint16_t reset_ip_addr = 0x0000;
 		if (verbose)
@@ -314,6 +308,21 @@ namespace dragon
 			}
 		}
 
+		if (verbose)
+		{
+			out.fg(ostd::ConsoleColors::BrightYellow).p("    Fixed clock enabled: ").p(STR_BOOL(machine_config.fixed_clock)).nl();
+			if (machine_config.fixed_clock)
+				out.fg(ostd::ConsoleColors::BrightYellow).p("    Clock speed: ").p(machine_config.clock_rate_sec).p(" Hz").nl();
+		}
+
+		vCMOS.write16(data::CMOSRegisters::MemoryStart, data::MemoryMapAddresses::Memory_Start);
+		vCMOS.write16(data::CMOSRegisters::MemorySize, data::MemoryMapAddresses::Memory_End);
+		vCMOS.write16(data::CMOSRegisters::ClockSpeed, machine_config.clock_rate_sec);
+		if (verbose)
+			out.fg(ostd::ConsoleColors::BrightYellow).p("    Loading CMOS Machine info").nl();
+
+
+
 		out.nl().nl();
 		s_trackMachineInfo = trackMachineInfoDiff;
 		s_trackCallStack = trackCallStack;
@@ -327,10 +336,14 @@ namespace dragon
 
 	void DragonRuntime::runMachine(void)
 	{
-		double clock_speed_us = 2000;
+		double clock_speed_us = 1000000.0 / machine_config.clock_rate_sec;
 		double acc = 0;
+		uint64_t avg_count = 0;
+		uint64_t _time = 0;
+		double avg_tot = 0;
 		ostd::Timer clock_timer;
 		bool running = true;
+		bool fixed_clock = machine_config.fixed_clock;
 		while (running || vDiskInterface.isBusy())
 		{
 			clock_timer.startCount(ostd::eTimeUnits::Microseconds);
@@ -346,15 +359,17 @@ namespace dragon
 				processErrors();
 				break;
 			}
-			uint64_t _time = clock_timer.endCount();
-			if (_time < clock_speed_us)
-				ostd::Utils::sleep(clock_speed_us - _time, ostd::eTimeUnits::Microseconds);
-			acc++;
 			if (acc == 500)
 			{
-				std::cout << _time << "\n";
+				avg_count++;
+				avg_tot += _time;
+				s_avgInstTime = (uint64_t)std::round(avg_tot / avg_count);
 				acc = 0;
 			}
+			_time = clock_timer.endCount();
+			acc++;
+			if (_time < clock_speed_us && fixed_clock)
+				ostd::Utils::sleep(clock_speed_us - _time, ostd::eTimeUnits::Microseconds);
 		}
 	}
 
@@ -485,26 +500,26 @@ namespace dragon
 		if (inst == data::OpCodes::CallImm)
 		{
 			uint16_t call_addr = memMap.read16(instAddr + 1);
-			minfo.callStack.push_back({ "CALL IMM", call_addr, instAddr });
+			minfo.callStack.push_back({ "CALL IMM", call_addr, instAddr, !interrupts_enabled });
 		}
 		else if (inst == data::OpCodes::CallReg)
 		{
 			uint8_t reg_addr = memMap.read8(instAddr + 1);
 			uint16_t call_addr = cpu.readRegister(reg_addr);
-			minfo.callStack.push_back({ "CALL REG", call_addr, instAddr });
+			minfo.callStack.push_back({ "CALL REG", call_addr, instAddr, !interrupts_enabled });
 		}
 		else if (interrupts_enabled && inst == data::OpCodes::Int)
 		{
 			uint8_t int_num = memMap.read8(instAddr + 1);
-			minfo.callStack.push_back({ "INT", int_num, instAddr });
+			minfo.callStack.push_back({ "INT", int_num, instAddr, !interrupts_enabled });
 		}
 		else if (inst == data::OpCodes::Ret)
 		{
-			minfo.callStack.push_back({ "RET", 0x0000, instAddr });
+			minfo.callStack.push_back({ "RET", 0x0000, instAddr, !interrupts_enabled });
 		}
 		else if (interrupts_enabled && inst == data::OpCodes::RetInt)
 		{
-			minfo.callStack.push_back({ "RET INT", 0x0000, instAddr });
+			minfo.callStack.push_back({ "RET INT", 0x0000, instAddr, !interrupts_enabled });
 		}
 	 }
 

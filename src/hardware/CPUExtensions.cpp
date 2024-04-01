@@ -464,6 +464,232 @@ namespace dragon
 				return true;
 			}
 
+
+
+
+			ostd::String ExtAlu::getOpCodeString(uint8_t opCode)
+			{
+				switch (opCode)
+				{
+					case OpCodes::addipu_reg_in_reg:		return m_name + "_addipu_reg_in_reg";
+					case OpCodes::addipu_imm_in_reg:		return m_name + "_addipu_imm_in_reg";
+					case OpCodes::subipu_reg_in_reg:		return m_name + "_subipu_reg_in_reg";
+					case OpCodes::subipu_imm_in_reg:		return m_name + "_subipu_imm_in_reg";
+					case OpCodes::mulipu_reg_in_reg:		return m_name + "_mulipu_reg_in_reg";
+					case OpCodes::mulipu_imm_in_reg:		return m_name + "_mulipu_imm_in_reg";
+					case OpCodes::divipu_reg_in_reg:		return m_name + "_divipu_reg_in_reg";
+					case OpCodes::divipu_imm_in_reg:		return m_name + "_divipu_imm_in_reg";
+					case OpCodes::addip_reg_in_reg:			return m_name + "_addip_reg_in_reg";
+					case OpCodes::addip_imm_in_reg:			return m_name + "_addip_imm_in_reg";
+					case OpCodes::subip_reg_in_reg:			return m_name + "_subip_reg_in_reg";
+					case OpCodes::subip_imm_in_reg:			return m_name + "_subip_imm_in_reg";
+					case OpCodes::mulip_reg_in_reg:			return m_name + "_mulip_reg_in_reg";
+					case OpCodes::mulip_imm_in_reg:			return m_name + "_mulip_imm_in_reg";
+					case OpCodes::divip_reg_in_reg:			return m_name + "_divip_reg_in_reg";
+					case OpCodes::divip_imm_in_reg:			return m_name + "_divip_imm_in_reg";
+					default: return m_name + "_UNKNOWN_INST";
+				}
+			}
+
+			uint8_t ExtAlu::getInstructionSIze(uint8_t opCode)
+			{
+				switch (opCode)
+				{
+					case OpCodes::addipu_reg_in_reg:		return 3;
+					case OpCodes::addipu_imm_in_reg:		return 4;
+					case OpCodes::subipu_reg_in_reg:		return 3;
+					case OpCodes::subipu_imm_in_reg:		return 4;
+					case OpCodes::mulipu_reg_in_reg:		return 3;
+					case OpCodes::mulipu_imm_in_reg:		return 4;
+					case OpCodes::divipu_reg_in_reg:		return 3;
+					case OpCodes::divipu_imm_in_reg:		return 4;
+					case OpCodes::addip_reg_in_reg:			return 3;
+					case OpCodes::addip_imm_in_reg:			return 4;
+					case OpCodes::subip_reg_in_reg:			return 3;
+					case OpCodes::subip_imm_in_reg:			return 4;
+					case OpCodes::mulip_reg_in_reg:			return 3;
+					case OpCodes::mulip_imm_in_reg:			return 4;
+					case OpCodes::divip_reg_in_reg:			return 3;
+					case OpCodes::divip_imm_in_reg:			return 4;
+					default: return 0;
+				}
+			}
+
+			bool ExtAlu::execute(VirtualCPU& vcpu)
+			{
+				auto& mem = DragonRuntime::memMap;
+				uint8_t inst = vcpu.fetch8();
+				switch (inst)
+				{
+					case OpCodes::addipu_reg_in_reg:
+					{
+						uint8_t dest_reg = vcpu.fetch8();
+						uint8_t src_reg = vcpu.fetch8();
+						uint16_t dest_val = vcpu.readRegister(dest_reg);
+						uint16_t src_val = vcpu.readRegister(src_reg);
+						uint16_t res = dest_val + src_val;
+						vcpu.writeRegister16(dest_reg, (int16_t)res);
+					}
+					break;
+					case OpCodes::addipu_imm_in_reg:
+					{
+						uint8_t dest_reg = vcpu.fetch8();
+						uint16_t src_val = vcpu.fetch16();
+						uint16_t dest_val = vcpu.readRegister(dest_reg);
+						uint16_t res = dest_val + src_val;
+						vcpu.writeRegister16(dest_reg, (int16_t)res);
+					}
+					break;
+					case OpCodes::subipu_reg_in_reg:
+					{
+						uint8_t dest_reg = vcpu.fetch8();
+						uint8_t src_reg = vcpu.fetch8();
+						uint16_t dest_val = vcpu.readRegister(dest_reg);
+						uint16_t src_val = vcpu.readRegister(src_reg);
+						uint16_t res = dest_val - src_val;
+						vcpu.writeRegister16(dest_reg, (int16_t)res);
+					}
+					break;
+					case OpCodes::subipu_imm_in_reg:
+					{
+						uint8_t dest_reg = vcpu.fetch8();
+						uint16_t src_val = vcpu.fetch16();
+						uint16_t dest_val = vcpu.readRegister(dest_reg);
+						uint16_t res = dest_val - src_val;
+						vcpu.writeRegister16(dest_reg, (int16_t)res);
+					}
+					break;
+					case OpCodes::mulipu_reg_in_reg:
+					{
+						uint8_t dest_reg = vcpu.fetch8();
+						uint8_t src_reg = vcpu.fetch8();
+						uint16_t dest_val = vcpu.readRegister(dest_reg);
+						uint16_t src_val = vcpu.readRegister(src_reg);
+						uint16_t res = dest_val * src_val;
+						vcpu.writeRegister16(dest_reg, (int16_t)res);
+					}
+					break;
+					case OpCodes::mulipu_imm_in_reg:
+					{
+						uint8_t dest_reg = vcpu.fetch8();
+						uint16_t src_val = vcpu.fetch16();
+						uint16_t dest_val = vcpu.readRegister(dest_reg);
+						uint16_t res = dest_val * src_val;
+						vcpu.writeRegister16(dest_reg, (int16_t)res);
+					}
+					break;
+					case OpCodes::divipu_reg_in_reg:
+					{
+						uint8_t dest_reg = vcpu.fetch8();
+						uint8_t src_reg = vcpu.fetch8();
+						uint16_t dest_val = vcpu.readRegister(dest_reg);
+						uint16_t src_val = vcpu.readRegister(src_reg);
+						uint16_t res = dest_val / src_val;
+						uint16_t rv = dest_val % src_val;
+						vcpu.writeRegister16(dest_reg, (int16_t)res);
+						vcpu.writeRegister16(data::Registers::RV, (int16_t)rv);
+					}
+					break;
+					case OpCodes::divipu_imm_in_reg:
+					{
+						uint8_t dest_reg = vcpu.fetch8();
+						uint16_t src_val = vcpu.fetch16();
+						uint16_t dest_val = vcpu.readRegister(dest_reg);
+						uint16_t res = dest_val / src_val;
+						uint16_t rv = dest_val % src_val;
+						vcpu.writeRegister16(dest_reg, (int16_t)res);
+						vcpu.writeRegister16(data::Registers::RV, (int16_t)rv);
+					}
+					break;
+					case OpCodes::addip_reg_in_reg:
+					{
+						uint8_t dest_reg = vcpu.fetch8();
+						uint8_t src_reg = vcpu.fetch8();
+						int16_t dest_val = vcpu.readRegister(dest_reg);
+						int16_t src_val = vcpu.readRegister(src_reg);
+						int16_t res = dest_val + src_val;
+						vcpu.writeRegister16(dest_reg, res);
+					}
+					break;
+					case OpCodes::addip_imm_in_reg:
+					{
+						uint8_t dest_reg = vcpu.fetch8();
+						uint16_t src_val = vcpu.fetch16();
+						int16_t dest_val = vcpu.readRegister(dest_reg);
+						int16_t res = dest_val + src_val;
+						vcpu.writeRegister16(dest_reg, res);
+					}
+					break;
+					case OpCodes::subip_reg_in_reg:
+					{
+						uint8_t dest_reg = vcpu.fetch8();
+						uint8_t src_reg = vcpu.fetch8();
+						int16_t dest_val = vcpu.readRegister(dest_reg);
+						int16_t src_val = vcpu.readRegister(src_reg);
+						int16_t res = dest_val - src_val;
+						vcpu.writeRegister16(dest_reg, res);
+					}
+					break;
+					case OpCodes::subip_imm_in_reg:
+					{
+						uint8_t dest_reg = vcpu.fetch8();
+						uint16_t src_val = vcpu.fetch16();
+						int16_t dest_val = vcpu.readRegister(dest_reg);
+						int16_t res = dest_val - src_val;
+						vcpu.writeRegister16(dest_reg, res);
+					}
+					break;
+					case OpCodes::mulip_reg_in_reg:
+					{
+						uint8_t dest_reg = vcpu.fetch8();
+						uint8_t src_reg = vcpu.fetch8();
+						int16_t dest_val = vcpu.readRegister(dest_reg);
+						int16_t src_val = vcpu.readRegister(src_reg);
+						int16_t res = dest_val * src_val;
+						vcpu.writeRegister16(dest_reg, res);
+					}
+					break;
+					case OpCodes::mulip_imm_in_reg:
+					{
+						uint8_t dest_reg = vcpu.fetch8();
+						uint16_t src_val = vcpu.fetch16();
+						int16_t dest_val = vcpu.readRegister(dest_reg);
+						int16_t res = dest_val * src_val;
+						vcpu.writeRegister16(dest_reg, res);
+					}
+					break;
+					case OpCodes::divip_reg_in_reg:
+					{
+						uint8_t dest_reg = vcpu.fetch8();
+						uint8_t src_reg = vcpu.fetch8();
+						int16_t dest_val = vcpu.readRegister(dest_reg);
+						int16_t src_val = vcpu.readRegister(src_reg);
+						int16_t res = dest_val / src_val;
+						int16_t rv = dest_val % src_val;
+						vcpu.writeRegister16(dest_reg, res);
+						vcpu.writeRegister16(data::Registers::RV, rv);
+					}
+					break;
+					case OpCodes::divip_imm_in_reg:
+					{
+						uint8_t dest_reg = vcpu.fetch8();
+						uint16_t src_val = vcpu.fetch16();
+						int16_t dest_val = vcpu.readRegister(dest_reg);
+						int16_t res = dest_val / src_val;
+						int16_t rv = dest_val % src_val;
+						vcpu.writeRegister16(dest_reg, res);
+						vcpu.writeRegister16(data::Registers::RV, rv);
+					}
+					break;
+					default:
+					{
+						//TODO: Error
+						return false;
+					}
+				}
+				return true;
+			}
+
 		}
 	}
 }

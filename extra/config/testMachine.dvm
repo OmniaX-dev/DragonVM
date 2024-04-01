@@ -1,7 +1,9 @@
 Disks = dragon/disk1.dr
 Bios = dragon/bios.bin
 CMOS = dragon/cmos.dr
-cpuext = extmov
+cpuext = extmov, extalu
+fixed_clock = false
+clock_rate_sec = 512
 
 SingleColor_foreground = #009900FF
 SingleColor_background = #111111FF

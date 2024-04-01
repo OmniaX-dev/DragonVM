@@ -1038,10 +1038,13 @@ namespace dragon
 		auto& callStack = minfo.callStack;
 		int32_t level = -1;
 		ostd::String ch_ang_u = "";
-		ch_ang_u.addChar((unsigned char)218);
+		//TODO: Find a fix for the UTF characters
+		ch_ang_u.add("┌");
+		// ch_ang_u.addChar((unsigned char)218);
 		ostd::String ch_ang_l = "|";
 		ostd::String ch_ang_d = "";
-		ch_ang_d.addChar((unsigned char)192);
+		ch_ang_d.add("└");
+		// ch_ang_d.addChar((unsigned char)192);
 		for (auto& call : callStack)
 		{
 			ostd::String call_info = call.info.new_trim().toLower();
@@ -1056,7 +1059,7 @@ namespace dragon
 			}
 			else if (call_info == "hw int")
 			{
-				call_str = ch_ang_u + "hwi " + ostd::Utils::getHexStr(call.addr, true, 1);
+				call_str = ch_ang_u + "hwi " + ostd::Utils::getHexStr(call.addr, true, 1) + " (" + data::InterruptCodes::getInterruptName(call.addr) + ")";
 				level++;
 			}
 			else if (call_info == "ret")
@@ -1095,7 +1098,11 @@ namespace dragon
 			rgx.fg("\\$\\w+", "Green"); //Labels
 			
 			out.fg(ostd::ConsoleColors::BrightGray).p("|").reset();
-			out.fg(ostd::ConsoleColors::Magenta).p(ostd::Utils::getHexStr(call.inst_addr, true, 2));
+			if (call.interrupts_disabled)
+				out.fg(ostd::ConsoleColors::BrightGray);
+			else
+				out.fg(ostd::ConsoleColors::Magenta);
+			out.p(ostd::Utils::getHexStr(call.inst_addr, true, 2));
 			out.fg(ostd::ConsoleColors::BrightGray).p("| > ").reset();
 			out.pStyled(rgx).nl().reset();
 

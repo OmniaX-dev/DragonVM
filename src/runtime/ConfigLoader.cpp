@@ -45,6 +45,10 @@ namespace dragon
 					{
 						config.cpuext_list[ext_nr++] = new hw::cpuext::ExtMov;
 					}
+					else if (lineEdit == "extalu")
+					{
+						config.cpuext_list[ext_nr++] = new hw::cpuext::ExtAlu;
+					}
 					else continue; //TODO: Warning
 				}
 			}
@@ -67,6 +71,23 @@ namespace dragon
 			{
 				lineEdit = tokens.next();
 				config.singleColor_background.set(lineEdit);
+			}
+			else if (lineEdit == "clock_rate_sec")
+			{
+				lineEdit = tokens.next();
+				lineEdit.trim().toLower();
+				if (!lineEdit.isNumeric()) continue; //TODO: Error
+				config.clock_rate_sec = lineEdit.toInt();
+			}
+			else if (lineEdit == "fixed_clock")
+			{
+				lineEdit = tokens.next();
+				lineEdit.trim().toLower();
+				if (lineEdit == "true")
+					config.fixed_clock = true;
+				else if (lineEdit == "false")
+					config.fixed_clock = false;
+				else continue; //TODO: Error
 			}
 			else continue; //TODO: Warning
 		}

@@ -25,6 +25,9 @@ namespace dragon
 			drawCharacter((uint8_t*)screenPixels, screenWidth, screenHeight, (uint8_t*)fontPixels, x, y, c, color, background);
 			x += FONT_CHAR_W;
 		}
+		s_cursor_pos_x = x;
+		if (s_cursor_pos_x >= CONSOLE_CHARS_H)
+			s_cursor_pos_x = 0;
 		return true;
 	}
 

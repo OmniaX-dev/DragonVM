@@ -20,7 +20,7 @@ namespace dragon
 				int16_t readRegister(uint8_t reg);
 				int16_t writeRegister16(uint8_t reg, int16_t value);
 				int8_t writeRegister8(uint8_t reg, int8_t value);
-				//TODO: Implement writeRegister8 and writeRegister16 functions (maybe for readRegister aswell)
+				//TODO: Implement readRegister8 and readRegister16 functions
 
 				int8_t fetch8(void);
 				int16_t fetch16(void);

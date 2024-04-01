@@ -59,6 +59,38 @@ namespace dragon
 					uint8_t getInstructionSIze(uint8_t opCode) override;
 					bool execute(VirtualCPU& vcpu) override;
 			};
-		}
+
+			class ExtAlu : public data::CPUExtension
+			{
+				public: class OpCodes
+				{
+					public:
+						inline static constexpr uint8_t addipu_reg_in_reg		=	0x10;
+						inline static constexpr uint8_t addipu_imm_in_reg		=	0x11;
+						inline static constexpr uint8_t subipu_reg_in_reg		=	0x12;
+						inline static constexpr uint8_t subipu_imm_in_reg		=	0x13;
+						inline static constexpr uint8_t mulipu_reg_in_reg		=	0x14;
+						inline static constexpr uint8_t mulipu_imm_in_reg		=	0x15;
+						inline static constexpr uint8_t divipu_reg_in_reg		=	0x16;
+						inline static constexpr uint8_t divipu_imm_in_reg		=	0x17;
+						
+						inline static constexpr uint8_t addip_reg_in_reg		=	0x20;
+						inline static constexpr uint8_t addip_imm_in_reg		=	0x21;
+						inline static constexpr uint8_t subip_reg_in_reg		=	0x22;
+						inline static constexpr uint8_t subip_imm_in_reg		=	0x23;
+						inline static constexpr uint8_t mulip_reg_in_reg		=	0x24;
+						inline static constexpr uint8_t mulip_imm_in_reg		=	0x25;
+						inline static constexpr uint8_t divip_reg_in_reg		=	0x26;
+						inline static constexpr uint8_t divip_imm_in_reg		=	0x27;
+				};
+				public:
+					inline ExtAlu(void) : data::CPUExtension(data::OpCodes::Ext02, "extalu") {  }
+					ostd::String getOpCodeString(uint8_t opCode) override;
+					uint8_t getInstructionSIze(uint8_t opCode) override;
+					bool execute(VirtualCPU& vcpu) override;
+			};
+		}	
+
+		
 	}
 }

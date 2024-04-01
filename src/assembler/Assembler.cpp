@@ -150,6 +150,8 @@ namespace dragon
 					}
 					else if (edit == "--extmov")
 						args.cpu_extensions.push_back("extmov");
+					else if (edit == "--extalu")
+						args.cpu_extensions.push_back("extalu");
 					else if (edit == "--verbose")
 						args.verbose = true;
 					else if (edit == "--save-exports")
@@ -178,7 +180,10 @@ namespace dragon
 			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Used to save any specified exports in the code.").reset().nl();
 			tmpCommand = "--extmov";
 			tmpCommand.addRightPadding(commandLength);
-			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Enables the <extmov> CPU extension.").reset().nl();
+			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Enables mnemonics for the <extmov> CPU extension.").reset().nl();
+			tmpCommand = "--extalu";
+			tmpCommand.addRightPadding(commandLength);
+			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Enables mnemonics for the <extalu> CPU extension.").reset().nl();
 			tmpCommand = "--help";
 			tmpCommand.addRightPadding(commandLength);
 			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Displays this help message.").reset().nl();
@@ -1303,6 +1308,64 @@ namespace dragon
 			opEdit.trim();
 			int16_t word = 0x0000;
 			auto st = opEdit.tokenize(",");
+			if (STDVEC_CONTAINS(cpuExtensions, "extalu"))
+			{
+				auto st = opEdit.tokenize(",");
+				if (instEdit == "addipu" || instEdit == "subipu" || instEdit == "mulipu" || instEdit == "divipu" || instEdit == "addip" || instEdit == "subip" || instEdit == "mulip" || instEdit == "divip")
+				{
+					m_code.push_back(data::OpCodes::Ext02);
+					m_code.push_back(0x00);
+					eOperandType opType = parseOperand(st.next(), word);
+					if (opType != eOperandType::Register)
+					{
+						std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Register required\n";
+						exit(0);
+						return;
+					}
+					m_code.push_back((uint8_t)word);
+					opType = parseOperand(st.next(), word);
+
+					if (opType == eOperandType::Immediate)
+					{
+						if (instEdit == "addip") m_code[m_code.size() - 2] = hw::cpuext::ExtAlu::OpCodes::addip_imm_in_reg;
+						else if (instEdit == "subip") m_code[m_code.size() - 2] = hw::cpuext::ExtAlu::OpCodes::subip_imm_in_reg;
+						else if (instEdit == "mulip") m_code[m_code.size() - 2] = hw::cpuext::ExtAlu::OpCodes::mulip_imm_in_reg;
+						else if (instEdit == "divip") m_code[m_code.size() - 2] = hw::cpuext::ExtAlu::OpCodes::divip_imm_in_reg;
+						else if (instEdit == "addipu") m_code[m_code.size() - 2] = hw::cpuext::ExtAlu::OpCodes::addipu_imm_in_reg;
+						else if (instEdit == "subipu") m_code[m_code.size() - 2] = hw::cpuext::ExtAlu::OpCodes::subipu_imm_in_reg;
+						else if (instEdit == "mulipu") m_code[m_code.size() - 2] = hw::cpuext::ExtAlu::OpCodes::mulipu_imm_in_reg;
+						else if (instEdit == "divipu") m_code[m_code.size() - 2] = hw::cpuext::ExtAlu::OpCodes::divipu_imm_in_reg;
+						m_code.push_back((uint8_t)((word & 0xFF00) >> 8));
+						m_code.push_back((uint8_t)(word & 0x00FF));
+					}
+					else if (opType == eOperandType::Register)
+					{
+						if (instEdit == "addip") m_code[m_code.size() - 2] = hw::cpuext::ExtAlu::OpCodes::addip_reg_in_reg;
+						else if (instEdit == "subip") m_code[m_code.size() - 2] = hw::cpuext::ExtAlu::OpCodes::subip_reg_in_reg;
+						else if (instEdit == "mulip") m_code[m_code.size() - 2] = hw::cpuext::ExtAlu::OpCodes::mulip_reg_in_reg;
+						else if (instEdit == "divip") m_code[m_code.size() - 2] = hw::cpuext::ExtAlu::OpCodes::divip_reg_in_reg;
+						else if (instEdit == "addipu") m_code[m_code.size() - 2] = hw::cpuext::ExtAlu::OpCodes::addipu_reg_in_reg;
+						else if (instEdit == "subipu") m_code[m_code.size() - 2] = hw::cpuext::ExtAlu::OpCodes::subipu_reg_in_reg;
+						else if (instEdit == "mulipu") m_code[m_code.size() - 2] = hw::cpuext::ExtAlu::OpCodes::mulipu_reg_in_reg;
+						else if (instEdit == "divipu") m_code[m_code.size() - 2] = hw::cpuext::ExtAlu::OpCodes::divipu_reg_in_reg;
+						m_code.push_back((uint8_t)word);
+					}
+					else
+					{
+						std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Immediate or register required\n";
+						exit(0);
+						return;
+					}
+					return;
+				}
+			}
+			else if (instEdit == "addipu" || instEdit == "subipu" || instEdit == "mulipu" || instEdit == "divipu" || instEdit == "addip" || instEdit == "subip" || instEdit == "mulip" || instEdit == "divip")
+			{
+				std::cout << "ExtAlu instruction detected, please add '--extalu' flag to dasm.\n";
+				exit(0);
+				return;
+			}
+
 			if (instEdit == "mov")
 			{
 				m_code.push_back(0x00);
@@ -1634,10 +1697,10 @@ namespace dragon
 				int16_t word2 = 0x0000;
 				int16_t word3 = 0x0000;
 				auto st = opEdit.tokenize(",");
-				m_code.push_back(data::OpCodes::Ext01);
-				m_code.push_back(0x00);
 				if (instEdit == "omov")
 				{
+					m_code.push_back(data::OpCodes::Ext01);
+					m_code.push_back(0x00);
 					if (st.count() != 3)
 					{
 						std::cout << "Invalid operand number; " << line << "3  ->  3 required\n";
@@ -1793,6 +1856,8 @@ namespace dragon
 				}
 				else if (instEdit == "omovb")
 				{
+					m_code.push_back(data::OpCodes::Ext01);
+					m_code.push_back(0x00);
 					if (st.count() != 3)
 					{
 						std::cout << "Invalid operand number; " << line << "3  ->  3 required\n";
@@ -1946,6 +2011,8 @@ namespace dragon
 				}
 				else if (instEdit == "movo")
 				{
+					m_code.push_back(data::OpCodes::Ext01);
+					m_code.push_back(0x00);
 					if (st.count() != 3)
 					{
 						std::cout << "Invalid operand number; " << line << "3  ->  3 required\n";
@@ -2097,6 +2164,8 @@ namespace dragon
 				}
 				else if (instEdit == "movbo")
 				{
+					m_code.push_back(data::OpCodes::Ext01);
+					m_code.push_back(0x00);
 					if (st.count() != 3)
 					{
 						std::cout << "Invalid operand number; " << line << "3  ->  3 required\n";
@@ -2246,16 +2315,13 @@ namespace dragon
 						return;
 					}
 				}
-				else
-				{
-					std::cout << "Unknown instruction; " << line << " (" << instEdit << ")\n";
-					exit(0);
-				}
+				return;
 			}
 			else if (instEdit == "omov" || instEdit == "omovb" || instEdit == "movo" || instEdit == "movbo")
 			{
 				std::cout << "ExtMov instruction detected, please add '--extmov' flag to dasm.\n";
 				exit(0);
+				return;
 			}
 		}
 
@@ -2271,11 +2337,15 @@ namespace dragon
 				m_disassembly.insert(m_disassembly.begin(), { (uint16_t)(m_loadAddress + 3), "[----------DATA_SECTION----------]" });
 			m_disassembly.insert(m_disassembly.begin(), { m_loadAddress, ostd::String("jmp ").add(ostd::Utils::getHexStr(entryAddr, true, 2)) });
 			for (auto& d : m_symbolTable)
+			{
 				symbols.push_back(d.second);
+				for (int32_t i = 0; i < d.second.bytes.size(); i++)
+					newCode.push_back(0x00);
+			}
 			for (int32_t i = symbols.size() - 1; i >= 0; i--)
 			{
-				for (auto& dd : symbols[i].bytes)
-					newCode.push_back(dd);
+				for (int32_t j = 0; j < symbols[i].bytes.size(); j++)
+					newCode[symbols[i].address - m_loadAddress + j] = symbols[i].bytes[j];
 			}
 			for (auto& b : m_code)
 				newCode.push_back(b);

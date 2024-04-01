@@ -14,6 +14,7 @@ namespace dragon
 				inline static constexpr uint8_t VideoMode = 0x00;	
 				inline static constexpr uint8_t Signal = 0x03;
 				inline static constexpr uint8_t TextSingleCharacter = 0x04;
+				inline static constexpr uint8_t TextSingleInvertColors = 0x05;
 			};
 			public: struct tVideoModeValues
 			{

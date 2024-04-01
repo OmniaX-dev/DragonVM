@@ -194,6 +194,28 @@ namespace dragon
 				inline static constexpr uint8_t KeyPressed = 0xA0;
 				inline static constexpr uint8_t KeyReleased = 0xA1;
 				inline static constexpr uint8_t TextEntered = 0xA2;
+
+				inline static ostd::String getInterruptName(uint8_t code)
+				{
+					switch (code)
+					{
+						case DiskInterfaceFFinished: 	return "Disk_Interface_Finished";
+						case KeyPressed: 				return "Key_Pressed";
+						case KeyReleased: 				return "Key_Released";
+						case TextEntered: 				return "Text_Entered";
+						default:						return "UNKNOWN";
+					}
+					return "UNKNOWN";
+				}
+		};
+
+		class CMOSRegisters
+		{
+			public:
+				inline static constexpr uint8_t MemoryStart		= 0x00;
+				inline static constexpr uint8_t MemorySize 		= 0x02;
+				inline static constexpr uint8_t ClockSpeed	 	= 0x04;
+				inline static constexpr uint8_t BootDisk	 	= 0x10;
 		};
 
 		class CPUExtension

@@ -17,13 +17,22 @@ namespace dragon
 		void VirtualDisplay::onRender(void)
 		{
 			auto& config = DragonRuntime::machine_config;
+			auto& mem = DragonRuntime::memMap;
+			uint16_t vga_addr = data::MemoryMapAddresses::VideoCardInterface_Start;
+			uint8_t invert_colors = mem.read8(vga_addr + tRegisters::TextSingleInvertColors);
 			if (m_refreshScreen)
 			{
-				m_renderer.clear(config.singleColor_background);
+				if (invert_colors == 0)
+					m_renderer.clear(config.singleColor_background);
+				else
+					m_renderer.clear(config.singleColor_foreground);
 				for (int32_t i = 0; i < m_singleTextLines.size(); i++)
 				{
 					auto& line = m_singleTextLines[i];
-					RawTextRenderer::drawString(line, 0, i, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_fontPixels, config.singleColor_foreground);
+					if (invert_colors == 0)
+						RawTextRenderer::drawString(line, 0, i, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_fontPixels, config.singleColor_foreground, config.singleColor_background);
+					else
+						RawTextRenderer::drawString(line, 0, i, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_fontPixels, config.singleColor_background, config.singleColor_foreground);
 				}
 				m_refreshScreen = false;
 			}
@@ -82,10 +91,16 @@ namespace dragon
 		void VirtualDisplay::single_text_add_char_to_line(char c)
 		{
 			auto& config = DragonRuntime::machine_config;
+			auto& mem = DragonRuntime::memMap;
+			uint16_t vga_addr = data::MemoryMapAddresses::VideoCardInterface_Start;
+			uint8_t invert_colors = mem.read8(vga_addr + tRegisters::TextSingleInvertColors);
 			if (m_singleTextLines.size() == 0)
 			{
 				m_singleTextLines.push_back(ostd::String().addChar(c));
-				RawTextRenderer::drawString(ostd::String().addChar(c), 0, 0, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_fontPixels, config.singleColor_foreground);
+				if (invert_colors == 0)
+					RawTextRenderer::drawString(ostd::String().addChar(c), 0, 0, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_fontPixels, config.singleColor_foreground, config.singleColor_background);
+				else
+					RawTextRenderer::drawString(ostd::String().addChar(c), 0, 0, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_fontPixels, config.singleColor_background, config.singleColor_foreground);
 				return;
 			}
 			auto& line = m_singleTextLines[m_singleTextLines.size() - 1];
@@ -97,12 +112,18 @@ namespace dragon
 				{
 					m_singleTextLines.push_back(ostd::String().addChar(c));
 					auto& line = m_singleTextLines[m_singleTextLines.size() - 1];
-					RawTextRenderer::drawString(ostd::String().addChar(c), line.len() - 1, m_singleTextLines.size() - 1, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_fontPixels, config.singleColor_foreground);
+				if (invert_colors == 0)
+						RawTextRenderer::drawString(ostd::String().addChar(c), line.len() - 1, m_singleTextLines.size() - 1, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_fontPixels, config.singleColor_foreground, config.singleColor_background);
+					else
+						RawTextRenderer::drawString(ostd::String().addChar(c), line.len() - 1, m_singleTextLines.size() - 1, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_fontPixels, config.singleColor_background, config.singleColor_foreground);
 				}
 				else
 				{
 					line.addChar(c);
-					RawTextRenderer::drawString(ostd::String().addChar(c), line.len() - 1, m_singleTextLines.size() - 1, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_fontPixels, config.singleColor_foreground);
+					if (invert_colors == 0)
+						RawTextRenderer::drawString(ostd::String().addChar(c), line.len() - 1, m_singleTextLines.size() - 1, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_fontPixels, config.singleColor_foreground, config.singleColor_background);
+					else
+						RawTextRenderer::drawString(ostd::String().addChar(c), line.len() - 1, m_singleTextLines.size() - 1, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_fontPixels, config.singleColor_background, config.singleColor_foreground);
 				}
 			}
 			else return;

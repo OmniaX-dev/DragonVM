@@ -30,10 +30,11 @@ namespace dragon
 		public: struct tCallInfo : public ostd::BaseObject
 		{
 			inline tCallInfo(void) {  }
-			inline tCallInfo(const ostd::String& _info, uint16_t _addr, uint16_t _inst_addr) : info(_info), addr(_addr), inst_addr(_inst_addr) {  }
+			inline tCallInfo(const ostd::String& _info, uint16_t _addr, uint16_t _inst_addr, bool ints_disabled) : info(_info), addr(_addr), inst_addr(_inst_addr), interrupts_disabled(ints_disabled) {  }
 			ostd::String info;
 			uint16_t addr;
 			uint16_t inst_addr;
+			bool interrupts_disabled;
 		};
 		public: struct tCommandLineArgs
 		{
@@ -101,6 +102,7 @@ namespace dragon
 			inline static const tMachineDebugInfo& getMachineInfoDiff(void) { return s_machineInfo; }
 			inline static bool hasError(void) { return data::ErrorHandler::hasError(); }
 			inline static ostd::ConsoleOutputHandler& output(void) { return out; }
+			inline static uint64_t getAvgClockSpeed(void) { return (uint64_t)std::round(1000000.0 / s_avgInstTime);  }
 
 		private:
 			static void __get_machine_footprint(tMachineDebugInfo* machineInfo, std::vector<uint16_t> trackedAddresses, bool previous);
@@ -129,11 +131,14 @@ namespace dragon
 
 			inline static tMachineConfig machine_config;
 
+			inline static uint64_t s_avgInstTime { 0 };
+
 		private:
 			inline static tMachineDebugInfo s_machineInfo;
 			inline static bool s_trackMachineInfo { false };
 			inline static bool s_trackCallStack { false };
 			inline static SignalListener s_signalListener;
+
 
 		public:
 			inline static const int32_t RETURN_VAL_CLOSE_DEBUGGER = 128;

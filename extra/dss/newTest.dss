@@ -10,19 +10,30 @@
 	$string "Hello World!!"
 
 .code
+
 	mov R10, 0x00
 	mov R9, $_text_entered_handler
 	mov R8, 0xA2
-	int 0x20	
+	int 0x20					## Enable text entered handler
+
 	mov R10, 0x00
 	mov R9, $_key_pressed_handler
 	mov R8, 0xA0
-	int 0x20	
+	int 0x20					## Enable key pressed handler
 
-	
+	mov R10, 0x0B
+	int 0x30					## Invert colors
+
 	mov R10, 0x01
 	mov R9, 62
-	int 0x30
+	int 0x30					## Print first prompt char
+
+	mov R10, 0x0B
+	int 0x30					## Invert colors
+
+	mov R10, 0x01
+	mov R9, 32
+	int 0x30					## Print space
 
 
 	mov R1, 0					## Zero the counter 
@@ -59,7 +70,6 @@ no_clear_screen:
 	jmp $infinite_loop			## jump to the beginning of infinite loop
 	hlt
 
-
 _text_entered_handler:
 	mov R9, [0x1282]
 	mov R10, 0x01
@@ -72,8 +82,15 @@ _key_pressed_handler:
 	jne $_key_pressed_handler_end, 13
 	mov R10, 0x02
 	int 0x30
+	mov R10, 0x0B
+	int 0x30					## Invert colors
 	mov R10, 0x01
 	mov R9, 62
+	int 0x30
+	mov R10, 0x0B
+	int 0x30					## Invert colors
+	mov R10, 0x01
+	mov R9, 32
 	int 0x30
 	jmp $_key_pressed_handler_end
 _key_pressed_handler_backspace:
