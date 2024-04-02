@@ -53,6 +53,7 @@ _int_30_handler:
 	jeq $_int_30_flush_buffer_text_single, 0x0009
 	jeq $_int_30_store_string_text_single, 0x000A
 	jeq $_int_30_invert_colors_text_single, 0x000B
+	jeq $_int_30_print_string_buffered, 0x000C
 	jeq $_int_30_clear_screen, 0x00E0
 	jeq $_int_30_refresh_screen, 0x00E1
 	jmp $_int_30_end
@@ -114,6 +115,12 @@ _int_30_invert_colors_text_single:
 _int_30_invert_colors_text_single_normal:
 	movb [VGA_Registers.TEXT_SIGNLE_INVERT], 0
 	jmp $_int_30_end
+_int_30_print_string_buffered:
+	mov [VGA_Registers.TEXT_SIGNLE_STR], R9
+	debug_break
+	movb [VGA_Registers.SIGNAL], Sig_VGA_Text_Single_Color.PRINT_STRING
+	jmp $_int_30_end
+	
 
 
 _int_30_clear_screen:

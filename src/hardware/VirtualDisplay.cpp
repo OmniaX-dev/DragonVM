@@ -54,6 +54,19 @@ namespace dragon
 					char c = (char)mem.read8(vga_addr + tRegisters::TextSingleCharacter);
 					single_text_add_char_to_line(c);
 				}
+				else if (signal == tSignalValues::TextSingleColor_DirectPrintString)
+				{
+					uint16_t first_char_addr = mem.read16(vga_addr + tRegisters::TextSingleString);
+					char c = ' ';
+					int h = 0;
+					while (c != 0)
+					{
+						char c = (char)mem.read8(first_char_addr);
+						single_text_add_char_to_line(c);
+						first_char_addr++;
+						if (c == 0) break;
+					}
+				}
 				else if (signal == tSignalValues::TextSingleColor_StoreChar)
 				{
 					char c = (char)mem.read8(vga_addr + tRegisters::TextSingleCharacter);

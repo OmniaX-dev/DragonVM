@@ -1,8 +1,9 @@
 @guard _DATA_DSS_
 
-@export BIOS_API bios_api.dss
+@export BIOS_API dss/bios_api.dss
 
 ## ============================= Memory Mapped Devices and Registers =============================
+@export_comment /BIOS_API "These are the base addresses of the memory map."
 @group MemoryAddresses
 	MBR 			0x1380
 	INT_VEC 		0x1080
@@ -11,6 +12,7 @@
 	CMOS 			0x1000
 	VGA 			0x1600
 @end
+@export_comment /BIOS_API "\n"
 
 @group CMOS_Settings
 	MEM_START				{ MemoryAddresses.CMOS + 0x0000 }
@@ -38,6 +40,7 @@
 	SIGNAL					{ MemoryAddresses.VGA + 0x0003 }
 	TEXT_SINGLE_CHAR		{ MemoryAddresses.VGA + 0x0004 }
 	TEXT_SIGNLE_INVERT		{ MemoryAddresses.VGA + 0x0005 }
+	TEXT_SIGNLE_STR			{ MemoryAddresses.VGA + 0x0006 }
 
 	BUFF_START				{ MemoryAddresses.VGA + 0x00E0 }
 @end
@@ -61,6 +64,7 @@
 	PRINT_FLUSH_BUFF	0x04
 	FLUSH_BUFF			0x05
 	PRINT_BUFF			0x06
+	PRINT_STRING		0x07
 
 	REFRESH_SCREEN 		0xE0
 	CLEAR_SCREEN 		0xE1
@@ -78,8 +82,8 @@
 
 .data
 	$_bios_version_number_maj 0x00, 0x00
-	$_bios_version_number_min 0x00, 0x03
-	$_bios_name " DragonBIOS "
+	$_bios_version_number_min 0x00, 0x04
+	$_bios_name "DragonBIOS "
 	$_clock_str " Clock: "
 	$_mem_str " Memory: "
 	$_hz_str " Hz"

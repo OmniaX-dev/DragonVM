@@ -17,9 +17,9 @@ if [ $? -eq 0 ]; then
     /bin/bash ./load_mbr
     cd ..
     printf "${green}Compiling Test Program...\n"
-    ./dasm dss/newTest.dss -o newTest.bin --extmov --extalu --save-disassembly disassembly/newTest.dds --verbose
+    ./dasm dss/activeTest.dss -o activeTest.bin --extmov --extalu --save-disassembly disassembly/activeTest.dds --verbose
     printf "\n${green}Running Application...\n\n${clear}"
-    ./dvm config/testMachine.dvm --force-load newTest.bin 0x00
+    ./dvm config/testMachine.dvm --force-load activeTest.bin 0x00
     cp dragon/disk1.dr ../extra/dragon/disk1.dr
     cp dragon/cmos.dr ../extra/dragon/cmos.dr
 fi

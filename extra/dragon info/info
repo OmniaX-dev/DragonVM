@@ -93,11 +93,13 @@
         0x04: Text SIngle Color - Direct Print buffer & Flush Buffer
         0x05: Text Single Color - Flush Buffer
         0x06: Text Single Color - Print Buffer Without Flushing
+        0x07: Text Single Color - Print Buffered String
 
         0xE0: Refresh Screen
         0xE1: Clear Screen
     0x04: Text Single Color Character (1 Byte)
     0x05: Text Single Color Inverted colors (1 Byte)
+    0x06: (2 bytes) Text Single Color Buffered String Address
 0x16FF
 -------
 0x1700 GENERIC SERIAL INTERFACE (64 Bytes)
@@ -145,3 +147,22 @@ MAX INTERRUPT 0xAA
 0xA0: Keyboard Interface - Key Pressed
 0xA1: Keyboard Interface - Key Released
 0xA2: Keyboard Interface - Text Entered
+
+
+
+#==========================================================================================================================================
+# DPT - Partition Table
+#==========================================================================================================================================
+
+Disk Address: 0x200 - 0x400 (512 bytes)
+Header: (0x200 - 0x20B) (12 bytes)
+    0x000: (2 bytes) - 0xF1CA - This number identifies this block as a DPT partition table
+    0x002: (2 bytes) - DPT version 
+    0x004: (1 byte)  - Partition count (max 5)
+    0x005: (7 bytes) - Reserved
+Partition Table: (0x20C - 0x3FF) (500 bytes)
+    Entry: (100 bytes) (x5)
+        0x00: (4 bytes) - Start Address
+        0x04: (4 bytes) - Size
+        0x08: (28 bytes) - Reserved
+        0x40: (64 bytes) - Partition label

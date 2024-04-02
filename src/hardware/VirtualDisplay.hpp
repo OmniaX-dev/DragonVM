@@ -15,6 +15,7 @@ namespace dragon
 				inline static constexpr uint8_t Signal = 0x03;
 				inline static constexpr uint8_t TextSingleCharacter = 0x04;
 				inline static constexpr uint8_t TextSingleInvertColors = 0x05;
+				inline static constexpr uint8_t TextSingleString = 0x06;
 			};
 			public: struct tVideoModeValues
 			{
@@ -29,6 +30,7 @@ namespace dragon
 				inline static constexpr uint8_t TextSingleColor_DirectPrintBuffAndFlush = 0x04;	
 				inline static constexpr uint8_t TextSingleColor_FlushBuffer = 0x05;	
 				inline static constexpr uint8_t TextSingleColor_DirectPrintBuffNoFlush = 0x06;	
+				inline static constexpr uint8_t TextSingleColor_DirectPrintString = 0x07;
 
 				inline static constexpr uint8_t RefreshScreen = 0xE0;	
 				inline static constexpr uint8_t ClearSCreen = 0xE1;	
