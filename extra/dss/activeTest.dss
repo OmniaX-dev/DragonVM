@@ -1,9 +1,3 @@
-##=================================================================================================================================
-## This is the test2 program for the Dragon Virtual Machine. This example simply demonstrates the Virtual Display in Text-Single-Color
-## mode, by printing an increasing counter followed by whatever is in the $string variable. The program also clears the screen 
-## every 10 lines.
-##=================================================================================================================================
-
 .load 0x1740
 
 .data
