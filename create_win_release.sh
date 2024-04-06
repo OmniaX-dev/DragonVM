@@ -14,7 +14,7 @@ rm dragon/disk1.dr
 ./dtools new-vdisk dragon/disk1.dr 1048576
 
 printf "\n${green}Compiling MBR Block...\n${clear}"
-./dasm dss/drake.dss -o dragon/drake.bin --save-disassembly disassembly/drake.dds --verbose
+./dasm dss/drake/entry.dss -o dragon/drake.bin --save-disassembly disassembly/drake.dds --verbose
 
 printf "\n${green}Loading MBR Block...\n${clear}"
 ./dtools load-binary dragon/disk1.dr dragon/drake.bin 0x00000000
@@ -46,8 +46,9 @@ rm ./bin/disassembly/test2.dds
 
 mkdir ./win-release/dss4
 mkdir ./win-release/dss/bios
+mkdir ./win-release/dss/drake
 cp ./bin/dss/bios/* ./win-release/dss/bios
-cp ./bin/dss/drake.dss ./win-release/dss
+cp ./bin/dss/drake/* ./win-release/dss/drake
 cp ./bin/dss/tests/test1.dss ./win-release/dss
 cp ./bin/dss/tests/test2.dss ./win-release/dss
 

@@ -45,7 +45,6 @@ _set_interrupt_vector_entry_end:
 _print_integer:
 	mov R1, 0
 	arg ACC
-	debug_break
 	jne $_print_integer_loop, 0
 	push 48  ## '0' ASCII is 48
 	inc R1
@@ -56,7 +55,6 @@ _print_integer_loop:
 	addipu RV, 48
 	push RV
 	inc R1
-	debug_break
 	jmp $_print_integer_loop
 _print_integer_loop_end:
 	pop R9

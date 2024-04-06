@@ -14,6 +14,7 @@ namespace dragon
 		private:
 			static int32_t tool_new_virtual_disk(int argc, char** argv);
 			static int32_t tool_load_binary(int argc, char** argv);
+			static int32_t tool_read_dpt(int argc, char** argv);
 			static void print_application_help(void);
 			static int32_t get_tool(int argc, char** argv, ostd::String& outTool);
 			
@@ -31,5 +32,11 @@ namespace dragon
 			inline static constexpr int32_t ErrorLoadProgNonIntAddr = 7;
 			inline static constexpr int32_t ErrorLoadProgUnableToLoadVDisk = 8;
 			inline static constexpr int32_t ErrorLoadProgUnableToLoadDataFile = 9;
+			inline static constexpr int32_t ErrorReadDPTTooFewArgs = 10;
+			inline static constexpr int32_t ErrorReadDPTUnableToLoadVDisk = 11;
+			inline static constexpr int32_t ErrorReadDPTSmallDisk = 12;
+			inline static constexpr int32_t ErrorReadDPTUnableToRead = 13;
+			inline static constexpr int32_t ErrorReadDPTNoPartitionTable = 14;
+
 	};
 }

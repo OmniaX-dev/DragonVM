@@ -4,6 +4,7 @@
 _int_20_handler:
 	mov ACC, R10
 	jeq $_int_20_disk_interface, 0x0010
+	jeq $_int_20_disk_interface_get_disk_list, 0x0011
 	jeq $_int_20_set_new_interrupt_handler, 0x0000
 	jeq $_int_20_clear_interrupt, 0x0001
 	jmp $_int_20_end
@@ -23,6 +24,8 @@ _int_20_disk_interface:
 	inc R9
 	mov  [{MemoryAddresses.DISK_INTERFACE + 0x9}], *R9     										## Memory Address
 	movb [MemoryAddresses.DISK_INTERFACE], 0x00    												## Signal set to "Start Operation"
+	jmp $_int_20_end
+_int_20_disk_interface_get_disk_list:
 	jmp $_int_20_end
 _int_20_set_new_interrupt_handler:
 	push R8															## Interrupt Code
@@ -117,7 +120,6 @@ _int_30_invert_colors_text_single_normal:
 	jmp $_int_30_end
 _int_30_print_string_buffered:
 	mov [VGA_Registers.TEXT_SIGNLE_STR], R9
-	debug_break
 	movb [VGA_Registers.SIGNAL], Sig_VGA_Text_Single_Color.PRINT_STRING
 	jmp $_int_30_end
 	

@@ -328,7 +328,7 @@ namespace dragon
 					ostd::ByteStream* getByteStream(void) override;
 
 					void cycleStep(void);
-					data::VDiskID connectDisk(VirtualHardDrive& hdd);
+					bool connectDisk(VirtualHardDrive& hdd, data::VDiskID disk_id);
 					bool disconnectDisk(data::VDiskID diskID);
 
 					inline bool isBusy(void) const { return m_busy; }
@@ -340,7 +340,7 @@ namespace dragon
 					MemoryMapper& m_memory;
 					VirtualCPU& m_cpu;
 
-					inline static data::VDiskID s_nextDiskID = 0;
+					// inline static data::VDiskID s_nextDiskID = 0;
 
 			};
 			class Graphics : public IMemoryDevice

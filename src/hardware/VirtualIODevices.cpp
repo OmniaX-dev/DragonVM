@@ -626,18 +626,20 @@ namespace dragon
 				m_busy = true;
 			}
 
-			data::VDiskID Disk::connectDisk(VirtualHardDrive& hdd)
+			bool Disk::connectDisk(VirtualHardDrive& hdd, data::VDiskID disk_id)
 			{
 				for (auto& disk : m_connectedDisks)
 				{
 					if (disk.second->isSame(hdd))
 					{
 						data::ErrorHandler::pushError(data::ErrorCodes::HardDrive_DiskAlreadyConnected, "Attempt to connect already connected Disk to Controller");
-						return 0;
+						return false;
 					}
 				}
-				m_connectedDisks[Disk::s_nextDiskID] = &hdd;
-				return Disk::s_nextDiskID++;
+				m_connectedDisks[disk_id] = &hdd;
+				return true;
+				// m_connectedDisks[Disk::s_nextDiskID] = &hdd;
+				// return Disk::s_nextDiskID++;
 			}
 
 			bool Disk::disconnectDisk(data::VDiskID diskID)

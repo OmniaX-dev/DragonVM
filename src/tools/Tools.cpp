@@ -3,6 +3,8 @@
 #include <ostd/Utils.hpp>
 #include <fstream>
 #include "../hardware/VirtualHardDrive.hpp"
+#include "GlobalData.hpp"
+#include <ostd/Serial.hpp>
 
 namespace dragon
 {
@@ -34,6 +36,12 @@ namespace dragon
 		else if (tool == "load-binary")
 		{
 			rValue = tool_load_binary(argc, argv);
+			if (rValue != ErrorNoError)
+				return rValue;
+		}
+		else if (tool == "read-dpt")
+		{
+			rValue = tool_read_dpt(argc, argv);
 			if (rValue != ErrorNoError)
 				return rValue;
 		}
@@ -122,6 +130,121 @@ namespace dragon
 		return ErrorNoError;
 	}
 
+	int32_t Tools::tool_read_dpt(int argc, char** argv)
+	{
+		if (argc < 3)
+		{
+			out.fg(ostd::ConsoleColors::Red).p("Error: too few arguments.").nl();
+			out.fg(ostd::ConsoleColors::Red).p("  Usage: ./dtools read-dpt <virtual_disk_file>").reset().nl();
+			return ErrorReadDPTTooFewArgs;
+		}
+		ostd::String vdisk_file = argv[2];
+		dragon::hw::VirtualHardDrive vHDD(vdisk_file);
+		if (!vHDD.isInitialized())
+		{
+			out.fg(ostd::ConsoleColors::Red).p("Error: Unable to load virtual disk.").reset().nl();
+			return ErrorReadDPTUnableToLoadVDisk;
+		}
+		if (vHDD.getSize() < 1024)
+		{
+			out.fg(ostd::ConsoleColors::Red).p("Error: Disk too small.").reset().nl();
+			return ErrorReadDPTSmallDisk;
+		}
+		ostd::ByteStream outData;
+		if (!vHDD.read(data::DPTStructure::DiskAddress, 512, outData))
+		{
+			out.fg(ostd::ConsoleColors::Red).p("Error: Unable to read from disk.").reset().nl();
+			return ErrorReadDPTUnableToRead;
+		}
+		// ostd::Utils::printByteStream(outData, 0, 16, 32, out);
+		ostd::serial::SerialIO dpt_block(outData);
+		int8_t outData8 = 0;
+		int16_t outData16 = 0;
+		int32_t outData32 = 0;
+		//TODO: Add errors for all read calls
+		dpt_block.r_Word(data::DPTStructure::DPTID, outData16);
+		uint16_t code = (uint16_t)outData16;
+		if (code != data::DPTStructure::DPT_ID_CODE)
+		{
+			out.fg(ostd::ConsoleColors::Red).p("Error: No DPT partition table on virtual disk.").reset().nl();
+			return ErrorReadDPTNoPartitionTable;
+		}
+		dpt_block.r_Byte(data::DPTStructure::DPTVersionMaj, outData8);
+		uint32_t version_maj = (uint32_t)outData8;
+		dpt_block.r_Byte(data::DPTStructure::DPTVersionMin, outData8);
+		uint32_t version_min = (uint32_t)outData8;
+		dpt_block.r_Byte(data::DPTStructure::PartitionCount, outData8);
+		uint32_t part_count = (uint32_t)outData8;
+		struct tPartitionData {
+			uint32_t startAddress { 0 };
+			uint32_t size { 0 };
+			ostd::BitField_16 flags { 0 };
+			ostd::String label { "" };
+		};
+		std::vector<tPartitionData> partitionList;
+		for (int32_t i = 0; i < part_count; i++)
+		{
+			tPartitionData pdata;
+			uint32_t entry_addr = data::DPTStructure::EntriesStart + (data::DPTStructure::EntrySizeBytes * i);
+			dpt_block.r_DWord(entry_addr + data::DPTStructure::EntryStartAddress, outData32);
+			pdata.startAddress = (uint32_t)outData32;
+			dpt_block.r_DWord(entry_addr + data::DPTStructure::EntryPartitionSize, outData32);
+			pdata.size = (uint32_t)outData32;
+			dpt_block.r_Word(entry_addr + data::DPTStructure::EntryFlags, outData16);
+			pdata.flags.value = (uint16_t)outData16;
+			dpt_block.r_NullTerminatedString(entry_addr + data::DPTStructure::EntryPartitionLabel, pdata.label);
+			pdata.label.trim();
+			partitionList.push_back(pdata);
+		}
+		out.fg(ostd::ConsoleColors::BrightRed).p("Disk: ").p(vdisk_file).p(" (").p(vHDD.getSize()).p(" bytes)").nl();
+		auto print_part_size = [](uint32_t size, ostd::ConsoleOutputHandler& out, uint16_t line_len) {
+			double dsize = size;
+			ostd::String units[4] = { " bytes", " Kb", " Mb", " Gb" };
+			int32_t unit_index = 0;
+			while (dsize > 1024 && unit_index < 3)
+			{
+				unit_index++;
+				dsize /= 1024.0;
+			}
+			out.p(ostd::String("").add(dsize, 2).add(units[unit_index]).new_fixedLength(line_len));
+		};
+		uint16_t len = 20;
+		out.nl().fg(ostd::ConsoleColors::BrightGray);
+		out.p(ostd::String("=").new_fixedLength(5 * len, '=')).nl();
+		out.fg(ostd::ConsoleColors::Blue);
+		out.p("  ");
+		out.p(ostd::String("LABEL").new_fixedLength(len));
+		out.p(ostd::String("SIZE").new_fixedLength(len));
+		out.p(ostd::String("START").new_fixedLength(len));
+		out.p(ostd::String("END").new_fixedLength(len));
+		out.p(ostd::String("FLAGS").new_fixedLength(len));
+		out.nl().fg(ostd::ConsoleColors::BrightGray);
+		out.p(ostd::String("=").new_fixedLength(5 * len, '=')).nl();
+		for (int32_t i = 0; i < partitionList.size(); i++)
+		{
+			bool comma = false;
+			auto& part = partitionList[i];
+			if (part.label == "")
+				part.label = "<NO-LABEL>";
+			out.fg(ostd::ConsoleColors::Cyan).p("  ");
+			out.p(part.label.new_fixedLength(len));
+			print_part_size(part.size, out, len);
+			out.p(ostd::Utils::getHexStr(part.startAddress, true, 4).new_fixedLength(len));
+			out.p(ostd::Utils::getHexStr(part.startAddress + part.size, true, 4).new_fixedLength(len));
+			if (ostd::Bits::get(part.flags, data::DPTStructure::tFlags::Boot))
+			{
+				if (comma)
+					out.p(", ");
+				out.fg(ostd::ConsoleColors::Yellow).p("Boot").fg(ostd::ConsoleColors::Cyan);
+			}
+			out.nl();
+		}
+		out.fg(ostd::ConsoleColors::BrightGray);
+		out.p(ostd::String("=").new_fixedLength(5 * len, '=')).nl();
+		out.reset().nl();
+		return ErrorNoError;
+	}
+
 	void Tools::print_application_help(void)
 	{
 		out.nl().fg(ostd::ConsoleColors::Yellow).p("List of available tools:").nl().nl();
@@ -136,6 +259,10 @@ namespace dragon
 		out.fg(ostd::ConsoleColors::Green).p("The <new-vdisk> tool is used to create a new Virtual Disk File.").nl();
 		out.p("    <destination_file>           Path of the destination Virtual Disk file to be created.").nl();
 		out.p("    <size_in_bytes>              Size of the new Virtual Disk file, in bytes .").nl().nl();
+
+		out.fg(ostd::ConsoleColors::Blue).p("read-dpt <virtual_disk_file>").nl();
+		out.fg(ostd::ConsoleColors::Green).p("The <read-dpt> tool is used to read the partition table of a Virtual Disk File.").nl();
+		out.p("    <virtual_disk_file>          Path to the Virtual Disk file.").nl().nl();
 
 		out.fg(ostd::ConsoleColors::Magenta).p("Usage: ./dtools <tool_name> [...arguments...]").nl().nl().reset();
 	}

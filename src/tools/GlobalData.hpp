@@ -216,6 +216,32 @@ namespace dragon
 				inline static constexpr uint8_t MemorySize 		= 0x02;
 				inline static constexpr uint8_t ClockSpeed	 	= 0x04;
 				inline static constexpr uint8_t BootDisk	 	= 0x10;
+
+				inline static constexpr uint8_t DiskList	 	= 0x7E;
+		};
+
+		class DPTStructure
+		{
+			public: struct tFlags {
+				inline static constexpr uint8_t Boot 			= 0;
+			};
+			public:
+				inline static constexpr uint16_t DiskAddress			= 0x200;
+
+				inline static constexpr uint16_t DPTID					= 0x000;
+				inline static constexpr uint16_t DPTVersionMaj			= 0x002;
+				inline static constexpr uint16_t DPTVersionMin			= 0x003;
+				inline static constexpr uint16_t PartitionCount			= 0x004;
+
+				inline static constexpr uint16_t EntriesStart			= 0x00C;
+
+				inline static constexpr uint16_t EntryStartAddress		= 0x000;
+				inline static constexpr uint16_t EntryPartitionSize		= 0x004;
+				inline static constexpr uint16_t EntryFlags				= 0x008;
+				inline static constexpr uint16_t EntryPartitionLabel	= 0x024;
+
+				inline static constexpr uint16_t DPT_ID_CODE			= 0xF1CA;
+				inline static constexpr uint16_t EntrySizeBytes			= 100;
 		};
 
 		class CPUExtension

@@ -165,7 +165,7 @@ namespace dragon
 		for (auto const& disk_path : machine_config.vdisk_paths)
 		{
 			vDisks[disk_path.first] = dragon::hw::VirtualHardDrive(disk_path.second);
-			vDiskInterface.connectDisk(vDisks[disk_path.first]);
+			vDiskInterface.connectDisk(vDisks[disk_path.first], disk_path.first);
 			if (verbose)
 				out.fg(ostd::ConsoleColors::BrightYellow).p("    Disk").p(disk_path.first).p(" connected: ").p(disk_path.second.cpp_str()).nl();
 		}
@@ -318,6 +318,14 @@ namespace dragon
 		vCMOS.write16(data::CMOSRegisters::MemoryStart, data::MemoryMapAddresses::Memory_Start);
 		vCMOS.write16(data::CMOSRegisters::MemorySize, data::MemoryMapAddresses::Memory_End);
 		vCMOS.write16(data::CMOSRegisters::ClockSpeed, machine_config.clock_rate_sec);
+		ostd::BitField_16 disk_list_bitfield;
+		disk_list_bitfield.value = 0;
+		for (int32_t i = 0; i < 16; i++)
+		{
+			if (vDisks.count(i) > 0)
+				ostd::Bits::set(disk_list_bitfield, i);
+		}
+		vCMOS.write16(data::CMOSRegisters::DiskList, disk_list_bitfield.value);
 		if (verbose)
 			out.fg(ostd::ConsoleColors::BrightYellow).p("    Loading CMOS Machine info").nl();
 

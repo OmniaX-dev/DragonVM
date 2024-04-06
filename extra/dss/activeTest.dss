@@ -4,6 +4,8 @@
 	$string "Hello World!!"
 
 .code
+	mov R10, 0xE0
+	int 0x30
 	mov R10, 0x0C
 	mov R9, $string
 	int 0x30
@@ -12,4 +14,4 @@ end_loop:
 	jmp $end_loop
 	hlt
 
-.fixed 512, 0x00
+.fixed 1024, 0x00

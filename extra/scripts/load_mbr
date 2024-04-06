@@ -5,8 +5,8 @@ clear='\033[0m'
 
 printf "\n${green}Reloading MBR Block...\n${clear}"
 cd ..
-cp ../extra/dss/drake.dss ./dss/drake.dss
-./dasm dss/drake.dss -o dragon/drake.bin --save-disassembly disassembly/drake.dds --verbose
+cp ../extra/dss/drake/* ./dss/drake/
+./dasm dss/drake/entry.dss -o dragon/drake.bin --extalu --save-disassembly disassembly/drake.dds --verbose
 ./dtools load-binary dragon/disk1.dr dragon/drake.bin 0x00000000
 printf "\n"
 cp dragon/disk1.dr ../extra/dragon/disk1.dr

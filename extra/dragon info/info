@@ -12,8 +12,7 @@
     ClockSpeed: (2 bytes) 0x0004
     BootDisk: 0x0010
 
-    ICC_
-    ICC_OutputAddr: (2 bytes) 0x007E
+    DiskList: (2 bytes) 0x007E
 0x107F
 -------
 0x1080 INTERRUPT VECTOR (512 Bytes)
@@ -164,5 +163,6 @@ Partition Table: (0x20C - 0x3FF) (500 bytes)
     Entry: (100 bytes) (x5)
         0x00: (4 bytes) - Start Address
         0x04: (4 bytes) - Size
-        0x08: (28 bytes) - Reserved
-        0x40: (64 bytes) - Partition label
+        0x08: (2 bytes) - Flags
+        0x08: (26 bytes) - Reserved
+        0x24: (64 bytes) - Partition label

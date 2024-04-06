@@ -4,7 +4,7 @@
 
 ## ============================= Memory Mapped Devices and Registers =============================
 @export_comment /BIOS_API "These are the base addresses of the memory map."
-@group MemoryAddresses
+@group /BIOS_API MemoryAddresses
 	MBR 			0x1380
 	INT_VEC 		0x1080
 	DISK_INTERFACE 	0x1580
@@ -19,6 +19,8 @@
 	MEM_SIZE				{ MemoryAddresses.CMOS + 0x0002 }
 	CLOCK_SPEED				{ MemoryAddresses.CMOS + 0x0004 }
 	BOOT_DISK 				{ MemoryAddresses.CMOS + 0x0010 }
+
+	DISK_LIST 				{ MemoryAddresses.CMOS + 0x007E }
 @end
 
 
