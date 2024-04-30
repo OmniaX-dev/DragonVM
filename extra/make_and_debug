@@ -14,6 +14,7 @@ printf "${green}\n==============================================================
 if [ $? -eq 0 ]; then
     cd scripts
     /bin/bash ./bios_flash
+    cp dss/bios_api.dss ../extra/dss/bios_api.dss
     /bin/bash ./load_mbr
     cd ..
     printf "${green}Compiling Test Program...\n"
@@ -24,5 +25,4 @@ if [ $? -eq 0 ]; then
     ./ddb config/testMachine.dvm --verbose-load
     cp dragon/disk1.dr ../extra/dragon/disk1.dr
     cp dragon/cmos.dr ../extra/dragon/cmos.dr
-    cp dss/bios_api.dss ../extra/dss/bios_api.dss
 fi

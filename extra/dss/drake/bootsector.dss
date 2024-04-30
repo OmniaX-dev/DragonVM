@@ -1,0 +1,15 @@
+.load 0x0000
+
+@define S_REG_3 0x09
+
+.data
+
+.code
+	mov R10, 0xE0
+	int 0x30
+	mov R10, 0x0C
+	mov R9, $string
+	int 0x30
+
+.dynamic_data
+	$string "Hello BOOTSECTOR!!"
