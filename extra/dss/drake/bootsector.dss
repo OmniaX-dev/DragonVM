@@ -1,8 +1,7 @@
-.load 0x0000
-
-@define S_REG_3 0x09
+.load [dynamic]
 
 .data
+	$string "Hello BOOTSECTOR!!"
 
 .code
 	mov R10, 0xE0
@@ -11,5 +10,3 @@
 	mov R9, $string
 	int 0x30
 
-.dynamic_data
-	$string "Hello BOOTSECTOR!!"

@@ -14,7 +14,7 @@ printf "${green}\n==============================================================
 if [ $? -eq 0 ]; then
     cd scripts
     /bin/bash ./bios_flash
-    cp dss/bios_api.dss ../extra/dss/bios_api.dss
+    cp ../dss/bios_api.dss ../../extra/dss/bios_api.dss
     /bin/bash ./load_mbr
     cd ..
     printf "${green}Compiling Test Program...\n"

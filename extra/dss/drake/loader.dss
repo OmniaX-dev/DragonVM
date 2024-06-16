@@ -2,6 +2,10 @@
 
 @include <../bios_api.dss>
 
+@define S_REG_1 0x07
+@define S_REG_2 0x08
+@define S_REG_3 0x09
+
 .data
 	$_drake_logo_line_1 "   ___  ___  ___   __ ______"
 	$_drake_logo_line_2 "  / _ \/ _ \/ _ | / //_/ __/"
