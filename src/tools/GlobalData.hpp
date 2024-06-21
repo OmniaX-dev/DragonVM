@@ -166,7 +166,7 @@ namespace dragon
 				inline static constexpr uint8_t ACC = 0x06;
 				inline static constexpr uint8_t S1 = 0x07;
 				inline static constexpr uint8_t S2 = 0x08;
-				inline static constexpr uint8_t S3 = 0x09;
+				inline static constexpr uint8_t OFFSET = 0x09;
 				inline static constexpr uint8_t R1 = 0x0A;
 				inline static constexpr uint8_t R2 = 0x0B;
 				inline static constexpr uint8_t R3 = 0x0C;
@@ -185,6 +185,7 @@ namespace dragon
 		{
 			public:
 				inline static constexpr uint8_t InterruptsEnabled = 0;
+				inline static constexpr uint8_t OffsetModeEnabled = 1;
 		};
 
 		class InterruptCodes

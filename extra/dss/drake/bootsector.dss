@@ -1,4 +1,4 @@
-.load [dynamic]
+.load [dynamic, base=0x1740]
 
 .data
 	$string "Hello BOOTSECTOR!!"

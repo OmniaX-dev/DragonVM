@@ -285,7 +285,7 @@ namespace dragon
 		str.add("\n");
 		str.add("|---------------|------------------------------------|------------------------------------|-----|-----------|-----------|");
 		str.add("\n");
-		str.add("|    FL:        |*%PREV_FL%**************************|**%CURR_FL%*************************| S3  |*%PREV_S3%*|*%CURR_S3%*|");
+		str.add("|    FL:        |*%PREV_FL%**************************|**%CURR_FL%*************************| OF  |*%PREV_OF%*|*%CURR_OF%*|");
 		str.add("\n");
 		str.add("|---------------|------------------------------------|------------------------------------|=====|===========|===========|");
 		str.add("\n");
@@ -833,28 +833,28 @@ namespace dragon
 
 			
 			tmp = " ", tmpStyle = "";
-			tmp.add(ostd::Utils::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::S3], true, 2));
+			tmp.add(ostd::Utils::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::OFFSET], true, 2));
 			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
 			tmpStyle = "[@@style foreground:Blue]";
 			tmpStyle.add(tmp).add("[@@/]");
-			str.replaceAll("%PREV_S3%", tmpStyle);
+			str.replaceAll("%PREV_OF%", tmpStyle);
 
 			tmp = " ";
-			tmp.add(ostd::Utils::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::S3], true, 2));
+			tmp.add(ostd::Utils::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::OFFSET], true, 2));
 			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
-			if (minfo.currentInstructionRegisters[dragon::data::Registers::S3] != minfo.previousInstructionRegisters[dragon::data::Registers::S3])
+			if (minfo.currentInstructionRegisters[dragon::data::Registers::OFFSET] != minfo.previousInstructionRegisters[dragon::data::Registers::OFFSET])
 				tmpStyle = "[@@style foreground:Black,background:BrightRed]";
 			else
 				tmpStyle = "[@@style foreground:Blue]";
 			tmpStyle.add(tmp).add("[@@/]");
-			str.replaceAll("%CURR_S3%", tmpStyle);
+			str.replaceAll("%CURR_OF%", tmpStyle);
 		}
 		
 		ostd::RegexRichString rgxstr(str);
 		rgxstr.fg("InstAddr|Code|StackFrame|DBG BRK|INT Handler|BIOS Mode|SubRoutine", "Magenta");
 		rgxstr.fg("IP|SP|FP|RV|PP|FL|ACC", "Cyan");
 		rgxstr.fg("R10|R2|R3|R4|R5|R6|R7|R8|R9|R1", "BrightGreen");
-		rgxstr.fg("S1|S2|S3", "BrightRed");
+		rgxstr.fg("S1|S2|OF", "BrightRed");
 		rgxstr.fg("PREV", "Red");
 		rgxstr.fg("CURR", "Green");
 		out.pStyled(rgxstr);

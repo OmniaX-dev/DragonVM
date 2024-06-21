@@ -203,6 +203,11 @@ namespace dragon
 			m_currentExtension = nullptr;
 			m_currentExtInst = 0x00;
 			m_isDebugBreakPoint = false;
+			m_isOffsetAddressingEnabled = readFlag(data::Flags::OffsetModeEnabled);
+			if (m_isOffsetAddressingEnabled)
+				m_currentOffset = readRegister(data::Registers::OFFSET);
+			else
+				m_currentOffset = 0x0000;
 			uint8_t inst = fetch8();
 			m_currentInst = inst;
 			if (loadExtension())

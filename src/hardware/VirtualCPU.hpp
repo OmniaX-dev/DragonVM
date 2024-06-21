@@ -47,7 +47,9 @@ namespace dragon
 				inline int32_t getSubRoutineCounter(void) const { return m_subroutineCounter; }
 				inline data::CPUExtension* getCurrentCPUExtension(void) const { return m_currentExtension; }
 				inline uint8_t getCurrentCPUExtensionInstruction(void) const { return m_currentExtInst; }
-
+				inline bool isOffsetAddressingModeEnabled(void) const { return m_isOffsetAddressingEnabled; }
+				inline uint16_t getCurrentOffset(void) const { return m_currentOffset; }
+ 
 			private:
 				void __debug_store_stack_frame_string_on_push(void);
 
@@ -64,6 +66,9 @@ namespace dragon
 				bool m_isDebugBreakPoint { false };
 				bool m_debugModeEnabled { false };
 				int32_t m_subroutineCounter { 0 };
+
+				bool m_isOffsetAddressingEnabled { false };
+				uint16_t m_currentOffset { 0x0000 };
 
 				data::CPUExtension* m_extensions[16];
 				data::CPUExtension* m_currentExtension { nullptr };

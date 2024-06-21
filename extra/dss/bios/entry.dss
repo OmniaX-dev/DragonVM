@@ -26,6 +26,10 @@
 	mov FL, ACC
 	## ----
 
+	mov reg(S_REG_OFFSET), 0x0000												## Zero the offset register
+	or FL, 0b0000000000000010													## Enable offset mode for memory addressing
+	mov FL, ACC
+
 	%low INST_BIOS_NODE_TOGGLE 0x00												## Disable BIOS Mode before leaving the BIOS
 	jmp MemoryAddresses.MBR         											## Jump to start of MBR in memory
 	hlt                															## Just in case somehow execution reaches this point
