@@ -45,6 +45,12 @@ namespace dragon
 			if (rValue != ErrorNoError)
 				return rValue;
 		}
+		else if (tool == "new-dpt")
+		{
+			rValue = tool_new_dpt(argc, argv);
+			if (rValue != ErrorNoError)
+				return rValue;
+		}
 		else if (tool == "--help")
 		{
 			print_application_help();
@@ -151,7 +157,7 @@ namespace dragon
 			return ErrorReadDPTSmallDisk;
 		}
 		ostd::ByteStream outData;
-		if (!vHDD.read(data::DPTStructure::DiskAddress, 512, outData))
+		if (!vHDD.read(data::DPTStructure::DiskAddress, data::DPTStructure::DPTBlockSizeBytes, outData))
 		{
 			out.fg(ostd::ConsoleColors::Red).p("Error: Unable to read from disk.").reset().nl();
 			return ErrorReadDPTUnableToRead;
@@ -175,6 +181,11 @@ namespace dragon
 		uint32_t version_min = (uint32_t)outData8;
 		dpt_block.r_Byte(data::DPTStructure::PartitionCount, outData8);
 		uint32_t part_count = (uint32_t)outData8;
+		if (part_count > data::DPTStructure::MaxPartCount)
+		{
+			out.fg(ostd::ConsoleColors::Red).p("Error: Too many partitions. Maximum is ").p(data::DPTStructure::MaxPartCount).p(".").reset().nl();
+			return ErrorReadDPTNoPartitionTable;
+		}
 		struct tPartitionData {
 			uint32_t startAddress { 0 };
 			uint32_t size { 0 };
@@ -222,7 +233,6 @@ namespace dragon
 		out.p(ostd::String("=").new_fixedLength(5 * len, '=')).nl();
 		for (int32_t i = 0; i < partitionList.size(); i++)
 		{
-			bool comma = false;
 			auto& part = partitionList[i];
 			if (part.label == "")
 				part.label = "<NO-LABEL>";
@@ -231,17 +241,204 @@ namespace dragon
 			print_part_size(part.size, out, len);
 			out.p(ostd::Utils::getHexStr(part.startAddress, true, 4).new_fixedLength(len));
 			out.p(ostd::Utils::getHexStr(part.startAddress + part.size, true, 4).new_fixedLength(len));
-			if (ostd::Bits::get(part.flags, data::DPTStructure::tFlags::Boot))
+			ostd::String flags_str = "";
+			for (uint8_t bit = 0; bit < sizeof(part.flags) * 8; bit++)
 			{
-				if (comma)
-					out.p(", ");
-				out.fg(ostd::ConsoleColors::Yellow).p("Boot").fg(ostd::ConsoleColors::Cyan);
+				if (m_dpt_flags_str.count(bit) == 0)
+					continue;
+				if (ostd::Bits::get(part.flags, bit))
+					flags_str += m_dpt_flags_str[bit] + ",";
 			}
-			out.nl();
+			if (flags_str.len() > 0)
+				flags_str.substr(0, flags_str.len() - 1);
+			
+			out.fg(ostd::ConsoleColors::Yellow).p(flags_str).fg(ostd::ConsoleColors::Cyan).nl();
 		}
 		out.fg(ostd::ConsoleColors::BrightGray);
 		out.p(ostd::String("=").new_fixedLength(5 * len, '=')).nl();
 		out.reset().nl();
+		return ErrorNoError;
+	}
+
+	int32_t Tools::tool_new_dpt(int argc, char** argv)
+	{
+		if (argc < 5)
+		{
+			out.fg(ostd::ConsoleColors::Red).p("Error: too few arguments.").nl();
+			out.fg(ostd::ConsoleColors::Red).p("  Usage: ./dtools new-dpt <virtual_disk_file> -p -s SIZE [-l LABEL] [-f FLAG1] [-f FLAG2] [-p SIZE ...]").reset().nl();
+			return ErrorLoadProgTooFewArgs;
+		}
+		ostd::String vdisk_file = argv[2];
+		dragon::hw::VirtualHardDrive vHDD(vdisk_file);
+		if (!vHDD.isInitialized())
+		{
+			out.fg(ostd::ConsoleColors::Red).p("Error: Unable to load virtual disk.").reset().nl();
+			return ErrorLoadProgUnableToLoadVDisk;
+		}
+		uint64_t disk_size = vHDD.getSize();
+
+		auto& _dpt_flags_str = m_dpt_flags_str;
+		auto get_flag_from_str = [_dpt_flags_str](const ostd::String& flag_str) -> int8_t {
+			for (auto& flag : _dpt_flags_str)
+			{
+				if (flag.second == flag_str)
+					return flag.first;
+			}
+			return -1;
+		};
+		auto make_bytestream = [](uint16_t size, ostd::Byte value = 0xFF) -> ostd::ByteStream {
+			
+			ostd::ByteStream stream;
+			for (int16_t i = 0; i < size; i++)
+				stream.push_back(value);
+			return stream;
+		};
+		struct tPartData {
+			uint32_t size { 0 };
+			uint32_t address { 0 };
+			std::vector<uint8_t> flags;
+			ostd::String label { "" };
+		};
+
+		std::vector<tPartData> partitions;
+
+		int32_t arg_index = 3;
+		bool has_args = true;
+		bool part_started = false;
+		tPartData _part_data;
+		uint32_t part_start_addr = data::DPTStructure::DiskStartAddr; 
+		while (has_args)
+		{
+			ostd::String arg = argv[arg_index];
+			arg.trim();
+			if (part_started)
+			{
+				if (arg.new_toLower() == "-p")
+				{
+					part_started = false;
+					partitions.push_back(_part_data);
+					_part_data = tPartData();
+					continue;
+				}
+				else if (arg.new_toLower() == "-l")
+				{
+					if (arg_index >= argc - 1)
+					{
+						out.fg(ostd::ConsoleColors::Red).p("Error: No partition label specified after -l parameter.").reset().nl();
+						return ErrorNewDPTNoPartitionLabel;
+					}
+					arg_index++;
+					_part_data.label = argv[arg_index];
+				}
+				else if (arg.new_toLower() == "-f")
+				{
+					if (arg_index >= argc - 1)
+					{
+						out.fg(ostd::ConsoleColors::Red).p("Error: No partition flag specified after -f parameter.").reset().nl();
+						return ErrorNewDPTNoPartitionFlag;
+					}
+					arg_index++;
+					int8_t flag = get_flag_from_str(argv[arg_index]);
+					if (flag < 0)
+					{
+						out.fg(ostd::ConsoleColors::Red).p("Error: Unknown partition flag.").reset().nl();
+						return ErrorNewDPTUnknownFlag;
+					}
+					_part_data.flags.push_back(flag);
+				}
+			}
+			else
+			{
+				if (arg.new_toLower() == "-p")
+				{
+					if (arg_index >= argc - 1)
+					{
+						out.fg(ostd::ConsoleColors::Red).p("Error: No partition size specified.").reset().nl();
+						return ErrorNewDPTNoPartitionSize;
+					}
+					else if (!ostd::Utils::isInt(argv[arg_index + 1]))
+					{
+						out.fg(ostd::ConsoleColors::Red).p("Error: Partition size must be an integer.").reset().nl();
+						return ErrorNewDPTInvalidPartitionSize;
+					}
+					arg_index++;
+					uint32_t part_size = ostd::String(argv[arg_index]).toInt();
+					if (part_start_addr + part_size > disk_size)
+					{
+						out.fg(ostd::ConsoleColors::Red).p("Error: Not enough space on disk.").reset().nl();
+						return ErrorNewDPTDiskOverflow;
+					}
+					_part_data.size = part_size;
+					_part_data.address = part_start_addr;
+					part_start_addr += part_size;
+					part_started = true;
+				}
+			}
+			arg_index++;
+			if (arg_index >= argc || partitions.size() > data::DPTStructure::MaxPartCount)
+				has_args = false;
+		}
+		if (part_started)
+			partitions.push_back(_part_data);
+
+		if (partitions.size() > data::DPTStructure::MaxPartCount)
+		{
+			out.fg(ostd::ConsoleColors::Red).p("Error: Too many partitions.").reset().nl();
+			return ErrorNewDPTTooManyPartitions;
+		}
+
+		//HEADER
+		ostd::StreamIndex addr = 0;
+		ostd::serial::SerialIO dpt_block(data::DPTStructure::DPTBlockSizeBytes);
+		dpt_block.enableAutoResize(false);
+		dpt_block.w_Word(addr, data::DPTStructure::DPT_ID_CODE);
+		addr += ostd::tTypeSize::WORD;
+		dpt_block.w_Byte(addr, data::DPTStructure::CurrentDPTVersionMaj);
+		addr += ostd::tTypeSize::BYTE;
+		dpt_block.w_Byte(addr, data::DPTStructure::CurrentDPTVersionMin);
+		addr += ostd::tTypeSize::BYTE;
+		dpt_block.w_Byte(addr, (ostd::Byte)(partitions.size()));
+		addr += ostd::tTypeSize::BYTE;
+		uint16_t reserved_size = data::DPTStructure::HeaderReservedSizeBytes;
+		dpt_block.w_ByteStream(addr, make_bytestream(reserved_size), false);
+		addr += reserved_size;
+
+		//PARTITIONS
+		for (auto& part : partitions)
+		{
+			dpt_block.w_DWord(addr, part.address);
+			addr += ostd::tTypeSize::DWORD;
+			dpt_block.w_DWord(addr, part.size);
+			addr += ostd::tTypeSize::DWORD;
+
+			ostd::BitField_16 flags;
+			flags.value = 0;
+			for (auto& bit : part.flags)
+				ostd::Bits::set(flags, bit);
+			dpt_block.w_Word(addr, flags.value);
+			addr += ostd::tTypeSize::WORD;
+
+			reserved_size = data::DPTStructure::EntryReservedSizeBytes;
+			dpt_block.w_ByteStream(addr, make_bytestream(reserved_size), false);
+			addr += reserved_size;
+
+			if (part.label.len() >= data::DPTStructure::EntryLabelSizeBytes)
+				part.label.fixedLength(data::DPTStructure::EntryLabelSizeBytes - 1, ' ', "");
+			dpt_block.w_String(addr, part.label, false, true);
+			addr += data::DPTStructure::EntryLabelSizeBytes;
+		}
+		
+		int16_t index = 0;
+		for (auto& b : dpt_block.getData())
+		{
+			vHDD.write(data::DPTStructure::DiskAddress + index, b);
+			index++;
+		}
+		vHDD.unmount();
+		out.nl().fg(ostd::ConsoleColors::Green).p("Success. DPT Block created on Virtual Disk:").nl();
+		out.p("  Disk Path: ").p(vdisk_file.cpp_str()).nl();
+		out.p("  DPT Block Address: ").p(ostd::Utils::getHexStr(data::DPTStructure::DiskAddress, true, 4).cpp_str()).nl();
+		out.p("  DPT Block Size: ").p(data::DPTStructure::DPTBlockSizeBytes).nl();
 		return ErrorNoError;
 	}
 
@@ -263,6 +460,14 @@ namespace dragon
 		out.fg(ostd::ConsoleColors::Blue).p("read-dpt <virtual_disk_file>").nl();
 		out.fg(ostd::ConsoleColors::Green).p("The <read-dpt> tool is used to read the partition table of a Virtual Disk File.").nl();
 		out.p("    <virtual_disk_file>          Path to the Virtual Disk file.").nl().nl();
+
+		out.fg(ostd::ConsoleColors::Blue).p("new-dpt <virtual_disk_file> -p -s SIZE [-l LABEL] [-f FLAG1] [-f FLAG2] [-p SIZE ...]").nl();
+		out.fg(ostd::ConsoleColors::Green).p("The <new-dpt> tool is used to create a new DPT-BLOCK on Virtual Disk File.").nl();
+		out.p("    <virtual_disk_file>          Path to the Virtual Disk file.").nl();
+		out.p("    -p                           Used to start creating a partition.").nl();
+		out.p("    -s                           Used to specify the partition's size.").nl();
+		out.p("    -l (optional)                Used to specify the partition's label.").nl();
+		out.p("    -f (optional)                Used to specify one single flag for the partition. Use multiple -f parameters for multiple flags.").nl().nl();
 
 		out.fg(ostd::ConsoleColors::Magenta).p("Usage: ./dtools <tool_name> [...arguments...]").nl().nl().reset();
 	}

@@ -4,6 +4,7 @@ CMOS = dragon/cmos.dr
 cpuext = extmov, extalu
 fixed_clock = true
 clock_rate_sec = 644
+memory_extension_pages = 16
 
 SingleColor_foreground = #009900FF
 SingleColor_background = #111111FF

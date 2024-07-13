@@ -1,4 +1,4 @@
-@uard _DPT_DSS_
+@guard _DPT_DSS_
 
 @group DPTStructure
 	DISK_ADDR 			0x0200

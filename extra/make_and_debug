@@ -15,13 +15,9 @@ if [ $? -eq 0 ]; then
     cd scripts
     /bin/bash ./bios_flash
     cp ../dss/bios_api.dss ../../extra/dss/bios_api.dss
-    /bin/bash ./load_mbr
+    /bin/bash ./build_drake
     cd ..
-    printf "${green}Compiling Test Program...\n"
-    ./dasm dss/activeTest.dss -o activeTest.bin --extmov --extalu --save-disassembly disassembly/activeTest.dds --verbose
     printf "\n${green}Running Application...\n\n${clear}"
-    ./dtools load-binary dragon/disk1.dr activeTest.bin 0x00000400
-    # ./ddb config/testMachine.dvm --force-load activeTest.bin 0x00 --verbose-load
     ./ddb config/testMachine.dvm --verbose-load
     cp dragon/disk1.dr ../extra/dragon/disk1.dr
     cp dragon/cmos.dr ../extra/dragon/cmos.dr

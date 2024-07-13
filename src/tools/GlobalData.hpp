@@ -227,7 +227,6 @@ namespace dragon
 				inline static constexpr uint8_t Boot 			= 0;
 			};
 			public:
-				inline static constexpr uint16_t DiskAddress			= 0x200;
 
 				inline static constexpr uint16_t DPTID					= 0x000;
 				inline static constexpr uint16_t DPTVersionMaj			= 0x002;
@@ -241,8 +240,20 @@ namespace dragon
 				inline static constexpr uint16_t EntryFlags				= 0x008;
 				inline static constexpr uint16_t EntryPartitionLabel	= 0x024;
 
+
+
+				inline static constexpr uint16_t HeaderReservedSizeBytes= 7;
+				inline static constexpr uint16_t DiskAddress			= 0x200;
 				inline static constexpr uint16_t DPT_ID_CODE			= 0xF1CA;
 				inline static constexpr uint16_t EntrySizeBytes			= 100;
+				inline static constexpr uint16_t EntryLabelSizeBytes	= 64;
+				inline static constexpr uint16_t EntryReservedSizeBytes	= 26;
+				inline static constexpr uint16_t HeaderSizeBytes		= 12;
+				inline static constexpr uint16_t DPTBlockSizeBytes		= 512;
+				inline static constexpr uint8_t CurrentDPTVersionMaj 	= 0x00;
+				inline static constexpr uint8_t CurrentDPTVersionMin 	= 0x02;
+				inline static constexpr uint32_t DiskStartAddr 			= 0x00000400;
+				inline static constexpr uint8_t MaxPartCount			= 5;
 		};
 
 		class CPUExtension
@@ -361,6 +372,12 @@ namespace dragon
 
 				static ostd::String getOpCodeString(uint8_t opCode);
 				static uint8_t getInstructionSIze(uint8_t opCode);
+		};
+	
+		class DefaultValues
+		{
+			public:
+				inline static constexpr uint8_t MaxMemoryExtensionPages = 255;
 		};
 	}
 }

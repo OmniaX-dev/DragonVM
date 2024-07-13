@@ -2,10 +2,6 @@
 
 @include <../bios_api.dss>
 
-@define S_REG_1 0x07
-@define S_REG_2 0x08
-@define S_REG_3 0x09
-
 .data
 	$_drake_logo_line_1 "   ___  ___  ___   __ ______"
 	$_drake_logo_line_2 "  / _ \/ _ \/ _ | / //_/ __/"
@@ -13,25 +9,30 @@
 	$_drake_logo_line_4 "/____/_/|_/_/ |_/_/|_/___/  "
 	$_logo_padding "                                "
 
+	$ddd <DiskDriverData>
+
 
 .code
 	mov R10, 0xE0
 	int 0x30
 	push 0
 	call $_print_logo
+
+	mov [$ddd.Mode], DiskMode.READ
+	mov [$ddd.Disk], 0x00
+	mov [$ddd.Sector], 0x0000
+	mov [$ddd.Address], 0x0400
+	mov [$ddd.DataSize], 5120
+	mov [$ddd.MemoryAddress], MemoryAddresses.RAM
+
 	and FL, 0b1111111111111110													## Disable interrupts
-	mov FL, ACC
-	push 0
-	call $_load_boot_sector
+	mov FL, ACC	
+	push $ddd.Mode
+	push 1
+	call $_disk_load_from_ddd_blocking
 	or FL, 0b0000000000000001													## Enable interrupts
 	mov FL, ACC
-
-	mov reg(S_REG_3), MemoryAddresses.RAM
-	inc reg(S_REG_3)
-	mov R1, *reg(S_REG_3)
-	addip R1, reg(S_REG_3)
-	mov *reg(S_REG_3), R1
-	dec reg(S_REG_3)
+	
 	jmp MemoryAddresses.RAM
 	
 _infinite_loop:
@@ -55,20 +56,6 @@ _print_logo_loop:
 	jls $_print_logo_loop, R6
 	ret
 
-_load_boot_sector:
-	movb [{MemoryAddresses.DISK_INTERFACE + 0x1}], 0x00											## Mode = Read
-	movb R1, [{ MemoryAddresses.CMOS + 0x10 }]
-	movb [{MemoryAddresses.DISK_INTERFACE + 0x2}], R1											## Disk = Default
-	mov  [{MemoryAddresses.DISK_INTERFACE + 0x3}],0x0000										## Sector
-	mov  [{MemoryAddresses.DISK_INTERFACE + 0x5}],0x0400										## Address
-	mov  [{MemoryAddresses.DISK_INTERFACE + 0x7}], 1024											## Size
-	mov  [{MemoryAddresses.DISK_INTERFACE + 0x9}], MemoryAddresses.RAM 							## MemoryAddress
-	movb [MemoryAddresses.DISK_INTERFACE], 0x00													## Signal = Start
-_load_boot_sector_block_wait_loop:
-	debug_break
-	mov ACC, [{MemoryAddresses.DISK_INTERFACE + 0xB}]											## Moving <Status> register into ACC
-	jne $_load_boot_sector_block_wait_loop, 0x00												## If <Status> register not Free, loop around and wait
-	ret
-
+@include <disk.dss>
 
 .fixed 512, 0x00

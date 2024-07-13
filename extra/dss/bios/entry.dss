@@ -6,6 +6,7 @@
 .code
 	movb [VGA_Registers.VIDEO_MODE], VGA_VideoModes.TEXT_SINGLE_COLOR			## Enable Text_Single_Color graphics mode
 	mov FL, 0b0000000000000001													## Zero the FL Register and enable interrupts
+	mov reg(S_REG_OFFSET), 0x0000												## Zero the offset register
 	movb [{MemoryAddresses.INT_VEC + (0x20 * 3)}], 0xFF 						## Setting up int 0x20 handler
 	mov [{MemoryAddresses.INT_VEC + (0x20 * 3) + 1}], $_int_20_handler			## --
 	
@@ -25,10 +26,6 @@
 	or FL, 0b0000000000000001													## Enable interrupts
 	mov FL, ACC
 	## ----
-
-	mov reg(S_REG_OFFSET), 0x0000												## Zero the offset register
-	or FL, 0b0000000000000010													## Enable offset mode for memory addressing
-	mov FL, ACC
 
 	%low INST_BIOS_NODE_TOGGLE 0x00												## Disable BIOS Mode before leaving the BIOS
 	jmp MemoryAddresses.MBR         											## Jump to start of MBR in memory

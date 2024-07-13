@@ -10,6 +10,7 @@ namespace dragon
 		VirtualRAM::VirtualRAM(void)
 		{
 			m_memory.init(0xFFFF);
+			m_memory.enableAutoResize(false);
 		}
 
 		int8_t VirtualRAM::read8(uint16_t addr)

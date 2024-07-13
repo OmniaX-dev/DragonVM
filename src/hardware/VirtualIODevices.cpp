@@ -44,13 +44,13 @@ namespace dragon
 
 		int8_t VirtualBIOS::write8(uint16_t addr, int8_t value)
 		{
-			data::ErrorHandler::pushError(data::ErrorCodes::BIOS_WriteAttempt, "Attempting to write to BIOS memory map.");
+			data::ErrorHandler::pushError(data::ErrorCodes::BIOS_WriteAttempt, ostd::String("Attempting to write to BIOS memory map.").add(addr));
 			return 0x00;
 		}
 
 		int16_t VirtualBIOS::write16(uint16_t addr, int16_t value)
 		{
-			data::ErrorHandler::pushError(data::ErrorCodes::BIOS_WriteAttempt, "Attempting to write to BIOS memory map.");
+			data::ErrorHandler::pushError(data::ErrorCodes::BIOS_WriteAttempt, ostd::String("Attempting to write to BIOS memory map.").add(addr));
 			return 0x0000;
 		}
 

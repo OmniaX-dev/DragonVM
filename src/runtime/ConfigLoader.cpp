@@ -89,6 +89,19 @@ namespace dragon
 					config.fixed_clock = false;
 				else continue; //TODO: Error
 			}
+			else if (lineEdit == "memory_extension_pages")
+			{
+				lineEdit = tokens.next();
+				lineEdit.trim().toLower();
+				if (!lineEdit.isNumeric()) continue; //TODO: Error
+				config.memory_extension_pages = lineEdit.toInt();
+				
+				//TODO: Warnings 
+				if (config.memory_extension_pages < 0)
+					config.memory_extension_pages = 0;
+				if (config.memory_extension_pages > data::DefaultValues::MaxMemoryExtensionPages)
+					config.memory_extension_pages = data::DefaultValues::MaxMemoryExtensionPages;
+			}
 			else continue; //TODO: Warning
 		}
 		return validate_machine_config(config);

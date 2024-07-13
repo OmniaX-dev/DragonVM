@@ -1,0 +1,219 @@
+#==========================================================================================================================================
+# Memory Map
+#==========================================================================================================================================
+    0x0000 BIOS (4096 Bytes) (write to this section is disabled)
+    0x0FFF
+    -------
+    0x1000 CMOS (128 Bytes) (write to this section is only allowed in BIOS Mode)
+        MemStart: (2 bytes) 0x0000
+        MemSize: (2 bytes) 0x0002
+        ClockSpeed: (2 bytes) 0x0004
+        BootDisk: 0x0010
+
+        DiskList: (2 bytes) 0x007E
+    0x107F
+    -------
+    0x1080 INTERRUPT VECTOR (512 Bytes)
+        Status: 1 Byte
+            0xFF: Enabled
+            0x00: Disabled
+        Handler Address: 2 Byte
+        ...Repeat...
+    0x127F
+    -------
+    0x1280 KEYBOARD MAPPING (224 Bytes) (write to this section is only allowed in BIOS Mode)
+        0x00: Modifiers (2 bytes)
+            0b00000000.00000001: Left Shift
+            0b00000000.00000010: Left Ctrl
+            0b00000000.00000100: Left Alt
+            0b00000000.00001000: Left Super
+            0b00000000.00010000: Right Shift
+            0b00000000.00100000: Right Control
+            0b00000000.01000000: Right Alt
+            0b00000000.10000000: Right Super
+            0b00000001.00000000: Caps Lock
+            0b00000010.00000000: Num Lock
+            0b00000100.00000000: Scroll Lock
+        0x02: KeyCode (2 bytes)
+    0x135F
+    -------
+    0x1360 MOUSE MAPPING (32 Bytes)
+    0x137F
+    -------
+    0x1380 BOOTLOADER (512 Bytes)
+    0x157F
+    -------
+    0x1580 DISK INTERFACE (128 Bytes)
+        Read/Write:
+            Signal: 1 Byte
+                0x00: Start Operation
+                0x01: Cancel Current Operation
+                0xFF: Ignore
+            Mode: 1 Byte
+                0x00: Read
+                0x01: Write
+            Disk: 1 Byte
+            Sector: 2 Bytes
+            Address: 2 Bytes
+            DataSize: 2 Bytes
+            DataAddress: 2 Byte
+        ReadOnly:
+            Status: 1 Byte
+                0x00: Free
+                0x01: Writing
+                0x02: Reading
+            CurrentDisk: 1 Byte
+            CurrentSector: 2 Bytes
+            CurrentAddress: 2 Bytes
+            RestDataSize: 2 Bytes
+            SourceData: 2 Bytes
+        Free: 107 Byte
+    0x15FF
+    -------
+    0x1600 VIDEO CARD INTERFACE (256 Bytes)
+        0x00:  Video Mode (1 Byte)
+            0x00: Text Single Color
+            # 0x01: Text 16-color
+            # 0x02: Text 256-color
+            # 0x03: Text True Color Mode
+            # 0x04: GFX Single Color
+            # 0x05: GFX 16-color
+            # 0x06: GFX 256-color
+            # 0x07: GFX True Color Mode
+        # 0x01: Clear Color (1 Byte)
+        # 0x02: Palette (1 Byte)
+        0x03: Signal (1 Byte)
+            0x00: Continue
+
+            0x02: Text Single Color - Direct Print Character
+            0x03: Text Single Color - Store character in buffer
+            0x04: Text SIngle Color - Direct Print buffer & Flush Buffer
+            0x05: Text Single Color - Flush Buffer
+            0x06: Text Single Color - Print Buffer Without Flushing
+            0x07: Text Single Color - Print Buffered String
+
+            0xE0: Refresh Screen
+            0xE1: Clear Screen
+        0x04: Text Single Color Character (1 Byte)
+        0x05: Text Single Color Inverted colors (1 Byte)
+        0x06: (2 bytes) Text Single Color Buffered String Address
+    0x16FF
+    -------
+    0x1700 GENERIC SERIAL INTERFACE (64 Bytes)
+    0x173F
+    -------
+    0x1740 RAM (59583 Bytes)
+    0xFFFF
+
+
+
+#==========================================================================================================================================
+# INTERRUPTS
+#==========================================================================================================================================
+    BIOS Specific - Software Interrupts:
+    ====================================
+    0x20: BIOS Interrupt (Uses R10 register for specific functionality)
+        0x00: Set Interrupt Handler
+        0x01: Clear Interrupt Handler
+        0x10: Disk Interface
+    0x30: BIOS Video Interrupt (Uses R10 register for specific functionality)
+        0x01: Print Char in Text Single Mode (char stored in R9 register)
+        0x02: New Line in Text Single Mode
+        0x03: Print Null-Terminated String in Text Single Mode (string address stored in R9 register)
+        0x04: Print Integer in Text Single Mode (integer stored in R9 register)
+        0x05: Store Integer in buffer in Text Single Mode (integer stored in R9 register)
+        0x06: Store character in buffer in Text Single Mode (integer stored in R9 register)
+        0x07: Print buffer no flush in Text Single Mode
+        0x08: Print buffer and flush in Text Single Mode
+        0x09: Flush buffer in Text Single Mode
+        0x0A: Store Null-Terminated String in buffer in Text Single Mode (string address stored in R9 register)
+        0x0B: Toggles inverted colors in Text Single Mode
+
+        0xE0: Refresh Screen
+        0xE1: Clear Screen
+
+
+    Machine Specific - Hardware Interrupts:
+    =======================================
+    MAX INTERRUPT 0xAA
+    0x80: Disk Interface Finished
+    0xA0: Keyboard Interface - Key Pressed
+    0xA1: Keyboard Interface - Key Released
+    0xA2: Keyboard Interface - Text Entered
+
+
+
+#==========================================================================================================================================
+# DPT - Partition Table
+#==========================================================================================================================================
+
+    Disk Address: 0x200 - 0x400 (512 bytes)
+    Header: (0x200 - 0x20B) (12 bytes)
+        0x000: (2 bytes) - 0xF1CA - This number identifies this block as a DPT partition table
+        0x002: (2 bytes) - DPT version 
+        0x004: (1 byte)  - Partition count (max 5)
+        0x005: (7 bytes) - Reserved
+    Partition Table: (0x20C - 0x3FF) (500 bytes)
+        Entry: (100 bytes) (x5)
+            0x00: (4 bytes) - Start Address
+            0x04: (4 bytes) - Size
+            0x08: (2 bytes) - Flags
+            0x08: (26 bytes) - Reserved
+            0x24: (64 bytes) - Partition label
+
+
+
+#==========================================================================================================================================
+# Regex
+#==========================================================================================================================================
+    Type: Javascript
+
+    Number Constants
+    0x[0-9A-Fa-f]+|0b[0-1]+|(?<!\w)[0-9]+(?!\w)
+
+    Labels
+    \$\w+
+
+    Registers (case-insensitive)
+    (?<!\w)(r[1-9]|r10|fl|pp|rv|fp|sp|ip|acc)(?!\w)
+
+
+
+#==========================================================================================================================================
+# Test Disk DPT Block (4 MB Disk, 4 partitions)
+#==========================================================================================================================================
+    F1 CA 00 02 04 FF FF FF FF FF FF FF
+
+    00 00 04 00 
+    00 00 14 00
+    00 00
+    FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF
+    42 4F 4F 54 53 45 43 54 4F 52 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+    00 00 18 00 
+    00 01 68 00
+    00 00
+    FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+    00 01 80 00 
+    00 1F 40 00
+    00 01
+    FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF
+    44 72 61 67 6F 6E 4F 53 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+    00 20 C0 00 
+    00 1F 40 00
+    00 00
+    FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF FF
+    54 65 73 74 20 50 61 72 74 69 74 69 6F 6E 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
+    Disk: 4096 kb
+    =============
+    boot + dpt 			1 kb		1024 		bytes	(9x400)				0x0000.0000 -> 0x0000.03FF
+    -------------
+    boot-ssector 		5 kb		5120 		bytes	(0x1400)			0x0000.0400 -> 0x0000.17FF
+    Unallocated			90 kb		92160 		bytes 	(0x16800)			0x0000.1800 -> 0x0001.7FFF
+    DragonOS			2000 kb		2048000 	bytes	(0x1F4000)			0x0001.8000 -> 0x0020.BFFF
+    Test Partition		2000 kb		2048000 	bytes	(0x1F4000)			0x0020.C000 -> 0x0040.0000

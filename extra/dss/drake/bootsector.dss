@@ -1,7 +1,11 @@
-.load [dynamic, base=0x1740]
+.load 0x1740
+
+@include <dpt.dss>
 
 .data
 	$string "Hello BOOTSECTOR!!"
+	$ddd <DiskDriverData>
+	$dpt_block <DPTBlock>
 
 .code
 	mov R10, 0xE0
@@ -9,4 +13,35 @@
 	mov R10, 0x0C
 	mov R9, $string
 	int 0x30
+
+	push 0
+	call $_load_dpt_block
+	debug_break
+
+end_loop:
+	jmp $end_loop
+	hlt
+
+
+
+_load_dpt_block:
+	mov [$ddd.Mode], DiskMode.READ
+	mov [$ddd.Disk], 0x00
+	mov [$ddd.Sector], 0x0000
+	mov [$ddd.Address], 0x0200
+	mov [$ddd.DataSize], 512
+	mov [$ddd.MemoryAddress], $dpt_block.ID
+	and FL, 0b1111111111111110													## Disable interrupts
+	mov FL, ACC	
+	push $ddd.Mode
+	push 1
+	call $_disk_load_from_ddd_blocking
+	or FL, 0b0000000000000001													## Enable interrupts
+	mov FL, ACC
+	ret
+
+	
+@include <disk.dss>
+
+.fixed 5120, 0xFF
 
