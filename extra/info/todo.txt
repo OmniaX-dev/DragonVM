@@ -1,8 +1,6 @@
 Assembler:
-	Add evaluation of direct struct instance name as as struct's first member
 	Add Struct export functionality
-	Add single Define export functionality
-	Add subroutine addres export functionality
+	Add subroutine address export functionality
 
 Bugs:
 	Fix VM closing when reaching hlt instruction
@@ -16,6 +14,8 @@ External:
 
 
 Done:
+	*Add evaluation of direct struct instance name as as struct's first member
+	*Add single Define export functionality
 	*Inverted Colors in Text-Single-Color
 	*show where interrupts are disabled (in call-tree view)
 	*Text visualization for hardware interrupts (in call-tree view)

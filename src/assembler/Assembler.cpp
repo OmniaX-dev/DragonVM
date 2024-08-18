@@ -736,6 +736,7 @@ namespace dragon
 						return;
 					}
 					int32_t data_index = 0;
+					newLines.push_back("!" + symbolName);
 					for (auto& member : struct_def.members)
 					{
 						ostd::String newLine = symbolName;
@@ -914,10 +915,25 @@ namespace dragon
 
 		void Assembler::parseDataSection(void)
 		{
+			// for (auto& line : m_rawDataSection)
+			// 	std::cout << line << "\n";
 			for (auto& line : m_rawDataSection)
 			{
 				ostd::String lineEdit(line);
 				tSymbol symbol;
+				if (lineEdit.startsWith("!"))
+				{
+					if (lineEdit.contains(" "))
+					{
+						std::cout << "Invalid phantom data entry: " << lineEdit << "\n";
+						continue;
+					}
+					lineEdit.substr(1).trim();
+					symbol.bytes.clear();
+					symbol.address = m_currentDataAddr;
+					m_symbolTable[lineEdit] = symbol;
+					continue;
+				}
 				if (!lineEdit.startsWith("$") || lineEdit.indexOf(" ") < 2)
 				{
 					std::cout << "Invalid data entry: " << lineEdit << "\n";
@@ -2367,7 +2383,15 @@ namespace dragon
 		{
 			ostd::String lineEdit(line);
 			for (auto& symbol : m_symbolTable)
-				lineEdit.replaceAll(symbol.first, ostd::Utils::getHexStr(symbol.second.address, true, 2));
+			{		
+				ostd::String regex = "\\" + symbol.first.new_regexReplace("\\.", "\\.") + "(?!\\.)(?!\\w)";
+
+				// std::cout << "SYMBOL: " << symbol.first << "\n";
+				// std::cout << "LINE: " << lineEdit << "\n";
+				// std::cout << "REGEX: " << regex << "\n";
+				lineEdit.regexReplace(regex, ostd::Utils::getHexStr(symbol.second.address, true, 2), false);
+				// std::cout << "NEW_LINE: " << lineEdit << "\n\n";
+			}
 			return lineEdit;
 		}
 
