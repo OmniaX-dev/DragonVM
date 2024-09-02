@@ -1,19 +1,24 @@
 .load 0x1740
 
-@include <dpt.dss>
+@include <../bios_api.dss>
 
 .data
-	$string "Hello BOOTSECTOR!!"
+	$string "Hello "
 	$ddd <DiskDriverData>
 	$dpt_block <DPTBlock>
 
 .code
+	push 0
+	call $_load_dpt_block
+
 	mov R10, 0x0C
 	mov R9, $string
 	int 0x30
 
-	push 0
-	call $_load_dpt_block
+	mov R10, 0x0C
+	mov R9, { $dpt_block + DPTStructure.ENTRIES_START + (2 * DPTStructure.ENTRY_SIZE_B) + DPTStructure.ENTRY_PART_LBL }
+	int 0x30
+
 	debug_break
 
 end_loop:
@@ -28,14 +33,10 @@ _load_dpt_block:
 	mov [$ddd.Sector], 0x0000
 	mov [$ddd.Address], 0x0200
 	mov [$ddd.DataSize], 512
-	mov [$ddd.MemoryAddress], $dpt_block.ID
-	and FL, 0b1111111111111110													## Disable interrupts
-	mov FL, ACC	
+	mov [$ddd.MemoryAddress], $dpt_block
 	push $ddd
 	push 1
 	call $_disk_load_from_ddd_blocking
-	or FL, 0b0000000000000001													## Enable interrupts
-	mov FL, ACC
 	ret
 
 	

@@ -15,186 +15,6 @@ namespace dragon
 {
 	namespace code
 	{
-		std::vector<ostd::String> IncludePreprocessor::loadEntryFile(const ostd::String& filePath)
-        {
-            m_guards.clear();
-            m_lines.clear();
-            m_directory = "";
-            m_lines = __load_file(filePath);
-            if (m_lines.size() == 0) return {  }; //TODO: Error
-            if (filePath.contains("/"))
-                m_directory = filePath.new_substr(0, filePath.lastIndexOf("/") + 1);
-            if (!__can_file_be_included(m_lines))
-                return {  }; //TODO: Error
-            if (!__include_loop()) return {  }; //TODO: Error
-			std::vector<ostd::String> newLines;
-			for (auto& line : m_lines)
-			{
-				line.trim();
-				if (line != "")
-					newLines.push_back(line);
-			}
-			m_lines.clear();
-			m_lines = newLines;
-            return m_lines;
-        }
-
-        bool IncludePreprocessor::__can_file_be_included(std::vector<ostd::String>& lines)
-        {
-            ostd::String guard_name = "";
-            for (auto& line : lines)
-            {
-                ostd::String lineEdit = line.new_trim();
-                if (lineEdit.new_toLower().startsWith("@guard "))
-                {
-                    guard_name = lineEdit.new_substr(7).trim();
-                    line = "";
-                    break;
-                }
-            }
-            if (guard_name == "") return true;
-            for (auto& guard : m_guards)
-            {
-                if (guard == guard_name)
-                    return false;
-            }
-            m_guards.push_back(guard_name);
-            return true;
-        }
-
-        bool IncludePreprocessor::__include_loop(void)
-        {
-            std::vector<ostd::String> lines = m_lines;
-            bool included = false;
-            do
-            {
-                included = false;
-                uint32_t i = 0;
-                for ( ; i < lines.size(); i++)
-                {
-                    ostd::String line = lines[i];
-                    line.trim();
-                    if (line.new_toLower().startsWith("@include") && line.len() > 8)
-                    {
-                        line.substr(8).trim();
-                        if (!line.startsWith("<") || !line.endsWith(">"))
-                            return false;
-                        line.substr(1, line.len() - 1).trim();
-                        auto file_lines = __load_file(m_directory + line);
-                        if (file_lines.size() == 0)
-                            return false;
-                        lines.erase(lines.begin() + i);
-                        if (__can_file_be_included(file_lines))
-                        {
-                            lines.insert(lines.begin() + i, file_lines.begin(), file_lines.end());
-                            included = true;
-                        }
-                        break;
-                    }
-                }
-            } while(included);
-            m_lines = lines;
-            return true;
-        }
-
-        std::vector<ostd::String> IncludePreprocessor::__load_file(const ostd::String& filePath)
-        {
-            ostd::TextFileBuffer file(filePath);
-            if (!file.exists())
-                return {  }; //TODO: Error
-            ostd::String source = file.rawContent();
-			return ostd::String(source.replaceAll("\t", "    ")).tokenize("\n").getRawData();
-        }
-
-
-
-
-		int32_t Assembler::Application::loadArguments(int argc, char** argv)
-		{
-			if (argc < 2)
-			{
-				out.fg(ostd::ConsoleColors::Red).p("Error: too few arguments.").nl();
-				out.fg(ostd::ConsoleColors::Red).p("Use the --help option for more info.").reset().nl();
-				return RETURN_VAL_TOO_FEW_ARGUMENTS;
-			}
-			else
-			{
-				args.source_file_path = argv[1];
-				if (args.source_file_path == "--help")
-				{
-					print_application_help();
-					return RETURN_VAL_CLOSE_PROGRAM;
-				}
-				for (int32_t i = 2; i < argc; i++)
-				{
-					ostd::String edit(argv[i]);
-					if (edit == "-o")
-					{
-						if (i == argc - 1)
-							return RETURN_VAL_MISSING_PARAM;
-						i++;
-						args.dest_file_path = argv[i];
-					}
-					else if (edit == "--save-disassembly")
-					{
-						if (i == argc - 1)
-							return RETURN_VAL_MISSING_PARAM;
-						i++;
-						args.disassembly_file_path = argv[i];
-						args.save_disassembly = true;
-					}
-					else if (edit == "--help")
-					{
-						print_application_help();
-						return RETURN_VAL_CLOSE_PROGRAM;
-					}
-					else if (edit == "--extmov")
-						args.cpu_extensions.push_back("extmov");
-					else if (edit == "--extalu")
-						args.cpu_extensions.push_back("extalu");
-					else if (edit == "--verbose")
-						args.verbose = true;
-					else if (edit == "--save-exports")
-						args.save_exports = true;
-				}
-			}
-			return RETURN_VAL_EXIT_SUCCESS;
-		}
-
-		void Assembler::Application::print_application_help(void)
-		{
-			int32_t commandLength = 46;
-
-			out.nl().fg(ostd::ConsoleColors::Yellow).p("List of available parameters:").reset().nl();
-			ostd::String tmpCommand = "--save-disassembly <destination-directory>";
-			tmpCommand.addRightPadding(commandLength);
-			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Saves debug information in the destination directory.").reset().nl();
-			tmpCommand = "--verbose";
-			tmpCommand.addRightPadding(commandLength);
-			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Shows more information about the assembled program.").reset().nl();
-			tmpCommand = "-o <destination-binary-file>";
-			tmpCommand.addRightPadding(commandLength);
-			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Used to specify the output binary file.").reset().nl();
-			tmpCommand = "--save-exports";
-			tmpCommand.addRightPadding(commandLength);
-			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Used to save any specified exports in the code.").reset().nl();
-			tmpCommand = "--extmov";
-			tmpCommand.addRightPadding(commandLength);
-			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Enables mnemonics for the <extmov> CPU extension.").reset().nl();
-			tmpCommand = "--extalu";
-			tmpCommand.addRightPadding(commandLength);
-			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Enables mnemonics for the <extalu> CPU extension.").reset().nl();
-			tmpCommand = "--help";
-			tmpCommand.addRightPadding(commandLength);
-			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Displays this help message.").reset().nl();
-			
-			out.nl().fg(ostd::ConsoleColors::Magenta).p("Usage: ./dasm <source> -o <destination> [...options...]").reset().nl();
-			out.nl();
-		}
-
-
-
-
 		ostd::ByteStream Assembler::assembleFromFile(ostd::String fileName)
 		{
 			m_rawSource = "";
@@ -215,7 +35,9 @@ namespace dragon
 			if (m_lines.size() == 0)
 				return {  }; //TODO: Error
 			removeComments();
-			parseExportSpecs();
+			parseExportSpecifications();
+			createExports();
+			replaceExportBuiltinVars();
 			replaceGroupDefines();
 			replaceDefines();
 			parseStructures();
@@ -226,7 +48,7 @@ namespace dragon
 			parseCodeSection();
 			replaceLabelRefs();
 			combineDataAndCode();
-			processExports();
+			createExportFiles();
 			m_programSize = m_code.size();
 			if (m_fixedSize > 0 && m_code.size() > m_fixedSize)
 				std::cout << "Warning: Fixed size specified but exceeded: (" << (int)m_code.size() << "/" << (int)m_fixedSize << " bytes)\n";
@@ -282,6 +104,59 @@ namespace dragon
 			return serializer.saveToFile(fileName);
 		}
 
+		void Assembler::printProgramInfo(void)
+		{
+			int32_t symbol_len = 30;
+			out.nl();
+
+			if (m_symbolTable.size() > 0)
+				out.fg(ostd::ConsoleColors::Yellow).p("Symbols:").nl();
+			for (auto& symbol : m_symbolTable)
+			{
+				out.fg(ostd::ConsoleColors::Red).p(ostd::Utils::getHexStr(symbol.second.address, true, 2));
+				out.fg(ostd::ConsoleColors::Magenta).p("  ").p(symbol.first);
+				out.fg(ostd::ConsoleColors::Blue).nl().p("  ");
+				for (auto& b : symbol.second.bytes)
+					out.p(ostd::Utils::getHexStr(b, false, 1)).p(".");
+				out.nl();
+			}
+			if (m_symbolTable.size() > 0)
+				out.nl();
+			
+			if (m_labelTable.size() > 0)
+				out.fg(ostd::ConsoleColors::Yellow).p("Labels:").nl();
+			for (auto& label : m_labelTable)
+			{
+				out.fg(ostd::ConsoleColors::Magenta).p(label.first.new_fixedLength(symbol_len));
+				out.fg(ostd::ConsoleColors::Red).p(ostd::Utils::getHexStr(label.second.address, true, 2)).nl();
+			}
+			if (m_labelTable.size() > 0)
+				out.nl();
+			
+			if (m_structDefs.size() > 0)
+				out.fg(ostd::ConsoleColors::Yellow).p("Structures:").nl();
+			for (auto& str : m_structDefs)
+			{
+				out.fg(ostd::ConsoleColors::Magenta).p(str.name.new_fixedLength(symbol_len));
+				out.fg(ostd::ConsoleColors::Red).p(str.size).p(" bytes").nl();
+			}
+			if (m_structDefs.size() > 0)
+				out.nl();
+
+
+			out.fg(ostd::ConsoleColors::Yellow).p("Program data:").nl();
+			out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Fixed Size:  ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p((int)m_fixedSize).p(" bytes").nl();
+			out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Program Size:").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p((int)m_programSize).p(" bytes").nl();
+			out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Data Size:   ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p((int)m_dataSize).p(" bytes").nl();
+			out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Fixed Fill:  ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p(ostd::Utils::getHexStr(m_fixedFillValue, true, 1)).nl();
+			out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Load Address:").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p(ostd::Utils::getHexStr(m_loadAddress, true, 2)).nl();
+			out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Entry Point: ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p(ostd::Utils::getHexStr(m_dataSize + m_loadAddress + 3, true, 2)).nl();
+
+			out.nl();
+		}
+
+
+
 		void Assembler::removeComments(void)
 		{
 			std::vector<ostd::String> newLines;
@@ -289,111 +164,14 @@ namespace dragon
 			for (auto& line : m_lines)
 			{
 				lineEdit = line;
-				lineEdit.trim();
-				if (lineEdit.startsWith("##"))
+				if (lineEdit.new_trim().startsWith("##"))
 					continue;
 				if (lineEdit.contains("##"))
-				{
-					lineEdit = lineEdit.substr(0, lineEdit.indexOf("##"));
-					lineEdit.trim();
-				}
+					lineEdit.substr(0, lineEdit.indexOf("##"));
 				newLines.push_back(lineEdit);
 			}
 			m_lines.clear();
 			m_lines = newLines;
-		}
-
-		void Assembler::parseExportSpecs(void)
-		{
-			auto exportAlreadyExists = [](const std::unordered_map<ostd::String, tExportSpec>& exports, const ostd::String& name) -> bool {
-				return exports.count(name) > 0;
-			};
-			std::vector<ostd::String> newLines;
-			ostd::String lineEdit = "";
-			ostd::String tmpLineEdit = "";
-			for (auto& line : m_lines)
-			{
-				lineEdit = line;
-				lineEdit.trim();
-				tmpLineEdit = lineEdit;
-				if (tmpLineEdit.toLower().startsWith("@export "))
-				{
-					lineEdit = lineEdit.substr(8);
-					lineEdit.trim();
-					if (!lineEdit.contains(" "))
-					{
-						std::cout << "Invalid @export directive: " << line << "\n";
-						return;
-					}
-					ostd::String export_name = lineEdit.new_substr(0, lineEdit.indexOf(" ")).trim();
-					ostd::String export_file = lineEdit.new_substr(lineEdit.indexOf(" ") + 1).trim();
-					if (export_name == "" || export_file == "")
-					{
-						std::cout << "Invalid @export directive (null value(s)): " << line << "\n";
-						return;
-					}
-					if (exportAlreadyExists(m_exportSpecifications, export_name))
-					{
-						std::cout << "An export specification with this name already exists: " << line << "\n";
-						return;
-					}
-					m_exportSpecifications[export_name] = { export_file, {} };
-					continue;
-				}
-				newLines.push_back(lineEdit);
-			}
-			m_lines.clear();
-			m_lines = newLines;
-		}
-
-		void Assembler::processExports(void)
-		{
-			for (auto& exp : m_exportSpecifications)
-			{
-				for (auto& def : exp.second.content)
-				{
-					if (def.name.startsWith("##"))
-					{
-						def.value.replaceAll("\\n", "\n");
-						continue;
-					}
-					if (def.value.startsWith("{") && def.value.endsWith("}"))
-					{
-						def.value.substr(1, def.value.len() - 1).trim();
-						int16_t val = (int16_t)ostd::Utils::solveIntegerExpression(def.value);
-						def.value = ostd::Utils::getHexStr(val, true, 2);
-					}
-				}
-			}
-			if (!saveExports) return;
-			for (auto& exp : m_exportSpecifications)
-			{
-				ostd::String fileContent = "## -- \n## -- This file is automatically generated by the DragonAssembler (version ";
-				fileContent.add(VERSION_STR).add(")\n");
-				fileContent.add("## -- Please do not modify this file in any way.");
-				fileContent.add("\n## -- \n\n");
-				fileContent.add("@guard __AUTO_GEN_GUARD_").add(exp.first.new_toUpper()).add("_DSS__\n\n");
-				std::filesystem::path filePath(exp.second.fileName.cpp_str());
-				uint32_t define_fixed_length = 96;
-				for (auto& def : exp.second.content)
-				{
-					if (def.name.startsWith("##"))
-					{
-						fileContent.add(def.name).add(def.value).add("\n");
-						continue;
-					}
-					fileContent.add("@define ");
-					fileContent.add(def.name.new_addRightPadding(define_fixed_length)).add(" ").add(def.value).add("\n");
-				}
-				std::ofstream outFile(filePath, std::ofstream::out | std::ofstream::trunc);
-				if (!std::filesystem::exists(filePath))
-				{
-					std::cout << "Invalid export specification file: " << filePath << "\n";
-					continue;
-				}
-				outFile << fileContent.cpp_str();
-				outFile.close();
-			}
 		}
 
 		void Assembler::replaceDefines(void)
@@ -406,9 +184,9 @@ namespace dragon
 				}
 				return false;
 			};
-			auto exportExists = [](const std::unordered_map<ostd::String, tExportSpec>& exports, const ostd::String& name) -> bool {
-				return exports.count(name) > 0;
-			};
+			// auto exportExists = [](const std::unordered_map<ostd::String, tExportSpec>& exports, const ostd::String& name) -> bool {
+			// 	return exports.count(name) > 0;
+			// };
 			std::vector<tDefine> defines;
 			std::vector<ostd::String> newLines;
 			ostd::String lineEdit;
@@ -418,32 +196,32 @@ namespace dragon
 				lineEdit = line;
 				lineEdit.trim();
 				tmpLineEdit = lineEdit;
-				ostd::String export_name = "";
-				if (tmpLineEdit.toLower().startsWith("@export_comment "))
-				{
-					lineEdit.substr(16).trim();
-					if (!lineEdit.startsWith("/") || !lineEdit.contains(" "))
-					{
-						std::cout << "Invalid @export_comment directive: export specification not found: " << line << "\n";
-						return;
-					}
-					export_name = lineEdit.new_substr(1, lineEdit.indexOf(" ")).trim();
-					lineEdit.substr(lineEdit.indexOf(" ") + 1).trim();
-					if (!lineEdit.startsWith("\"") || !lineEdit.endsWith("\""))
-					{
-						std::cout << "Invalid @export_comment directive: comment not found: " << line << "\n";
-						return;
-					}
-					lineEdit.substr(1, lineEdit.len() - 1);
-					if (!exportExists(m_exportSpecifications, export_name))
-					{
-						std::cout << "Invalid export specification: " << line << "\n";
-						return;
-					}
-					m_exportSpecifications[export_name].content.push_back({ "## -- ", lineEdit });
-					continue;
-				}
-				else if (tmpLineEdit.toLower().startsWith("@define "))
+				// ostd::String export_name = "";
+				// if (tmpLineEdit.toLower().startsWith("@export_comment "))
+				// {
+				// 	lineEdit.substr(16).trim();
+				// 	if (!lineEdit.startsWith("/") || !lineEdit.contains(" "))
+				// 	{
+				// 		std::cout << "Invalid @export_comment directive: export specification not found: " << line << "\n";
+				// 		return;
+				// 	}
+				// 	export_name = lineEdit.new_substr(1, lineEdit.indexOf(" ")).trim();
+				// 	lineEdit.substr(lineEdit.indexOf(" ") + 1).trim();
+				// 	if (!lineEdit.startsWith("\"") || !lineEdit.endsWith("\""))
+				// 	{
+				// 		std::cout << "Invalid @export_comment directive: comment not found: " << line << "\n";
+				// 		return;
+				// 	}
+				// 	lineEdit.substr(1, lineEdit.len() - 1);
+				// 	if (!exportExists(m_exportSpecifications, export_name))
+				// 	{
+				// 		std::cout << "Invalid export specification: " << line << "\n";
+				// 		return;
+				// 	}
+				// 	m_exportSpecifications[export_name].content.push_back({ "## -- ", lineEdit });
+				// 	continue;
+				// } else 
+				if (tmpLineEdit.toLower().startsWith("@define "))
 				{
 					lineEdit.substr(8).trim();
 					if (lineEdit.startsWith("/"))
@@ -453,7 +231,7 @@ namespace dragon
 							std::cout << "Invalid export definition for group: " << line << "\n";
 							return;
 						}
-						export_name = lineEdit.new_substr(1, lineEdit.indexOf(" ")).trim();
+						// export_name = lineEdit.new_substr(1, lineEdit.indexOf(" ")).trim();
 						lineEdit.substr(lineEdit.indexOf(" ") + 1).trim();
 					}
 					if (!lineEdit.contains(" "))
@@ -469,15 +247,15 @@ namespace dragon
 						return;
 					}
 					defines.push_back({ define_name, define_value });
-					if (export_name != "")
-					{
-						if (!exportExists(m_exportSpecifications, export_name))
-						{
-							std::cout << "Invalid export specification: " << line << "\n";
-							return;
-						}
-						m_exportSpecifications[export_name].content.push_back({ define_name, define_value });
-					}
+					// if (export_name != "")
+					// {
+					// 	if (!exportExists(m_exportSpecifications, export_name))
+					// 	{
+					// 		std::cout << "Invalid export specification: " << line << "\n";
+					// 		return;
+					// 	}
+					// 	m_exportSpecifications[export_name].content.push_back({ define_name, define_value });
+					// }
 					continue;
 				}
 				newLines.push_back(lineEdit);
@@ -489,14 +267,14 @@ namespace dragon
 					lineEdit.replaceAll(defines[i].name, defines[i].value.new_trim());
 				line = lineEdit;
 			}
-			for (auto& exp : m_exportSpecifications)
-			{
-				for (auto& def : exp.second.content)
-				{
-					for (int32_t i = defines.size() - 1; i >= 0; i--)
-						def.value.replaceAll(defines[i].name, defines[i].value.new_trim());
-				}
-			}
+			// for (auto& exp : m_exportSpecifications)
+			// {
+			// 	for (auto& def : exp.second.content)
+			// 	{
+			// 		for (int32_t i = defines.size() - 1; i >= 0; i--)
+			// 			def.value.replaceAll(defines[i].name, defines[i].value.new_trim());
+			// 	}
+			// }
 			m_lines.clear();
 			m_lines = newLines;
 		}
@@ -566,198 +344,6 @@ namespace dragon
 			}
 			m_lines.clear();
 			m_lines = newLines;
-		}
-
-		void Assembler::parseSections(void)
-		{
-			constexpr uint8_t DATA_SECTION = 0x01;
-			constexpr uint8_t CODE_SECTION = 0x02;
-
-			uint8_t currentSection = 0x00;
-
-			for (auto& line : m_lines)
-			{
-				ostd::String lineEdit(line);
-				if (lineEdit.startsWith(".data"))
-					currentSection = DATA_SECTION;
-				else if (lineEdit.startsWith(".code"))
-					currentSection = CODE_SECTION;
-				else if (lineEdit.startsWith(".fixed "))
-				{
-					if (lineEdit.len() < 8)
-					{
-						//TODO: Error 
-						std::cout << "Invalid .fixed value: " << lineEdit << "\n";
-						return;
-					}
-					lineEdit = lineEdit.substr(7);
-					lineEdit.trim();
-					if (!lineEdit.contains(","))
-					{
-						//TODO: Error 
-						std::cout << "Invalid .fixed value: " << lineEdit << "\n";
-						return;
-					}
-					ostd::String fixedSizeEdit = lineEdit.new_substr(0, lineEdit.indexOf(","));
-					fixedSizeEdit.trim();
-					lineEdit = lineEdit.substr(lineEdit.indexOf(",") + 1);
-					lineEdit.trim();
-					if (!lineEdit.isNumeric())
-					{
-						//TODO: Error 
-						std::cout << "Invalid .fixed size value: " << lineEdit << "\n";
-						return;
-					}
-					m_fixedFillValue = lineEdit.toInt();
-					if (!fixedSizeEdit.isNumeric())
-					{
-						//TODO: Error 
-						std::cout << "Invalid .fixed fill value: " << lineEdit << "\n";
-						return;
-					}
-					m_fixedSize = fixedSizeEdit.toInt();
-					continue;
-				}
-				else if (lineEdit.startsWith(".load "))
-				{
-					if (lineEdit.len() < 7)
-					{
-						//TODO: Error 
-						std::cout << "Invalid .load value: " << lineEdit << "\n";
-						return;
-					}
-					lineEdit = lineEdit.substr(6);
-					lineEdit.trim();
-					if (!lineEdit.isNumeric())
-					{
-						//TODO: Error 
-						std::cout << "Invalid .load value: " << lineEdit << "\n";
-						return;
-					}
-					m_loadAddress = lineEdit.toInt();
-					m_currentDataAddr = m_loadAddress + 3;
-					continue;
-				}
-				else if (lineEdit.startsWith("."))
-				{
-					//TODO: Error 
-					std::cout << "Invalid section: " << lineEdit << "\n";
-					return;
-				}
-				else
-				{
-					if (currentSection == DATA_SECTION)
-						m_rawDataSection.push_back(line);
-					else if (currentSection == CODE_SECTION)
-						m_rawCodeSection.push_back(line);
-					else
-					{
-						//TODO: Error 
-						std::cout << "Invalid section: " << lineEdit << "\n";
-						return;
-					}
-				}
-			}
-		}
-
-		void Assembler::parseStructInstances(void)
-		{
-			std::vector<ostd::String> newLines;
-			ostd::String lineEdit;
-			bool in_group = false;
-			ostd::String group_name = "";
-			for (auto& line : m_rawDataSection)
-			{
-				lineEdit = line;
-				lineEdit.trim();
-				if (!lineEdit.startsWith("$") || lineEdit.indexOf(" ") < 2)
-				{
-					std::cout << "Invalid data entry: " << lineEdit << "\n";
-					return;
-				}
-				ostd::String symbolName = lineEdit.new_substr(0, lineEdit.indexOf(" "));
-				symbolName.trim();
-				lineEdit.substr(lineEdit.indexOf(" ") + 1);
-				lineEdit.trim();
-				ostd::String initialization_data = "";
-				bool has_init_data = false;
-				if (lineEdit.startsWith("<") && lineEdit.contains("="))
-				{
-					initialization_data = lineEdit.new_substr(lineEdit.indexOf("=") + 1).trim();
-					if (initialization_data.startsWith("(") && initialization_data.endsWith(")"))
-					{
-						initialization_data.substr(1, initialization_data.len() - 1).trim();
-						has_init_data = initialization_data != "";
-					}
-					else
-					{
-						std::cout << "Invalid initialization data: " << lineEdit << "\n";
-						return;
-					}
-					lineEdit.substr(0, lineEdit.indexOf("=")).trim();
-				}
-				if (lineEdit.startsWith("<") && lineEdit.endsWith(">") && lineEdit.len() > 2)
-				{
-					lineEdit = lineEdit.substr(1, lineEdit.len() - 1);
-					std::vector<uint8_t> init_data;
-					if (has_init_data)
-					{
-						auto tokens = initialization_data.tokenize(",");
-						while (tokens.hasNext())
-						{
-							ostd::String tok = tokens.next();
-							if (!tok.isNumeric())
-							{
-								std::cout << "Invalid initialization data: " << lineEdit << "\n";
-								return;
-							}
-							init_data.push_back((uint8_t)tok.toInt());
-						}
-					}
-					tStructDefinition struct_def;
-					bool found = false;
-					for (auto& _struct : m_structDefs)
-					{
-						if (_struct.name == lineEdit)
-						{
-							struct_def = _struct;
-							found = true;
-							break;
-						}
-					}
-					if (!found)
-					{
-						std::cout << "Unknown Structure name: " << lineEdit << "\n";
-						return;
-					}
-					if (has_init_data && struct_def.size != init_data.size())
-					{
-						std::cout << "Structure size must match initialization data size: " << lineEdit << "\n";
-						return;
-					}
-					int32_t data_index = 0;
-					newLines.push_back("!" + symbolName);
-					for (auto& member : struct_def.members)
-					{
-						ostd::String newLine = symbolName;
-						newLine.add(".").add(member.name).add(" ");
-						for (int32_t i = 0; i < member.data.size(); i++, data_index++)
-						{
-							if (has_init_data)
-								newLine.add(ostd::Utils::getHexStr(init_data[data_index], true, 2));
-							else
-								newLine.add(ostd::Utils::getHexStr(member.data[i], true, 2));
-							newLine.add(",");
-						}
-						newLine.substr(0, newLine.len() - 1);
-						newLines.push_back(newLine);
-					}
-					continue;
-				}
-				newLines.push_back(line);
-			}
-			m_rawDataSection.clear();
-			m_rawDataSection = newLines;
 		}
 
 		void Assembler::parseStructures(void)
@@ -911,6 +497,339 @@ namespace dragon
 			// 	std::cout << "\n";
 			// }
 			// std::cin.get();
+		}
+
+		void Assembler::parseStructInstances(void)
+		{
+			std::vector<ostd::String> newLines;
+			ostd::String lineEdit;
+			bool in_group = false;
+			ostd::String group_name = "";
+			for (auto& line : m_rawDataSection)
+			{
+				lineEdit = line;
+				lineEdit.trim();
+				if (!lineEdit.startsWith("$") || lineEdit.indexOf(" ") < 2)
+				{
+					std::cout << "Invalid data entry: " << lineEdit << "\n";
+					return;
+				}
+				ostd::String symbolName = lineEdit.new_substr(0, lineEdit.indexOf(" "));
+				symbolName.trim();
+				lineEdit.substr(lineEdit.indexOf(" ") + 1);
+				lineEdit.trim();
+				ostd::String initialization_data = "";
+				bool has_init_data = false;
+				if (lineEdit.startsWith("<") && lineEdit.contains("="))
+				{
+					initialization_data = lineEdit.new_substr(lineEdit.indexOf("=") + 1).trim();
+					if (initialization_data.startsWith("(") && initialization_data.endsWith(")"))
+					{
+						initialization_data.substr(1, initialization_data.len() - 1).trim();
+						has_init_data = initialization_data != "";
+					}
+					else
+					{
+						std::cout << "Invalid initialization data: " << lineEdit << "\n";
+						return;
+					}
+					lineEdit.substr(0, lineEdit.indexOf("=")).trim();
+				}
+				if (lineEdit.startsWith("<") && lineEdit.endsWith(">") && lineEdit.len() > 2)
+				{
+					lineEdit = lineEdit.substr(1, lineEdit.len() - 1);
+					std::vector<uint8_t> init_data;
+					if (has_init_data)
+					{
+						auto tokens = initialization_data.tokenize(",");
+						while (tokens.hasNext())
+						{
+							ostd::String tok = tokens.next();
+							if (!tok.isNumeric())
+							{
+								std::cout << "Invalid initialization data: " << lineEdit << "\n";
+								return;
+							}
+							init_data.push_back((uint8_t)tok.toInt());
+						}
+					}
+					tStructDefinition struct_def;
+					bool found = false;
+					for (auto& _struct : m_structDefs)
+					{
+						if (_struct.name == lineEdit)
+						{
+							struct_def = _struct;
+							found = true;
+							break;
+						}
+					}
+					if (!found)
+					{
+						std::cout << "Unknown Structure name: " << lineEdit << "\n";
+						return;
+					}
+					if (has_init_data && struct_def.size != init_data.size())
+					{
+						std::cout << "Structure size must match initialization data size: " << lineEdit << "\n";
+						return;
+					}
+					int32_t data_index = 0;
+					newLines.push_back("!" + symbolName);
+					for (auto& member : struct_def.members)
+					{
+						ostd::String newLine = symbolName;
+						newLine.add(".").add(member.name).add(" ");
+						for (int32_t i = 0; i < member.data.size(); i++, data_index++)
+						{
+							if (has_init_data)
+								newLine.add(ostd::Utils::getHexStr(init_data[data_index], true, 2));
+							else
+								newLine.add(ostd::Utils::getHexStr(member.data[i], true, 2));
+							newLine.add(",");
+						}
+						newLine.substr(0, newLine.len() - 1);
+						newLines.push_back(newLine);
+					}
+					continue;
+				}
+				newLines.push_back(line);
+			}
+			m_rawDataSection.clear();
+			m_rawDataSection = newLines;
+		}
+
+
+
+		void Assembler::parseExportSpecifications(void)
+		{
+			std::vector<ostd::String> newLines;
+			ostd::String lineEdit;
+			for (auto& line : m_lines)
+			{
+				lineEdit = line;
+				if (!lineEdit.new_toLower().trim().startsWith("@export "))
+				{
+					newLines.push_back(line);
+					continue;
+				}
+				lineEdit.trim().substr(8).trim();
+				if (!lineEdit.contains(" "))
+				{
+					std::cout << "Invalid @export directive: " << line << "\n";
+					return;
+				}
+				ostd::String exportName = lineEdit.new_substr(0, lineEdit.indexOf(" ")).trim();
+				ostd::String exportPath = lineEdit.new_substr(lineEdit.indexOf(" ") + 1).trim();
+				m_exports[exportName] = { exportPath, {  } };
+			}
+			m_lines.clear();
+			m_lines = newLines;
+		}
+
+		void Assembler::createExports(void)
+		{
+			std::vector<ostd::String> newLines;
+			ostd::String lineEdit;
+			auto exportExists = [](const std::unordered_map<ostd::String, tExportSpec>& exportList, const ostd::String& exportName) -> bool {
+				return exportList.count(exportName) > 0;
+			};
+			bool export_start = false;
+			ostd::String open_export = "";
+			for (auto& line : m_lines)
+			{
+				lineEdit = line;
+				lineEdit.trim();
+				if (lineEdit.new_toLower().startsWith("@export_comment "))
+				{
+					if (export_start)
+					{
+						std::cout << "Invalid @export_comment directive inside an open raw export block: " << line << "\n";
+						return;
+					}
+					lineEdit.substr(16).trim();
+					if (!lineEdit.contains(" "))
+					{
+						std::cout << "Invalid @export_comment directive: " << line << "\n";
+						return;
+					}
+					ostd::String exportName = lineEdit.new_substr(0, lineEdit.indexOf(" ")).trim();
+					ostd::String exportComment = lineEdit.new_substr(lineEdit.indexOf(" ") + 1).trim();
+					if (!exportExists(m_exports, exportName))
+					{
+						std::cout << "Invalid export name in @export_comment directive: " << line << "\n";
+						return;
+					}
+					if (!exportComment.startsWith("\"") || !exportComment.endsWith("\""))
+					{
+						std::cout << "Invalid export comment in @export_comment directive: " << line << "\n";
+						return;
+					}
+					exportComment.substr(1, exportComment.len() - 1).replaceAll("\\n", "\n");
+					m_exports[exportName].lines.push_back(ostd::String("##").add(exportComment));
+				}
+				else if (lineEdit.startsWith("@raw_export_start "))
+				{
+					if (export_start)
+					{
+						std::cout << "Error: raw export block already open: " << line << "\n";
+						return;
+					}
+					lineEdit.substr(18).trim();
+					if (lineEdit.len() <= 0)
+					{
+						std::cout << "Missing export name in @raw_export_start directive: " << line << "\n";
+						return;
+					}
+					if (!exportExists(m_exports, lineEdit))
+					{
+						std::cout << "Invalid export name in @raw_export_start directive: " << line << "\n";
+						return;
+					}
+					export_start = true;
+					open_export = lineEdit;
+				}
+				else if (lineEdit.startsWith("@raw_export_end"))
+				{
+					if (!export_start)
+					{
+						std::cout << "Error: reached @raw_export_end without an open raw export block: " << line << "\n";
+						return;
+					}
+					export_start = false;
+					open_export = "";
+				}
+				else
+				{
+					if (export_start)
+						m_exports[open_export].lines.push_back(line);
+					newLines.push_back(line);
+				}
+			}
+			m_lines.clear();
+			m_lines = newLines;
+		}
+
+		void Assembler::replaceExportBuiltinVars(void)
+		{
+			if (!saveExports) return;
+			auto getVersionStr = []() -> ostd::String {
+				return ostd::String("").add(MAJ_V).add(".").add(MIN_V).add(".").add(BUILD_NR);
+			};
+			for (auto&[name, exportSpec] : m_exports)
+			{
+				for (auto& exportLine : exportSpec.lines)
+				{
+					exportLine.replaceAll("%dasm_version%", getVersionStr());
+				}
+			}
+		}
+
+		void Assembler::createExportFiles(void)
+		{
+			if (!saveExports) return;
+			for (auto[name, exportSpec] : m_exports)
+			{
+				std::ofstream outFile(exportSpec.fileName.c_str());
+				for (auto& line : exportSpec.lines)	
+					outFile << line << "\n";
+				outFile.close();
+				std::cout << "Created export file: " << exportSpec.fileName << " (" << name << ")\n";
+			}
+		}
+
+
+
+		void Assembler::parseSections(void)
+		{
+			constexpr uint8_t DATA_SECTION = 0x01;
+			constexpr uint8_t CODE_SECTION = 0x02;
+
+			uint8_t currentSection = 0x00;
+
+			for (auto& line : m_lines)
+			{
+				ostd::String lineEdit(line);
+				if (lineEdit.startsWith(".data"))
+					currentSection = DATA_SECTION;
+				else if (lineEdit.startsWith(".code"))
+					currentSection = CODE_SECTION;
+				else if (lineEdit.startsWith(".fixed "))
+				{
+					if (lineEdit.len() < 8)
+					{
+						//TODO: Error 
+						std::cout << "Invalid .fixed value: " << lineEdit << "\n";
+						return;
+					}
+					lineEdit = lineEdit.substr(7);
+					lineEdit.trim();
+					if (!lineEdit.contains(","))
+					{
+						//TODO: Error 
+						std::cout << "Invalid .fixed value: " << lineEdit << "\n";
+						return;
+					}
+					ostd::String fixedSizeEdit = lineEdit.new_substr(0, lineEdit.indexOf(","));
+					fixedSizeEdit.trim();
+					lineEdit = lineEdit.substr(lineEdit.indexOf(",") + 1);
+					lineEdit.trim();
+					if (!lineEdit.isNumeric())
+					{
+						//TODO: Error 
+						std::cout << "Invalid .fixed size value: " << lineEdit << "\n";
+						return;
+					}
+					m_fixedFillValue = lineEdit.toInt();
+					if (!fixedSizeEdit.isNumeric())
+					{
+						//TODO: Error 
+						std::cout << "Invalid .fixed fill value: " << lineEdit << "\n";
+						return;
+					}
+					m_fixedSize = fixedSizeEdit.toInt();
+					continue;
+				}
+				else if (lineEdit.startsWith(".load "))
+				{
+					if (lineEdit.len() < 7)
+					{
+						//TODO: Error 
+						std::cout << "Invalid .load value: " << lineEdit << "\n";
+						return;
+					}
+					lineEdit = lineEdit.substr(6);
+					lineEdit.trim();
+					if (!lineEdit.isNumeric())
+					{
+						//TODO: Error 
+						std::cout << "Invalid .load value: " << lineEdit << "\n";
+						return;
+					}
+					m_loadAddress = lineEdit.toInt();
+					m_currentDataAddr = m_loadAddress + 3;
+					continue;
+				}
+				else if (lineEdit.startsWith("."))
+				{
+					//TODO: Error 
+					std::cout << "Invalid section: " << lineEdit << "\n";
+					return;
+				}
+				else
+				{
+					if (currentSection == DATA_SECTION)
+						m_rawDataSection.push_back(line);
+					else if (currentSection == CODE_SECTION)
+						m_rawCodeSection.push_back(line);
+					else
+					{
+						//TODO: Error 
+						std::cout << "Invalid section: " << lineEdit << "\n";
+						return;
+					}
+				}
+			}
 		}
 
 		void Assembler::parseDataSection(void)
@@ -1106,6 +1025,17 @@ namespace dragon
 			}
 		}
 
+
+
+		void Assembler::parseDebugOperands(ostd::String line)
+		{
+			if (ostd::String(line).toLower().startsWith("debug_break"))
+			{
+				m_code.push_back(data::OpCodes::DEBUG_Break);
+				return;
+			}
+		}
+
 		void Assembler::parse0Operand(ostd::String line)
 		{
 			if (ostd::String(line).toLower().startsWith("nop"))
@@ -1126,15 +1056,6 @@ namespace dragon
 			else if (ostd::String(line).toLower().startsWith("hlt"))
 			{
 				m_code.push_back(data::OpCodes::Halt);
-				return;
-			}
-		}
-
-		void Assembler::parseDebugOperands(ostd::String line)
-		{
-			if (ostd::String(line).toLower().startsWith("debug_break"))
-			{
-				m_code.push_back(data::OpCodes::DEBUG_Break);
 				return;
 			}
 		}
@@ -2379,6 +2300,8 @@ namespace dragon
 			}
 		}
 
+
+
 		ostd::String Assembler::replaceSymbols(ostd::String line)
 		{
 			ostd::String lineEdit(line);
@@ -2520,56 +2443,5 @@ namespace dragon
 			if (opEdit == "fl") return data::Registers::FL;
 			return data::Registers::Last;
 		}
-
-		void Assembler::printProgramInfo(void)
-		{
-			int32_t symbol_len = 30;
-			out.nl();
-
-			if (m_symbolTable.size() > 0)
-				out.fg(ostd::ConsoleColors::Yellow).p("Symbols:").nl();
-			for (auto& symbol : m_symbolTable)
-			{
-				out.fg(ostd::ConsoleColors::Red).p(ostd::Utils::getHexStr(symbol.second.address, true, 2));
-				out.fg(ostd::ConsoleColors::Magenta).p("  ").p(symbol.first);
-				out.fg(ostd::ConsoleColors::Blue).nl().p("  ");
-				for (auto& b : symbol.second.bytes)
-					out.p(ostd::Utils::getHexStr(b, false, 1)).p(".");
-				out.nl();
-			}
-			if (m_symbolTable.size() > 0)
-				out.nl();
-			
-			if (m_labelTable.size() > 0)
-				out.fg(ostd::ConsoleColors::Yellow).p("Labels:").nl();
-			for (auto& label : m_labelTable)
-			{
-				out.fg(ostd::ConsoleColors::Magenta).p(label.first.new_fixedLength(symbol_len));
-				out.fg(ostd::ConsoleColors::Red).p(ostd::Utils::getHexStr(label.second.address, true, 2)).nl();
-			}
-			if (m_labelTable.size() > 0)
-				out.nl();
-			
-			if (m_structDefs.size() > 0)
-				out.fg(ostd::ConsoleColors::Yellow).p("Structures:").nl();
-			for (auto& str : m_structDefs)
-			{
-				out.fg(ostd::ConsoleColors::Magenta).p(str.name.new_fixedLength(symbol_len));
-				out.fg(ostd::ConsoleColors::Red).p(str.size).p(" bytes").nl();
-			}
-			if (m_structDefs.size() > 0)
-				out.nl();
-
-
-			out.fg(ostd::ConsoleColors::Yellow).p("Program data:").nl();
-			out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Fixed Size:  ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p((int)m_fixedSize).p(" bytes").nl();
-			out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Program Size:").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p((int)m_programSize).p(" bytes").nl();
-			out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Data Size:   ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p((int)m_dataSize).p(" bytes").nl();
-			out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Fixed Fill:  ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p(ostd::Utils::getHexStr(m_fixedFillValue, true, 1)).nl();
-			out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Load Address:").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p(ostd::Utils::getHexStr(m_loadAddress, true, 2)).nl();
-			out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Entry Point: ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p(ostd::Utils::getHexStr(m_dataSize + m_loadAddress + 3, true, 2)).nl();
-
-			out.nl();
 		}
-	}
 }

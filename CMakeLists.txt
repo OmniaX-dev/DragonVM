@@ -2,7 +2,7 @@
 #-----------------------------------------------------------------------------------------
 set(PROJ_NAME DragonVM)
 set(MAJOR_VER 0)
-set(MINOR_VER 3)
+set(MINOR_VER 4)
 #-----------------------------------------------------------------------------------------
 
 #Setup
@@ -67,6 +67,8 @@ list(APPEND DEBUGGER_SOURCE_FILES
 	${CMAKE_CURRENT_LIST_DIR}/src/runtime/ConfigLoader.cpp
 
 	${CMAKE_CURRENT_LIST_DIR}/src/assembler/Assembler.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/assembler/IncludePreprocessor.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/assembler/DASMApp.cpp
 	
 	${CMAKE_CURRENT_LIST_DIR}/src/tools/Utils.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/tools/GlobalData.cpp
@@ -74,6 +76,8 @@ list(APPEND DEBUGGER_SOURCE_FILES
 list(APPEND ASSEMBLER_SOURCE_FILES
 	${CMAKE_CURRENT_LIST_DIR}/src/assembler/assembler_main.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/assembler/Assembler.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/assembler/IncludePreprocessor.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/assembler/DASMApp.cpp
 
 	${CMAKE_CURRENT_LIST_DIR}/src/hardware/VirtualHardDrive.cpp
 

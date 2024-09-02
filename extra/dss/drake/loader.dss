@@ -25,13 +25,9 @@
 	mov [$ddd.DataSize], 5120
 	mov [$ddd.MemoryAddress], MemoryAddresses.RAM
 
-	and FL, 0b1111111111111110													## Disable interrupts
-	mov FL, ACC	
 	push $ddd
 	push 1
 	call $_disk_load_from_ddd_blocking
-	or FL, 0b0000000000000001													## Enable interrupts
-	mov FL, ACC
 	
 	jmp MemoryAddresses.RAM
 	

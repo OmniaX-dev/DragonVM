@@ -60,7 +60,11 @@ _disk_load_from_ddd_blocking:
 	addip R1, 2
 	mov  [{DISK_INTERFACE_ADDR + DiskRegisters.MEMORY_ADDRESS}], *R1
 	movb [{DISK_INTERFACE_ADDR + DiskRegisters.SIGNAL}], DiskSignals.START
+	and FL, 0b1111111111111110													## Disable interrupts
+	mov FL, ACC	
 _disk_load_from_ddd_blocking_wait_loop:
 	mov ACC, [{DISK_INTERFACE_ADDR + DiskRegisters.RO_STATUS}]
 	jne $_disk_load_from_ddd_blocking_wait_loop, DiskStatus.FREE
+	or FL, 0b0000000000000001													## Enable interrupts
+	mov FL, ACC
 	ret

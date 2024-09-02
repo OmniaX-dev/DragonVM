@@ -98,7 +98,8 @@
 		"*.ipp": "cpp",
 		"format": "cpp",
 		"stdfloat": "cpp",
-		"*.inc": "cpp"
+		"*.inc": "cpp",
+		"text_encoding": "cpp"
 	},
 	"workbench.editorAssociations": {
 		"*.bin": "hexEditor.hexedit"

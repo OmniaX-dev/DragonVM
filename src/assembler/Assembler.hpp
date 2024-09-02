@@ -69,8 +69,8 @@ namespace dragon
 			};
 			public: struct tExportSpec
 			{
-				ostd::String fileName;
-				std::vector<tDefine> content;
+				ostd::String fileName { "" };
+				std::vector<ostd::String> lines;
 			};
 			public: enum class eOperandType
 			{
@@ -114,20 +114,24 @@ namespace dragon
 				static ostd::ByteStream assembleToFile(ostd::String sourceFileName, ostd::String binaryFileName);
 				static ostd::ByteStream assembleToVirtualDisk(ostd::String fileName, hw::VirtualHardDrive& vhdd, uint32_t address);
 				static bool saveDisassemblyToFile(ostd::String fileName);
-
 				static void printProgramInfo(void);
 
 			private:
 				static void removeComments(void);
-				static void parseExportSpecs(void);
-				static void processExports(void);
 				static void replaceDefines(void);
 				static void replaceGroupDefines(void);
-				static void parseSections(void);
-				static void parseStructInstances(void);
 				static void parseStructures(void);
+				static void parseStructInstances(void);
+
+				static void parseExportSpecifications(void);
+				static void createExports(void);
+				static void replaceExportBuiltinVars(void);
+				static void createExportFiles(void);
+
+				static void parseSections(void);
 				static void parseDataSection(void);
 				static void parseCodeSection(void);
+
 				static void parseDebugOperands(ostd::String line);
 				static void parse0Operand(ostd::String line);
 				static void parse1Operand(ostd::String line);
@@ -143,22 +147,27 @@ namespace dragon
 			private:
 				inline static ostd::String m_rawSource { "" };
 				inline static ostd::ByteStream m_code;
+
 				inline static std::vector<ostd::String> m_lines;
 				inline static std::vector<ostd::String> m_rawDataSection;
 				inline static std::vector<ostd::String> m_rawCodeSection;
+
 				inline static std::unordered_map<ostd::String, tSymbol> m_symbolTable;
 				inline static std::unordered_map<ostd::String, tLabel> m_labelTable;
-				inline static std::unordered_map<ostd::String, tExportSpec> m_exportSpecifications;
+
 				inline static uint16_t m_fixedSize { 0 };
 				inline static uint8_t m_fixedFillValue { 0x00 };
 				inline static uint16_t m_loadAddress { 0x0000 };
 				inline static uint16_t m_currentDataAddr { 0x0000 };
 				inline static uint16_t m_dataSize { 0x0000 };
 				inline static uint16_t m_programSize { 0x0000 };
+
 				inline static std::vector<tStructDefinition> m_structDefs;
 				inline static std::vector<tDisassemblyLine> m_disassembly;
+
+				inline static std::unordered_map<ostd::String, tExportSpec> m_exports; 
+
 				inline static ostd::ConsoleOutputHandler out;
-				inline static uint32_t m_exportCommentCount { 0 };
 
 			public:
 				inline static bool saveExports { false };

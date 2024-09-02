@@ -219,4 +219,4 @@
     boot-ssector 		5 kb		5120 		bytes	(0x1400)			0x0000.0400 -> 0x0000.17FF
     Unallocated			90 kb		92160 		bytes 	(0x16800)			0x0000.1800 -> 0x0001.7FFF
     DragonOS			2000 kb		2048000 	bytes	(0x1F4000)			0x0001.8000 -> 0x0020.BFFF
-    Test Partition		2000 kb		2048000 	bytes	(0x1F4000)			0x0020.C000 -> 0x0040.0000
+    Test Partition		2000 kb		2048000 	bytes	(   0x1F4000)			0x0020.C000 -> 0x0040.0000

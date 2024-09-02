@@ -1,5 +1,4 @@
 Assembler:
-	Add Struct export functionality
 	Add subroutine address export functionality
 
 Bugs:
@@ -14,6 +13,7 @@ External:
 
 
 Done:
+	*Add Struct export functionality
 	*Add evaluation of direct struct instance name as as struct's first member
 	*Add single Define export functionality
 	*Inverted Colors in Text-Single-Color
