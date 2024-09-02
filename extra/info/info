@@ -102,8 +102,8 @@
         0x06: (2 bytes) Text Single Color Buffered String Address
         
         0x80: Memory Controller
-            0x80: XCoordinate (4 Bytes)
-            0x84: YCoordinate (4 Bytes)
+            0x80: XCoordinate (2 Bytes)
+            0x84: YCoordinate (2 Bytes)
             0x88: Character (1 Byte)
             0x09: Foreground (1 Byte)
             0x8A: Background (1 Byte)
@@ -142,6 +142,9 @@
         0x0A: Store Null-Terminated String in buffer in Text Single Mode (string address stored in R9 register)
         0x0B: Toggles inverted colors in Text Single Mode
 
+        0x20: Read VRAM in Text16 Colors Mode (Cell address stored in R9)
+        0x20: Write VRAM in Text16 Colors Mode (Cell address stored in R9)
+
         0xE0: Refresh Screen
         0xE1: Clear Screen
 
@@ -153,6 +156,7 @@
     0xA0: Keyboard Interface - Key Pressed
     0xA1: Keyboard Interface - Key Released
     0xA2: Keyboard Interface - Text Entered
+    0xE0: Virtual Display - Text16_Mode Screen Refreshed
 
 
 

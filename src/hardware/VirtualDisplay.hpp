@@ -20,6 +20,12 @@ namespace dragon
 				inline static constexpr uint8_t TextSingleCharacter = 0x04;
 				inline static constexpr uint8_t TextSingleInvertColors = 0x05;
 				inline static constexpr uint8_t TextSingleString = 0x06;
+
+				inline static constexpr uint8_t MemControllerX = 0x80;
+				inline static constexpr uint8_t MemControllerY = 0x82;
+				inline static constexpr uint8_t MemControllerChar = 0x84;
+				inline static constexpr uint8_t MemControllerBGCol = 0x85;
+				inline static constexpr uint8_t MemControllerFGCol = 0x86;
 			};
 			public: struct tVideoModeValues
 			{
@@ -49,7 +55,6 @@ namespace dragon
 				void onRender(void) override;
 				void onUpdate(void) override;
 				void onFixedUpdate(void) override;
-				void onFixedUpdate(void) override;
 				void onSlowUpdate(void) override;
 
 			private:
@@ -63,7 +68,7 @@ namespace dragon
 				void single_text_refresh_screen(void);
 
 				void text16_init_buffer(void);
-				void text16_buffer_diff(void);
+				void text16_load_palettes(void);
 
 			private:
 				Renderer m_renderer;
@@ -72,7 +77,9 @@ namespace dragon
 				ostd::String m_singleTextBuffer { "" };
 
 				std::vector<hw::interface::Graphics::tText16_Cell> m_text16_buffer;
-				data::IBiosVideoPalette* m_text16_palette;
+				std::vector<data::IBiosVideoPalette*> m_text16_palettes;
+				data::IBiosVideoPalette* m_text16_Currentpalette { nullptr };
+				uint8_t m_currentPaletteID { 0 };
 		};
 	}
 }

@@ -9,7 +9,7 @@ namespace dragon
 	{
 		tMachineConfig config;
 		ostd::TextFileBuffer file(configFilePath.cpp_str());
-		if (!file.exists()) return config;
+		if (!file.exists()) return config; //TODO: Error
 		auto lines = file.getLines();
 		for (auto& line : lines)
 		{
@@ -101,6 +101,13 @@ namespace dragon
 					config.memory_extension_pages = 0;
 				if (config.memory_extension_pages > data::DefaultValues::MaxMemoryExtensionPages)
 					config.memory_extension_pages = data::DefaultValues::MaxMemoryExtensionPages;
+			}
+			else if (lineEdit == "16color_palette")
+			{
+				lineEdit = tokens.next();
+				lineEdit.trim().toLower();
+				if (!lineEdit.isNumeric()) continue; //TODO: Error
+				config.text16_palette = lineEdit.toInt();
 			}
 			else continue; //TODO: Warning
 		}

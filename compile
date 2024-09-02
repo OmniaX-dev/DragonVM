@@ -5,7 +5,7 @@ rm -r bin
 if [ "$(expr substr $(uname -s) 1 5)" == "Linux" ]; then
     cmake -B bin -S ./
     cd bin
-    make
+    make -j$(grep -c ^processor /proc/cpuinfo)
     mkdir disassembly
     if [ $? -eq 0 ]; then
         cd ..
@@ -19,7 +19,7 @@ if [ "$(expr substr $(uname -s) 1 5)" == "Linux" ]; then
 elif [ "$(expr substr $(uname -s) 1 10)" == "MINGW64_NT" ]; then
     cmake -B bin -S ./ -G "MinGW Makefiles"
     cd bin
-    mingw32-make.exe
+    mingw32-make.exe -j16
     mkdir disassembly
     if [ $? -eq 0 ]; then
         cd ..

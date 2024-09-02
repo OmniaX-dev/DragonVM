@@ -17,6 +17,7 @@ namespace dragon
 		ostd::String cmos_path;
 		ostd::Color singleColor_background;
 		ostd::Color singleColor_foreground;
+		uint8_t text16_palette { 0 };
 		
 		inline bool isValid(void) const { return m_valid; }
 		inline void destroy(void) { for (auto& ptr : cpuext_list) delete ptr.second; }

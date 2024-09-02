@@ -9,4 +9,4 @@ memory_extension_pages = 16
 
 SingleColor_foreground = #009900FF
 SingleColor_background = #111111FF
-16Color_Palette = config/test_palette.dpal
+16Color_Palette = 0

@@ -128,7 +128,16 @@ _int_30_print_string_buffered:
 	jmp $_int_30_end
 
 _int_30_write_vram_text16:
-
+	movb [VGA_Registers.MEMORY_CONTROLLER_CHAR], *R9
+	inc R9
+	movb [VGA_Registers.MEMORY_CONTROLLER_FG_COL], *R9
+	inc R9
+	movb [VGA_Registers.MEMORY_CONTROLLER_BG_COL], *R9
+	inc R9
+	movb [VGA_Registers.MEMORY_CONTROLLER_X_BYTE], *R9
+	inc R9
+	movb [VGA_Registers.MEMORY_CONTROLLER_Y_BYTE], *R9
+	movb [VGA_Registers.SIGNAL], Sig_VGA_Text_16_Color.WRITE_VRAM
 	jmp $_int_30_end
 _int_30_read_vram_text16:
 

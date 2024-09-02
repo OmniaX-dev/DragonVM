@@ -6,8 +6,8 @@ clear='\033[0m'
 printf "${green}\n============================================[ Building Application ]============================================\n\n${clear}"
 \cp -r ../extra/* ./
 if [ "$(expr substr $(uname -s) 1 5)" == "Linux" ]; then
-    make
+    make -j$(grep -c ^processor /proc/cpuinfo)
 elif [ "$(expr substr $(uname -s) 1 10)" == "MINGW64_NT" ]; then
-    mingw32-make.exe
+    mingw32-make.exe -j16
 fi
 printf "${green}\n=================================================================================================================\n\n"

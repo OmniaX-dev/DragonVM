@@ -150,7 +150,7 @@ namespace dragon
 					return m_colors[col];
 				}
 
-			private:
+			protected:
 				std::vector<ostd::Color> m_colors;
 		};
 
@@ -196,6 +196,8 @@ namespace dragon
 				inline static constexpr uint8_t KeyReleased = 0xA1;
 				inline static constexpr uint8_t TextEntered = 0xA2;
 
+				inline static constexpr uint8_t Text16ModeScreenRefreshed = 0xE0;
+
 				inline static ostd::String getInterruptName(uint8_t code)
 				{
 					switch (code)
@@ -204,6 +206,7 @@ namespace dragon
 						case KeyPressed: 				return "Key_Pressed";
 						case KeyReleased: 				return "Key_Released";
 						case TextEntered: 				return "Text_Entered";
+						case Text16ModeScreenRefreshed:	return "Text16_Mode_Screen_Refreshed";
 						default:						return "UNKNOWN";
 					}
 					return "UNKNOWN";

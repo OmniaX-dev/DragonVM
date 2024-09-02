@@ -6,10 +6,48 @@
 	$string "Hello "
 	$ddd <DiskDriverData>
 	$dpt_block <DPTBlock>
+	$textCell <Text16VModeCell>
 
 .code
 	push 0
 	call $_load_dpt_block
+
+	movb [VGA_Registers.VIDEO_MODE], VGA_VideoModes.TEXT_16_COLORS
+
+	mov R5, 0
+draw_loop:
+
+	movb [$textCell.Character], 65
+	movb [$textCell.Foreground], 6
+	movb [$textCell.Background], 0
+	movb [$textCell.CoordX], R5
+	movb [$textCell.CoordY], 1
+
+	mov R10, 0x21
+	mov R9, $textCell
+	int 0x30
+
+	inc R5
+	mov ACC, R5
+	jgr $draw_loop, 90
+
+	mov R5, 0
+draw_loop2:
+
+	movb [$textCell.Character], 65
+	movb [$textCell.Foreground], 6
+	movb [$textCell.Background], 0
+	movb [$textCell.CoordX], R5
+	movb [$textCell.CoordY], 10
+
+	mov R10, 0x21
+	mov R9, $textCell
+	int 0x30
+
+	inc R5
+	mov ACC, R5
+	jgr $draw_loop2, 90
+
 
 	mov R10, 0x0C
 	mov R9, $string

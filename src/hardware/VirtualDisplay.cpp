@@ -12,7 +12,13 @@ namespace dragon
 			m_renderer.initialize(*this);
 			RawTextRenderer::initialize();
 
-			m_text16_palette = new data::BiosVideoDefaultPalette; //TODO: Delete, Memory Leak
+			text16_load_palettes();
+			m_currentPaletteID = DragonRuntime::machine_config.text16_palette;
+			if (m_currentPaletteID >= m_text16_palettes.size())
+				m_text16_Currentpalette = m_text16_palettes[0];
+			else
+				m_text16_Currentpalette = m_text16_palettes[m_currentPaletteID];
+
 			text16_init_buffer();
 		}
 
@@ -49,17 +55,19 @@ namespace dragon
 				if (m_refreshScreen)
 				{
 					uint8_t clear_color = mem.read8(vga_addr + tRegisters::ClearColor);
-					ostd::Color clearColor = m_text16_palette->getColor(clear_color);
+					ostd::Color clearColor = m_text16_Currentpalette->getColor(clear_color);
 					m_renderer.clear(clearColor);
 					for (int32_t i = 0; i < RawTextRenderer::CONSOLE_CHARS_V * RawTextRenderer::CONSOLE_CHARS_H; i++)
 					{
 						auto& cell = m_text16_buffer[i];
-						ostd::Color background = m_text16_palette->getColor(cell.backgroundColor);
-						ostd::Color foreground = m_text16_palette->getColor(cell.foregroundColor);
+						ostd::Color background = m_text16_Currentpalette->getColor(cell.backgroundColor);
+						ostd::Color foreground = m_text16_Currentpalette->getColor(cell.foregroundColor);
 						char character = static_cast<char>(cell.character);
 						auto xy = CONVERT_1D_2D(i, RawTextRenderer::CONSOLE_CHARS_H);
 						RawTextRenderer::drawString(ostd::String().addChar(character), xy.x, xy.y, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_fontPixels, foreground, background);
 					}
+					DragonRuntime::cpu.handleInterrupt(data::InterruptCodes::Text16ModeScreenRefreshed, true);
+					m_refreshScreen = false;
 				}
 			}
 			m_renderer.updateBuffer();
@@ -121,6 +129,22 @@ namespace dragon
 			}
 			else if (video_mode == tVideoModeValues::Text16Colors)
 			{
+				if (signal == tSignalValues::Text16Color_ReadMemory)
+				{
+
+				}
+				else if (signal == tSignalValues::Text16Color_WriteMemory)
+				{
+					hw::interface::Graphics::tText16_Cell textCell;
+
+					textCell.foregroundColor = mem.read8(vga_addr + tRegisters::MemControllerFGCol);
+					textCell.backgroundColor = mem.read8(vga_addr + tRegisters::MemControllerBGCol);
+					textCell.character = mem.read8(vga_addr + tRegisters::MemControllerChar);
+					int16_t x = mem.read16(vga_addr + tRegisters::MemControllerX);
+					int16_t y = mem.read16(vga_addr + tRegisters::MemControllerY);
+
+					DragonRuntime::vGraphicsInterface.writeVRAM_16Colors(static_cast<uint8_t>(x), static_cast<uint8_t>(y), textCell.character, textCell.backgroundColor, textCell.foregroundColor);
+				}
 			}
 			else return;
 			mem.write8(vga_addr + tRegisters::Signal, tSignalValues::Continue);
@@ -133,7 +157,6 @@ namespace dragon
 			uint16_t vga_addr = data::MemoryMapAddresses::VideoCardInterface_Start;
 			uint8_t video_mode = mem.read8(vga_addr + tRegisters::VideoMode);
 			uint8_t signal = mem.read8(vga_addr + tRegisters::Signal);
-			if (signal == tSignalValues::Continue) return;
 			if (video_mode == tVideoModeValues::Text16Colors)
 			{
 				m_refreshScreen = true;
@@ -146,8 +169,6 @@ namespace dragon
 				}
 			}
 		}
-
-		void VirtualDisplay::onFixedUpdate(void) {  }
 
 		void VirtualDisplay::onSlowUpdate(void) {  }
 
@@ -244,12 +265,9 @@ namespace dragon
 				m_text16_buffer.push_back({ 0, 0, ' ' });
 		}
 
-		void VirtualDisplay::text16_buffer_diff(void)
+		void VirtualDisplay::text16_load_palettes(void)
 		{
-			for (int32_t i = 0; i < RawTextRenderer::CONSOLE_CHARS_V * RawTextRenderer::CONSOLE_CHARS_H; i++)
-			{
-
-			}
+			m_text16_palettes.push_back(new data::BiosVideoDefaultPalette); //TODO: Delete, Memory Leak
 		}
 		
 	}

@@ -39,6 +39,8 @@
 	KEY_PRESSED							0xA0
 	KEY_RELEASED						0xA1
 	TEXT_ENTERED						0xA2
+
+	TEXT16_SCREEN_REFRESHED				0xE0
 @end
 @raw_export_end
 @export_comment BIOS_API " --\n"
@@ -57,10 +59,12 @@
 	TEXT_SIGNLE_STR							{ MemoryAddresses.VGA + 0x0006 }
 
 	MEMORY_CONTROLLER_X						{ MemoryAddresses.VGA + 0x0080 }
-	MEMORY_CONTROLLER_Y						{ MemoryAddresses.VGA + 0x0084 }
-	MEMORY_CONTROLLER_CHAR					{ MemoryAddresses.VGA + 0x0088 }
-	MEMORY_CONTROLLER_BG_COL				{ MemoryAddresses.VGA + 0x0089 }
-	MEMORY_CONTROLLER_FG_COL				{ MemoryAddresses.VGA + 0x008A }
+	MEMORY_CONTROLLER_X_BYTE				{ MemoryAddresses.VGA + 0x0080 + 1 }
+	MEMORY_CONTROLLER_Y						{ MemoryAddresses.VGA + 0x0082 }
+	MEMORY_CONTROLLER_Y_BYTE				{ MemoryAddresses.VGA + 0x0082 + 1 }
+	MEMORY_CONTROLLER_CHAR					{ MemoryAddresses.VGA + 0x0084 }
+	MEMORY_CONTROLLER_BG_COL				{ MemoryAddresses.VGA + 0x0085 }
+	MEMORY_CONTROLLER_FG_COL				{ MemoryAddresses.VGA + 0x0086 }
 
 	BUFF_START								{ MemoryAddresses.VGA + 0x00E0 }
 @end
@@ -159,7 +163,7 @@
 
 @export_comment BIOS_API " Structure to store a character cell for the Text16-Video-Mode."
 @raw_export_start BIOS_API
-@struct Text16VModeTextCell
+@struct Text16VModeCell
 	Character:1
 	Foreground:1
 	Background:1
