@@ -73,15 +73,15 @@
     0x1600 VIDEO CARD INTERFACE (256 Bytes)
         0x00:  Video Mode (1 Byte)
             0x00: Text Single Color
-            # 0x01: Text 16-color
+            0x01: Text 16-color
             # 0x02: Text 256-color
             # 0x03: Text True Color Mode
             # 0x04: GFX Single Color
             # 0x05: GFX 16-color
             # 0x06: GFX 256-color
             # 0x07: GFX True Color Mode
-        # 0x01: Clear Color (1 Byte)
-        # 0x02: Palette (1 Byte)
+        0x01: Clear Color (1 Byte)
+        0x02: Palette (1 Byte)
         0x03: Signal (1 Byte)
             0x00: Continue
 

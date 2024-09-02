@@ -8,7 +8,7 @@
 @export_comment BIOS_API " --\n"
 
 ## ============================= Memory Mapped Devices and Registers =============================
-@export_comment BIOS_API "These are the base addresses of the memory map."
+@export_comment BIOS_API " These are the base addresses of the memory map."
 @raw_export_start BIOS_API
 @group MemoryAddresses
 	MBR 			0x1380
@@ -32,7 +32,7 @@
 
 
 
-@export_comment BIOS_API "These are the Hardware Interrupt codes of this machine."
+@export_comment BIOS_API " These are the Hardware Interrupt codes of this machine."
 @raw_export_start BIOS_API
 @group HW_Int
 	DISK_INTERFACE_FINISHED				0x80
@@ -45,10 +45,12 @@
 
 
 
-@export_comment BIOS_API "These are the memory-mapped registers used to interact with the video card's interface."
+@export_comment BIOS_API " These are the memory-mapped registers used to interact with the video card's interface."
 @raw_export_start BIOS_API
 @group VGA_Registers
 	VIDEO_MODE 				{ MemoryAddresses.VGA + 0x0000 }
+	CLEAR_COLOR				{ MemoryAddresses.VGA + 0x0001 }
+	PALETTE					{ MemoryAddresses.VGA + 0x0002 }
 	SIGNAL					{ MemoryAddresses.VGA + 0x0003 }
 	TEXT_SINGLE_CHAR		{ MemoryAddresses.VGA + 0x0004 }
 	TEXT_SIGNLE_INVERT		{ MemoryAddresses.VGA + 0x0005 }
@@ -61,17 +63,18 @@
 
 
 
-@export_comment BIOS_API "These are the different Video Modes that the video card supports."
+@export_comment BIOS_API " These are the different Video Modes that the video card supports."
 @raw_export_start BIOS_API
 @group VGA_VideoModes
 	TEXT_SINGLE_COLOR			0x00
+	TEXT_16_COLORS				0x01
 @end
 @raw_export_end
 @export_comment BIOS_API " --\n"
 
 
 
-@export_comment BIOS_API "These are signals used to comunicate with the video card's interface, when in TEXT_SINGLE_COLOR mode."
+@export_comment BIOS_API " These are signals used to comunicate with the video card's interface, when in TEXT_SINGLE_COLOR mode."
 @raw_export_start BIOS_API
 @group Sig_VGA_Text_Single_Color
 	CONTINUE 			0x00
@@ -100,7 +103,7 @@
 
 
 ## ========================================== Other Data =========================================
-@export_comment BIOS_API "Structure of a DPT (Dragon Partition Table)."
+@export_comment BIOS_API " Structure of a DPT (Dragon Partition Table)."
 @raw_export_start BIOS_API
 @group DPTStructure
 	DISK_ADDR 			0x0200
@@ -118,7 +121,7 @@
 @export_comment BIOS_API " --\n"
 
 
-@export_comment BIOS_API "Structure to store a DPT block."
+@export_comment BIOS_API " Structure to store a DPT block."
 @raw_export_start BIOS_API
 @struct DPTBlock
 	ID:2
