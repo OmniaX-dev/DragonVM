@@ -345,6 +345,19 @@ namespace dragon
 			};
 			class Graphics : public IMemoryDevice
 			{
+				public: struct tText16_Cell
+				{
+					uint8_t backgroundColor;
+					uint8_t foregroundColor;
+					uint8_t character;
+				};
+				public: struct tText16_CellStructure
+				{
+					inline static constexpr uint8_t character	=			0x00;
+					inline static constexpr uint8_t foreground	=			0x01;
+					inline static constexpr uint8_t background	=			0x02;
+					inline static constexpr uint8_t reserved	=			0x03;
+				};
 				public:
 					Graphics(void);
 					int8_t read8(uint16_t addr) override;
@@ -354,8 +367,15 @@ namespace dragon
 
 					ostd::ByteStream* getByteStream(void) override;
 
+					inline uint16_t getVRAMStart(void) { return m_vramStart; }
+					bool readVRAM_16Colors(uint8_t x, uint8_t y, tText16_Cell& outTextCell);
+					bool writeVRAM_16Colors(uint8_t x, uint8_t y, uint8_t character = 0, uint8_t background = 0xFF, uint8_t foreground = 0xFF);
+
 				private:
 					ostd::serial::SerialIO m_videoMemory;
+
+					uint16_t m_vramStart { 0 };
+					uint8_t m_16Color_cellSize { 4 };
 			};
 			class SerialPort : public IMemoryDevice
 			{

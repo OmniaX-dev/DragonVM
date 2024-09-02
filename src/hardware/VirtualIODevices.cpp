@@ -7,6 +7,7 @@
 #include "VirtualRAM.hpp"
 
 #include "../runtime/DragonRuntime.hpp"
+#include "../gui/RawTextRenderer.hpp"
 
 //TODO: Fix all access functions (reads and writes) ensuring the address is not out of bounds.
 //		Right now the check is done, but just to push an error if out of bounds; the address 
@@ -660,6 +661,7 @@ namespace dragon
 			Graphics::Graphics(void)
 			{
 				m_videoMemory.init(0xFFFF);
+				m_vramStart = data::MemoryMapAddresses::VideoCardInterface_End - data::MemoryMapAddresses::VideoCardInterface_Start;
 			}
 
 			int8_t Graphics::read8(uint16_t addr)
@@ -707,6 +709,36 @@ namespace dragon
 			ostd::ByteStream* Graphics::getByteStream(void)
 			{
 				return &m_videoMemory.getData();
+			}
+
+			bool Graphics::readVRAM_16Colors(uint8_t x, uint8_t y, Graphics::tText16_Cell& outTextCell)
+			{
+				uint16_t cellOffset = static_cast<uint16_t>(CONVERT_2D_1D(x, y, RawTextRenderer::CONSOLE_CHARS_H)) * 4;
+				cellOffset += m_vramStart;
+				int8_t outVal = 0;
+				if (!m_videoMemory.r_Byte(cellOffset + tText16_CellStructure::character, outVal))
+					return false; //TODO: Error
+				outTextCell.character = outVal;
+				if (!m_videoMemory.r_Byte(cellOffset + tText16_CellStructure::background, outVal))
+					return false; //TODO: Error
+				outTextCell.backgroundColor = outVal;
+				if (!m_videoMemory.r_Byte(cellOffset + tText16_CellStructure::foreground, outVal))
+					return false; //TODO: Error
+				outTextCell.foregroundColor = outVal;
+				return true;
+			}
+
+			bool Graphics::writeVRAM_16Colors(uint8_t x, uint8_t y, uint8_t character, uint8_t background, uint8_t foreground)
+			{
+				uint16_t cellOffset = static_cast<uint16_t>(CONVERT_2D_1D(x, y, RawTextRenderer::CONSOLE_CHARS_H)) * 4;
+				cellOffset += m_vramStart;
+				if (!m_videoMemory.w_Byte(cellOffset + tText16_CellStructure::character, character))
+					return false; //TODO: Error
+				if (!m_videoMemory.w_Byte(cellOffset + tText16_CellStructure::background, background))
+					return false; //TODO: Error
+				if (!m_videoMemory.w_Byte(cellOffset + tText16_CellStructure::foreground, foreground))
+					return false; //TODO: Error
+				return true;
 			}
 
 

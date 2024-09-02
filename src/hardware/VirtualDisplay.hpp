@@ -2,9 +2,11 @@
 
 #include "../gui/Window.hpp"
 #include "../gui/Renderer.hpp"
+#include "../hardware/VirtualIODevices.hpp"
 
 namespace dragon
 {
+	namespace data { class IBiosVideoPalette; }
 	namespace hw
 	{
 		class VirtualDisplay : public Window
@@ -12,6 +14,8 @@ namespace dragon
 			public: struct tRegisters
 			{
 				inline static constexpr uint8_t VideoMode = 0x00;	
+				inline static constexpr uint8_t ClearColor = 0x01;	
+				inline static constexpr uint8_t Palette = 0x02;	
 				inline static constexpr uint8_t Signal = 0x03;
 				inline static constexpr uint8_t TextSingleCharacter = 0x04;
 				inline static constexpr uint8_t TextSingleInvertColors = 0x05;
@@ -20,6 +24,7 @@ namespace dragon
 			public: struct tVideoModeValues
 			{
 				inline static constexpr uint8_t TextSingleColor = 0x00;	
+				inline static constexpr uint8_t Text16Colors = 0x01;	
 			};
 			public: struct tSignalValues
 			{
@@ -32,6 +37,9 @@ namespace dragon
 				inline static constexpr uint8_t TextSingleColor_DirectPrintBuffNoFlush = 0x06;	
 				inline static constexpr uint8_t TextSingleColor_DirectPrintString = 0x07;
 
+				inline static constexpr uint8_t Text16Color_ReadMemory = 0x10;
+				inline static constexpr uint8_t Text16Color_WriteMemory = 0x11;
+
 				inline static constexpr uint8_t RefreshScreen = 0xE0;	
 				inline static constexpr uint8_t ClearSCreen = 0xE1;	
 			};
@@ -40,6 +48,7 @@ namespace dragon
 				void onDestroy(void) override;
 				void onRender(void) override;
 				void onUpdate(void) override;
+				void onFixedUpdate(void) override;
 				void onFixedUpdate(void) override;
 				void onSlowUpdate(void) override;
 
@@ -53,11 +62,17 @@ namespace dragon
 				void single_text_clear_screen(void);
 				void single_text_refresh_screen(void);
 
+				void text16_init_buffer(void);
+				void text16_buffer_diff(void);
+
 			private:
 				Renderer m_renderer;
 
 				std::vector<ostd::String> m_singleTextLines;
 				ostd::String m_singleTextBuffer { "" };
+
+				std::vector<hw::interface::Graphics::tText16_Cell> m_text16_buffer;
+				data::IBiosVideoPalette* m_text16_palette;
 		};
 	}
 }

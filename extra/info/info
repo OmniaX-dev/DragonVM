@@ -92,11 +92,24 @@
             0x06: Text Single Color - Print Buffer Without Flushing
             0x07: Text Single Color - Print Buffered String
 
+            0x10: Text 16 Colors - Read Memory
+            0x11: Text 16 Colors - Write Memory
+
             0xE0: Refresh Screen
             0xE1: Clear Screen
         0x04: Text Single Color Character (1 Byte)
         0x05: Text Single Color Inverted colors (1 Byte)
         0x06: (2 bytes) Text Single Color Buffered String Address
+        
+        0x80: Memory Controller
+            0x80: XCoordinate (4 Bytes)
+            0x84: YCoordinate (4 Bytes)
+            0x88: Character (1 Byte)
+            0x09: Foreground (1 Byte)
+            0x8A: Background (1 Byte)
+
+        (VRAM Memory Cell: Character:1, Foreground:1, Background:1, Reserved:1)
+
     0x16FF
     -------
     0x1700 GENERIC SERIAL INTERFACE (64 Bytes)

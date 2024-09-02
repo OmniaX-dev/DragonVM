@@ -48,15 +48,21 @@
 @export_comment BIOS_API " These are the memory-mapped registers used to interact with the video card's interface."
 @raw_export_start BIOS_API
 @group VGA_Registers
-	VIDEO_MODE 				{ MemoryAddresses.VGA + 0x0000 }
-	CLEAR_COLOR				{ MemoryAddresses.VGA + 0x0001 }
-	PALETTE					{ MemoryAddresses.VGA + 0x0002 }
-	SIGNAL					{ MemoryAddresses.VGA + 0x0003 }
-	TEXT_SINGLE_CHAR		{ MemoryAddresses.VGA + 0x0004 }
-	TEXT_SIGNLE_INVERT		{ MemoryAddresses.VGA + 0x0005 }
-	TEXT_SIGNLE_STR			{ MemoryAddresses.VGA + 0x0006 }
+	VIDEO_MODE 								{ MemoryAddresses.VGA + 0x0000 }
+	CLEAR_COLOR								{ MemoryAddresses.VGA + 0x0001 }
+	PALETTE									{ MemoryAddresses.VGA + 0x0002 }
+	SIGNAL									{ MemoryAddresses.VGA + 0x0003 }
+	TEXT_SINGLE_CHAR						{ MemoryAddresses.VGA + 0x0004 }
+	TEXT_SIGNLE_INVERT						{ MemoryAddresses.VGA + 0x0005 }
+	TEXT_SIGNLE_STR							{ MemoryAddresses.VGA + 0x0006 }
 
-	BUFF_START				{ MemoryAddresses.VGA + 0x00E0 }
+	MEMORY_CONTROLLER_X						{ MemoryAddresses.VGA + 0x0080 }
+	MEMORY_CONTROLLER_Y						{ MemoryAddresses.VGA + 0x0084 }
+	MEMORY_CONTROLLER_CHAR					{ MemoryAddresses.VGA + 0x0088 }
+	MEMORY_CONTROLLER_BG_COL				{ MemoryAddresses.VGA + 0x0089 }
+	MEMORY_CONTROLLER_FG_COL				{ MemoryAddresses.VGA + 0x008A }
+
+	BUFF_START								{ MemoryAddresses.VGA + 0x00E0 }
 @end
 @raw_export_end
 @export_comment BIOS_API " --\n"
@@ -87,6 +93,22 @@
 
 	REFRESH_SCREEN 		0xE0
 	CLEAR_SCREEN 		0xE1
+@end
+@raw_export_end
+@export_comment BIOS_API " --\n"
+
+
+
+@export_comment BIOS_API " These are signals used to comunicate with the video card's interface, when in TEXT16_COLOR mode."
+@raw_export_start BIOS_API
+@group Sig_VGA_Text_16_Color
+	CONTINUE 					0x00
+
+	READ_VRAM					0x10
+	WRITE_VRAM					0x11
+
+	FORCE_REFRESH_SCREEN 		0xE0
+	FORCE_CLEAR_SCREEN 			0xE1
 @end
 @raw_export_end
 @export_comment BIOS_API " --\n"
@@ -130,6 +152,19 @@
 	PartCount:1
 	Reserved:7
 	Entries:500
+@end
+@raw_export_end
+@export_comment BIOS_API " --\n"
+
+
+@export_comment BIOS_API " Structure to store a character cell for the Text16-Video-Mode."
+@raw_export_start BIOS_API
+@struct Text16VModeTextCell
+	Character:1
+	Foreground:1
+	Background:1
+	CoordX:1
+	CoordY:1
 @end
 @raw_export_end
 @export_comment BIOS_API " --\n"

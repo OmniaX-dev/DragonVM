@@ -1,6 +1,7 @@
 Disks = dragon/disk1.dr
 Bios = dragon/bios.bin
 CMOS = dragon/cmos.dr
+
 cpuext = extmov, extalu
 fixed_clock = true
 clock_rate_sec = 644
@@ -8,3 +9,4 @@ memory_extension_pages = 16
 
 SingleColor_foreground = #009900FF
 SingleColor_background = #111111FF
+16Color_Palette = config/test_palette.dpal
