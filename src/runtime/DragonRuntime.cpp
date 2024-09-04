@@ -352,20 +352,22 @@ namespace dragon
 		ostd::Timer clock_timer;
 		bool running = true;
 		bool fixed_clock = machine_config.fixed_clock;
+		// ostd::Timer _timer;
 		while (running || vDiskInterface.isBusy())
 		{
 			clock_timer.startCount(ostd::eTimeUnits::Microseconds);
 			ostd::SignalHandler::refresh();
 			uint16_t addr = cpu.readRegister(dragon::data::Registers::IP);
 			uint16_t spAddr = cpu.readRegister(dragon::data::Registers::SP);
+			// _timer.start(true, "Profiling", ostd::eTimeUnits::Microseconds, &out);
 			running = cpu.execute() && vDisplay.isRunning();
+			// _timer.end(true);
 			vDisplay.update();
-			cpu.getCurrentInstruction();
 			vDiskInterface.cycleStep();
 			if (dragon::data::ErrorHandler::hasError())
 			{
 				processErrors();
-				break;
+				break;		
 			}
 			if (acc == 500)
 			{

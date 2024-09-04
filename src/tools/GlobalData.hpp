@@ -279,6 +279,8 @@ namespace dragon
 				inline static constexpr uint8_t NoOp = 0x00;
 				inline static constexpr uint8_t DEBUG_Break = 0x01;
 				inline static constexpr uint8_t BIOSModeImm = 0x02;
+				inline static constexpr uint8_t DEBUG_StartProfile = 0x03;
+				inline static constexpr uint8_t DEBUG_StopProfile = 0x04;
 			
 				inline static constexpr uint8_t MovImmReg = 0x10;
 				inline static constexpr uint8_t MovRegReg = 0x11;

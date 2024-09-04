@@ -92,7 +92,8 @@ namespace dragon
 					ostd::String dest_file_path { "" };
 					bool save_disassembly { false };
 					bool verbose { false };
-					bool save_exports { false };
+					bool debug_mode { false };
+					bool save_exports { true };
 					ostd::String disassembly_file_path { "" };
 					std::vector<ostd::String> cpu_extensions;
 				};
@@ -171,6 +172,7 @@ namespace dragon
 
 			public:
 				inline static bool saveExports { false };
+				inline static bool debugMode { false };
 				inline static std::vector<ostd::String> cpuExtensions;
 		};
 	}

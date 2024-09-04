@@ -172,6 +172,18 @@
 @end
 @raw_export_end
 @export_comment BIOS_API " --\n"
+
+
+@export_comment BIOS_API " Debugger Profiler time units."
+@raw_export_start BIOS_API
+@group DBGProfilerTime
+	MILLIS			0x00
+	SECS			0x01
+	MICROS			0x02
+	NANOS			0x03
+@end
+@raw_export_end
+@export_comment BIOS_API " --\n"
 ## ===============================================================================================
 
 .data

@@ -994,7 +994,11 @@ namespace dragon
 				{
 					_disassembly_line.addr = m_dataSize + m_loadAddress + m_code.size() + 3;
 					lineEdit = replaceSymbols(lineEdit);
-					parse1Operand(lineEdit);
+					ostd::String _tmp_edit(lineEdit);
+					if (_tmp_edit.toLower().trim().startsWith("debug_"))
+						parseDebugOperands(lineEdit);
+					else
+						parse1Operand(lineEdit);
 					_disassembly_line.code = lineEdit;
 					m_disassembly.push_back(_disassembly_line);
 					continue;
@@ -1003,7 +1007,11 @@ namespace dragon
 				{
 					_disassembly_line.addr = m_dataSize + m_loadAddress + m_code.size() + 3;
 					lineEdit = replaceSymbols(lineEdit);
-					parse2Operand(lineEdit);
+					ostd::String _tmp_edit(lineEdit);
+					if (_tmp_edit.toLower().trim().startsWith("debug_"))
+						parseDebugOperands(lineEdit);
+					else
+						parse2Operand(lineEdit);
 					_disassembly_line.code = lineEdit;
 					m_disassembly.push_back(_disassembly_line);
 					continue;
@@ -1012,7 +1020,11 @@ namespace dragon
 				{
 					_disassembly_line.addr = m_dataSize + m_loadAddress + m_code.size() + 3;
 					lineEdit = replaceSymbols(lineEdit);
-					parse3Operand(lineEdit);
+					ostd::String _tmp_edit(lineEdit);
+					if (_tmp_edit.toLower().trim().startsWith("debug_"))
+						parseDebugOperands(lineEdit);
+					else
+						parse3Operand(lineEdit);
 					_disassembly_line.code = lineEdit;
 					m_disassembly.push_back(_disassembly_line);
 					continue;
@@ -1029,9 +1041,51 @@ namespace dragon
 
 		void Assembler::parseDebugOperands(ostd::String line)
 		{
+			if (!debugMode)
+				return;
 			if (ostd::String(line).toLower().startsWith("debug_break"))
 			{
 				m_code.push_back(data::OpCodes::DEBUG_Break);
+				return;
+			}
+			else if (ostd::String(line).toLower().startsWith("debug_profile_stop"))
+			{
+				m_code.push_back(data::OpCodes::DEBUG_StopProfile);
+				return;
+			}
+			else if (ostd::String(line).toLower().startsWith("debug_profile_start"))
+			{
+				ostd::String lineEdit(line);
+				ostd::String instEdit(lineEdit.new_substr(0, lineEdit.indexOf(" ")));
+				instEdit.trim().toLower();
+				ostd::String opEdit(lineEdit.new_substr(lineEdit.indexOf(" ") + 1));
+				opEdit.trim();
+				int16_t word1 = 0x0000;
+				int16_t word2 = 0x0000;
+				auto st = opEdit.tokenize(",");
+				eOperandType opType1 = parseOperand(st.next(), word1);
+				if (opType1 == eOperandType::Immediate)
+				{
+					eOperandType opType2 = parseOperand(st.next(), word2);
+					switch (opType2)
+					{
+						case eOperandType::Immediate:
+							m_code.push_back(data::OpCodes::DEBUG_StartProfile);
+							m_code.push_back(static_cast<uint8_t>(word1));
+							m_code.push_back(static_cast<uint8_t>(word2));
+						break;
+						default:
+							std::cout << "Invalid operand2 type; " << line << " (" << opEdit << ")\n";
+							exit(0);
+						break;
+					}
+				}
+				else
+				{
+					std::cout << "Invalid operand1 type; " << line << " (" << opEdit << ")\n";
+					exit(0);
+				}
+				
 				return;
 			}
 		}

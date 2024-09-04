@@ -106,22 +106,23 @@
 	},
 
 	"workbench.colorCustomizations": {
-		"editor.background": "#131313",
-		"tab.hoverBackground": "#111",
+		// "editor.background": "#131313",
+		"tab.hoverBackground": "#022809",
 		"tab.inactiveBackground": "#000",
-		"tab.activeBackground": "#1b1b1b",
-		"tab.activeBorder": "#bb5400",
+		"tab.activeBackground": "#001804",
+		"editor.foldBackground": "#20070bcc",
+		"tab.activeBorder": "#15ff00",
 		"editorIndentGuide.background1": "#252525",
 		"editorWhitespace.foreground": "#683700",
 		"editor.lineHighlightBorder": "#1a1a1a",
-		"editor.lineHighlightBackground": "#490050",
+		"editor.lineHighlightBackground": "#0a200a",
 		"editorBracketMatch.background": "#444",
 		"editorBracketMatch.border": "#b80318",
-		"editor.selectionBackground": "#3b3b3b",
-		"editor.selectionHighlightBackground": "#702900e8",
-		"statusBar.background": "#2e2850",
-		"minimap.background" : "#1b1b1b",
-		"sideBar.background": "#1b1b1b"
+		"editor.selectionBackground": "#0e3616",
+		"editor.selectionHighlightBackground": "#9c3e08c5",
+		// "statusBar.background": "#2e2850",
+		"minimap.background" : "#0f0f0f",
+		"sideBar.background": "#0b0b0b"
 	},
 
 	"workbench.editor.wrapTabs": true,
@@ -166,5 +167,8 @@
 
 	"python.languageServer": "None",
 
-	"files.eol": "\r\n"
+	"files.eol": "\r\n",
+
+	"workbench.iconTheme": "material-icon-theme",
+	"workbench.colorTheme": "Aramok's GLX Black"			
 }

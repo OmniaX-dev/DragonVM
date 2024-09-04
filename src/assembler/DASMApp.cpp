@@ -1,4 +1,6 @@
 #include "Assembler.hpp"
+#include "../tools/Utils.hpp"
+#include <ostd/Random.hpp>
 
 namespace dragon
 {
@@ -20,6 +22,9 @@ namespace dragon
 					print_application_help();
 					return RETURN_VAL_CLOSE_PROGRAM;
 				}
+				args.disassembly_file_path = "";
+				bool disable_extmov = false;
+				bool disable_extalu = false;
 				for (int32_t i = 2; i < argc; i++)
 				{
 					ostd::String edit(argv[i]);
@@ -43,42 +48,58 @@ namespace dragon
 						print_application_help();
 						return RETURN_VAL_CLOSE_PROGRAM;
 					}
-					else if (edit == "--extmov")
-						args.cpu_extensions.push_back("extmov");
-					else if (edit == "--extalu")
-						args.cpu_extensions.push_back("extalu");
+					else if (edit == "-D" || edit == "--debug")
+						args.debug_mode = true;
+					else if (edit == "--disable-extmov")
+						disable_extmov = true;
+					else if (edit == "--disable-extalu")
+						disable_extalu = true;
 					else if (edit == "--verbose")
 						args.verbose = true;
-					else if (edit == "--save-exports")
-						args.save_exports = true;
+					else if (edit == "--disable-exports")
+						args.save_exports = false;
 				}
+				if (args.debug_mode)
+				{
+					// args.verbose = true;	
+					args.save_disassembly = true;				
+				}
+				if (!disable_extalu)
+					args.cpu_extensions.push_back("extalu");
+				if (!disable_extmov)
+					args.cpu_extensions.push_back("extmov");
+				if (args.save_disassembly && args.disassembly_file_path == "")
+					args.disassembly_file_path = "disassembly/" + ostd::Utils::md5(args.dest_file_path) + ".dds";
 			}
 			return RETURN_VAL_EXIT_SUCCESS;
 		}
 
-		void Assembler::Application::print_application_help(void)
+		void Assembler::Application::print_application_help(void)			
 		{
 			int32_t commandLength = 46;
 
 			out.nl().fg(ostd::ConsoleColors::Yellow).p("List of available parameters:").reset().nl();
 			ostd::String tmpCommand = "--save-disassembly <destination-directory>";
 			tmpCommand.addRightPadding(commandLength);
-			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Saves debug information in the destination directory.").reset().nl();
+			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Saves debug information in the destination directory. (Enabled by default in debug mode.)").reset().nl();
 			tmpCommand = "--verbose";
 			tmpCommand.addRightPadding(commandLength);
 			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Shows more information about the assembled program.").reset().nl();
 			tmpCommand = "-o <destination-binary-file>";
 			tmpCommand.addRightPadding(commandLength);
 			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Used to specify the output binary file.").reset().nl();
-			tmpCommand = "--save-exports";
+			tmpCommand = "--disable-exports";
 			tmpCommand.addRightPadding(commandLength);
-			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Used to save any specified exports in the code.").reset().nl();
-			tmpCommand = "--extmov";
+			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Used to disable any specified exports in the code.").reset().nl();
+			tmpCommand = "--disable-extmov";
 			tmpCommand.addRightPadding(commandLength);
-			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Enables mnemonics for the <extmov> CPU extension.").reset().nl();
-			tmpCommand = "--extalu";
+			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Disables mnemonics for the <extmov> CPU extension.").reset().nl();
+			tmpCommand = "--disable-extalu";
 			tmpCommand.addRightPadding(commandLength);
-			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Enables mnemonics for the <extalu> CPU extension.").reset().nl();
+			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Disables mnemonics for the <extalu> CPU extension.").reset().nl();
+			tmpCommand = "--debug, -D";
+			tmpCommand.addRightPadding(commandLength);
+			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Used to enable debug mode.").reset().nl();
 			tmpCommand = "--help";
 			tmpCommand.addRightPadding(commandLength);
 			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Displays this help message.").reset().nl();

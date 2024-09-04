@@ -234,6 +234,28 @@ namespace dragon
 						m_biosMode = value != 0;
 				}
 				break;
+				case data::OpCodes::DEBUG_StartProfile:
+				{
+					int8_t id = fetch8();
+					int8_t timeUnit = fetch8();
+					ostd::eTimeUnits tu = ostd::eTimeUnits::Milliseconds;
+					if (static_cast<eDebugProfilerTimeUnits>(timeUnit) == eDebugProfilerTimeUnits::Micros)
+						tu = ostd::eTimeUnits::Microseconds;
+					else if (static_cast<eDebugProfilerTimeUnits>(timeUnit) == eDebugProfilerTimeUnits::Nanos)
+						tu = ostd::eTimeUnits::Nanoseconds;
+					else if (static_cast<eDebugProfilerTimeUnits>(timeUnit) == eDebugProfilerTimeUnits::Secs)
+						tu = ostd::eTimeUnits::Seconds;
+					m_profilerTimer.start(true, ostd::String("DebugProfiler [").add(ostd::Utils::getHexStr(id, true, 1)).add("]"), tu);
+					m_debugProfilerStarted = true;
+				}
+				break;
+				case data::OpCodes::DEBUG_StopProfile:
+				{
+					if (m_debugProfilerStarted)
+						m_profilerTimer.end(true);
+					m_debugProfilerStarted = false;
+				}
+				break;
 				case data::OpCodes::MovImmReg:
 				{
 					uint8_t regAddr = fetch8();

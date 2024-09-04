@@ -15,6 +15,7 @@ namespace dragon
 	{
 		class VirtualCPU
 		{
+			public: enum class eDebugProfilerTimeUnits { Millis = 0, Secs = 1, Micros = 2, Nanos = 3 };
 			public:
 				VirtualCPU(IMemoryDevice& memory);
 				int16_t readRegister(uint8_t reg);
@@ -66,6 +67,7 @@ namespace dragon
 				bool m_isDebugBreakPoint { false };
 				bool m_debugModeEnabled { false };
 				int32_t m_subroutineCounter { 0 };
+				bool m_debugProfilerStarted { false };
 
 				bool m_isOffsetAddressingEnabled { false };
 				uint16_t m_currentOffset { 0x0000 };
@@ -75,6 +77,8 @@ namespace dragon
 				uint8_t m_currentExtInst { 0x00 };
 
 				std::vector<ostd::String> m_debug_stackFrameStrings;
+
+				ostd::Timer m_profilerTimer;
 
 			friend class dragon::DragonRuntime;
 			friend class dragon::Debugger::Display;

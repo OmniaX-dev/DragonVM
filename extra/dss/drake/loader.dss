@@ -7,7 +7,7 @@
 	$_drake_logo_line_2 "  / _ \/ _ \/ _ | / //_/ __/"
 	$_drake_logo_line_3 " / // / , _/ __ |/ ,< / _/  "
 	$_drake_logo_line_4 "/____/_/|_/_/ |_/_/|_/___/  "
-	$_logo_padding "                                "
+	$_logo_padding  "                                "
 
 	$ddd <DiskDriverData>
 

@@ -63,7 +63,9 @@ _disk_load_from_ddd_blocking:
 	and FL, 0b1111111111111110													## Disable interrupts
 	mov FL, ACC	
 _disk_load_from_ddd_blocking_wait_loop:
+	debug_profile_start 0xE0, DBGProfilerTime.MILLIS
 	mov ACC, [{DISK_INTERFACE_ADDR + DiskRegisters.RO_STATUS}]
+	debug_profile_stop
 	jne $_disk_load_from_ddd_blocking_wait_loop, DiskStatus.FREE
 	or FL, 0b0000000000000001													## Enable interrupts
 	mov FL, ACC
