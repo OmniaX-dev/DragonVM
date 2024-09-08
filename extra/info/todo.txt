@@ -9,6 +9,7 @@ Refactor:
 
 External:
 	Redo script to create windows Release
+	Update Ubuntu install instructions in readme file (for OmniaFramework aswell)
 
 
 

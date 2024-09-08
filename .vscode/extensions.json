@@ -1,0 +1,11 @@
+{
+	// List of extensions which should be recommended for users of this workspace.
+	"recommendations": [
+		"aramok.aramoks-black",
+		"ms-vscode.cpptools",
+		"ms-vscode.hexeditor",
+		"PKief.material-icon-theme",
+		"wayou.vscode-todo-highlight",
+		"josetr.cmake-language-support-vscode"
+	]
+}
