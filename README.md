@@ -43,7 +43,7 @@ open a terminal inside the root directory of the project and run this command:
 open a terminal and run:
 ```
 sudo apt update && sudo apt upgrade
-sudo apt install clang gdb make cmake libsdl2-dev libsdl2-mixer-dev libsdl2-image-dev libxcb-randr0-dev
+sudo apt install build-essential dkms linux-headers-$(uname -r) clang gdb make cmake libssl-dev libboost-all-dev libsdl2-dev libsdl2-mixer-dev libsdl2-image-dev libsdl2-ttf-dev libsdl2-gfx-dev libxcb-randr0-dev
 ```
 
 **Step 2:**
