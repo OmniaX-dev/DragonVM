@@ -18,7 +18,7 @@ namespace dragon
 			return; //TODO: Error
 		m_parent = &parent;
 		m_pixels = ostd::Utils::createArray<uint32_t>(parent.getWindowWidth() * parent.getWindowHeight());
-		m_texture = SDL_CreateTexture(parent.getSDLRenderer(), SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STREAMING, parent.getWindowWidth(), parent.getWindowHeight());
+		m_texture = SDL_CreateTexture(parent.getSDLRenderer(), SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, parent.getWindowWidth(), parent.getWindowHeight());
 		m_windowWidth = parent.getWindowWidth();
 		m_windowHeight = parent.getWindowHeight();
 		setTypeName("dragon::Renderer");
@@ -34,7 +34,7 @@ namespace dragon
 		{
 			m_pixels = ostd::Utils::resizeArray<uint32_t>(m_pixels, m_parent->getWindowWidth() * m_parent->getWindowHeight());
 			SDL_DestroyTexture(m_texture);
-			m_texture = SDL_CreateTexture(m_parent->getSDLRenderer(), SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STREAMING, m_parent->getWindowWidth(), m_parent->getWindowHeight());
+			m_texture = SDL_CreateTexture(m_parent->getSDLRenderer(), SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, m_parent->getWindowWidth(), m_parent->getWindowHeight());
 			m_windowWidth = m_parent->getWindowWidth();
 			m_windowHeight = m_parent->getWindowHeight();
 			updateBuffer();
@@ -45,10 +45,7 @@ namespace dragon
 	void Renderer::updateBuffer(void)
 	{
 		if (isInvalid()) return;
-		ostd::Timer timer;
-		timer.start(true, "DISPLAY_PROFILER", ostd::eTimeUnits::Milliseconds);
 		SDL_UpdateTexture(m_texture, NULL, m_pixels, m_windowWidth * 4);
-		timer.end(true);
 	}
 	
 	void Renderer::displayBuffer(void)
@@ -66,7 +63,7 @@ namespace dragon
 			for (uint32_t x = 0; x < m_windowWidth; x++)
 			{
 				int32_t index = CONVERT_2D_1D(x, y, m_windowWidth);
-				m_pixels[index] = color.asInteger();
+				m_pixels[index] = color.asInteger(ostd::Color::eColorFormat::ARGB);
 			}
 		}
 	}

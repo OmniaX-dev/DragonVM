@@ -346,6 +346,7 @@ namespace dragon
 	{
 		double clock_speed_us = 1000000.0 / machine_config.clock_rate_sec;
 		double acc = 0;
+		double acc2 = 0;
 		uint64_t avg_count = 0;
 		uint64_t _time = 0;
 		double avg_tot = 0;
@@ -377,8 +378,14 @@ namespace dragon
 				// out.fg(ostd::ConsoleColors::Red).p(s_avgInstTime).nl().reset();
 				acc = 0;
 			}
+			if (acc2 == 100)
+			{
+				vDisplay.redrawScreen();
+				acc2 = 0;
+			}
 			_time = clock_timer.endCount();
 			acc++;
+			acc2++;
 			if (_time < clock_speed_us && fixed_clock)
 				ostd::Utils::sleep(clock_speed_us - _time, ostd::eTimeUnits::Microseconds);
 		}

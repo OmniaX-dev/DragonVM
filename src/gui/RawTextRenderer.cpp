@@ -84,18 +84,18 @@ namespace dragon
 				}
 				if (applyBackground)
 				{
-					screenPixels[screenIndex] = 255;
-					screenPixels[screenIndex + 1] = background.b;
-					screenPixels[screenIndex + 2] = background.g;
-					screenPixels[screenIndex + 3] = background.r;
+					screenPixels[screenIndex + 0] = background.b;
+					screenPixels[screenIndex + 1] = background.g;
+					screenPixels[screenIndex + 2] = background.r;
+					screenPixels[screenIndex + 3] = 255;
 					applyBackground = false;
 					continue;
 				}
 				tintedColor = applyTint({ fontPixels[index], fontPixels[index + 1], fontPixels[index + 2], 255 }, color);
-				screenPixels[screenIndex] = fontPixels[index + 3];
-				screenPixels[screenIndex + 1] = tintedColor.b;
-				screenPixels[screenIndex + 2] = tintedColor.g;
-				screenPixels[screenIndex + 3] = tintedColor.r;
+				screenPixels[screenIndex + 0] = tintedColor.b;
+				screenPixels[screenIndex + 1] = tintedColor.g;
+				screenPixels[screenIndex + 2] = tintedColor.r;
+				screenPixels[screenIndex + 3] = fontPixels[index + 3];
 			}
 			screeny += 1;
 			screenx = x * 4;

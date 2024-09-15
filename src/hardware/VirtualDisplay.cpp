@@ -71,7 +71,11 @@ namespace dragon
 				}
 			}
 			
-			m_renderer.updateBuffer();
+			if (m_redrawScreen)
+			{
+				m_renderer.updateBuffer();
+				m_redrawScreen = false;
+			}
 			m_renderer.displayBuffer();
 		}
 

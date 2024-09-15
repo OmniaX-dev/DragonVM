@@ -57,6 +57,8 @@ namespace dragon
 				void onFixedUpdate(void) override;
 				void onSlowUpdate(void) override;
 
+				inline void redrawScreen(void) { m_redrawScreen = true; }
+
 			private:
 				void single_text_add_char_to_line(char c);
 				void single_text_add_char_to_buffer(char c);
@@ -80,6 +82,8 @@ namespace dragon
 				std::vector<data::IBiosVideoPalette*> m_text16_palettes;
 				data::IBiosVideoPalette* m_text16_Currentpalette { nullptr };
 				uint8_t m_currentPaletteID { 0 };
+
+				bool m_redrawScreen { true };
 		};
 	}
 }
