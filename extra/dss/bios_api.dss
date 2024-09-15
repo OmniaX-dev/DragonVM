@@ -68,7 +68,6 @@
 ## These are signals used to comunicate with the video card's interface, when in TEXT16_COLOR mode.
 @group Sig_VGA_Text_16_Color
     CONTINUE                     0x00
-    READ_VRAM                    0x10
     WRITE_VRAM                    0x11
     FORCE_REFRESH_SCREEN         0xE0
     FORCE_CLEAR_SCREEN             0xE1

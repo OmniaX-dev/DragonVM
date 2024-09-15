@@ -66,7 +66,6 @@ namespace dragon
 						auto xy = CONVERT_1D_2D(i, RawTextRenderer::CONSOLE_CHARS_H);
 						RawTextRenderer::drawString(ostd::String().addChar(character), xy.x, xy.y, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_fontPixels, foreground, background);
 					}
-					DragonRuntime::cpu.handleInterrupt(data::InterruptCodes::Text16ModeScreenRefreshed, true);
 					m_refreshScreen = false;
 				}
 			}
@@ -74,6 +73,7 @@ namespace dragon
 			if (m_redrawScreen)
 			{
 				m_renderer.updateBuffer();
+				DragonRuntime::cpu.handleInterrupt(data::InterruptCodes::Text16ModeScreenRefreshed, true);
 				m_redrawScreen = false;
 			}
 			m_renderer.displayBuffer();
@@ -81,7 +81,7 @@ namespace dragon
 
 		// static char c = 'A';
 
-		void VirtualDisplay::onUpdate(void)
+		void VirtualDisplay::onUpdate(void)		
 		{
 			auto& mem = DragonRuntime::memMap;
 			uint16_t vga_addr = data::MemoryMapAddresses::VideoCardInterface_Start;
@@ -136,11 +136,7 @@ namespace dragon
 			}
 			else if (video_mode == tVideoModeValues::Text16Colors)
 			{
-				if (signal == tSignalValues::Text16Color_ReadMemory)
-				{
-
-				}
-				else if (signal == tSignalValues::Text16Color_WriteMemory)
+				if (signal == tSignalValues::Text16Color_WriteMemory)
 				{
 					hw::interface::Graphics::tText16_Cell textCell;
 

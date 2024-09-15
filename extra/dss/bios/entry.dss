@@ -1,9 +1,14 @@
 .load 0x0000           															## BIOS is mapped to address 0x0000 in memory
+.entry _bios_entry_point
 
 @include <data.dss>
+@include <utils.dss>
+@include <drivers.dss>
+@include <display_info.dss>
 
 ## ============================= BIOS Program =============================
 .code
+_bios_entry_point:
 	movb [VGA_Registers.VIDEO_MODE], VGA_VideoModes.TEXT_SINGLE_COLOR			## Enable Text_Single_Color graphics mode
 	mov FL, 0b0000000000000001													## Zero the FL Register and enable interrupts
 	mov reg(S_REG_OFFSET), 0x0000												## Zero the offset register
@@ -31,12 +36,5 @@
 	jmp MemoryAddresses.MBR         											## Jump to start of MBR in memory
 	hlt                															## Just in case somehow execution reaches this point
 ## ========================================================================
-
-@include <drivers.dss>
-@include <display_info.dss>
-
-## This file contains the .data section, so it needs to be the last thing included
-@include <utils.dss>
-## ===============================================================================
 
 .fixed 4096, 0xFF      ## BIOS Needs to be 4096 Bytes exactly

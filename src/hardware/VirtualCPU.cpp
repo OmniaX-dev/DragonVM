@@ -199,7 +199,7 @@ namespace dragon
 
 		bool VirtualCPU::execute(void)
 		{
-			if (m_halt) return false;
+			if (m_halt) return true;
 			m_currentExtension = nullptr;
 			m_currentExtInst = 0x00;
 			m_isDebugBreakPoint = false;
@@ -765,7 +765,7 @@ namespace dragon
 				case data::OpCodes::Halt:
 				{
 					m_halt = true;
-					return false;
+					return true;
 				}
 				break;
 				case data::OpCodes::PushImm:

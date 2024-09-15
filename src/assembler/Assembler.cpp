@@ -750,6 +750,7 @@ namespace dragon
 			for (auto& line : m_lines)
 			{
 				ostd::String lineEdit(line);
+				lineEdit.trim();
 				if (lineEdit.startsWith(".data"))
 					currentSection = DATA_SECTION;
 				else if (lineEdit.startsWith(".code"))
@@ -788,6 +789,18 @@ namespace dragon
 						return;
 					}
 					m_fixedSize = fixedSizeEdit.toInt();
+					continue;
+				}
+				else if (lineEdit.startsWith(".entry "))
+				{
+					if (lineEdit.len() < 8)
+					{
+						//TODO: Error 
+						std::cout << "Invalid .entry value: " << lineEdit << "\n";
+						return;
+					}
+					lineEdit.substr(7).trim();
+					m_entry_lbl = lineEdit;
 					continue;
 				}
 				else if (lineEdit.startsWith(".load "))
@@ -2319,6 +2332,17 @@ namespace dragon
 		void Assembler::combineDataAndCode(void)
 		{
 			uint16_t entryAddr = m_dataSize + m_loadAddress + 3;
+			if (m_entry_lbl != "")
+			{
+				if (m_labelTable.count("$" + m_entry_lbl) == 0)
+				{
+					std::cout << "Invalid entry label: " << m_entry_lbl << ".\n";
+					exit(0);
+					return;
+				}
+				auto lbl = m_labelTable["$" + m_entry_lbl];
+				entryAddr = lbl.address;
+			}
 			std::vector<tSymbol> symbols;
 			ostd::ByteStream newCode;
 			newCode.push_back(data::OpCodes::Jmp);

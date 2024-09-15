@@ -1,6 +1,6 @@
 @guard _UTILS_DSS_
 
-@include <data.dss>
+.code
 
 _load_mbr_data_block:
 	movb [{MemoryAddresses.DISK_INTERFACE + 0x1}], 0x00											## Mode = Read

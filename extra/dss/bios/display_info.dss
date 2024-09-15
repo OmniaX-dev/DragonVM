@@ -1,5 +1,7 @@
 @guard _DISPLAY_INFO_DSS_
 
+.code
+
 _print_machine_info:
 	mov R9, $_bios_logo_2_line_1
 	mov R10, 0x0C

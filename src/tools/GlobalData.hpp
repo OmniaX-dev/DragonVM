@@ -126,22 +126,22 @@ namespace dragon
 			public:
 				inline BiosVideoDefaultPalette(void)
 				{
-					m_colors.push_back({ 0, 0, 0 });
-					m_colors.push_back({ 157, 157, 157 });
-					m_colors.push_back({ 255, 255, 255 });
-					m_colors.push_back({ 190, 38, 51 });
-					m_colors.push_back({ 224, 111, 139 });
-					m_colors.push_back({ 73, 60, 43 });
-					m_colors.push_back({ 164, 100, 34 });
-					m_colors.push_back({ 235, 137, 49 });
-					m_colors.push_back({ 247, 226, 107 });
-					m_colors.push_back({ 47, 80, 42 });
-					m_colors.push_back({ 68, 137, 26 });
-					m_colors.push_back({ 163, 206, 39 });
-					m_colors.push_back({ 27, 38, 50 });
-					m_colors.push_back({ 0, 87, 132 });
-					m_colors.push_back({ 49, 162, 242 });
-					m_colors.push_back({ 178, 220, 239 });
+					m_colors.push_back({ 0, 0, 0 });				// Black
+					m_colors.push_back({ 157, 157, 157 });			// Gray
+					m_colors.push_back({ 255, 255, 255 });			// White
+					m_colors.push_back({ 190, 38, 51 });			// Red
+					m_colors.push_back({ 224, 111, 139 });			// Pink
+					m_colors.push_back({ 73, 60, 43 });				// Brown
+					m_colors.push_back({ 164, 100, 34 });			// Dark Orange
+					m_colors.push_back({ 235, 137, 49 });			// Orange
+					m_colors.push_back({ 247, 226, 107 });			// Yellow
+					m_colors.push_back({ 47, 80, 42 });				// Dark Green
+					m_colors.push_back({ 68, 137, 26 });			// Green
+					m_colors.push_back({ 163, 206, 39 });			// Lime
+					m_colors.push_back({ 27, 38, 50 });				// Dark Blue
+					m_colors.push_back({ 0, 87, 132 });				// Blue
+					m_colors.push_back({ 49, 162, 242 });			// Light Blue
+					m_colors.push_back({ 178, 220, 239 });			// Sky
 				}
 
 				inline ostd::Color getColor(uint8_t col) override
@@ -216,12 +216,13 @@ namespace dragon
 		class CMOSRegisters
 		{
 			public:
-				inline static constexpr uint8_t MemoryStart		= 0x00;
-				inline static constexpr uint8_t MemorySize 		= 0x02;
-				inline static constexpr uint8_t ClockSpeed	 	= 0x04;
-				inline static constexpr uint8_t BootDisk	 	= 0x10;
+				inline static constexpr uint8_t MemoryStart			= 0x00;
+				inline static constexpr uint8_t MemorySize 			= 0x02;
+				inline static constexpr uint8_t ClockSpeed	 		= 0x04;
+				inline static constexpr uint8_t ScreenRedrawRate 	= 0x06;
+				inline static constexpr uint8_t BootDisk	 		= 0x10;
 
-				inline static constexpr uint8_t DiskList	 	= 0x7E;
+				inline static constexpr uint8_t DiskList	 		= 0x7E;
 		};
 
 		class DPTStructure

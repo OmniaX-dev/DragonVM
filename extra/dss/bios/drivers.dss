@@ -1,5 +1,7 @@
 @guard _DRIVERS_DSS_
 
+.code
+
 ## ============================= BIOS Interrupt handler =============================
 _int_20_handler:
 	mov ACC, R10
@@ -44,7 +46,6 @@ _int_20_end:
 
 ## ==========================  BIOS Video Interrupt handler =========================
 _int_30_handler:
-	## debug_profile_start 0xE0, DBGProfilerTime.MILLIS
 	mov ACC, R10
 	jeq $_int_30_direct_print_char_text_single, 0x0001
 	jeq $_int_30_direct_new_line_text_single, 0x0002
@@ -59,7 +60,6 @@ _int_30_handler:
 	jeq $_int_30_invert_colors_text_single, 0x000B
 	jeq $_int_30_print_string_buffered, 0x000C
 
-	jeq $_int_30_read_vram_text16, 0x0020
 	jeq $_int_30_write_vram_text16, 0x0021
 
 	jeq $_int_30_clear_screen, 0x00E0
@@ -139,13 +139,7 @@ _int_30_write_vram_text16:
 	inc R9
 	movb [VGA_Registers.MEMORY_CONTROLLER_Y_BYTE], *R9
 	movb [VGA_Registers.SIGNAL], Sig_VGA_Text_16_Color.WRITE_VRAM
-	## debug_profile_stop
 	jmp $_int_30_end
-_int_30_read_vram_text16:
-
-	jmp $_int_30_end
-	
-
 
 _int_30_clear_screen:
 	movb [VGA_Registers.SIGNAL], Sig_VGA_Text_Single_Color.CLEAR_SCREEN

@@ -18,6 +18,7 @@ namespace dragon
 		ostd::Color singleColor_background;
 		ostd::Color singleColor_foreground;
 		uint8_t text16_palette { 0 };
+		uint8_t screen_redraw_rate_per_second { 10 };
 		
 		inline bool isValid(void) const { return m_valid; }
 		inline void destroy(void) { for (auto& ptr : cpuext_list) delete ptr.second; }

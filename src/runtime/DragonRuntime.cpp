@@ -313,11 +313,13 @@ namespace dragon
 			out.fg(ostd::ConsoleColors::BrightYellow).p("    Fixed clock enabled: ").p(STR_BOOL(machine_config.fixed_clock)).nl();
 			if (machine_config.fixed_clock)
 				out.fg(ostd::ConsoleColors::BrightYellow).p("    Clock speed: ").p(machine_config.clock_rate_sec).p(" Hz").nl();
+			out.fg(ostd::ConsoleColors::BrightYellow).p("    Screen redraw rate: ").p((int32_t)machine_config.screen_redraw_rate_per_second).p(" Hz").nl();
 		}
 
 		vCMOS.write16(data::CMOSRegisters::MemoryStart, data::MemoryMapAddresses::Memory_Start);
 		vCMOS.write16(data::CMOSRegisters::MemorySize, data::MemoryMapAddresses::Memory_End);
 		vCMOS.write16(data::CMOSRegisters::ClockSpeed, machine_config.clock_rate_sec);
+		vCMOS.write8	(data::CMOSRegisters::ScreenRedrawRate, machine_config.screen_redraw_rate_per_second);
 		ostd::BitField_16 disk_list_bitfield;
 		disk_list_bitfield.value = 0;
 		for (int32_t i = 0; i < 16; i++)
@@ -360,6 +362,7 @@ namespace dragon
 			ostd::SignalHandler::refresh();
 			uint16_t addr = cpu.readRegister(dragon::data::Registers::IP);
 			uint16_t spAddr = cpu.readRegister(dragon::data::Registers::SP);
+			uint8_t screenRedrawRate = vCMOS.read8(data::CMOSRegisters::ScreenRedrawRate);
 			// _timer.start(true, "Profiling", ostd::eTimeUnits::Microseconds, &out);		
 			running = cpu.execute() && vDisplay.isRunning();
 			// _timer.end(true);
@@ -378,7 +381,7 @@ namespace dragon
 				// out.fg(ostd::ConsoleColors::Red).p(s_avgInstTime).nl().reset();
 				acc = 0;
 			}
-			if (acc2 == 100)
+			if (acc2 == (1000 / screenRedrawRate))
 			{
 				vDisplay.redrawScreen();
 				acc2 = 0;
@@ -398,6 +401,7 @@ namespace dragon
 		__track_call_stack(&s_machineInfo);
 		bool running = cpu.execute() && vDisplay.isRunning();
 		vDisplay.update();
+		vDisplay.redrawScreen(); // This is slow...maybe it should be on a 100ms rate, like in normal runtime mode
 		vDiskInterface.cycleStep();
 		__get_machine_footprint(&s_machineInfo, trackedAddresses, false);
 		return running || vDiskInterface.isBusy();

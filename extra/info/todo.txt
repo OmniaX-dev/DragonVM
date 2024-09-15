@@ -2,7 +2,6 @@ Assembler:
 	Add subroutine address export functionality
 
 Bugs:
-	Fix VM closing when reaching hlt instruction
 
 Refactor:
 	Move all possible default values into data::DefaultValues class (in <GlobalData.hpp>)
@@ -13,6 +12,7 @@ External:
 
 
 Done:
+	*Fix VM closing when reaching hlt instruction
 	*Add Struct export functionality
 	*Add evaluation of direct struct instance name as as struct's first member
 	*Add single Define export functionality

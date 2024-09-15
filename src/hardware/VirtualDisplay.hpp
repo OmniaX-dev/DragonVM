@@ -43,7 +43,6 @@ namespace dragon
 				inline static constexpr uint8_t TextSingleColor_DirectPrintBuffNoFlush = 0x06;	
 				inline static constexpr uint8_t TextSingleColor_DirectPrintString = 0x07;
 
-				inline static constexpr uint8_t Text16Color_ReadMemory = 0x10;
 				inline static constexpr uint8_t Text16Color_WriteMemory = 0x11;
 
 				inline static constexpr uint8_t RefreshScreen = 0xE0;	

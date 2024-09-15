@@ -162,6 +162,7 @@ namespace dragon
 				inline static uint16_t m_currentDataAddr { 0x0000 };
 				inline static uint16_t m_dataSize { 0x0000 };
 				inline static uint16_t m_programSize { 0x0000 };
+				inline static ostd::String m_entry_lbl { "" };
 
 				inline static std::vector<tStructDefinition> m_structDefs;
 				inline static std::vector<tDisassemblyLine> m_disassembly;

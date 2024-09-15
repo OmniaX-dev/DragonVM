@@ -109,6 +109,13 @@ namespace dragon
 				if (!lineEdit.isNumeric()) continue; //TODO: Error
 				config.text16_palette = lineEdit.toInt();
 			}
+			else if (lineEdit == "screen_redraw_rate_per_second")
+			{
+				lineEdit = tokens.next();
+				lineEdit.trim().toLower();
+				if (!lineEdit.isNumeric()) continue; //TODO: Error
+				config.screen_redraw_rate_per_second = lineEdit.toInt();
+			}
 			else continue; //TODO: Warning
 		}
 		return validate_machine_config(config);

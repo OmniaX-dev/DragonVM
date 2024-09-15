@@ -25,6 +25,7 @@
 	MEM_START				{ MemoryAddresses.CMOS + 0x0000 }
 	MEM_SIZE				{ MemoryAddresses.CMOS + 0x0002 }
 	CLOCK_SPEED				{ MemoryAddresses.CMOS + 0x0004 }
+	SCREEN_REDRAW_RATE		{ MemoryAddresses.CMOS + 0x0006 }
 	BOOT_DISK 				{ MemoryAddresses.CMOS + 0x0010 }
 
 	DISK_LIST 				{ MemoryAddresses.CMOS + 0x007E }
@@ -108,7 +109,6 @@
 @group Sig_VGA_Text_16_Color
 	CONTINUE 					0x00
 
-	READ_VRAM					0x10
 	WRITE_VRAM					0x11
 
 	FORCE_REFRESH_SCREEN 		0xE0

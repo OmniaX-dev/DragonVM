@@ -1,71 +1,30 @@
 .load 0x1740
+.entry _drake_bootsector_entry_point
 
 @include <../bios_api.dss>
+@include <palette.dss>
+@include <disk.dss>
 
 .data
 	$string "Hello "
 	$ddd <DiskDriverData>
 	$dpt_block <DPTBlock>
-	$textCell <Text16VModeCell>
+	$textCell <Text16VModeCell>	
 
 .code
+_drake_bootsector_entry_point:
 	push 0
 	call $_load_dpt_block
-
 	movb [VGA_Registers.VIDEO_MODE], VGA_VideoModes.TEXT_16_COLORS
 
-	mov R5, 0
-draw_loop:
+	push 2
+	push 1
+	push 2
+	call $_draw_palette
 
-	movb [$textCell.Character], 65
-	movb [$textCell.Foreground], 6
-	movb [$textCell.Background], 0
-	movb [$textCell.CoordX], R5
-	movb [$textCell.CoordY], 1
+	## mov R9, { $dpt_block + DPTStructure.ENTRIES_START + (2 * DPTStructure.ENTRY_SIZE_B) + DPTStructure.ENTRY_PART_LBL }
 
-	mov R10, 0x21
-	mov R9, $textCell
-	## debug_profile_start 0xE0, DBGProfilerTime.MILLIS
-	int 0x30
-	## debug_profile_stop
-
-	inc R5
-	mov ACC, R5
-	jgr $draw_loop, 90
-
-	mov R5, 0
-draw_loop2:
-
-	movb [$textCell.Character], 65
-	movb [$textCell.Foreground], 6
-	movb [$textCell.Background], 0
-	movb [$textCell.CoordX], R5
-	movb [$textCell.CoordY], 10
-
-	mov R10, 0x21
-	mov R9, $textCell
-	int 0x30
-
-	inc R5
-	mov ACC, R5
-	jgr $draw_loop2, 90
-
-
-	mov R10, 0x0C
-	mov R9, $string
-	int 0x30
-
-	mov R10, 0x0C
-	mov R9, { $dpt_block + DPTStructure.ENTRIES_START + (2 * DPTStructure.ENTRY_SIZE_B) + DPTStructure.ENTRY_PART_LBL }
-	int 0x30
-
-	debug_break
-
-end_loop:
-	jmp $end_loop
-	hlt
-
-
+	hlt	
 
 _load_dpt_block:
 	mov [$ddd.Mode], DiskMode.READ
@@ -80,7 +39,6 @@ _load_dpt_block:
 	ret
 
 	
-@include <disk.dss>
 
 .fixed 5120, 0xFF
 
