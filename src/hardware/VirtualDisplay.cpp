@@ -70,11 +70,12 @@ namespace dragon
 					m_refreshScreen = false;
 				}
 			}
+			
 			m_renderer.updateBuffer();
 			m_renderer.displayBuffer();
 		}
 
-		static char c = 'A';
+		// static char c = 'A';
 
 		void VirtualDisplay::onUpdate(void)
 		{
@@ -146,15 +147,15 @@ namespace dragon
 					int16_t y = mem.read16(vga_addr + tRegisters::MemControllerY);
 
 					//TODO: Remove this override used for testing purposes
-					for (int32_t i = 0; i < RawTextRenderer::CONSOLE_CHARS_V * RawTextRenderer::CONSOLE_CHARS_H; i++)
-					{
-						auto xy = CONVERT_1D_2D(i, RawTextRenderer::CONSOLE_CHARS_H);
-						DragonRuntime::vGraphicsInterface.writeVRAM_16Colors(static_cast<uint8_t>(xy.x), static_cast<uint8_t>(xy.y), c++, 0, 15);
-						if (c > 'Z')
-							c = 'A';
-					}
+					// for (int32_t i = 0; i < RawTextRenderer::CONSOLE_CHARS_V * RawTextRenderer::CONSOLE_CHARS_H; i++)
+					// {
+					// 	auto xy = CONVERT_1D_2D(i, RawTextRenderer::CONSOLE_CHARS_H);
+					// 	DragonRuntime::vGraphicsInterface.writeVRAM_16Colors(static_cast<uint8_t>(xy.x), static_cast<uint8_t>(xy.y), c++, 0, 15);
+					// 	if (c > 'Z')
+					// 		c = 'A';
+					// }
 					
-					// DragonRuntime::vGraphicsInterface.writeVRAM_16Colors(static_cast<uint8_t>(x), static_cast<uint8_t>(y), textCell.character, textCell.backgroundColor, textCell.foregroundColor);
+					DragonRuntime::vGraphicsInterface.writeVRAM_16Colors(static_cast<uint8_t>(x), static_cast<uint8_t>(y), textCell.character, textCell.backgroundColor, textCell.foregroundColor);
 				}
 			}
 			else return;

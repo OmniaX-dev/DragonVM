@@ -352,14 +352,14 @@ namespace dragon
 		ostd::Timer clock_timer;
 		bool running = true;
 		bool fixed_clock = machine_config.fixed_clock;
-		// ostd::Timer _timer;
+		ostd::Timer _timer;
 		while (running || vDiskInterface.isBusy())
 		{
 			clock_timer.startCount(ostd::eTimeUnits::Microseconds);
 			ostd::SignalHandler::refresh();
 			uint16_t addr = cpu.readRegister(dragon::data::Registers::IP);
 			uint16_t spAddr = cpu.readRegister(dragon::data::Registers::SP);
-			// _timer.start(true, "Profiling", ostd::eTimeUnits::Microseconds, &out);
+			// _timer.start(true, "Profiling", ostd::eTimeUnits::Microseconds, &out);		
 			running = cpu.execute() && vDisplay.isRunning();
 			// _timer.end(true);
 			vDisplay.update();
@@ -374,6 +374,7 @@ namespace dragon
 				avg_count++;
 				avg_tot += _time;
 				s_avgInstTime = (uint64_t)std::round(avg_tot / avg_count);
+				// out.fg(ostd::ConsoleColors::Red).p(s_avgInstTime).nl().reset();
 				acc = 0;
 			}
 			_time = clock_timer.endCount();

@@ -45,7 +45,10 @@ namespace dragon
 	void Renderer::updateBuffer(void)
 	{
 		if (isInvalid()) return;
+		ostd::Timer timer;
+		timer.start(true, "DISPLAY_PROFILER", ostd::eTimeUnits::Milliseconds);
 		SDL_UpdateTexture(m_texture, NULL, m_pixels, m_windowWidth * 4);
+		timer.end(true);
 	}
 	
 	void Renderer::displayBuffer(void)

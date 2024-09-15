@@ -44,6 +44,7 @@ _int_20_end:
 
 ## ==========================  BIOS Video Interrupt handler =========================
 _int_30_handler:
+	## debug_profile_start 0xE0, DBGProfilerTime.MILLIS
 	mov ACC, R10
 	jeq $_int_30_direct_print_char_text_single, 0x0001
 	jeq $_int_30_direct_new_line_text_single, 0x0002
@@ -138,6 +139,7 @@ _int_30_write_vram_text16:
 	inc R9
 	movb [VGA_Registers.MEMORY_CONTROLLER_Y_BYTE], *R9
 	movb [VGA_Registers.SIGNAL], Sig_VGA_Text_16_Color.WRITE_VRAM
+	## debug_profile_stop
 	jmp $_int_30_end
 _int_30_read_vram_text16:
 

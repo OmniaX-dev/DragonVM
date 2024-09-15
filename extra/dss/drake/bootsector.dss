@@ -25,7 +25,9 @@ draw_loop:
 
 	mov R10, 0x21
 	mov R9, $textCell
+	## debug_profile_start 0xE0, DBGProfilerTime.MILLIS
 	int 0x30
+	## debug_profile_stop
 
 	inc R5
 	mov ACC, R5
