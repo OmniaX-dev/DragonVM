@@ -2521,5 +2521,5 @@ namespace dragon
 			if (opEdit == "fl") return data::Registers::FL;
 			return data::Registers::Last;
 		}
-		}
+	}
 }

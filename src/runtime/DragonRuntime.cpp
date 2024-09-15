@@ -378,7 +378,7 @@ namespace dragon
 				avg_count++;
 				avg_tot += _time;
 				s_avgInstTime = (uint64_t)std::round(avg_tot / avg_count);
-				// out.fg(ostd::ConsoleColors::Red).p(s_avgInstTime).nl().reset();
+				// out.fg(ostd::ConsoleColors::Red).p(getAvgClockSpeed()).nl().reset();
 				acc = 0;
 			}
 			if (acc2 == (1000 / screenRedrawRate))

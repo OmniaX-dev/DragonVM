@@ -4,10 +4,10 @@ CMOS = dragon/cmos.dr
 
 cpuext = extmov, extalu
 fixed_clock = false
-clock_rate_sec = 2000
+clock_rate_sec = 5000
 memory_extension_pages = 16
 
-screen_redraw_rate_per_second = 50
+screen_redraw_rate_per_second = 10
 
 SingleColor_foreground = #009900FF
 SingleColor_background = #111111FF

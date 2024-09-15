@@ -5,13 +5,19 @@
 @include <palette.dss>
 @include <disk.dss>
 
+
+
 .data
 	$string "Hello "
 	$ddd <DiskDriverData>
 	$dpt_block <DPTBlock>
 	$textCell <Text16VModeCell>	
 
+
+
 .code
+
+
 _drake_bootsector_entry_point:
 	push 0
 	call $_load_dpt_block
@@ -22,9 +28,36 @@ _drake_bootsector_entry_point:
 	push 2
 	call $_draw_palette
 
-	## mov R9, { $dpt_block + DPTStructure.ENTRIES_START + (2 * DPTStructure.ENTRY_SIZE_B) + DPTStructure.ENTRY_PART_LBL }
+
+
+	movb [$textCell.CoordX], 2
+	movb [$textCell.CoordY], 2
+	movb [$textCell.Foreground], DefaultPalette.Orange
+	movb [$textCell.Background], DefaultPalette.Black
+
+	push $string
+	push $textCell
+	push 2
+	call $_print_string
+
+
+
+
+	movb [$textCell.CoordX], 8
+	movb [$textCell.CoordY], 2
+	movb [$textCell.Foreground], DefaultPalette.Black
+	movb [$textCell.Background], DefaultPalette.Orange
+
+	push { $dpt_block + DPTStructure.ENTRIES_START + (2 * DPTStructure.ENTRY_SIZE_B) + DPTStructure.ENTRY_PART_LBL }
+	push $textCell
+	push 2
+	call $_print_string
+
+
 
 	hlt	
+
+
 
 _load_dpt_block:
 	mov [$ddd.Mode], DiskMode.READ
@@ -37,6 +70,27 @@ _load_dpt_block:
 	push 1
 	call $_disk_load_from_ddd_blocking
 	ret
+
+
+
+_print_string:  ## _print_string(String* str, Text16VModeCell* cell)
+	arg R1						## @Param: String addr
+	arg R2						## @Param: Cell addr
+_print_string_loop:
+	mov R6, R2					## Restore Cell addr
+	movb *R6, *R1				## Move next character into cell
+	inc R1						## Point address to next character
+	addip R6, 3					## Offset to X coord of cell
+	movb R7, *R6				## Store X coord in R7
+	inc R7						## Increment X coord
+	movb *R6, R7				## Store new X coord in cell
+	mov R10, 0x21				## int 0x30 parameter for print_char_text16
+	mov R9, R2					## int 0x30 parameter for text_cell address
+	int 0x30					## bios_video_int
+	movb ACC, *R1				## Copy current character in ACC
+	jne $_print_string_loop, 0	## Jump if current character is not 0 (NULL_TERM)
+	ret
+
 
 	
 

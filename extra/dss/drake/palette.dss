@@ -41,6 +41,5 @@ _draw_palette_loop:
 
 	inc R5
 	mov ACC, R5
-	debug_break
 	jge $_draw_palette_loop, 15
 	ret
