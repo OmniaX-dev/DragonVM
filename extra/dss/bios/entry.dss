@@ -4,7 +4,7 @@
 @include <data.dss>
 @include <utils.dss>
 @include <drivers.dss>
-@include <display_info.dss>
+@include <display.dss>
 
 ## ============================= BIOS Program =============================
 .code
@@ -21,7 +21,7 @@ _bios_entry_point:
 	int 0x20																	##  -Calling int 0x20 with 0x00 as parameter, to set new handler up
 
 	push 0
-	call $_print_machine_info													## Print BIOS logo and machine info
+	call $_print_machine_info_signle_color										## Print BIOS logo and machine info
 
 	## MBR Loading 
 	and FL, 0b1111111111111110													## Disable interrupts

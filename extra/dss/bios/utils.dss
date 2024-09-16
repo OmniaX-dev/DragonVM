@@ -2,6 +2,34 @@
 
 .code
 
+_disk_load_from_ddd_blocking:  ## _disk_load_from_ddd_blocking(DiskDriverData* ddd)
+	arg R1					   ## @Param: ddd
+	movb [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.MODE_SELECTOR}], *R1
+	inc R1
+	movb [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.DISK_SELECTOR}], *R1
+	inc R1
+	mov  [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.SECTOR_SELECTOR}], *R1
+	addip R1, 2
+	mov  [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.ADDRESS_SELECTOR}], *R1
+	addip R1, 2
+	mov  [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.DATA_SIZE}], *R1
+	addip R1, 2
+	mov  [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.MEMORY_ADDRESS}], *R1
+	movb [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.SIGNAL}], DiskSignals.START
+	and FL, 0b1111111111111110													## Disable interrupts
+	mov FL, ACC	
+_disk_load_from_ddd_blocking_wait_loop:
+	## debug_profile_start 0xE0, DBGProfilerTime.MILLIS
+	mov ACC, [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.RO_STATUS}]
+	## debug_profile_stop
+	jne $_disk_load_from_ddd_blocking_wait_loop, DiskStatus.FREE
+	or FL, 0b0000000000000001													## Enable interrupts
+	mov FL, ACC
+	ret
+
+
+
+
 _load_mbr_data_block:
 	movb [{MemoryAddresses.DISK_INTERFACE + 0x1}], 0x00											## Mode = Read
 	movb R1, [CMOS_Settings.BOOT_DISK]
@@ -24,6 +52,9 @@ _calc_interrupt_vector_address:
 	mov RV, ACC
 	ret
 
+
+
+
 _set_interrupt_vector_entry:
 	arg R1
 	push R1
@@ -42,28 +73,6 @@ _set_interrupt_vector_entry_end:
 	ret
 
 
-_print_integer:
-	mov R1, 0
-	arg ACC
-	jne $_print_integer_loop, 0
-	push 48  ## '0' ASCII is 48
-	inc R1
-	jmp $_print_integer_loop_end
-_print_integer_loop:
-	jeq $_print_integer_loop_end, 0
-	divipu ACC, 10
-	addipu RV, 48
-	push RV
-	inc R1
-	jmp $_print_integer_loop
-_print_integer_loop_end:
-	pop R9
-	dec R1
-	movb [VGA_Registers.TEXT_SINGLE_CHAR], R9
-	movb [VGA_Registers.SIGNAL], reg(S_REG_1)
-	mov ACC, R1
-	jne $_print_integer_loop_end, 0
-	ret
 
 
 _strlen:

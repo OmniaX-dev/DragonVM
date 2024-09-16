@@ -2,7 +2,6 @@
 .entry _drake_loader_entry_point
 
 @include <../bios_api.dss>
-@include <disk.dss>
 
 .data
 	## $_drake_logo_line_1 "   ___  ___  ___   __ ______"
@@ -28,9 +27,9 @@ _drake_loader_entry_point:
 	mov [$ddd.DataSize], 5120
 	mov [$ddd.MemoryAddress], MemoryAddresses.RAM
 
-	push $ddd
-	push 1
-	call $_disk_load_from_ddd_blocking
+	mov R9, $ddd
+	mov R10, 0x12
+	int 0x20	
 	
 	jmp MemoryAddresses.RAM
 	hlt

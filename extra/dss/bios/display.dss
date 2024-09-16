@@ -2,7 +2,54 @@
 
 .code
 
-_print_machine_info:
+_print_string_text16:  ## _print_string(String* str, Text16VModeCell* cell)
+	arg R1								## @Param: String addr
+	arg R2								## @Param: Cell addr
+_print_string_text16_loop:
+	mov R6, R2							## Restore Cell addr
+	movb *R6, *R1						## Move next character into cell
+	inc R1								## Point address to next character
+	addip R6, 3							## Offset to X coord of cell
+	movb R7, *R6						## Store X coord in R7
+	inc R7								## Increment X coord
+	movb *R6, R7						## Store new X coord in cell
+	mov R10, 0x21						## int 0x30 parameter for print_char_text16
+	mov R9, R2							## int 0x30 parameter for text_cell address
+	int 0x30							## bios_video_int
+	movb ACC, *R1						## Copy current character in ACC
+	jne $_print_string_text16_loop, 0	## Jump if current character is not 0 (NULL_TERM)
+	ret
+
+
+
+
+_print_integer_signle_color:
+	mov R1, 0
+	arg ACC
+	jne $_print_integer_signle_color_loop, 0
+	push 48  ## '0' ASCII is 48
+	inc R1
+	jmp $_print_integer_signle_color_loop_end
+_print_integer_signle_color_loop:
+	jeq $_print_integer_signle_color_loop_end, 0
+	divipu ACC, 10
+	addipu RV, 48
+	push RV
+	inc R1
+	jmp $_print_integer_signle_color_loop
+_print_integer_signle_color_loop_end:
+	pop R9
+	dec R1
+	movb [VGA_Registers.TEXT_SINGLE_CHAR], R9
+	movb [VGA_Registers.SIGNAL], reg(S_REG_1)
+	mov ACC, R1
+	jne $_print_integer_signle_color_loop_end, 0
+	ret
+
+
+
+
+_print_machine_info_signle_color:
 	mov R9, $_bios_logo_2_line_1
 	mov R10, 0x0C
 	int 0x30											## Print Next Logo Line
@@ -69,12 +116,12 @@ _print_machine_info:
 	mov R9, $_bios_logo_2_line_5
 	mov R7, 4
 	mov ACC, 19
-_print_machine_info_logo_loop:
+_print_machine_info_logo_signle_color_loop:
 	inc R7
 	mov R10, 0x0C
 	int 0x30											## Print Next Logo Line
 	addip R9, 54										## 54 is the length of a line
 	mov R10, 0x02
 	int 0x30											## Print New Line
-	jls $_print_machine_info_logo_loop, R7
+	jls $_print_machine_info_logo_signle_color_loop, R7
 	ret

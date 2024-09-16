@@ -6,7 +6,8 @@
 _int_20_handler:
 	mov ACC, R10
 	jeq $_int_20_disk_interface, 0x0010
-	jeq $_int_20_disk_interface_get_disk_list, 0x0011
+	jeq $_int_20_disk_interface_get_disk_list, 0x0011			## TODO: Implement
+	jeq $_int_20_disk_interface_load_from_ddd_blocking, 0x0012
 	jeq $_int_20_set_new_interrupt_handler, 0x0000
 	jeq $_int_20_clear_interrupt, 0x0001
 	jmp $_int_20_end
@@ -28,6 +29,11 @@ _int_20_disk_interface:
 	movb [MemoryAddresses.DISK_INTERFACE], 0x00    												## Signal set to "Start Operation"
 	jmp $_int_20_end
 _int_20_disk_interface_get_disk_list:
+	jmp $_int_20_end
+_int_20_disk_interface_load_from_ddd_blocking:
+	push R9 		## DDD Address
+	push 1
+	call $_disk_load_from_ddd_blocking
 	jmp $_int_20_end
 _int_20_set_new_interrupt_handler:
 	push R8															## Interrupt Code
@@ -61,6 +67,7 @@ _int_30_handler:
 	jeq $_int_30_print_string_buffered, 0x000C
 
 	jeq $_int_30_write_vram_text16, 0x0021
+	jeq $_int_30_print_string_text16, 0x0022
 
 	jeq $_int_30_clear_screen, 0x00E0
 	jeq $_int_30_refresh_screen, 0x00E1
@@ -87,13 +94,13 @@ _int_30_direct_print_integer_text_single:
 	mov reg(S_REG_1), Sig_VGA_Text_Single_Color.PRINT_CHAR
 	push R9
 	push 1
-	call $_print_integer
+	call $_print_integer_signle_color
 	jmp $_int_30_end
 _int_30_store_integer_text_single:
 	mov reg(S_REG_1), Sig_VGA_Text_Single_Color.STORE_CHAR
 	push R9
 	push 1
-	call $_print_integer
+	call $_print_integer_signle_color
 	jmp $_int_30_end
 _int_30_store_char_text_single:
 	movb [VGA_Registers.TEXT_SINGLE_CHAR], R9
@@ -139,6 +146,12 @@ _int_30_write_vram_text16:
 	inc R9
 	movb [VGA_Registers.MEMORY_CONTROLLER_Y_BYTE], *R9
 	movb [VGA_Registers.SIGNAL], Sig_VGA_Text_16_Color.WRITE_VRAM
+	jmp $_int_30_end
+_int_30_print_string_text16:
+	push R8					## String addr
+	push R9					## TextCell16 addr
+	push 2
+	call $_print_string_text16
 	jmp $_int_30_end
 
 _int_30_clear_screen:

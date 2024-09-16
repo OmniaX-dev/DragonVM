@@ -3,7 +3,6 @@
 
 @include <../bios_api.dss>
 @include <palette.dss>
-@include <disk.dss>
 
 
 
@@ -14,13 +13,15 @@
 	$textCell <Text16VModeCell>	
 
 
-
 .code
 
 
 _drake_bootsector_entry_point:
-	push 0
+	push $ddd
+	push $dpt_block
+	push 2
 	call $_load_dpt_block
+	
 	movb [VGA_Registers.VIDEO_MODE], VGA_VideoModes.TEXT_16_COLORS
 
 	push 2
@@ -35,12 +36,10 @@ _drake_bootsector_entry_point:
 	movb [$textCell.Foreground], DefaultPalette.Orange
 	movb [$textCell.Background], DefaultPalette.Black
 
-	push $string
-	push $textCell
-	push 2
-	call $_print_string
-
-
+	mov R10, 0x22
+	mov R8, $string
+	mov R9, $textCell
+	int 0x30
 
 
 	movb [$textCell.CoordX], 8
@@ -48,10 +47,10 @@ _drake_bootsector_entry_point:
 	movb [$textCell.Foreground], DefaultPalette.Black
 	movb [$textCell.Background], DefaultPalette.Orange
 
-	push { $dpt_block + DPTStructure.ENTRIES_START + (2 * DPTStructure.ENTRY_SIZE_B) + DPTStructure.ENTRY_PART_LBL }
-	push $textCell
-	push 2
-	call $_print_string
+	mov R10, 0x22
+	mov R8, { $dpt_block + DPTStructure.ENTRIES_START + (2 * DPTStructure.ENTRY_SIZE_B) + DPTStructure.ENTRY_PART_LBL }
+	mov R9, $textCell
+	int 0x30
 
 
 
@@ -59,39 +58,25 @@ _drake_bootsector_entry_point:
 
 
 
-_load_dpt_block:
-	mov [$ddd.Mode], DiskMode.READ
-	mov [$ddd.Disk], 0x00
-	mov [$ddd.Sector], 0x0000
-	mov [$ddd.Address], 0x0200
-	mov [$ddd.DataSize], 512
-	mov [$ddd.MemoryAddress], $dpt_block
-	push $ddd
-	push 1
-	call $_disk_load_from_ddd_blocking
+_load_dpt_block:  ## _load_dpt_block(DiskDriverData* ddd, DPTBlock* dpt_block)
+	arg R1 		  ## @Param: ddd
+	arg R2 		  ## @Param: dpt_block
+	mov R3, R1						## Copy $ddd address into R3
+	movb *R1, DiskMode.READ			## $ddd.Mode
+	inc R1										
+	movb *R1, 0x00					## $ddd.Disk
+	inc R1
+	mov *R1, 0x0000					## $ddd.Sector
+	addip R1, 2
+	mov *R1, 0x0200					## $ddd.Address
+	addip R1, 2
+	mov *R1, 512					## $ddd.DataSize
+	addip R1, 2
+	mov *R1, R2						## $ddd.MemoryAddress
+	mov R9, R3						## Move original $ddd address into R9 (for int 0x20)
+	mov R10, 0x12					## int 0x20 parameter for load_from_ddd_blocking
+	int 0x20						## Bios interrupt
 	ret
-
-
-
-_print_string:  ## _print_string(String* str, Text16VModeCell* cell)
-	arg R1						## @Param: String addr
-	arg R2						## @Param: Cell addr
-_print_string_loop:
-	mov R6, R2					## Restore Cell addr
-	movb *R6, *R1				## Move next character into cell
-	inc R1						## Point address to next character
-	addip R6, 3					## Offset to X coord of cell
-	movb R7, *R6				## Store X coord in R7
-	inc R7						## Increment X coord
-	movb *R6, R7				## Store new X coord in cell
-	mov R10, 0x21				## int 0x30 parameter for print_char_text16
-	mov R9, R2					## int 0x30 parameter for text_cell address
-	int 0x30					## bios_video_int
-	movb ACC, *R1				## Copy current character in ACC
-	jne $_print_string_loop, 0	## Jump if current character is not 0 (NULL_TERM)
-	ret
-
-
 	
 
 .fixed 5120, 0xFF
