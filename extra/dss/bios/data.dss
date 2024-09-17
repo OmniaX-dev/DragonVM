@@ -17,6 +17,7 @@
 	RAM 			0x1740
 	CMOS 			0x1000
 	VGA 			0x1600
+	KEYBOARD		0x1280
 @end
 @raw_export_end
 @export_comment BIOS_API " --\n"
@@ -68,6 +69,17 @@
 	MEMORY_CONTROLLER_FG_COL				{ MemoryAddresses.VGA + 0x0086 }
 
 	BUFF_START								{ MemoryAddresses.VGA + 0x00E0 }
+@end
+@raw_export_end
+@export_comment BIOS_API " --\n"
+
+
+
+@export_comment BIOS_API " These are the memory-mapped registers used to interact with the keyboard's interface."
+@raw_export_start BIOS_API
+@group Keyboard_Registers
+	MODIFIERS_BITFIELD 								{ MemoryAddresses.KEYBOARD + 0x0000 }
+	KEYCODE			 								{ MemoryAddresses.KEYBOARD + 0x0002 }
 @end
 @raw_export_end
 @export_comment BIOS_API " --\n"

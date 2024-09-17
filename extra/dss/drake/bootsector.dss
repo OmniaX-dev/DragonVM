@@ -3,58 +3,119 @@
 
 @include <../bios_api.dss>
 @include <palette.dss>
+@include <keyboard_driver.dss>
 
 
 
 .data
-	$string "Hello "
+	## Disk data structures 
 	$ddd <DiskDriverData>
 	$dpt_block <DPTBlock>
-	$textCell <Text16VModeCell>	
+
+	$textCell <Text16VModeCell>
+	$counter 0x00
+	$current_char 65
+
+	$dpt_version_str "DPT Version "
+	$drake_version_str "Drake 0.1 -- "
+	$invalid_dpt_block_str "Error: Invalid DPT Block..."
 
 
 .code
 
 
 _drake_bootsector_entry_point:
-	push $ddd
-	push $dpt_block
+	## Load DPT block from disk 0
+	push $ddd				## Empty DiskDriverData used to load from disk
+	push $dpt_block			## Empty DPT Block to store the partition table
 	push 2
 	call $_load_dpt_block
-	
+	## Enable Text16 Video Mode
 	movb [VGA_Registers.VIDEO_MODE], VGA_VideoModes.TEXT_16_COLORS
-
-	push 2
+	## Validate DPT Block
+	mov ACC, [$dpt_block]
+	jne $_invalid_dpt_block, 0xF1CA
+	## Init Keyboard driver
+	push $_key_pressed		## KeyPressed handler address passed to the _init_keyboard subroutine
 	push 1
-	push 2
-	call $_draw_palette
+	call $_init_keyboard
 
 
-
-	movb [$textCell.CoordX], 2
-	movb [$textCell.CoordY], 2
-	movb [$textCell.Foreground], DefaultPalette.Orange
+	movb [$textCell.CoordX], 0
+	movb [$textCell.CoordY], 0
+	movb [$textCell.Foreground], DefaultPalette.Pink
 	movb [$textCell.Background], DefaultPalette.Black
 
 	mov R10, 0x22
-	mov R8, $string
+	mov R8, $drake_version_str
 	mov R9, $textCell
 	int 0x30
 
-
-	movb [$textCell.CoordX], 8
-	movb [$textCell.CoordY], 2
-	movb [$textCell.Foreground], DefaultPalette.Black
-	movb [$textCell.Background], DefaultPalette.Orange
-
+	movb [$textCell.CoordX], 13
 	mov R10, 0x22
-	mov R8, { $dpt_block + DPTStructure.ENTRIES_START + (2 * DPTStructure.ENTRY_SIZE_B) + DPTStructure.ENTRY_PART_LBL }
+	mov R8, $dpt_version_str
 	mov R9, $textCell
 	int 0x30
 
+	movb [$textCell.CoordX], 26
+	mov R10, 0x23
+	movb R8, [{ $dpt_block + 2 }]
+	mov R9, $textCell
+	int 0x30
+
+	movb [$textCell.CoordX], 27	
+	movb [$textCell.Character], 0x2E
+	mov R10, 0x21
+	mov R9, $textCell
+	int 0x30
+
+	movb [$textCell.CoordX], 28	
+	mov R10, 0x23
+	movb R8, [{ $dpt_block + 3 }]
+	mov R9, $textCell
+	int 0x30
+
+	## 	mov R10, 0x23
+	## 	mov R9, $textCell
+	## 	mov R8, 2341	
+	## 	int 0x30
 
 
-	hlt	
+	## mov R10, 0x22
+	## mov R8, { $dpt_block + DPTStructure.ENTRIES_START + (2 * DPTStructure.ENTRY_SIZE_B) + DPTStructure.ENTRY_PART_LBL }
+	## mov R9, $textCell
+	## int 0x30
+
+	jmp $_endless_loop
+_invalid_dpt_block:
+	push $invalid_dpt_block_str
+	push 1
+	call $_print_error_msg
+_endless_loop:
+	jmp $_endless_loop
+	hlt
+
+
+_key_pressed:
+	mov ACC, [Keyboard_Registers.KEYCODE]
+	jne $_key_pressed_end, 0x0127
+
+	movb R1, [$counter]
+	movb [$textCell.CoordX], R1
+	movb [$textCell.CoordY], 12
+	movb [$textCell.Foreground], DefaultPalette.Orange
+	movb [$textCell.Background], DefaultPalette.Black
+	movb [$textCell.Character], 65
+
+	inc R1
+	movb [$counter], R1
+
+	mov R10, 0x21
+	mov R9, $textCell
+	int 0x30
+
+_key_pressed_end:
+	ret
 
 
 
@@ -78,6 +139,20 @@ _load_dpt_block:  ## _load_dpt_block(DiskDriverData* ddd, DPTBlock* dpt_block)
 	int 0x20						## Bios interrupt
 	ret
 	
+
+_print_error_msg:  ## _print_error_msg(string* error_msg)
+	arg R1 		   ## @Param: error_msg
+	## TODO: Clear the screen
+	movb [$textCell.CoordX], 0
+	movb [$textCell.CoordY], 0
+	movb [$textCell.Foreground], DefaultPalette.Red
+	movb [$textCell.Background], DefaultPalette.Black
+	mov R10, 0x22
+	mov R8, R1
+	mov R9, $textCell
+	int 0x30
+	ret
+
 
 .fixed 5120, 0xFF
 

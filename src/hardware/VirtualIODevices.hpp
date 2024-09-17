@@ -370,6 +370,7 @@ namespace dragon
 					inline uint16_t getVRAMStart(void) { return m_vramStart; }
 					bool readVRAM_16Colors(uint8_t x, uint8_t y, tText16_Cell& outTextCell);
 					bool writeVRAM_16Colors(uint8_t x, uint8_t y, uint8_t character = 0, uint8_t background = 0xFF, uint8_t foreground = 0xFF);
+					bool clearVRAM_16Colors(uint8_t character = 0, uint8_t background = 0x00, uint8_t foreground = 0xFF);
 
 				private:
 					ostd::serial::SerialIO m_videoMemory;

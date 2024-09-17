@@ -45,13 +45,13 @@ namespace dragon
 
 		int8_t VirtualBIOS::write8(uint16_t addr, int8_t value)
 		{
-			data::ErrorHandler::pushError(data::ErrorCodes::BIOS_WriteAttempt, ostd::String("Attempting to write to BIOS memory map.").add(addr));
+			data::ErrorHandler::pushError(data::ErrorCodes::BIOS_WriteAttempt, ostd::String("Attempting to write to BIOS memory map: ").add(ostd::Utils::getHexStr(addr, true, 2)));
 			return 0x00;
 		}
 
 		int16_t VirtualBIOS::write16(uint16_t addr, int16_t value)
 		{
-			data::ErrorHandler::pushError(data::ErrorCodes::BIOS_WriteAttempt, ostd::String("Attempting to write to BIOS memory map.").add(addr));
+			data::ErrorHandler::pushError(data::ErrorCodes::BIOS_WriteAttempt, ostd::String("Attempting to write to BIOS memory map: ").add(ostd::Utils::getHexStr(addr, true, 2)));
 			return 0x0000;
 		}
 
@@ -738,6 +738,20 @@ namespace dragon
 					return false; //TODO: Error
 				if (!m_videoMemory.w_Byte(cellOffset + tText16_CellStructure::foreground, foreground))
 					return false; //TODO: Error
+				return true;
+			}
+
+			bool Graphics::clearVRAM_16Colors(uint8_t character, uint8_t background, uint8_t foreground)
+			{
+				for (int32_t i = m_vramStart; i < m_vramStart + (RawTextRenderer::CONSOLE_CHARS_H * RawTextRenderer::CONSOLE_CHARS_V); i++)
+				{
+					if (!m_videoMemory.w_Byte(i + tText16_CellStructure::character, character))
+						return false; //TODO: Error
+					if (!m_videoMemory.w_Byte(i + tText16_CellStructure::background, background))
+						return false; //TODO: Error
+					if (!m_videoMemory.w_Byte(i + tText16_CellStructure::foreground, foreground))
+						return false; //TODO: Error
+				}
 				return true;
 			}
 

@@ -22,6 +22,39 @@ _print_string_text16_loop:
 
 
 
+_print_integer_text16:  ## _print_integer_text16(int16_t number, TextCell16* cell)
+	arg ACC				## @Param: number
+	arg R2				## @Param: cell
+	mov R3, R2
+	addip R3, 3			## R3 is now a pointer to the X coord in the cell
+	mov R1, 0
+	jne $_print_integer_text16_loop, 0
+	push 48  ## '0' ASCII is 48
+	inc R1
+	jmp $_print_integer_text16_loop_end
+_print_integer_text16_loop:
+	jeq $_print_integer_text16_loop_end, 0
+	divipu ACC, 10
+	addipu RV, 48
+	push RV
+	inc R1
+	jmp $_print_integer_text16_loop
+_print_integer_text16_loop_end:
+	pop R4				## Put next char in R4
+	dec R1
+	movb *R2, R4		## Store next char in first byte of cell
+	mov R10, 0x21		## int 0x30 param for write vram
+	mov R9, R2			## int 0x30 param for textCell16
+	int 0x30
+	debug_break
+	movb R5, *R3		## Retrieve current X coord from cell
+	inc R5				## Increment X coord
+	movb *R3, R5		## Store new X coord in cell
+	mov ACC, R1
+	jne $_print_integer_text16_loop_end, 0
+	ret
+
+
 
 _print_integer_signle_color:
 	mov R1, 0

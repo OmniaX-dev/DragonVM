@@ -17,16 +17,13 @@ _int_20_disk_interface:
 	movb [{MemoryAddresses.DISK_INTERFACE + 0x2}], *R9     										## Disk
 	inc R9
 	mov  [{MemoryAddresses.DISK_INTERFACE + 0x3}], *R9     										## Sector
-	inc R9
-	inc R9
+	addip R9, 2
 	mov  [{MemoryAddresses.DISK_INTERFACE + 0x5}], *R9     										## Address
-	inc R9
-	inc R9
+	addip R9, 2
 	mov  [{MemoryAddresses.DISK_INTERFACE + 0x7}], *R9     										## Size
-	inc R9
-	inc R9
+	addip R9, 2
 	mov  [{MemoryAddresses.DISK_INTERFACE + 0x9}], *R9     										## Memory Address
-	movb [MemoryAddresses.DISK_INTERFACE], 0x00    												## Signal set to "Start Operation"
+	movb [MemoryAddresses.DISK_INTERFACE], DiskSignals.START									## Signal set to "Start Operation"
 	jmp $_int_20_end
 _int_20_disk_interface_get_disk_list:
 	jmp $_int_20_end
@@ -68,6 +65,8 @@ _int_30_handler:
 
 	jeq $_int_30_write_vram_text16, 0x0021
 	jeq $_int_30_print_string_text16, 0x0022
+	jeq $_int_30_print_integer_text16, 0x0023
+	jeq $_int_30_clear_screen_text16, 0x0024
 
 	jeq $_int_30_clear_screen, 0x00E0
 	jeq $_int_30_refresh_screen, 0x00E1
@@ -152,6 +151,20 @@ _int_30_print_string_text16:
 	push R9					## TextCell16 addr
 	push 2
 	call $_print_string_text16
+	jmp $_int_30_end
+_int_30_print_integer_text16:
+	push R8					## number
+	push R9					## TextCell16 addr
+	push 2
+	call $_print_integer_text16
+	jmp $_int_30_end
+_int_30_clear_screen_text16:
+	movb [VGA_Registers.MEMORY_CONTROLLER_CHAR], *R9
+	inc R9
+	movb [VGA_Registers.MEMORY_CONTROLLER_FG_COL], *R9
+	inc R9
+	movb [VGA_Registers.MEMORY_CONTROLLER_BG_COL], *R9
+	movb [VGA_Registers.SIGNAL], Sig_VGA_Text_16_Color.FORCE_CLEAR_SCREEN
 	jmp $_int_30_end
 
 _int_30_clear_screen:

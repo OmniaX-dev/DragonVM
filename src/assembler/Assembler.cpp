@@ -503,16 +503,13 @@ namespace dragon
 		{
 			std::vector<ostd::String> newLines;
 			ostd::String lineEdit;
-			bool in_group = false;
-			ostd::String group_name = "";
 			for (auto& line : m_rawDataSection)
 			{
 				lineEdit = line;
 				lineEdit.trim();
-				if (!lineEdit.startsWith("$") || lineEdit.indexOf(" ") < 2)
+				if (!lineEdit.startsWith("$"))
 				{
-					std::cout << "Invalid data entry: " << lineEdit << "\n";
-					return;
+					continue;
 				}
 				ostd::String symbolName = lineEdit.new_substr(0, lineEdit.indexOf(" "));
 				symbolName.trim();
@@ -853,6 +850,8 @@ namespace dragon
 			{
 				ostd::String lineEdit(line);
 				tSymbol symbol;
+				ostd::String symbolName = "";
+				bool array = false;
 				if (lineEdit.startsWith("!"))
 				{
 					if (lineEdit.contains(" "))
@@ -866,15 +865,52 @@ namespace dragon
 					m_symbolTable[lineEdit] = symbol;
 					continue;
 				}
-				if (!lineEdit.startsWith("$") || lineEdit.indexOf(" ") < 2)
+				if (!lineEdit.startsWith("$"))
 				{
-					std::cout << "Invalid data entry: " << lineEdit << "\n";
+					std::cout << "Invalid data entry (name must start with $): " << line << "\n";
 					continue;
 				}
-				ostd::String symbolName = lineEdit.new_substr(0, lineEdit.indexOf(" "));
-				symbolName.trim();
-				lineEdit.substr(lineEdit.indexOf(" ") + 1);
-				lineEdit.trim();
+				if (lineEdit.contains(":") && (!lineEdit.contains("\"") || lineEdit.indexOf(":") < lineEdit.indexOf("\"")))
+				{
+					if (lineEdit.indexOf(":") < 2 || lineEdit.indexOf(":") == lineEdit.len() - 1)
+					{
+						std::cout << "Invalid array data entry: " << line << "\n";
+						continue;
+					}
+					symbolName = lineEdit.new_substr(0, lineEdit.indexOf(":")).trim();
+					lineEdit.substr(lineEdit.indexOf(":") + 1).trim();
+					if (!lineEdit.isNumeric())
+					{
+						std::cout << "Invalid array data entry size (must be numeric): " << line << "\n";
+						continue;
+					}
+					array = true;
+				}
+				else if (lineEdit.indexOf(" ") >= 2)
+				{
+					symbolName = lineEdit.new_substr(0, lineEdit.indexOf(" ")).trim();
+					lineEdit.substr(lineEdit.indexOf(" ") + 1).trim();
+				}
+				else
+				{
+					std::cout << "Invalid data entry1: " << line << "\n";
+					continue;
+				}
+				
+				if (array)
+				{
+					uint16_t array_size = lineEdit.toInt();
+					if (array_size == 0)
+					{
+						std::cout << "Invalid array data entry size (must be greater than 0): " << line << "\n";
+						continue;
+					}
+					lineEdit = "";
+					for (int32_t i = 0; i < array_size; i++)
+						lineEdit.add("0x00, ");
+					lineEdit.trim().substr(0, lineEdit.len() - 1).trim();
+				}
+
 				if (lineEdit.isNumeric())
 				{
 					// union valueSplit {
@@ -909,7 +945,7 @@ namespace dragon
 					auto tokens = lineEdit.tokenize(",");
 					if (tokens.count() < 2)
 					{
-						std::cout << "Invalid data entry: " << lineEdit << "\n";
+						std::cout << "Invalid data entry2: " << line << "\n";
 						return;
 					}
 					for (auto& token : tokens)
@@ -929,7 +965,7 @@ namespace dragon
 				}
 				else
 				{
-					std::cout << "Invalid data entry: " << lineEdit << "\n";
+					std::cout << "Invalid data entry3: " << line << "\n";
 					continue;
 				}
 			}
@@ -1176,16 +1212,21 @@ namespace dragon
 			}
 			else if (instEdit == "push")
 			{
+				m_code.push_back(0x00);
 				eOperandType opType = parseOperand(opEdit, word);
 				if (opType == eOperandType::Immediate || opType == eOperandType::Label)
 				{
-					m_code.push_back(data::OpCodes::PushImm);
+					// if (opType == eOperandType::Label)
+					// 	std::cout << ostd::Utils::getHexStr(word, true, 2) << "\n";
+					m_code[m_code.size() - 1] = data::OpCodes::PushImm;
+					// m_code.push_back(data::OpCodes::PushImm);
 					m_code.push_back((uint8_t)((word & 0xFF00) >> 8));
 					m_code.push_back((uint8_t)(word & 0x00FF));
 				}
 				else if (opType == eOperandType::Register)
 				{
-					m_code.push_back(data::OpCodes::PushReg);
+					// m_code.push_back(data::OpCodes::PushReg);
+					m_code[m_code.size() - 1] = data::OpCodes::PushReg;
 					m_code.push_back((uint8_t)word);
 				}
 				else
@@ -2467,6 +2508,9 @@ namespace dragon
 				if (labelAddr == 0x0000)
 					m_labelTable[opEdit].references.push_back(m_code.size());
 				outOp = (int16_t)labelAddr;
+				// std::cout << "LABEL: " << opEdit << "\n";
+				// std::cout << "     : " << ostd::Utils::getHexStr(labelAddr, true, 2) << "\n";
+				// std::cout << "     : " << ostd::Utils::getHexStr(outOp, true, 2) << "\n";
 				return eOperandType::Label;
 			}
 			if (opEdit.startsWith("{") && opEdit.endsWith("}"))

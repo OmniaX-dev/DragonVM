@@ -157,6 +157,16 @@ namespace dragon
 					
 					DragonRuntime::vGraphicsInterface.writeVRAM_16Colors(static_cast<uint8_t>(x), static_cast<uint8_t>(y), textCell.character, textCell.backgroundColor, textCell.foregroundColor);
 				}
+				else if (signal == tSignalValues::ClearSCreen)
+				{
+					hw::interface::Graphics::tText16_Cell textCell;
+
+					textCell.foregroundColor = mem.read8(vga_addr + tRegisters::MemControllerFGCol);
+					textCell.backgroundColor = mem.read8(vga_addr + tRegisters::MemControllerBGCol);
+					textCell.character = mem.read8(vga_addr + tRegisters::MemControllerChar);
+
+					DragonRuntime::vGraphicsInterface.clearVRAM_16Colors(textCell.character, textCell.backgroundColor, textCell.foregroundColor);
+				}
 			}
 			else return;
 			mem.write8(vga_addr + tRegisters::Signal, tSignalValues::Continue);

@@ -129,6 +129,8 @@
         0x00: Set Interrupt Handler
         0x01: Clear Interrupt Handler
         0x10: Disk Interface
+        0x11: Disk Interface - Get disk list
+        0x12: Disk Interface - Load from DDD - BLOCKING
     0x30: BIOS Video Interrupt (Uses R10 register for specific functionality)
         0x01: Print Char in Text Single Mode (char stored in R9 register)
         0x02: New Line in Text Single Mode
@@ -142,8 +144,10 @@
         0x0A: Store Null-Terminated String in buffer in Text Single Mode (string address stored in R9 register)
         0x0B: Toggles inverted colors in Text Single Mode
 
-        0x20: Read VRAM in Text16 Colors Mode (Cell address stored in R9)
         0x21: Write VRAM in Text16 Colors Mode (Cell address stored in R9)
+        0x22: Print String in Text16 Colors Mode (String address stored in R8, Cell address stored in R9)
+        0x23: Print Integer in Text16 Colors Mode (Integer stored in R8, Cell address stored in R9)
+        0x24: Clear Screen in Text16 Colors Mode (Cell address stored in R9)
 
         0xE0: Refresh Screen
         0xE1: Clear Screen
