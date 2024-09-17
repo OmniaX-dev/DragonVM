@@ -9,6 +9,8 @@
         MemSize: (2 bytes) 0x0002
         ClockSpeed: (2 bytes) 0x0004
         DisplayRedrawRate: (1 bytes) 0x0006
+        ScreenWidth: (2 bytes) 0x0007
+        ScreenHeight: (2 bytes) 0x0009
         BootDisk: 0x0010
 
         DiskList: (2 bytes) 0x007E

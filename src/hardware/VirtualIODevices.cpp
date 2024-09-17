@@ -700,7 +700,7 @@ namespace dragon
 			{
 				if (!m_videoMemory.w_Word(addr, value))
 				{
-					data::ErrorHandler::pushError(data::ErrorCodes::Graphics_MemoryWriteFailed, "Failed to word byte to Graphics Memory");
+					data::ErrorHandler::pushError(data::ErrorCodes::Graphics_MemoryWriteFailed, "Failed to write word to Graphics Memory");
 					return 0;
 				}
 				return value;
@@ -743,14 +743,11 @@ namespace dragon
 
 			bool Graphics::clearVRAM_16Colors(uint8_t character, uint8_t background, uint8_t foreground)
 			{
-				for (int32_t i = m_vramStart; i < m_vramStart + (RawTextRenderer::CONSOLE_CHARS_H * RawTextRenderer::CONSOLE_CHARS_V); i++)
+				for (int32_t i = m_vramStart; i < m_vramStart + (RawTextRenderer::CONSOLE_CHARS_H * RawTextRenderer::CONSOLE_CHARS_V) * 4; i += 4)
 				{
-					if (!m_videoMemory.w_Byte(i + tText16_CellStructure::character, character))
-						return false; //TODO: Error
-					if (!m_videoMemory.w_Byte(i + tText16_CellStructure::background, background))
-						return false; //TODO: Error
-					if (!m_videoMemory.w_Byte(i + tText16_CellStructure::foreground, foreground))
-						return false; //TODO: Error
+					m_videoMemory.w_Byte(i + tText16_CellStructure::character, character);
+					m_videoMemory.w_Byte(i + tText16_CellStructure::background, background);
+					m_videoMemory.w_Byte(i + tText16_CellStructure::foreground, foreground);
 				}
 				return true;
 			}

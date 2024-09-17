@@ -1,5 +1,6 @@
 .load 0x0000           															## BIOS is mapped to address 0x0000 in memory
 .entry _bios_entry_point
+.fixed 4096, 0xFF      ## BIOS Needs to be 4096 Bytes exactly
 
 @include <data.dss>
 @include <utils.dss>
@@ -36,5 +37,3 @@ _bios_entry_point:
 	jmp MemoryAddresses.MBR         											## Jump to start of MBR in memory
 	hlt                															## Just in case somehow execution reaches this point
 ## ========================================================================
-
-.fixed 4096, 0xFF      ## BIOS Needs to be 4096 Bytes exactly

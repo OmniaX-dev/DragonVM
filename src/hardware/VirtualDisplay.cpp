@@ -166,6 +166,9 @@ namespace dragon
 					textCell.character = mem.read8(vga_addr + tRegisters::MemControllerChar);
 
 					DragonRuntime::vGraphicsInterface.clearVRAM_16Colors(textCell.character, textCell.backgroundColor, textCell.foregroundColor);
+
+					m_redrawScreen = true;
+					m_refreshScreen = true;
 				}
 			}
 			else return;

@@ -220,6 +220,8 @@ namespace dragon
 				inline static constexpr uint8_t MemorySize 			= 0x02;
 				inline static constexpr uint8_t ClockSpeed	 		= 0x04;
 				inline static constexpr uint8_t ScreenRedrawRate 	= 0x06;
+				inline static constexpr uint8_t ScreenWidth 		= 0x07;
+				inline static constexpr uint8_t ScreenHeight	 	= 0x09;
 				inline static constexpr uint8_t BootDisk	 		= 0x10;
 
 				inline static constexpr uint8_t DiskList	 		= 0x7E;
