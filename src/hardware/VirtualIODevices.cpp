@@ -662,6 +662,9 @@ namespace dragon
 			{
 				m_videoMemory.init(0xFFFF);
 				m_vramStart = data::MemoryMapAddresses::VideoCardInterface_End - data::MemoryMapAddresses::VideoCardInterface_Start;
+				m_16Color_frameSize = RawTextRenderer::CONSOLE_CHARS_H * RawTextRenderer::CONSOLE_CHARS_V * m_16Color_cellSize;
+				m_16Color_currentFrameAddr = m_vramStart;
+				m_16Color_secondFrameAddr = m_vramStart + m_16Color_frameSize;
 			}
 
 			int8_t Graphics::read8(uint16_t addr)
@@ -706,6 +709,28 @@ namespace dragon
 				return value;
 			}
 
+			bool Graphics::readFlag(uint8_t flg)
+			{
+				if (flg >= 16) return false;
+				int16_t outValue = 0;
+				if (!m_videoMemory.r_Word(VirtualDisplay::tRegisters::Flags, outValue))
+					return false; //TODO: Error
+				m_tempFlags.value = outValue;
+				return ostd::Bits::get(m_tempFlags, flg);
+			}
+
+			void Graphics::setFlag(uint8_t flg, bool val)
+			{
+				if (flg >= 16) return;
+				int16_t outValue = 0;
+				if (!m_videoMemory.r_Word(VirtualDisplay::tRegisters::Flags, outValue))
+					return; //TODO: Error
+				m_tempFlags.value = outValue;
+				ostd::Bits::val(m_tempFlags, flg, val);
+				if (!m_videoMemory.w_Word(VirtualDisplay::tRegisters::Flags, m_tempFlags.value))
+					return; //TODO: Error
+			}
+
 			ostd::ByteStream* Graphics::getByteStream(void)
 			{
 				return &m_videoMemory.getData();
@@ -714,7 +739,7 @@ namespace dragon
 			bool Graphics::readVRAM_16Colors(uint8_t x, uint8_t y, Graphics::tText16_Cell& outTextCell)
 			{
 				uint16_t cellOffset = static_cast<uint16_t>(CONVERT_2D_1D(x, y, RawTextRenderer::CONSOLE_CHARS_H)) * 4;
-				cellOffset += m_vramStart;
+				cellOffset += m_16Color_currentFrameAddr;
 				int8_t outVal = 0;
 				if (!m_videoMemory.r_Byte(cellOffset + tText16_CellStructure::character, outVal))
 					return false; //TODO: Error
@@ -726,12 +751,15 @@ namespace dragon
 					return false; //TODO: Error
 				outTextCell.foregroundColor = outVal;
 				return true;
-			}
+			} 
 
 			bool Graphics::writeVRAM_16Colors(uint8_t x, uint8_t y, uint8_t character, uint8_t background, uint8_t foreground)
 			{
 				uint16_t cellOffset = static_cast<uint16_t>(CONVERT_2D_1D(x, y, RawTextRenderer::CONSOLE_CHARS_H)) * 4;
-				cellOffset += m_vramStart;
+				if (!readFlag(tFlags::DoubleBufferingEnabled))
+					cellOffset += m_16Color_currentFrameAddr;
+				else
+					cellOffset += m_16Color_secondFrameAddr;
 				if (!m_videoMemory.w_Byte(cellOffset + tText16_CellStructure::character, character))
 					return false; //TODO: Error
 				if (!m_videoMemory.w_Byte(cellOffset + tText16_CellStructure::background, background))
@@ -743,13 +771,32 @@ namespace dragon
 
 			bool Graphics::clearVRAM_16Colors(uint8_t character, uint8_t background, uint8_t foreground)
 			{
-				for (int32_t i = m_vramStart; i < m_vramStart + (RawTextRenderer::CONSOLE_CHARS_H * RawTextRenderer::CONSOLE_CHARS_V) * 4; i += 4)
+				for (int32_t i = m_16Color_currentFrameAddr; i < m_16Color_currentFrameAddr + m_16Color_frameSize; i += 4)
 				{
 					m_videoMemory.w_Byte(i + tText16_CellStructure::character, character);
 					m_videoMemory.w_Byte(i + tText16_CellStructure::background, background);
 					m_videoMemory.w_Byte(i + tText16_CellStructure::foreground, foreground);
 				}
 				return true;
+			}
+
+			void Graphics::swapBuffers_16Colors(void)
+			{
+				if (!readFlag(tFlags::DoubleBufferingEnabled))
+					return;
+				for (int32_t i = m_16Color_currentFrameAddr, j = 0; i < m_16Color_currentFrameAddr + m_16Color_frameSize; i += 4, j += 4)
+				{
+					int8_t outByte = 0;
+					m_videoMemory.r_Byte(m_16Color_secondFrameAddr + j, outByte);
+					m_videoMemory.w_Byte(i + tText16_CellStructure::character, outByte);
+					m_videoMemory.r_Byte(m_16Color_secondFrameAddr + j + 1, outByte);
+					m_videoMemory.w_Byte(i + tText16_CellStructure::background, outByte);
+					m_videoMemory.r_Byte(m_16Color_secondFrameAddr + j + 2, outByte);
+					m_videoMemory.w_Byte(i + tText16_CellStructure::foreground, outByte);
+				}
+				uint16_t tmp = m_16Color_currentFrameAddr;
+				m_16Color_currentFrameAddr = m_16Color_secondFrameAddr;
+				m_16Color_secondFrameAddr = tmp;
 			}
 
 

@@ -66,6 +66,8 @@
 	TEXT_SIGNLE_INVERT						{ MemoryAddresses.VGA + 0x0005 }
 	TEXT_SIGNLE_STR							{ MemoryAddresses.VGA + 0x0006 }
 
+	FLAGS									{ MemoryAddresses.VGA + 0x007E }
+
 	MEMORY_CONTROLLER_X						{ MemoryAddresses.VGA + 0x0080 }
 	MEMORY_CONTROLLER_X_BYTE				{ MemoryAddresses.VGA + 0x0080 + 1 }
 	MEMORY_CONTROLLER_Y						{ MemoryAddresses.VGA + 0x0082 }
@@ -116,6 +118,7 @@
 
 	REFRESH_SCREEN 		0xE0
 	CLEAR_SCREEN 		0xE1
+	REDRAW_SCREEN 		0xE2
 @end
 @raw_export_end
 @export_comment BIOS_API " --\n"
@@ -127,10 +130,12 @@
 @group Sig_VGA_Text_16_Color
 	CONTINUE 					0x00
 
+	SWAP_BUFFERS				0x10
 	WRITE_VRAM					0x11
 
 	FORCE_REFRESH_SCREEN 		0xE0
 	FORCE_CLEAR_SCREEN 			0xE1
+	FORCE_REDRAW_SCREEN 		0xE2
 @end
 @raw_export_end
 @export_comment BIOS_API " --\n"

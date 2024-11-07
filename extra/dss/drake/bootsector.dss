@@ -39,27 +39,22 @@ _drake_bootsector_entry_point:
 	## Enable Text16 Video Mode
 	movb [VGA_Registers.VIDEO_MODE], VGA_VideoModes.TEXT_16_COLORS
 
-	## Clear screen
-	push DefaultPalette.DarkBlue
-	push 1
-	call $_clear_screen
-
 	## Validate DPT Block
 	mov ACC, [$dpt_block]
 	jne $_invalid_dpt_block, 0xF1CA
-
-	## Print system info
-	push 0
-	call $_print_system_info
 
 	## Init Keyboard driver
 	push $_key_pressed		## KeyPressed handler address passed to the _init_keyboard subroutine
 	push 1
 	call $_init_keyboard
 
+	## Enable Double buffering
+	## mov R2, [VGA_Registers.FLAGS]
+	## or R2, 0b0000000000000001
+	## mov [VGA_Registers.FLAGS], ACC
+
 	## @call(_clear_screen, DefaultPalette.DarkBlue)
 	## @_clear_screen(DefaultPalette.DarkBlue)
-
 
 	## mov R10, 0x22
 	## mov R8, { $dpt_block + DPTStructure.ENTRIES_START + (2 * DPTStructure.ENTRY_SIZE_B) + DPTStructure.ENTRY_PART_LBL }
@@ -67,17 +62,32 @@ _drake_bootsector_entry_point:
 	## int 0x30
 
 	jmp $_endless_loop
-_invalid_dpt_block:
+_invalid_dpt_block: ## TODO: Fix screen drawing on error
 	push $invalid_dpt_block_str
 	push 1
 	call $_print_error_msg
+	jmp $_main_end
 _endless_loop:
+
+	## Clear screen
+	push DefaultPalette.DarkBlue
+	push 1
+	call $_clear_screen
+
+	## Print system info
+	push 0
+	call $_print_system_info
 
 	## Draw main box
 	push 0
 	call $_print_main_box
 
+	## Swap the buffers
+	push 0
+	call $_swap_buffers
+
 	jmp $_endless_loop
+_main_end:
 	hlt
 ## =========================================================================================================================
 
@@ -128,6 +138,24 @@ _clear_screen:  ## _clear_screen(int8_t color)
 	mov R10, 0x24
 	mov R9, $textCell
 	int 0x30
+	ret
+## =========================================================================================================================
+
+
+
+
+## =========================================================================================================================
+_redraw_screen:
+	movb [VGA_Registers.SIGNAL], Sig_VGA_Text_16_Color.FORCE_REDRAW_SCREEN
+	ret
+## =========================================================================================================================
+
+
+
+
+## =========================================================================================================================
+_swap_buffers:
+	movb [VGA_Registers.SIGNAL], Sig_VGA_Text_16_Color.SWAP_BUFFERS
 	ret
 ## =========================================================================================================================
 

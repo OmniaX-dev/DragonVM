@@ -358,6 +358,11 @@ namespace dragon
 					inline static constexpr uint8_t background	=			0x02;
 					inline static constexpr uint8_t reserved	=			0x03;
 				};
+				public: struct tFlags
+				{
+					inline static constexpr uint8_t DoubleBufferingEnabled 	=		0;
+					inline static constexpr uint8_t ScreenRedrawDisabled 	=		1;
+				};
 				public:
 					Graphics(void);
 					int8_t read8(uint16_t addr) override;
@@ -365,18 +370,28 @@ namespace dragon
 					int8_t write8(uint16_t addr, int8_t value) override;
 					int16_t write16(uint16_t addr, int16_t value) override;
 
+					bool readFlag(uint8_t flg);
+					void setFlag(uint8_t flg, bool val = true);
+
 					ostd::ByteStream* getByteStream(void) override;
 
 					inline uint16_t getVRAMStart(void) { return m_vramStart; }
 					bool readVRAM_16Colors(uint8_t x, uint8_t y, tText16_Cell& outTextCell);
 					bool writeVRAM_16Colors(uint8_t x, uint8_t y, uint8_t character = 0, uint8_t background = 0xFF, uint8_t foreground = 0xFF);
 					bool clearVRAM_16Colors(uint8_t character = 0, uint8_t background = 0x00, uint8_t foreground = 0xFF);
+					void swapBuffers_16Colors(void);
 
 				private:
 					ostd::serial::SerialIO m_videoMemory;
 
 					uint16_t m_vramStart { 0 };
 					uint8_t m_16Color_cellSize { 4 };
+					uint16_t m_16Color_frameSize { 0 };
+					uint16_t m_16Color_secondFrameAddr { 0 };
+					uint16_t m_16Color_currentFrameAddr { 0 };
+					bool m_16Color_doubleBufferingEnabled { false };
+
+					ostd::BitField_16 m_tempFlags;
 			};
 			class SerialPort : public IMemoryDevice
 			{

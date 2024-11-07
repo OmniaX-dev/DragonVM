@@ -21,6 +21,8 @@ namespace dragon
 				inline static constexpr uint8_t TextSingleInvertColors = 0x05;
 				inline static constexpr uint8_t TextSingleString = 0x06;
 
+				inline static constexpr uint8_t Flags = 0x7E;
+
 				inline static constexpr uint8_t MemControllerX = 0x80;
 				inline static constexpr uint8_t MemControllerY = 0x82;
 				inline static constexpr uint8_t MemControllerChar = 0x84;
@@ -43,10 +45,12 @@ namespace dragon
 				inline static constexpr uint8_t TextSingleColor_DirectPrintBuffNoFlush = 0x06;	
 				inline static constexpr uint8_t TextSingleColor_DirectPrintString = 0x07;
 
+				inline static constexpr uint8_t Text16Color_SwapBuffers = 0x10;
 				inline static constexpr uint8_t Text16Color_WriteMemory = 0x11;
 
 				inline static constexpr uint8_t RefreshScreen = 0xE0;	
 				inline static constexpr uint8_t ClearSCreen = 0xE1;	
+				inline static constexpr uint8_t RedrawScreen = 0xE2;	
 			};
 			public:
 				void onInitialize(void) override;
@@ -59,6 +63,8 @@ namespace dragon
 				inline void redrawScreen(void) { m_redrawScreen = true; }
 
 			private:
+				void __redraw_screen(void);
+
 				void single_text_add_char_to_line(char c);
 				void single_text_add_char_to_buffer(char c);
 				void single_text_flush_buffer(void);

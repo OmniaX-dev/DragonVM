@@ -99,10 +99,14 @@
 
             0xE0: Refresh Screen
             0xE1: Clear Screen
+            0xE2: Redraw Screen
         0x04: Text Single Color Character (1 Byte)
         0x05: Text Single Color Inverted colors (1 Byte)
         0x06: (2 bytes) Text Single Color Buffered String Address
         
+        0x7E: Flags (2 Bytes)
+            0b00000000.00000001: Double Buffering Enabled
+            0b00000000.00000010: Disable Screen Redraw
         0x80: Memory Controller
             0x80: XCoordinate (2 Bytes)
             0x84: YCoordinate (2 Bytes)

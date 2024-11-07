@@ -1,3 +1,7 @@
+Runtime:
+	Add in place logic operators (and, or...) to ExtAlu CPU Extension
+	Implement native flags operators (set, zero, toggle)
+
 Assembler:
 	Add subroutine address export functionality
 

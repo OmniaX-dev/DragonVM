@@ -70,11 +70,10 @@ namespace dragon
 				}
 			}
 			
+			m_redrawScreen = m_redrawScreen && !DragonRuntime::vGraphicsInterface.readFlag(hw::interface::Graphics::tFlags::ScreenRedrawDisabled);
 			if (m_redrawScreen)
 			{
-				m_renderer.updateBuffer();
-				DragonRuntime::cpu.handleInterrupt(data::InterruptCodes::Text16ModeScreenRefreshed, true);
-				m_redrawScreen = false;
+				__redraw_screen();
 			}
 			m_renderer.displayBuffer();
 		}
@@ -170,6 +169,15 @@ namespace dragon
 					m_redrawScreen = true;
 					m_refreshScreen = true;
 				}
+				else if (signal == tSignalValues::RedrawScreen)
+				{
+					__redraw_screen();
+				}
+				else if (signal == tSignalValues::Text16Color_SwapBuffers)
+				{
+					DragonRuntime::vGraphicsInterface.swapBuffers_16Colors();
+					__redraw_screen();
+				}
 			}
 			else return;
 			mem.write8(vga_addr + tRegisters::Signal, tSignalValues::Continue);
@@ -196,6 +204,14 @@ namespace dragon
 		}
 
 		void VirtualDisplay::onSlowUpdate(void) {  }
+
+		void VirtualDisplay::__redraw_screen(void)
+		{
+			m_renderer.updateBuffer();
+			DragonRuntime::cpu.handleInterrupt(data::InterruptCodes::Text16ModeScreenRefreshed, true);
+			m_redrawScreen = false;
+			m_refreshScreen = true;
+		}
 
 		void VirtualDisplay::single_text_add_char_to_line(char c)
 		{
