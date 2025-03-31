@@ -234,32 +234,40 @@ namespace dragon
 			};
 			public:
 
-				inline static constexpr uint16_t DPTID					= 0x000;
-				inline static constexpr uint16_t DPTVersionMaj			= 0x002;
-				inline static constexpr uint16_t DPTVersionMin			= 0x003;
-				inline static constexpr uint16_t PartitionCount			= 0x004;
+				inline static constexpr uint16_t DPTID								= 0x000;
+				inline static constexpr uint16_t DPTVersionMaj						= 0x002;
+				inline static constexpr uint16_t DPTVersionMin						= 0x003;
+				inline static constexpr uint16_t PartitionCount						= 0x004;
 
-				inline static constexpr uint16_t EntriesStart			= 0x00C;
+				inline static constexpr uint16_t EntriesStart						= 0x00C;
 
-				inline static constexpr uint16_t EntryStartAddress		= 0x000;
-				inline static constexpr uint16_t EntryPartitionSize		= 0x004;
-				inline static constexpr uint16_t EntryFlags				= 0x008;
-				inline static constexpr uint16_t EntryPartitionLabel	= 0x024;
+				inline static constexpr uint16_t EntryStartAddress					= 0x000;
+				inline static constexpr uint16_t EntryPartitionSize					= 0x004;
+				inline static constexpr uint16_t EntryFlags							= 0x008;
+				inline static constexpr uint16_t EntryPartitionLabel				= 0x024;
 
 
 
-				inline static constexpr uint16_t HeaderReservedSizeBytes= 7;
-				inline static constexpr uint16_t DiskAddress			= 0x200;
-				inline static constexpr uint16_t DPT_ID_CODE			= 0xF1CA;
-				inline static constexpr uint16_t EntrySizeBytes			= 100;
-				inline static constexpr uint16_t EntryLabelSizeBytes	= 64;
-				inline static constexpr uint16_t EntryReservedSizeBytes	= 26;
-				inline static constexpr uint16_t HeaderSizeBytes		= 12;
-				inline static constexpr uint16_t DPTBlockSizeBytes		= 512;
-				inline static constexpr uint8_t CurrentDPTVersionMaj 	= 0x00;
-				inline static constexpr uint8_t CurrentDPTVersionMin 	= 0x02;
-				inline static constexpr uint32_t DiskStartAddr 			= 0x00000400;
-				inline static constexpr uint8_t MaxPartCount			= 5;
+				inline static constexpr uint16_t HeaderReservedSizeBytes			= 7;
+				inline static constexpr uint16_t DiskAddress						= 0x200;
+				inline static constexpr uint16_t DPT_ID_CODE						= 0xF1CA;
+				inline static constexpr uint16_t EntrySizeBytes						= 100;
+				inline static constexpr uint16_t EntryLabelSizeBytes				= 64;
+				inline static constexpr uint16_t EntryReservedSizeBytes				= 26;
+				inline static constexpr uint16_t HeaderSizeBytes					= 12;
+				inline static constexpr uint16_t DPTBlockSizeBytes					= 512;
+				inline static constexpr uint8_t CurrentDPTVersionMaj 				= 0x00;
+				inline static constexpr uint8_t CurrentDPTVersionMin 				= 0x02;
+				inline static constexpr uint32_t DiskStartAddr 						= 0x00000400;
+				inline static constexpr uint8_t MaxPartCount						= 5;
+
+
+
+				inline static constexpr uint16_t BootPart_IDAddr					= 0x0000;
+				inline static constexpr uint16_t BootPart_CodeStart					= 0x0020;
+				inline static constexpr uint16_t BootPart_ID_CODE					= 0xF1C4;
+				inline static constexpr uint16_t BootPart_CodeSizeBytes				= 1024;
+				inline static constexpr uint8_t BootPart_HeaderSizeBytes			= 32;
 		};
 
 		class CPUExtension

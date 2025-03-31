@@ -16,6 +16,7 @@ if [ $? -eq 0 ]; then
     /bin/bash ./bios_flash
     cp ../dss/bios_api.dss ../../extra/dss/bios_api.dss
     /bin/bash ./build_drake
+    /bin/bash ./build_dragonos
     cd ..
     printf "\n${green}Running Application...\n\n${clear}"
     ./ddb config/testMachine.dvm --verbose-load

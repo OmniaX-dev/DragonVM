@@ -100,7 +100,12 @@
 		"stdfloat": "cpp",
 		"*.inc": "cpp",
 		"text_encoding": "cpp",
-		"__split_buffer": "cpp"
+		"__split_buffer": "cpp",
+		"print": "cpp",
+		"__hash_table": "cpp",
+		"execution": "cpp",
+		"ios": "cpp",
+		"locale": "cpp"
 	},
 	"workbench.editorAssociations": {
 		"*.bin": "hexEditor.hexedit"

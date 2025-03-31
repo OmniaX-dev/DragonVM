@@ -247,3 +247,14 @@
     Unallocated			90 kb		92160 		bytes 	(0x16800)			0x0000.1800 -> 0x0001.7FFF
     DragonOS			2000 kb		2048000 	bytes	(0x1F4000)			0x0001.8000 -> 0x0020.BFFF
     Test Partition		2000 kb		2048000 	bytes	(0x1F4000)			0x0020.C000 -> 0x0040.0000
+
+
+
+#==========================================================================================================================================
+# Bootstrap structure
+#==========================================================================================================================================
+    Starting bytes of bootable partition:
+        Identifier (2 Bytes) - Must be set to 0xF1C4
+        Reserved (30 Bytes)
+
+    Kernel first stage block must start at PART_ADDR + 32 and must be 1024 bytes in size

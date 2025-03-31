@@ -28,8 +28,9 @@ namespace dragon
 
 			inline bool isInitialized(void) const { return m_initialized; }
 			inline bool isRunning(void) const { return m_running; }
-			inline void hide(void) { SDL_HideWindow(m_window); }
-			inline void show(void) { SDL_ShowWindow(m_window); }
+			inline bool isVisible(void) const { return m_visible; }
+			inline void hide(void) { SDL_HideWindow(m_window); m_visible = false; }
+			inline void show(void) { SDL_ShowWindow(m_window); m_visible = true; }
 			inline ostd::String getTitle(void) const { return m_title; }
 			inline int32_t getFPS(void) const { return m_fps; }
 			inline int32_t getWindowWidth(void) const { return m_windowWidth; }
@@ -63,6 +64,7 @@ namespace dragon
 			bool m_deagEventEnabled { false };
 			bool m_running { false };
 			bool m_initialized { false };
+			bool m_visible { true };
 	};
 	class WindowResizedData : public ostd::BaseObject
 	{

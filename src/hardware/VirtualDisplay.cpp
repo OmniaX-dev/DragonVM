@@ -26,6 +26,7 @@ namespace dragon
 
 		void VirtualDisplay::onRender(void)
 		{
+			if (!isVisible()) return;
 			auto& config = DragonRuntime::machine_config;
 			auto& mem = DragonRuntime::memMap;
 			uint16_t vga_addr = data::MemoryMapAddresses::VideoCardInterface_Start;

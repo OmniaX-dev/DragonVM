@@ -57,6 +57,7 @@ namespace dragon
 				for (int16_t i = m_code.size(); i < m_fixedSize; i++)
 					m_code.push_back(m_fixedFillValue);
 			}
+			insertHeader();
 			return m_code;
 		}
 
@@ -153,6 +154,32 @@ namespace dragon
 			out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Entry Point: ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p(ostd::Utils::getHexStr(m_dataSize + m_loadAddress + 3, true, 2)).nl();
 
 			out.nl();
+		}
+
+
+		
+		void Assembler::insertHeader(void)
+		{
+			if (m_code.size() == 0) return;
+			ostd::ByteStream header;
+
+			m_headerStr.toLower().trim();
+			if (m_headerStr == "") return;
+			//TODO: Expand header functionality to allow for custom values maybe
+			if (m_headerStr == "kernel0_boot")
+			{
+				header.push_back((uint8_t)((data::DPTStructure::BootPart_ID_CODE & 0xFF00) >> 8));
+				header.push_back((uint8_t)(data::DPTStructure::BootPart_ID_CODE & 0x00FF));
+				for (int32_t i = 0; i < 30; i++)
+					header.push_back(0xFF);
+			}
+			else
+			{
+				std::cout << "Invalid .header value: " << m_headerStr << "\n";
+				return;
+			}
+
+			m_code.insert(m_code.begin(), header.begin(), header.end());
 		}
 
 
@@ -798,6 +825,18 @@ namespace dragon
 					}
 					lineEdit.substr(7).trim();
 					m_entry_lbl = lineEdit;
+					continue;
+				}
+				else if (lineEdit.startsWith(".header "))
+				{
+					if (lineEdit.len() < 9)
+					{
+						//TODO: Error 
+						std::cout << "Invalid .header value: " << lineEdit << "\n";
+						return;
+					}
+					lineEdit.substr(8).trim();
+					m_headerStr = lineEdit;
 					continue;
 				}
 				else if (lineEdit.startsWith(".load "))
