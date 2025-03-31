@@ -128,7 +128,7 @@ namespace dragon
 			index++;
 		}
 		vHDD.unmount();
-		out.nl().fg(ostd::ConsoleColors::Green).p("Success. Data writte to Virtual Disk:").nl();
+		out.nl().fg(ostd::ConsoleColors::Green).p("Success. Data written to Virtual Disk:").nl();
 		out.p("  Data Path: ").p(data_file.cpp_str()).nl();
 		out.p("  Disk Path: ").p(vdisk_file.cpp_str()).nl();
 		out.p("  Data Address: ").p(ostd::Utils::getHexStr(addr, true, 4).cpp_str()).nl();

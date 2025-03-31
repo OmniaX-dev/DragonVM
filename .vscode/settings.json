@@ -99,7 +99,8 @@
 		"format": "cpp",
 		"stdfloat": "cpp",
 		"*.inc": "cpp",
-		"text_encoding": "cpp"
+		"text_encoding": "cpp",
+		"__split_buffer": "cpp"
 	},
 	"workbench.editorAssociations": {
 		"*.bin": "hexEditor.hexedit"
@@ -156,6 +157,7 @@
 	"window.zoomLevel": 0,
 	"explorer.autoReveal": false,
 	"editor.stickyScroll.enabled": false,
+	"editor.fontSize": 16,
 	"workbench.statusBar.visible": false,
 	"breadcrumbs.enabled": false,
 	"workbench.tree.enableStickyScroll": false,
@@ -170,5 +172,9 @@
 	"files.eol": "\r\n",
 
 	"workbench.iconTheme": "material-icon-theme",
-	"workbench.colorTheme": "Aramok's GLX Black"			
+	"workbench.colorTheme": "Aramok's GLX Black",
+
+	"window.titleBarStyle": "custom",
+	"window.customTitleBarVisibility": "never"
 }
+

@@ -82,6 +82,15 @@ namespace dragon
 						inline static constexpr uint8_t mulip_imm_in_reg		=	0x25;
 						inline static constexpr uint8_t divip_reg_in_reg		=	0x26;
 						inline static constexpr uint8_t divip_imm_in_reg		=	0x27;
+
+						inline static constexpr uint8_t andip_reg_in_reg		=	0x30;
+						inline static constexpr uint8_t andip_imm_in_reg		=	0x31;
+						inline static constexpr uint8_t orip_reg_in_reg			=	0x32;
+						inline static constexpr uint8_t orip_imm_in_reg			=	0x33;
+						inline static constexpr uint8_t xorip_reg_in_reg		=	0x34;
+						inline static constexpr uint8_t xorip_imm_in_reg		=	0x35;
+						inline static constexpr uint8_t notip_reg				=	0x36;
+
 				};
 				public:
 					inline ExtAlu(void) : data::CPUExtension(data::OpCodes::Ext02, "extalu") {  }

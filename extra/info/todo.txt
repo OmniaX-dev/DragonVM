@@ -1,6 +1,4 @@
 Runtime:
-	Add in place logic operators (and, or...) to ExtAlu CPU Extension
-	Implement native flags operators (set, zero, toggle)
 
 Assembler:
 	Add subroutine address export functionality
@@ -29,3 +27,5 @@ Done:
 	*Remove old offset mov
 	*Implelemnt extmov mnemonics in dasm:
 	*Update Ubuntu install instructions in readme file (for OmniaFramework aswell)
+	*Add in place logic operators (and, or...) to ExtAlu CPU Extension
+	*Implement native flags operators (set, zero, toggle)

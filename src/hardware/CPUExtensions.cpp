@@ -681,6 +681,64 @@ namespace dragon
 						vcpu.writeRegister16(data::Registers::RV, rv);
 					}
 					break;
+					case OpCodes::andip_reg_in_reg:
+					{
+						uint8_t dest_reg = vcpu.fetch8();
+						uint8_t src_reg = vcpu.fetch8();
+						int16_t src_val = vcpu.readRegister(src_reg);
+						int16_t dest_val = vcpu.readRegister(dest_reg);
+						vcpu.writeRegister16(dest_reg, src_val & dest_val);
+					}
+					break;
+					case OpCodes::andip_imm_in_reg:
+					{
+						uint8_t dest_reg = vcpu.fetch8();
+						uint16_t src_val = vcpu.fetch16();
+						int16_t value = vcpu.readRegister(dest_reg);
+						vcpu.writeRegister16(dest_reg, value & src_val);
+					}
+					break;
+					case OpCodes::orip_reg_in_reg:
+					{
+						uint8_t dest_reg = vcpu.fetch8();
+						uint8_t src_reg = vcpu.fetch8();
+						int16_t src_val = vcpu.readRegister(src_reg);
+						int16_t dest_val = vcpu.readRegister(dest_reg);
+						vcpu.writeRegister16(dest_reg, src_val | dest_val);
+					}
+					break;
+					case OpCodes::orip_imm_in_reg:
+					{
+						uint8_t dest_reg = vcpu.fetch8();
+						uint16_t src_val = vcpu.fetch16();
+						int16_t value = vcpu.readRegister(dest_reg);
+						vcpu.writeRegister16(dest_reg, value | src_val);
+					}
+					break;
+					case OpCodes::xorip_reg_in_reg:
+					{
+						uint8_t dest_reg = vcpu.fetch8();
+						uint8_t src_reg = vcpu.fetch8();
+						int16_t src_val = vcpu.readRegister(src_reg);
+						int16_t dest_val = vcpu.readRegister(dest_reg);
+						vcpu.writeRegister16(dest_reg, src_val ^ dest_val);
+					}
+					break;
+					case OpCodes::xorip_imm_in_reg:
+					{
+						uint8_t dest_reg = vcpu.fetch8();
+						uint16_t src_val = vcpu.fetch16();
+						int16_t value = vcpu.readRegister(dest_reg);
+						vcpu.writeRegister16(dest_reg, value ^ src_val);
+					}
+					break;
+					case OpCodes::notip_reg:
+					{
+						uint8_t regAddr = vcpu.fetch8();
+						int16_t value = vcpu.readRegister(regAddr);
+						vcpu.writeRegister16(regAddr, ~value);
+					}
+					break;
 					default:
 					{
 						//TODO: Error

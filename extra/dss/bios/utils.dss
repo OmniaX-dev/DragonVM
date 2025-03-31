@@ -16,15 +16,13 @@ _disk_load_from_ddd_blocking:  ## _disk_load_from_ddd_blocking(DiskDriverData* d
 	addip R1, 2
 	mov  [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.MEMORY_ADDRESS}], *R1
 	movb [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.SIGNAL}], DiskSignals.START
-	and FL, 0b1111111111111110													## Disable interrupts
-	mov FL, ACC	
+	zflg Flags.InterruptsEnabled													## Disable interrupts
 _disk_load_from_ddd_blocking_wait_loop:
 	## debug_profile_start 0xE0, DBGProfilerTime.MILLIS
 	mov ACC, [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.RO_STATUS}]
 	## debug_profile_stop
 	jne $_disk_load_from_ddd_blocking_wait_loop, DiskStatus.FREE
-	or FL, 0b0000000000000001													## Enable interrupts
-	mov FL, ACC
+	sflg Flags.InterruptsEnabled													## Enable interrupts
 	ret
 
 

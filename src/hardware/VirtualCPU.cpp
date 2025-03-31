@@ -839,6 +839,25 @@ namespace dragon
 					m_subroutineCounter++;
 				}
 				break;
+				case data::OpCodes::ZeroFlag:
+				{
+					uint8_t flag = fetch8();
+					setFlag(flag, false);
+				}
+				break;
+				case data::OpCodes::SetFlag:
+				{
+					uint8_t flag = fetch8();
+					setFlag(flag, true);
+				}
+				break;
+				case data::OpCodes::ToggleFlag:
+				{
+					uint8_t flag = fetch8();
+					bool value = readFlag(flag);
+					setFlag(flag, !value);
+				}
+				break;
 				case data::OpCodes::Ext01:
 				case data::OpCodes::Ext02:
 				case data::OpCodes::Ext03:

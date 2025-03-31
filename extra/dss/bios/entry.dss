@@ -25,12 +25,10 @@ _bios_entry_point:
 	call $_print_machine_info_signle_color										## Print BIOS logo and machine info
 
 	## MBR Loading 
-	and FL, 0b1111111111111110													## Disable interrupts
-	mov FL, ACC
+	zflg Flags.InterruptsEnabled												## Disable interrupts
 	push 0
 	call $_load_mbr_data_block
-	or FL, 0b0000000000000001													## Enable interrupts
-	mov FL, ACC
+	sflg Flags.InterruptsEnabled												## Enable interrupts
 	## ----
 
 	%low INST_BIOS_NODE_TOGGLE 0x00												## Disable BIOS Mode before leaving the BIOS

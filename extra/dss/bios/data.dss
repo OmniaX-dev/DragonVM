@@ -38,6 +38,15 @@
 @raw_export_end
 @export_comment BIOS_API " --\n"
 
+@export_comment BIOS_API " These are the FLAG addresses."
+@raw_export_start BIOS_API
+@group Flags
+	InterruptsEnabled				0x00
+	OffsetModeEnabled				0x01
+@end
+@raw_export_end
+@export_comment BIOS_API " --\n"
+
 
 
 @export_comment BIOS_API " These are the Hardware Interrupt codes of this machine."

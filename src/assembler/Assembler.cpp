@@ -1171,6 +1171,30 @@ namespace dragon
 			ostd::String opEdit(lineEdit.new_substr(lineEdit.indexOf(" ") + 1));
 			opEdit.trim();
 			int16_t word = 0x0000;
+			if (STDVEC_CONTAINS(cpuExtensions, "extalu"))
+			{
+				if (instEdit == "notip")
+				{
+					m_code.push_back(data::OpCodes::Ext02);
+					eOperandType opType = parseOperand(opEdit, word);
+					if (opType != eOperandType::Register)
+					{
+						std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Register required\n";
+						exit(0);
+						return;
+					}
+					m_code.push_back(hw::cpuext::ExtAlu::OpCodes::notip_reg);
+					m_code.push_back((uint8_t)word);
+					return;
+				}
+			}
+			else if (instEdit == "notip")
+			{
+				std::cout << "ExtAlu instruction detected, please add '--extalu' flag to dasm.\n";
+				exit(0);
+				return;
+			}
+
 			if (instEdit == "inc")
 			{
 				eOperandType opType = parseOperand(opEdit, word);
@@ -1337,6 +1361,45 @@ namespace dragon
 				m_code.push_back((uint8_t)word);
 				return;
 			}
+			else if (instEdit == "zflg")
+			{
+				eOperandType opType = parseOperand(opEdit, word);
+				if (opType != eOperandType::Immediate)
+				{
+					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Immediate required\n";
+					exit(0);
+					return;
+				}
+				m_code.push_back(data::OpCodes::ZeroFlag);
+				m_code.push_back((uint8_t)word);
+				return;
+			}
+			else if (instEdit == "sflg")
+			{
+				eOperandType opType = parseOperand(opEdit, word);
+				if (opType != eOperandType::Immediate)
+				{
+					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Immediate required\n";
+					exit(0);
+					return;
+				}
+				m_code.push_back(data::OpCodes::SetFlag);
+				m_code.push_back((uint8_t)word);
+				return;
+			}
+			else if (instEdit == "tflg")
+			{
+				eOperandType opType = parseOperand(opEdit, word);
+				if (opType != eOperandType::Immediate)
+				{
+					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Immediate required\n";
+					exit(0);
+					return;
+				}
+				m_code.push_back(data::OpCodes::ToggleFlag);
+				m_code.push_back((uint8_t)word);
+				return;
+			}
 			else
 			{
 				std::cout << "Unknown instruction; " << line << " (" << instEdit << ")\n";
@@ -1356,7 +1419,7 @@ namespace dragon
 			if (STDVEC_CONTAINS(cpuExtensions, "extalu"))
 			{
 				auto st = opEdit.tokenize(",");
-				if (instEdit == "addipu" || instEdit == "subipu" || instEdit == "mulipu" || instEdit == "divipu" || instEdit == "addip" || instEdit == "subip" || instEdit == "mulip" || instEdit == "divip")
+				if (instEdit == "addipu" || instEdit == "subipu" || instEdit == "mulipu" || instEdit == "divipu" || instEdit == "addip" || instEdit == "subip" || instEdit == "mulip" || instEdit == "divip" || instEdit == "orip" || instEdit == "andip" || instEdit == "xorip")
 				{
 					m_code.push_back(data::OpCodes::Ext02);
 					m_code.push_back(0x00);
@@ -1380,6 +1443,9 @@ namespace dragon
 						else if (instEdit == "subipu") m_code[m_code.size() - 2] = hw::cpuext::ExtAlu::OpCodes::subipu_imm_in_reg;
 						else if (instEdit == "mulipu") m_code[m_code.size() - 2] = hw::cpuext::ExtAlu::OpCodes::mulipu_imm_in_reg;
 						else if (instEdit == "divipu") m_code[m_code.size() - 2] = hw::cpuext::ExtAlu::OpCodes::divipu_imm_in_reg;
+						else if (instEdit == "orip") m_code[m_code.size() - 2] = hw::cpuext::ExtAlu::OpCodes::orip_imm_in_reg;
+						else if (instEdit == "andip") m_code[m_code.size() - 2] = hw::cpuext::ExtAlu::OpCodes::andip_imm_in_reg;
+						else if (instEdit == "xorip") m_code[m_code.size() - 2] = hw::cpuext::ExtAlu::OpCodes::xorip_imm_in_reg;
 						m_code.push_back((uint8_t)((word & 0xFF00) >> 8));
 						m_code.push_back((uint8_t)(word & 0x00FF));
 					}
@@ -1393,6 +1459,9 @@ namespace dragon
 						else if (instEdit == "subipu") m_code[m_code.size() - 2] = hw::cpuext::ExtAlu::OpCodes::subipu_reg_in_reg;
 						else if (instEdit == "mulipu") m_code[m_code.size() - 2] = hw::cpuext::ExtAlu::OpCodes::mulipu_reg_in_reg;
 						else if (instEdit == "divipu") m_code[m_code.size() - 2] = hw::cpuext::ExtAlu::OpCodes::divipu_reg_in_reg;
+						else if (instEdit == "orip") m_code[m_code.size() - 2] = hw::cpuext::ExtAlu::OpCodes::orip_reg_in_reg;
+						else if (instEdit == "andip") m_code[m_code.size() - 2] = hw::cpuext::ExtAlu::OpCodes::andip_reg_in_reg;
+						else if (instEdit == "xorip") m_code[m_code.size() - 2] = hw::cpuext::ExtAlu::OpCodes::xorip_reg_in_reg;
 						m_code.push_back((uint8_t)word);
 					}
 					else
@@ -1404,7 +1473,8 @@ namespace dragon
 					return;
 				}
 			}
-			else if (instEdit == "addipu" || instEdit == "subipu" || instEdit == "mulipu" || instEdit == "divipu" || instEdit == "addip" || instEdit == "subip" || instEdit == "mulip" || instEdit == "divip")
+			else if (instEdit == "addipu" || instEdit == "subipu" || instEdit == "mulipu" || instEdit == "divipu" || instEdit == "addip" || instEdit == "subip" || instEdit == "mulip" || instEdit == "divip"
+						|| instEdit == "orip" || instEdit == "andip" || instEdit == "xorip" || instEdit == "notip")
 			{
 				std::cout << "ExtAlu instruction detected, please add '--extalu' flag to dasm.\n";
 				exit(0);

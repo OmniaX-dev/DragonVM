@@ -374,6 +374,9 @@ namespace dragon
 				inline static constexpr uint8_t Ext15 = 0xEE;
 				inline static constexpr uint8_t Ext16 = 0xEF;
 				
+				inline static constexpr uint8_t ZeroFlag = 0xF0;
+				inline static constexpr uint8_t SetFlag = 0xF1;
+				inline static constexpr uint8_t ToggleFlag = 0xF2;
 				inline static constexpr uint8_t RetInt = 0xFD;
 				inline static constexpr uint8_t Int = 0xFE;
 				inline static constexpr uint8_t Halt = 0xFF;
