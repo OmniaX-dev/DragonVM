@@ -5,6 +5,7 @@
 
 @include <../bios_api.dss>
 @include <palette.dss>
+@include <keyboard_driver.dss>
 
 
 ## =========================================================================================================================
@@ -27,6 +28,12 @@ _kernel0_main:
 	push $test_str
 	push 1
 	call $_print_string
+
+	## Init Keyboard driver
+	push $_key_pressed		## KeyPressed handler address passed to the _init_keyboard subroutine
+	push 1
+	call $_init_keyboard
+
 	hlt
 ## =========================================================================================================================
 
