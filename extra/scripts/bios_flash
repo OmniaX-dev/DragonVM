@@ -7,5 +7,4 @@ printf "${green}Reloading BIOS...\n${clear}"
 cd ..
 cp ../extra/dss/bios/* ./dss/bios/
 ./dasm dss/bios/entry.dss -o dragon/bios.bin -D
-# ./dasm dss/bios/entry.dss -o dragon/bios.bin --extalu --save-disassembly disassembly/bios.dds --verbose --save-exports
 cp dragon/bios.bin ../extra/dragon/bios.bin

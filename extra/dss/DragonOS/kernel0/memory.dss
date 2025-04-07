@@ -1,0 +1,7 @@
+@guard _MEMORY_DSS_
+
+.code
+
+_init_memory_handler:
+	mov R6, 0xFAAA
+	ret

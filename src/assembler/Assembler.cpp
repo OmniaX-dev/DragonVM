@@ -107,53 +107,59 @@ namespace dragon
 			return serializer.saveToFile(fileName);
 		}
 
-		void Assembler::printProgramInfo(void)
+		void Assembler::printProgramInfo(int32_t verbose_level)
 		{
+			if (verbose_level == 0xFF) return;
 			int32_t symbol_len = 30;
 			out.nl();
 
-			if (m_symbolTable.size() > 0)
-				out.fg(ostd::ConsoleColors::Yellow).p("Symbols:").nl();
-			for (auto& symbol : m_symbolTable)
+			if (verbose_level == 0 || verbose_level == 2)
 			{
-				out.fg(ostd::ConsoleColors::Red).p(ostd::Utils::getHexStr(symbol.second.address, true, 2));
-				out.fg(ostd::ConsoleColors::Magenta).p("  ").p(symbol.first);
-				out.fg(ostd::ConsoleColors::Blue).nl().p("  ");
-				for (auto& b : symbol.second.bytes)
-					out.p(ostd::Utils::getHexStr(b, false, 1)).p(".");
-				out.nl();
+				if (m_symbolTable.size() > 0)
+					out.fg(ostd::ConsoleColors::Yellow).p("Symbols:").nl();
+				for (auto& symbol : m_symbolTable)
+				{
+					out.fg(ostd::ConsoleColors::Red).p(ostd::Utils::getHexStr(symbol.second.address, true, 2));
+					out.fg(ostd::ConsoleColors::Magenta).p("  ").p(symbol.first);
+					out.fg(ostd::ConsoleColors::Blue).nl().p("  ");
+					for (auto& b : symbol.second.bytes)
+						out.p(ostd::Utils::getHexStr(b, false, 1)).p(".");
+					out.nl();
+				}
+				if (m_symbolTable.size() > 0)
+					out.nl();
+				
+				if (m_labelTable.size() > 0)
+					out.fg(ostd::ConsoleColors::Yellow).p("Labels:").nl();
+				for (auto& label : m_labelTable)
+				{
+					out.fg(ostd::ConsoleColors::Magenta).p(label.first.new_fixedLength(symbol_len));
+					out.fg(ostd::ConsoleColors::Red).p(ostd::Utils::getHexStr(label.second.address, true, 2)).nl();
+				}
+				if (m_labelTable.size() > 0)
+					out.nl();
+				
+				if (m_structDefs.size() > 0)
+					out.fg(ostd::ConsoleColors::Yellow).p("Structures:").nl();
+				for (auto& str : m_structDefs)
+				{
+					out.fg(ostd::ConsoleColors::Magenta).p(str.name.new_fixedLength(symbol_len));
+					out.fg(ostd::ConsoleColors::Red).p(str.size).p(" bytes").nl();
+				}
+				if (m_structDefs.size() > 0)
+					out.nl();
 			}
-			if (m_symbolTable.size() > 0)
-				out.nl();
-			
-			if (m_labelTable.size() > 0)
-				out.fg(ostd::ConsoleColors::Yellow).p("Labels:").nl();
-			for (auto& label : m_labelTable)
-			{
-				out.fg(ostd::ConsoleColors::Magenta).p(label.first.new_fixedLength(symbol_len));
-				out.fg(ostd::ConsoleColors::Red).p(ostd::Utils::getHexStr(label.second.address, true, 2)).nl();
-			}
-			if (m_labelTable.size() > 0)
-				out.nl();
-			
-			if (m_structDefs.size() > 0)
-				out.fg(ostd::ConsoleColors::Yellow).p("Structures:").nl();
-			for (auto& str : m_structDefs)
-			{
-				out.fg(ostd::ConsoleColors::Magenta).p(str.name.new_fixedLength(symbol_len));
-				out.fg(ostd::ConsoleColors::Red).p(str.size).p(" bytes").nl();
-			}
-			if (m_structDefs.size() > 0)
-				out.nl();
 
-
-			out.fg(ostd::ConsoleColors::Yellow).p("Program data:").nl();
-			out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Fixed Size:  ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p((int)m_fixedSize).p(" bytes").nl();
-			out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Program Size:").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p((int)m_programSize).p(" bytes").nl();
-			out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Data Size:   ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p((int)m_dataSize).p(" bytes").nl();
-			out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Fixed Fill:  ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p(ostd::Utils::getHexStr(m_fixedFillValue, true, 1)).nl();
-			out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Load Address:").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p(ostd::Utils::getHexStr(m_loadAddress, true, 2)).nl();
-			out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Entry Point: ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p(ostd::Utils::getHexStr(m_dataSize + m_loadAddress + 3, true, 2)).nl();
+			if (verbose_level == 0 || verbose_level == 1)
+			{
+				out.fg(ostd::ConsoleColors::Yellow).p("Program data:").nl();
+				out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Fixed Size:  ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p((int)m_fixedSize).p(" bytes").nl();
+				out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Program Size:").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p((int)m_programSize).p(" bytes").nl();
+				out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Data Size:   ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p((int)m_dataSize).p(" bytes").nl();
+				out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Fixed Fill:  ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p(ostd::Utils::getHexStr(m_fixedFillValue, true, 1)).nl();
+				out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Load Address:").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p(ostd::Utils::getHexStr(m_loadAddress, true, 2)).nl();
+				out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Entry Point: ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p(ostd::Utils::getHexStr(m_dataSize + m_loadAddress + 3, true, 2)).nl();
+			}
 
 			out.nl();
 		}
@@ -1443,7 +1449,7 @@ namespace dragon
 			}
 			else
 			{
-				std::cout << "Unknown instruction; " << line << " (" << instEdit << ")\n";
+				std::cout << "Unknown instruction 1; " << line << " (" << instEdit << ")\n";
 				exit(0);
 			}
 		}
@@ -1834,7 +1840,7 @@ namespace dragon
 			}
 			else
 			{
-				std::cout << "Unknown instruction: " << line << " (" << instEdit << ")\n";
+				std::cout << "Unknown instruction 2: " << line << " (" << instEdit << ")\n";
 				exit(0);
 			}
 		}

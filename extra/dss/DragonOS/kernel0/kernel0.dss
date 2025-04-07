@@ -1,0 +1,89 @@
+.load 0x2C00
+.fixed 1024, 0xFF
+.entry _kernel0_main
+.header KERNEL0_BOOT
+
+@include <../../sdk/bios_api.dss>
+@include <../../sdk/palette.dss>
+@include <../drivers/keyboard_driver.dss>
+@include <../drivers/display_driver.dss>
+@include <memory.dss>
+
+
+## =========================================================================================================================
+.data
+	$test_str "Hello DragonOS! :)"
+	$cursor_x:1
+
+## =========================================================================================================================
+
+
+
+
+## =========================================================================================================================
+.code
+_kernel0_main:
+	push DefaultPalette.Black
+	push 1
+	call $_clear_screen
+	push $test_str
+	push 1
+	call $_print_string
+	debug_break
+
+	mov [$cursor_x], 0
+
+	## Init Memory Handler
+	push 0
+	call $_init_memory_handler
+
+	## Init Display driver
+	push 0
+	call $_init_display_driver
+
+	## Init Keyboard driver
+	push $_key_pressed		## KeyPressed handler address passed to the _init_keyboard subroutine
+	push 1
+	call $_init_keyboard_driver
+
+_infinite_loop:
+	jmp $_infinite_loop
+
+	hlt
+## =========================================================================================================================
+
+ 
+
+
+## =========================================================================================================================
+_key_pressed:
+	## debug_break
+	mov R1, [Keyboard_Registers.KEYCODE]
+
+	mov ACC, KeyCodes.Return
+	jeq $_key_pressed_enter, R1
+
+	mov ACC, KeyCodes.LowerCase_a
+	jls $_key_pressed_end, R1
+	mov ACC,  KeyCodes.LowerCase_z
+	jgr $_key_pressed_end, R1
+	push R1
+	mov R2, [$cursor_x]
+	push R2
+	push 1
+	push DefaultPalette.Red
+	push 4
+	call $_print_char
+	inc R2
+	mov [$cursor_x], R2
+	jmp $_key_pressed_end
+
+_key_pressed_enter:
+	mov [$cursor_x], 0
+	mov R10, 0x25
+	int 0x30
+	jmp $_key_pressed_end
+
+_key_pressed_end:
+	ret
+## =========================================================================================================================

@@ -12,8 +12,7 @@ int main(int argc, char** argv)
 	dragon::code::Assembler::debugMode = args.debug_mode;
 	dragon::code::Assembler::cpuExtensions = args.cpu_extensions;
 	dragon::code::Assembler::assembleToFile(args.source_file_path, args.dest_file_path);
-	if (args.verbose)
-		dragon::code::Assembler::printProgramInfo();
+	dragon::code::Assembler::printProgramInfo(args.verbose_level);
 	if (args.save_disassembly)
 		dragon::code::Assembler::saveDisassemblyToFile(args.disassembly_file_path);
 	return dragon::code::Assembler::Application::RETURN_VAL_EXIT_SUCCESS;

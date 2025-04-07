@@ -1,0 +1,45 @@
+@guard _PALETTE_DSS_
+
+@group DefaultPalette
+	Black					0x00
+	Gray					0x01
+	White					0x02
+	Red						0x03
+	Pink					0x04
+	Brown					0x05
+	DarkOrange				0x06
+	Orange					0x07
+	Yellow					0x08
+	DarkGreen				0x09
+	Green					0x0A
+	Lime					0x0B
+	DarkBlue				0x0C
+	Blue					0x0D
+	LightBlue				0x0E
+	Sky						0x0F
+@end
+
+.code
+
+_draw_palette:  ## _draw_palette(word x, word y)
+	arg R1
+	movb [$textCell.CoordX], R1
+	arg R2
+	movb [$textCell.CoordY], R2
+	movb [$textCell.Character], 0x20
+	movb [$textCell.Foreground], 0
+	mov R5, 0
+_draw_palette_loop:
+	movb [$textCell.Background], R5
+	movb R6, [$textCell.CoordX]
+	inc R6 
+	movb [$textCell.CoordX], R6
+
+	mov R10, 0x21
+	mov R9, $textCell
+	int 0x30
+
+	inc R5
+	mov ACC, R5
+	jge $_draw_palette_loop, 15
+	ret

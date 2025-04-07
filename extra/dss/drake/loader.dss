@@ -1,25 +1,15 @@
 .load 0x1380
 .entry _drake_loader_entry_point
+.fixed 512, 0x00
 
-@include <../bios_api.dss>
+@include <../sdk/bios_api.dss>
 
 .data
-	## $_drake_logo_line_1 "   ___  ___  ___   __ ______"
-	## $_drake_logo_line_2 "  / _ \/ _ \/ _ | / //_/ __/"
-	## $_drake_logo_line_3 " / // / , _/ __ |/ ,< / _/  "
-	## $_drake_logo_line_4 "/____/_/|_/_/ |_/_/|_/___/  "
-	## $_logo_padding  "                                "
-
 	$ddd <DiskDriverData>
 
 
 .code
 _drake_loader_entry_point:
-	## mov R10, 0xE0
-	## int 0x30
-	## push 0
-	## call $_print_logo
-
 	mov [$ddd.Mode], DiskMode.READ
 	mov [$ddd.Disk], 0x00
 	mov [$ddd.Sector], 0x0000
@@ -34,21 +24,3 @@ _drake_loader_entry_point:
 	jmp MemoryAddresses.RAM
 	hlt
 
-## _print_logo:
-## 	mov R5, $_drake_logo_line_1
-## 	mov R6, 0
-## 	mov ACC, 6
-## _print_logo_loop:
-## 	mov R10, 0x0C
-## 	inc R6
-## 	mov R9, $_logo_padding
-## 	int 0x30
-## 	mov R9, R5
-## 	int 0x30
-## 	mov R10, 0x02
-## 	int 0x30
-## 	addip R5, 29
-## 	jls $_print_logo_loop, R6
-## 	ret
-
-.fixed 512, 0x00

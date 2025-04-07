@@ -55,13 +55,17 @@ namespace dragon
 					else if (edit == "--disable-extalu")
 						disable_extalu = true;
 					else if (edit == "--verbose")
-						args.verbose = true;
+						args.verbose_level = 1;
+					else if (edit == "--verbose-2")
+						args.verbose_level = 2;
+					else if (edit == "--verbose-full")
+						args.verbose_level = 0;
 					else if (edit == "--disable-exports")
 						args.save_exports = false;
 				}
 				if (args.debug_mode)
 				{
-					// args.verbose = true;	
+					args.verbose_level = 1;	
 					args.save_disassembly = true;				
 				}
 				if (!disable_extalu)
@@ -85,6 +89,12 @@ namespace dragon
 			tmpCommand = "--verbose";
 			tmpCommand.addRightPadding(commandLength);
 			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Shows more information about the assembled program.").reset().nl();
+			tmpCommand = "--verbose-2";
+			tmpCommand.addRightPadding(commandLength);
+			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Shows more information about the assembled program. (Structures/Symbols)").reset().nl();
+			tmpCommand = "--verbose-full";
+			tmpCommand.addRightPadding(commandLength);
+			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Enables all levels of verbose.").reset().nl();
 			tmpCommand = "-o <destination-binary-file>";
 			tmpCommand.addRightPadding(commandLength);
 			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Used to specify the output binary file.").reset().nl();

@@ -66,6 +66,8 @@ namespace dragon
                 {
                     ostd::String line = lines[i];
                     line.trim();
+                    if (line.new_toLower().contains("memory.dss"))
+                        std::cout << line << "\n";
                     if (line.new_toLower().startsWith("@include") && line.len() > 8)
                     {
                         line.substr(8).trim();

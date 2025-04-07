@@ -9,12 +9,10 @@ cp ../extra/dss/drake/* ./dss/drake/
 
 printf "\n${green}1) loader.dss\n${clear}"
 ./dasm dss/drake/loader.dss -o dragon/drake_loader.bin -D
-# ./dasm dss/drake/loader.dss -o dragon/drake_loader.bin --extalu --save-disassembly disassembly/drake_loader.dds --verbose
 ./dtools load-binary dragon/disk1.dr dragon/drake_loader.bin 0x00000000
 
 printf "\n${green}2) bootsector.dss\n${clear}"
 ./dasm dss/drake/bootsector.dss -o dragon/drake_bootsector.bin -D	
-# ./dasm dss/drake/bootsector.dss -o dragon/drake_bootsector.bin --extalu --save-disassembly disassembly/drake_bootsector.dds --verbose
 ./dtools load-binary dragon/disk1.dr dragon/drake_bootsector.bin 0x00000400
 
 printf "\n"

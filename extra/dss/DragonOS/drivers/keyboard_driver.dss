@@ -1,0 +1,13 @@
+@guard _KEYBOARD_DRIVER_DSS_
+
+@include <../../sdk/ascii.dss>
+@include <../../sdk/keycodes.dss>
+
+.code
+
+_init_keyboard_driver:  ## _init_keyboard_driver(func_ptr* key_pressed_handler)
+	arg R9		 ## @Param: key_pressed_handler
+	mov R10, 0x00									## int 0x20 param for set_interrupt_handler
+	mov R8, 0xA0									## 0xA0 is the hardware interrupt for KeyPressed
+	int 0x20
+	ret

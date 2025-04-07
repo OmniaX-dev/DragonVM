@@ -2,9 +2,8 @@
 .entry _drake_bootsector_entry_point
 .fixed 5120, 0xFF
 
-@include <../bios_api.dss>
-@include <palette.dss>
-@include <keyboard_driver.dss>
+@include <../sdk/bios_api.dss>
+@include <../sdk/palette.dss>
 
 @define OS_LOAD_ADDR 0x2C00
 
@@ -48,24 +47,6 @@ _drake_bootsector_entry_point:
 	mov ACC, [$dpt_block]
 	jne $_invalid_dpt_block, 0xF1CA
 
-	## Init Keyboard driver
-	## push $_key_pressed		## KeyPressed handler address passed to the _init_keyboard subroutine
-	## push 1
-	## call $_init_keyboard
-
-	## Enable Double buffering
-	## mov R2, [VGA_Registers.FLAGS]
-	## or R2, 0b0000000000000001
-	## mov [VGA_Registers.FLAGS], ACC
-
-	## @call(_clear_screen, DefaultPalette.DarkBlue)
-	## @_clear_screen(DefaultPalette.DarkBlue)
-
-	## mov R10, 0x22
-	## mov R8, { $dpt_block + DPTStructure.ENTRIES_START + (2 * DPTStructure.ENTRY_SIZE_B) + DPTStructure.ENTRY_PART_LBL }
-	## mov R9, $textCell
-	## int 0x30
-
 	jmp $_endless_loop
 _invalid_dpt_block: ## TODO: Fix screen drawing on error
 	push $invalid_dpt_block_str
@@ -82,14 +63,6 @@ _endless_loop:
 	## Print system info
 	push 0
 	call $_print_system_info
-
-	## Draw main box
-	## push 0
-	## call $_print_main_box
-
-	## Swap the buffers
-	## push 0
-	## call $_swap_buffers
 
 	mov R10, $dpt_block.PartCount
 	movb ACC, *R10
@@ -304,123 +277,4 @@ _clear_screen:  ## _clear_screen(int8_t color)
 	mov R9, $textCell
 	int 0x30
 	ret
-## =========================================================================================================================
-
-
-
-
-## =========================================================================================================================
-_redraw_screen:
-	movb [VGA_Registers.SIGNAL], Sig_VGA_Text_16_Color.FORCE_REDRAW_SCREEN
-	ret
-## =========================================================================================================================
-
-
-
-
-## =========================================================================================================================
-## _swap_buffers:
-## 	movb [VGA_Registers.SIGNAL], Sig_VGA_Text_16_Color.SWAP_BUFFERS
-## 	ret
-## =========================================================================================================================
-
-
-
-
-## =========================================================================================================================
-## _key_pressed:
-## 	mov ACC, [Keyboard_Registers.KEYCODE]
-## 	jne $_key_pressed_end, 0x0127
-## _key_pressed_end:
-## 	ret
-## =========================================================================================================================
-
-
-
-
-## =========================================================================================================================
-## _print_main_box:
-## 	movb [$textCell.CoordX], 5
-## 	movb [$textCell.CoordY], 2
-## 	movb [$textCell.Foreground], DefaultPalette.Sky
-## 	movb [$textCell.Background], DefaultPalette.DarkBlue
-## 	movb [$textCell.Character], 0x3D
-## 
-## 	mov R8, [CMOS_Settings.SCREEN_WIDTH]
-## 	subip R8, 10
-## 
-## 	push $textCell
-## 	push R8
-## 	push 2
-## 	call $_draw_horizontal_line
-## 
-## 	movb [$textCell.CoordX], 5
-## 	movb [$textCell.CoordY], 12
-## 	push $textCell
-## 	push R8
-## 	push 2
-## 	call $_draw_horizontal_line
-## 
-## 	movb [$textCell.CoordX], 4
-## 	movb [$textCell.CoordY], 2
-## 	movb [$textCell.Character], 0x7C
-## 	push $textCell
-## 	push 11
-## 	push 2
-## 	call $_draw_vertical_line
-## 
-## 	addip R8, 5
-## 	movb [$textCell.CoordX], R8	
-## 	movb [$textCell.CoordY], 2
-## 	push $textCell
-## 	push 11
-## 	push 2
-## 	call $_draw_vertical_line
-## 	ret
-## =========================================================================================================================
-
-
-
-
-## =========================================================================================================================
-## _draw_horizontal_line:  ## _draw_horizontal_line(TextCell16* cell, int8_t length)
-## 	arg R1	 ## @Param: cell
-## 	arg R2	 ## @Param: length
-## 	mov R3, R1
-## 	addip R3, 3
-## 	movb R4, *R3
-## 
-## 	mov R10, 0x21
-## 	mov R9, R1
-## _draw_horizontal_line_loop:
-## 	int 0x30
-## 	movb R5, *R3
-## 	inc R5
-## 	movb *R3, R5
-## 	sub R5, R4
-## 	jgr $_draw_horizontal_line_loop, R2
-## 	ret
-## =========================================================================================================================
-
-
-
-
-## =========================================================================================================================
-## _draw_vertical_line:  ## _draw_line(TextCell16* cell, int8_t length)
-## 	arg R1	 ## @Param: cell
-## 	arg R2	 ## @Param: length
-## 	mov R3, R1
-## 	addip R3, 4
-## 	movb R4, *R3
-## 
-## 	mov R10, 0x21
-## 	mov R9, R1
-## _draw_vertical_line_loop:
-## 	int 0x30
-## 	movb R5, *R3
-## 	inc R5
-## 	movb *R3, R5
-## 	sub R5, R4
-## 	jgr $_draw_vertical_line_loop, R2
-## 	ret
 ## =========================================================================================================================

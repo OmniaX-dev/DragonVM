@@ -5,10 +5,10 @@ clear='\033[0m'
 
 printf "\n${green}Compiling DragonOS...\n${clear}"
 cd ..
-cp ../extra/dss/DragonOS/* ./dss/DragonOS/
+cp -r ../extra/dss/DragonOS/* ./dss/DragonOS/
 
 printf "\n${green}1) kernel0.dss\n${clear}"
-./dasm dss/DragonOS/kernel0.dss -o dragon/kernel0.bin -D --verbose
+./dasm dss/DragonOS/kernel0/kernel0.dss -o dragon/kernel0.bin -D --verbose
 ./dtools load-binary dragon/disk1.dr dragon/kernel0.bin 0x00018000
 
 printf "\n"

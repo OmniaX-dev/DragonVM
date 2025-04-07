@@ -91,7 +91,7 @@ namespace dragon
 					ostd::String source_file_path { "" };
 					ostd::String dest_file_path { "" };
 					bool save_disassembly { false };
-					bool verbose { false };
+					int32_t verbose_level { 0xFF };
 					bool debug_mode { false };
 					bool save_exports { true };
 					ostd::String disassembly_file_path { "" };
@@ -115,7 +115,7 @@ namespace dragon
 				static ostd::ByteStream assembleToFile(ostd::String sourceFileName, ostd::String binaryFileName);
 				static ostd::ByteStream assembleToVirtualDisk(ostd::String fileName, hw::VirtualHardDrive& vhdd, uint32_t address);
 				static bool saveDisassemblyToFile(ostd::String fileName);
-				static void printProgramInfo(void);
+				static void printProgramInfo(int32_t verbose_level = 1);
 
 			private:
 				static void insertHeader(void);
