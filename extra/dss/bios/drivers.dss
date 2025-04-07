@@ -67,6 +67,7 @@ _int_30_handler:
 	jeq $_int_30_print_string_text16, 0x0022
 	jeq $_int_30_print_integer_text16, 0x0023
 	jeq $_int_30_clear_screen_text16, 0x0024
+	jeq $_int_30_scroll_text16, 0x0025
 
 	jeq $_int_30_clear_screen, 0x00E0
 	jeq $_int_30_refresh_screen, 0x00E1
@@ -165,6 +166,9 @@ _int_30_clear_screen_text16:
 	inc R9
 	movb [VGA_Registers.MEMORY_CONTROLLER_BG_COL], *R9
 	movb [VGA_Registers.SIGNAL], Sig_VGA_Text_16_Color.FORCE_CLEAR_SCREEN
+	jmp $_int_30_end
+_int_30_scroll_text16:
+	movb [VGA_Registers.SIGNAL], Sig_VGA_Text_16_Color.SCROLL
 	jmp $_int_30_end
 
 _int_30_clear_screen:

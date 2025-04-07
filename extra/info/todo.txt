@@ -1,4 +1,5 @@
 Runtime:
+	Add option to disable screenRedrawRate in debugger top-level prompt
 
 Assembler:
 	Add subroutine address export functionality

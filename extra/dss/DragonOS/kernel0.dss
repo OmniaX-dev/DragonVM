@@ -24,7 +24,6 @@ _kernel0_main:
 	push DefaultPalette.Black
 	push 1
 	call $_clear_screen
-	debug_break
 	push $test_str
 	push 1
 	call $_print_string
@@ -34,7 +33,33 @@ _kernel0_main:
 	push 1
 	call $_init_keyboard
 
+_infinite_loop:
+	jmp $_infinite_loop
+
 	hlt
+## =========================================================================================================================
+
+ 
+
+
+## =========================================================================================================================
+_key_pressed:
+	## debug_break
+	mov R1, [Keyboard_Registers.KEYCODE]
+
+	mov ACC, ASCII.LOWERCASE_A
+	jls $_key_pressed_end, R1
+	mov ACC,  ASCII.LOWERCASE_Z
+	jgr $_key_pressed_end, R1
+	push R1
+	push 10
+	push 10
+	push DefaultPalette.Red
+	push 4
+	call $_print_char
+
+_key_pressed_end:
+	ret
 ## =========================================================================================================================
 
  
@@ -49,6 +74,26 @@ _print_string:  ## _print_string(string* str)
 	movb [$textCell.Background], DefaultPalette.Black
 	mov R10, 0x22
 	mov R8, R1
+	mov R9, $textCell
+	int 0x30
+	ret
+## =========================================================================================================================
+
+ 
+
+
+## =========================================================================================================================
+_print_char:  ## _print_char(int16 char, int16 x, int16 y, int16 color)
+	arg R1 		   ## @Param: char
+	arg R2 		   ## @Param: x
+	arg R3 		   ## @Param: y
+	arg R4 		   ## @Param: color
+	movb [$textCell.CoordX], R2
+	movb [$textCell.CoordY], R3
+	movb [$textCell.Foreground], R4
+	movb [$textCell.Background], DefaultPalette.Black
+	movb [$textCell.Character], R1
+	mov R10, 0x21
 	mov R9, $textCell
 	int 0x30
 	ret

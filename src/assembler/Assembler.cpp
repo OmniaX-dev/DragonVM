@@ -34,6 +34,8 @@ namespace dragon
 			m_lines = IncludePreprocessor::loadEntryFile(fileName);
 			if (m_lines.size() == 0)
 				return {  }; //TODO: Error
+			// for (auto& line : m_lines)
+			// 	std::cout << line  << "\n";
 			removeComments();
 			parseExportSpecifications();
 			createExports();

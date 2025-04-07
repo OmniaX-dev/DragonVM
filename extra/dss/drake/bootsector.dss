@@ -125,7 +125,6 @@ _endless_loop:
 	mov R10, 0x12					## int 0x20 parameter for load_from_ddd_blocking
 	int 0x20						## Bios interrupt
 
-	debug_break
 	jmp OS_LOAD_ADDR
 	jmp $_main_end
 

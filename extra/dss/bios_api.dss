@@ -100,6 +100,7 @@
     CONTINUE                     0x00
     SWAP_BUFFERS                0x10
     WRITE_VRAM                    0x11
+    SCROLL                        0x12
     FORCE_REFRESH_SCREEN         0xE0
     FORCE_CLEAR_SCREEN             0xE1
     FORCE_REDRAW_SCREEN         0xE2

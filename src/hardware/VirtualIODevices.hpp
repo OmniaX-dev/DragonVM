@@ -380,6 +380,7 @@ namespace dragon
 					bool writeVRAM_16Colors(uint8_t x, uint8_t y, uint8_t character = 0, uint8_t background = 0xFF, uint8_t foreground = 0xFF);
 					bool clearVRAM_16Colors(uint8_t character = 0, uint8_t background = 0x00, uint8_t foreground = 0xFF);
 					void swapBuffers_16Colors(void);
+					void scroll_16Colors(void);
 
 				private:
 					ostd::serial::SerialIO m_videoMemory;

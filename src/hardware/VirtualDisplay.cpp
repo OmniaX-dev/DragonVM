@@ -179,6 +179,11 @@ namespace dragon
 					DragonRuntime::vGraphicsInterface.swapBuffers_16Colors();
 					__redraw_screen();
 				}
+				else if (signal == tSignalValues::Text16Color_Scroll)
+				{
+					DragonRuntime::vGraphicsInterface.scroll_16Colors();
+					__redraw_screen();
+				}
 			}
 			else return;
 			mem.write8(vga_addr + tRegisters::Signal, tSignalValues::Continue);

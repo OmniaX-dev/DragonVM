@@ -47,6 +47,7 @@ namespace dragon
 
 				inline static constexpr uint8_t Text16Color_SwapBuffers = 0x10;
 				inline static constexpr uint8_t Text16Color_WriteMemory = 0x11;
+				inline static constexpr uint8_t Text16Color_Scroll = 0x12;
 
 				inline static constexpr uint8_t RefreshScreen = 0xE0;	
 				inline static constexpr uint8_t ClearSCreen = 0xE1;	

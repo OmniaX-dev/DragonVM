@@ -403,8 +403,19 @@ namespace dragon
 		__get_machine_footprint(&s_machineInfo, trackedAddresses, true);
 		__track_call_stack(&s_machineInfo);
 		bool running = cpu.execute() && vDisplay.isRunning();
+		uint8_t screenRedrawRate = vCMOS.read8(data::CMOSRegisters::ScreenRedrawRate);
 		vDisplay.update();
-		vDisplay.redrawScreen(); // This is slow...maybe it should be on a 100ms rate, like in normal runtime mode
+		if (s_enableScreenRedrawDelay && s_stepAcc2 == (1000 / screenRedrawRate))
+		{
+			vDisplay.redrawScreen();
+			s_stepAcc2 = 0;
+		}
+		else if (!s_enableScreenRedrawDelay)
+		{
+			vDisplay.redrawScreen();
+		}
+		s_stepAcc2++;
+		// vDisplay.redrawScreen(); // This is slow...maybe it should be on a 100ms rate, like in normal runtime mode
 		vDiskInterface.cycleStep();
 		__get_machine_footprint(&s_machineInfo, trackedAddresses, false);
 		return running || vDiskInterface.isBusy();

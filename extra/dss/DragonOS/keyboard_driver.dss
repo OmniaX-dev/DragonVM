@@ -1,5 +1,7 @@
 @guard _KEYBOARD_DRIVER_DSS_
 
+@include <ascii.dss>
+
 .code
 
 _init_keyboard:  ## _init_keyboard(func_ptr* key_pressed_handler)

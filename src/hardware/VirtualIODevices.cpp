@@ -799,6 +799,28 @@ namespace dragon
 				m_16Color_secondFrameAddr = tmp;
 			}
 
+			void Graphics::scroll_16Colors(void)
+			{
+				int32_t line_len = (RawTextRenderer::CONSOLE_CHARS_H * 4);
+				for (int32_t i = m_16Color_currentFrameAddr + line_len; i < m_16Color_currentFrameAddr + m_16Color_frameSize; i += 4)
+				{
+					int32_t k = i;
+					int8_t outByte = 0;
+					m_videoMemory.r_Byte(k, outByte);
+					m_videoMemory.w_Byte(k - line_len, outByte);
+					k++;
+					m_videoMemory.r_Byte(k, outByte);
+					m_videoMemory.w_Byte(k - line_len, outByte);
+					k++;
+					m_videoMemory.r_Byte(k, outByte);
+					m_videoMemory.w_Byte(k - line_len, outByte);
+				}
+				for (int32_t i = m_16Color_currentFrameAddr + m_16Color_frameSize - line_len; i < m_16Color_currentFrameAddr + m_16Color_frameSize; i += 4)
+				{
+					m_videoMemory.w_Byte(i, 0x20);
+				}
+			}
+
 
 
 

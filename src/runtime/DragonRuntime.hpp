@@ -132,6 +132,8 @@ namespace dragon
 			inline static tMachineConfig machine_config;
 
 			inline static uint64_t s_avgInstTime { 0 };
+			inline static double s_stepAcc2 { 0 };
+			inline static bool s_enableScreenRedrawDelay { true };
 
 		private:
 			inline static tMachineDebugInfo s_machineInfo;
