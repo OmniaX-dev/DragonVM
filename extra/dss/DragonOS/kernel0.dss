@@ -12,6 +12,7 @@
 .data
 	$textCell <Text16VModeCell>
 	$test_str "Hello DragonOS! :)"
+	$cursor_x:1
 
 ## =========================================================================================================================
 
@@ -27,6 +28,8 @@ _kernel0_main:
 	push $test_str
 	push 1
 	call $_print_string
+
+	mov [$cursor_x], 0
 
 	## Init Keyboard driver
 	push $_key_pressed		## KeyPressed handler address passed to the _init_keyboard subroutine
@@ -47,16 +50,29 @@ _key_pressed:
 	## debug_break
 	mov R1, [Keyboard_Registers.KEYCODE]
 
+	mov ACC, 13 ## Enter
+	jeq $_key_pressed_enter, R1
+
 	mov ACC, ASCII.LOWERCASE_A
 	jls $_key_pressed_end, R1
 	mov ACC,  ASCII.LOWERCASE_Z
 	jgr $_key_pressed_end, R1
 	push R1
-	push 10
-	push 10
+	mov R2, [$cursor_x]
+	push R2
+	push 1
 	push DefaultPalette.Red
 	push 4
 	call $_print_char
+	inc R2
+	mov [$cursor_x], R2
+	jmp $_key_pressed_end
+
+_key_pressed_enter:
+	mov [$cursor_x], 0
+	mov R10, 0x25
+	int 0x30
+	jmp $_key_pressed_end
 
 _key_pressed_end:
 	ret
