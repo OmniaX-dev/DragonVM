@@ -20,6 +20,7 @@ namespace dragon
 
 				inline static constexpr uint64_t CPU_UnknownInstruction 			= 			0x2000000000000000;
 				inline static constexpr uint64_t CPU_UnsupportedExtension 			= 			0x2000000000000001;
+				inline static constexpr uint64_t CPU_StackOverflow		 			= 			0x2000000000000002;
 
 				inline static constexpr uint64_t BIOS_FailedToLoad 					= 			0x3000000000000000;
 				inline static constexpr uint64_t BIOS_InvalidSize 					= 			0x3000000000000001;
@@ -223,6 +224,7 @@ namespace dragon
 				inline static constexpr uint8_t ScreenWidth 		= 0x07;
 				inline static constexpr uint8_t ScreenHeight	 	= 0x09;
 				inline static constexpr uint8_t BootDisk	 		= 0x10;
+				inline static constexpr uint8_t StackSize	 		= 0x11;
 
 				inline static constexpr uint8_t DiskList	 		= 0x7E;
 		};

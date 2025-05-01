@@ -61,6 +61,13 @@ namespace dragon
 		void VirtualCPU::pushToStack(int16_t value)
 		{
 			uint16_t stackAddr = readRegister(data::Registers::SP);
+			uint16_t stack_size = DragonRuntime::vCMOS.read16(data::CMOSRegisters::StackSize);
+			if (stackAddr <= 0xFFFF - stack_size)
+			{
+				data::ErrorHandler::pushError(data::ErrorCodes::CPU_StackOverflow, "Stack Overflow: ");
+				m_halt = true;
+				return;
+			}
 			m_memory.write16(stackAddr, value);
 			writeRegister16(data::Registers::SP, stackAddr - 2);
 			m_stackFrameSize += 2;
