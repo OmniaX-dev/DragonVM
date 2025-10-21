@@ -322,6 +322,7 @@ namespace dragon
 		vCMOS.write8(data::CMOSRegisters::ScreenRedrawRate, machine_config.screen_redraw_rate_per_second);
 		vCMOS.write16(data::CMOSRegisters::ScreenWidth, static_cast<int16_t>(RawTextRenderer::CONSOLE_CHARS_H));
 		vCMOS.write16(data::CMOSRegisters::ScreenHeight, static_cast<int16_t>(RawTextRenderer::CONSOLE_CHARS_V));
+		vCMOS.write16(data::CMOSRegisters::StackSize, 0x1000);
 		ostd::BitField_16 disk_list_bitfield;
 		disk_list_bitfield.value = 0;
 		for (int32_t i = 0; i < 16; i++)
