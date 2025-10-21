@@ -34,10 +34,11 @@ namespace dragon
 			DisassemblyList data;
 			std::vector<uint16_t> trackedAddresses;
 			ostd::String command;
-			int32_t labelLineLength { 20 };
+			int32_t labelLineLength { 40 };
 			uint16_t currentAddress { 0 };
 			bool userQuit { false };
 			ostd::String disassemblyDirectory { "disassembly" };
+			std::vector<uint16_t> manualBreakPoints;
 		};
 		struct tCloseEventListener : public ostd::BaseObject
 		{
@@ -59,7 +60,10 @@ namespace dragon
 				static bool isEscapeKeyPressed(bool blocking = false);
 				static ostd::ConsoleOutputHandler& printFullLine(char c, const ostd::ConsoleColors::tConsoleColor& foreground);
 				static ostd::ConsoleOutputHandler& printFullLine(char c, const ostd::ConsoleColors::tConsoleColor& foreground, const ostd::ConsoleColors::tConsoleColor& background);
-		};
+				static void removeBreakPoint(uint16_t addr);
+				static bool isBreakPoint(uint16_t addr);
+				static void addBreakPoint(uint16_t addr);
+			};
 		public: class Display
 		{
 			public:

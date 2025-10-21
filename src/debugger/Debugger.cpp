@@ -126,6 +126,34 @@ namespace dragon
 		return out;
 	}
 
+	void Debugger::Utils::removeBreakPoint(uint16_t addr)
+	{
+		if (debugger.manualBreakPoints.size() == 0)
+			return;
+		int32_t i = 0;
+		for ( ; i < debugger.manualBreakPoints.size(); i++)
+		{
+			if (debugger.manualBreakPoints[i] == addr)
+				break;
+		}
+		if (i >= debugger.manualBreakPoints.size())
+			return;
+		debugger.manualBreakPoints.erase(debugger.manualBreakPoints.begin() + i);
+	}
+
+	bool Debugger::Utils::isBreakPoint(uint16_t addr)
+	{
+		for (const auto& b : debugger.manualBreakPoints)
+			if (b == addr) return true;
+		return false;
+	}
+
+	void Debugger::Utils::addBreakPoint(uint16_t addr)
+	{
+		debugger.manualBreakPoints.push_back(addr);
+	}
+	
+
 
 
 
@@ -1526,6 +1554,44 @@ namespace dragon
 				else
 				{
 					output().fg(ostd::ConsoleColors::Red).p("Invalid value for <print> command.").reset().nl();
+				}
+				Display::printPrompt();
+				data().command = getCommandInput();
+			}
+			else if (data().command.startsWith("b ") || data().command.startsWith("break "))
+			{//0x2C1D
+				data().command.substr(data().command.indexOf(" ") + 1).trim();
+				uint16_t addr = 0;
+				bool valid = false;
+				if (data().command.isNumeric())
+				{
+					addr = (uint16_t)data().command.toInt();
+					valid = true;
+				}
+				else if (data().command.startsWith("$"))
+				{
+					addr = Utils::findSymbol(debugger.labels, data().command);
+					if (addr == 0x0000 || addr == 0xFFFF)
+						output().fg(ostd::ConsoleColors::Red).p("Invalid symbol: ").p(data().command).reset().nl();
+					else
+						valid = true;
+				}
+				else
+				{
+					output().fg(ostd::ConsoleColors::Red).p("Invalid value for <break> command.").reset().nl();
+				}
+				if (valid)
+				{
+					if (Utils::isBreakPoint(addr))
+					{
+						Utils::removeBreakPoint(addr);
+						output().fg(ostd::ConsoleColors::Yellow).p("Breakpoint removed at address: ").p(ostd::Utils::getHexStr(addr, true, 2)).reset().nl();
+					}
+					else
+					{
+						Utils::addBreakPoint(addr);
+						output().fg(ostd::ConsoleColors::Yellow).p("Breakpoint set at address: ").p(ostd::Utils::getHexStr(addr, true, 2)).reset().nl();
+					}
 				}
 				Display::printPrompt();
 				data().command = getCommandInput();

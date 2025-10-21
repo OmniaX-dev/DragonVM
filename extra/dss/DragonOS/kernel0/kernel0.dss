@@ -4,7 +4,6 @@
 .header KERNEL0_BOOT
 
 @include <../../sdk/bios_api.dss>
-@include <../../sdk/palette.dss>
 @include <../drivers/keyboard_driver.dss>
 @include <../drivers/display_driver.dss>
 @include <memory.dss>
