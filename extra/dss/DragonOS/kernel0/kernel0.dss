@@ -28,7 +28,7 @@ _kernel0_main:
 	push $test_str
 	push 1
 	call $_print_string
-	debug_break
+	## debug_break
 
 	mov [$cursor_x], 0
 

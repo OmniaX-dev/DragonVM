@@ -827,6 +827,7 @@ namespace dragon
 					int16_t arg_data = m_memory.read16(pp_val);
 					writeRegister16(data::Registers::PP, pp_val - 2);
 					writeRegister16(regAddr, arg_data);
+					std::cout << ostd::Utils::getHexStr(readRegister(data::Registers::IP), true, 2) << "\n";
 				}
 				break;
 				case data::OpCodes::RetInt:

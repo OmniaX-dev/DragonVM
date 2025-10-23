@@ -1605,6 +1605,11 @@ namespace dragon
 	int32_t Debugger::normal_runtime(bool& outUserQuit)
 	{
 		bool result = DragonRuntime::runStep(data().trackedAddresses);
+		if (Utils::isBreakPoint((uint16_t)DragonRuntime::cpu.readRegister(data::Registers::IP)))
+		{
+			data().args.step_exec = true;
+			return step_execution(outUserQuit, false);
+		}
 		bool hasError = DragonRuntime::hasError();
 		bool enableStepExec = !result || hasError || Utils::isEscapeKeyPressed() || DragonRuntime::cpu.isInDebugBreakPoint();
 		data().args.step_exec = enableStepExec;

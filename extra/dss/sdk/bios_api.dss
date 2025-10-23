@@ -24,6 +24,7 @@
     SCREEN_WIDTH            { MemoryAddresses.CMOS + 0x0007 }
     SCREEN_HEIGHT            { MemoryAddresses.CMOS + 0x0009 }
     BOOT_DISK                 { MemoryAddresses.CMOS + 0x0010 }
+    STACK_SIZE                 { MemoryAddresses.CMOS + 0x0011 }
     DISK_LIST                 { MemoryAddresses.CMOS + 0x007E }
 @end
 ## --

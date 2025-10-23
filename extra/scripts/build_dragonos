@@ -15,4 +15,4 @@ printf "\n"
 
 
 cp dragon/disk1.dr ../extra/dragon/disk1.dr
-rm dragon/kernel0.bin
+# rm dragon/kernel0.bin

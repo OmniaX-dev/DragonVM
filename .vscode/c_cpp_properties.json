@@ -3,8 +3,7 @@
         {
             "name": "Linux",
             "includePath": [
-                "${default}",
-                "${workspaceRoot}/../omnia-framework/src"
+                "${default}"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/clang++",
