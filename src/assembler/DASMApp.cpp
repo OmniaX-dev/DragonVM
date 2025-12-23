@@ -25,6 +25,7 @@ namespace dragon
 				args.disassembly_file_path = "";
 				bool disable_extmov = false;
 				bool disable_extalu = false;
+				args.verbose_level = -1;
 				for (int32_t i = 2; i < argc; i++)
 				{
 					ostd::String edit(argv[i]);
@@ -65,8 +66,9 @@ namespace dragon
 				}
 				if (args.debug_mode)
 				{
-					args.verbose_level = 1;	
-					args.save_disassembly = true;				
+					if (args.verbose_level == -1)
+						args.verbose_level = 1;
+					args.save_disassembly = true;
 				}
 				if (!disable_extalu)
 					args.cpu_extensions.push_back("extalu");
@@ -78,7 +80,7 @@ namespace dragon
 			return RETURN_VAL_EXIT_SUCCESS;
 		}
 
-		void Assembler::Application::print_application_help(void)			
+		void Assembler::Application::print_application_help(void)
 		{
 			int32_t commandLength = 46;
 
@@ -113,7 +115,7 @@ namespace dragon
 			tmpCommand = "--help";
 			tmpCommand.addRightPadding(commandLength);
 			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Displays this help message.").reset().nl();
-			
+
 			out.nl().fg(ostd::ConsoleColors::Magenta).p("Usage: ./dasm <source> -o <destination> [...options...]").reset().nl();
 			out.nl();
 		}

@@ -181,8 +181,8 @@ namespace dragon
 		if (verbose)
 		{
 			out.fg(ostd::ConsoleColors::Magenta).p("  Initializing Memory Mapper:").nl();
+			out.fg(ostd::ConsoleColors::Magenta).p("    vBIOS: ");
 			out.fg(ostd::ConsoleColors::BrightYellow);
-			out.p("    vBIOS: ");
 			out.p(ostd::Utils::getHexStr(dragon::data::MemoryMapAddresses::BIOS_Start, true, 2).cpp_str());
 			out.p(" to ");
 			out.p(ostd::Utils::getHexStr(dragon::data::MemoryMapAddresses::BIOS_End, true, 2).cpp_str());
@@ -191,7 +191,7 @@ namespace dragon
 		memMap.mapDevice(vBIOS, dragon::data::MemoryMapAddresses::BIOS_Start, dragon::data::MemoryMapAddresses::BIOS_End, false, "BIOS");
 		if (verbose)
 		{
-			out.fg(ostd::ConsoleColors::Magenta).fg(ostd::ConsoleColors::Magenta).p("    vCMOS: ");
+			out.fg(ostd::ConsoleColors::Magenta).p("    vCMOS: ");
 			out.fg(ostd::ConsoleColors::BrightYellow);
 			out.p(ostd::Utils::getHexStr(dragon::data::MemoryMapAddresses::CMOS_Start, true, 2).cpp_str());
 			out.p(" to ");
@@ -367,7 +367,7 @@ namespace dragon
 			uint16_t addr = cpu.readRegister(dragon::data::Registers::IP);
 			uint16_t spAddr = cpu.readRegister(dragon::data::Registers::SP);
 			uint8_t screenRedrawRate = vCMOS.read8(data::CMOSRegisters::ScreenRedrawRate);
-			// _timer.start(true, "Profiling", ostd::eTimeUnits::Microseconds, &out);		
+			// _timer.start(true, "Profiling", ostd::eTimeUnits::Microseconds, &out);
 			running = cpu.execute() && vDisplay.isRunning();
 			// _timer.end(true);
 			vDisplay.update();
@@ -375,7 +375,7 @@ namespace dragon
 			if (dragon::data::ErrorHandler::hasError())
 			{
 				processErrors();
-				break;		
+				break;
 			}
 			if (acc == 500)
 			{
@@ -574,7 +574,7 @@ namespace dragon
 		tmpCommand = "--help";
 		tmpCommand.addRightPadding(commandLength);
 		out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Displays this help message.").reset().nl();
-		
+
 		out.nl().fg(ostd::ConsoleColors::Magenta).p("Usage: ./dvm <machine-config-file> [...options...]").reset().nl();
 		out.nl();
 	 }

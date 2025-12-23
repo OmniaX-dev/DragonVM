@@ -1,0 +1,76 @@
+#!/bin/bash
+
+backtrack_changes() {
+	cp dragon/disk1.dr ../extra/dragon/disk1.dr
+	cp dragon/cmos.dr ../extra/dragon/cmos.dr
+	cp dragon/bios.bin ../extra/dragon/bios.bin
+	cp dss/sdk/bios_api.dss ../extra/dss/sdk/bios_api.dss
+}
+
+set -e
+
+MAKE_COMMAND=make
+MAKEFILE_TYPE="Unix Makefiles"
+
+if [ "$(expr substr $(uname -s) 1 10)" == "MINGW64_NT" ]; then
+    MAKE_COMMAND=mingw32-make.exe
+    MAKEFILE_TYPE="MinGW Makefiles"
+fi
+
+if [[ "$1" == "debug" || "$1" == "release" ]]; then
+    BUILD_TYPE="$(tr '[:lower:]' '[:upper:]' <<< ${1:0:1})${1:1}"
+    rm -rf bin
+    cmake -B bin -S ./ -G "$MAKEFILE_TYPE" -DCMAKE_BUILD_TYPE=$BUILD_TYPE
+    $MAKE_COMMAND -C bin -j$(nproc) --no-print-directory
+    cp -r extra/* bin/
+    typeset -i build_number=$(cat other/build.nr)
+    ((build_number++))
+    truncate -s 0 other/build.nr
+    echo $build_number >> other/build.nr
+elif [[ "$1" == "windows_release" ]]; then
+    cd other
+    chmod +x build_windows_release.sh
+    ./build_windows_release.sh
+    cd ../bin/DragonVM_w64
+   	./reload_env.sh
+    cd ../..
+elif [[ "$1" == "linux_release" ]]; then
+    cd other
+    chmod +x build_linux_release.sh
+    ./build_linux_release.sh
+    cd ../bin/DragonVM_linux64
+   	./reload_env.sh
+    cd ../..
+elif [[ "$1" == "dependencies" ]]; then
+    cd other
+    chmod +x build_dependencies.sh
+    ./build_dependencies.sh
+    cd ..
+else
+    cp -r extra/* bin/
+    printf "\n\033[0;32mBuilding Changes...\n\n\033[0m"
+    $MAKE_COMMAND -C bin -j$(nproc) --no-print-directory
+    mkdir -p bin/disassembly
+    if [[ "$1" == "run" ]]; then
+    	printf "\n\033[0;32mRunning DragonVM runtime...\n\n\033[0m"
+     	cd bin
+      	./reload_env.sh
+        ./dvm config/testMachine.dvm
+        backtrack_changes
+        cd ..
+    elif [[ "$1" == "dbg" ]]; then
+	    printf "\n\033[0;32mRunning DragonVM debug...\n\n\033[0m"
+	    cd bin
+		./reload_env.sh -D
+	    ./ddb config/testMachine.dvm --verbose-load
+		backtrack_changes
+	    cd ..
+    elif [[ "$1" == "dbgv" ]]; then
+	    printf "\n\033[0;32mRunning DragonVM debug...\n\n\033[0m"
+	    cd bin
+		./reload_env.sh "-D --verbose-full"
+	    ./ddb config/testMachine.dvm --verbose-load
+		backtrack_changes
+	    cd ..
+    fi
+fi

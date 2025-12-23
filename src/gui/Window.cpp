@@ -8,7 +8,7 @@ namespace dragon
 		SDL_FreeSurface(m_fontSurface);
 		SDL_DestroyRenderer(m_renderer);
 		SDL_DestroyWindow(m_window);
-		// IMG_Quit();
+		IMG_Quit();
 		SDL_Quit();
 	}
 
@@ -23,12 +23,12 @@ namespace dragon
 			printf( "SDL could not initialize! Error: %s\n", SDL_GetError() );
 			exit(1);
 		}
-		// int imgFlags = IMG_INIT_PNG;
-		// if (!(IMG_Init(imgFlags) & imgFlags))
-		// {
-		// 	printf( "SDL_image could not initialize! SDL_image Error: %s\n", IMG_GetError() );
-		// 	exit(2);
-		// }
+		int imgFlags = IMG_INIT_PNG;
+		if (!(IMG_Init(imgFlags) & imgFlags))
+		{
+			printf( "SDL_image could not initialize! SDL_image Error: %s\n", IMG_GetError() );
+			exit(2);
+		}
 		m_window = SDL_CreateWindow("", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, m_windowWidth, m_windowHeight, SDL_WINDOW_RESIZABLE);
 		SDL_SetWindowResizable(m_window, SDL_FALSE);
 		m_renderer = SDL_CreateRenderer(m_window, -1, SDL_RENDERER_ACCELERATED);
@@ -38,6 +38,17 @@ namespace dragon
 		if (m_fontSurface == NULL)
 			out.bg(ostd::ConsoleColors::Red).p("Error loading font.").reset().nl();
 		m_fontPixels = (uint32_t*)m_fontSurface->pixels;
+
+		SDL_Surface* icon = IMG_Load("icon.png");
+		if (icon == NULL)
+		{
+		    printf("Failed to load icon: %s\n", IMG_GetError());
+		}
+		else
+		{
+		    SDL_SetWindowIcon(m_window, icon);
+		    SDL_FreeSurface(icon);
+		}
 
 		m_initialized = true;
 		m_running = true;
