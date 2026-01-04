@@ -3,8 +3,6 @@
 #include <ostd/File.hpp>
 #include <ostd/Serial.hpp>
 
-#include "../tools/Utils.hpp"
-
 #include <algorithm>
 
 namespace dragon

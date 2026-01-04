@@ -4,7 +4,7 @@ detect_package_manager() {
   if [[ -f /etc/os-release ]]; then
     source /etc/os-release
     case "$ID" in
-      arch|manjaro|endeavouros|garuda)
+      arch|manjaro|endeavouros|garuda|cachyos)
         echo "pacman"
         ;;
       ubuntu|debian|linuxmint)

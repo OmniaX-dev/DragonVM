@@ -31,7 +31,7 @@ namespace dragon
 		std::vector<dragon::code::Assembler::tDisassemblyLine> codeRegion;
 		uint16_t start = 0;
 		uint16_t end = (codeRegionMargin * 2);
-		for (int32_t i = 0; i < code.size(); i++) 
+		for (int32_t i = 0; i < code.size(); i++)
 		{
 			if (code[i].addr != address) continue;
 			if (i + 1 <= codeRegionMargin) break;
@@ -152,7 +152,7 @@ namespace dragon
 	{
 		debugger.manualBreakPoints.push_back(addr);
 	}
-	
+
 
 
 
@@ -215,7 +215,7 @@ namespace dragon
 		else
 			out.fg(ostd::ConsoleColors::Blue);
 		out.p(instHead.cpp_str());
-		out.reset().reset();
+		out.reset();
 		colorizeInstructionBody(instBody, currentLine, labelList);
 	}
 
@@ -253,7 +253,7 @@ namespace dragon
 			}
 			if (specialSection)
 				out.fg(ostd::ConsoleColors::Cyan).p(_da.code.cpp_str()).nl();
-				colorCodeInstructions(_da.code, currentLine, debugger.labels);
+			colorCodeInstructions(_da.code, currentLine, debugger.labels);
 			out.reset();
 		}
 		Utils::printFullLine('#', ostd::ConsoleColors::Black, ostd::ConsoleColors::Yellow);
@@ -433,7 +433,7 @@ namespace dragon
 			tmpStyle.add(tmp).add("[@@/]");
 			str.replaceAll("%CURR_INT_HANDLER%", tmpStyle);
 		}
-		
+
 		//Bios Mode
 		{
 			tmp = " ", tmpStyle = "";
@@ -453,7 +453,7 @@ namespace dragon
 			tmpStyle.add(tmp).add("[@@/]");
 			str.replaceAll("%CURR_BIOS_MODE%", tmpStyle);
 		}
-		
+
 		//SubRoutine Info
 		{
 			tmp = " ", tmpStyle = "";
@@ -498,7 +498,7 @@ namespace dragon
 
 
 
-			
+
 			tmp = " ", tmpStyle = "";
 			tmp.add(ostd::Utils::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::SP], true, 2));
 			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
@@ -518,7 +518,7 @@ namespace dragon
 
 
 
-			
+
 			tmp = " ", tmpStyle = "";
 			tmp.add(ostd::Utils::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::FP], true, 2));
 			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
@@ -538,7 +538,7 @@ namespace dragon
 
 
 
-			
+
 			tmp = " ", tmpStyle = "";
 			tmp.add(ostd::Utils::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::RV], true, 2));
 			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
@@ -558,7 +558,7 @@ namespace dragon
 
 
 
-			
+
 			tmp = " ", tmpStyle = "";
 			tmp.add(ostd::Utils::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::PP], true, 2));
 			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
@@ -578,7 +578,7 @@ namespace dragon
 
 
 
-			
+
 			tmp = " ", tmpStyle = "";
 			tmp.add(ostd::Utils::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::FL], true, 2));
 			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
@@ -598,7 +598,7 @@ namespace dragon
 
 
 
-			
+
 			tmp = " ", tmpStyle = "";
 			tmp.add(ostd::Utils::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::ACC], true, 2));
 			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
@@ -639,7 +639,7 @@ namespace dragon
 
 
 
-			
+
 			tmp = " ", tmpStyle = "";
 			tmp.add(ostd::Utils::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::R2], true, 2));
 			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
@@ -659,7 +659,7 @@ namespace dragon
 
 
 
-			
+
 			tmp = " ", tmpStyle = "";
 			tmp.add(ostd::Utils::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::R3], true, 2));
 			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
@@ -679,7 +679,7 @@ namespace dragon
 
 
 
-			
+
 			tmp = " ", tmpStyle = "";
 			tmp.add(ostd::Utils::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::R4], true, 2));
 			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
@@ -699,7 +699,7 @@ namespace dragon
 
 
 
-			
+
 			tmp = " ", tmpStyle = "";
 			tmp.add(ostd::Utils::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::R5], true, 2));
 			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
@@ -719,7 +719,7 @@ namespace dragon
 
 
 
-			
+
 			tmp = " ", tmpStyle = "";
 			tmp.add(ostd::Utils::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::R6], true, 2));
 			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
@@ -739,7 +739,7 @@ namespace dragon
 
 
 
-			
+
 			tmp = " ", tmpStyle = "";
 			tmp.add(ostd::Utils::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::R7], true, 2));
 			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
@@ -759,7 +759,7 @@ namespace dragon
 
 
 
-			
+
 			tmp = " ", tmpStyle = "";
 			tmp.add(ostd::Utils::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::R8], true, 2));
 			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
@@ -779,7 +779,7 @@ namespace dragon
 
 
 
-			
+
 			tmp = " ", tmpStyle = "";
 			tmp.add(ostd::Utils::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::R9], true, 2));
 			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
@@ -799,7 +799,7 @@ namespace dragon
 
 
 
-			
+
 			tmp = " ", tmpStyle = "";
 			tmp.add(ostd::Utils::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::R10], true, 2));
 			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
@@ -839,7 +839,7 @@ namespace dragon
 
 
 
-			
+
 			tmp = " ", tmpStyle = "";
 			tmp.add(ostd::Utils::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::S2], true, 2));
 			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
@@ -859,7 +859,7 @@ namespace dragon
 
 
 
-			
+
 			tmp = " ", tmpStyle = "";
 			tmp.add(ostd::Utils::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::OFFSET], true, 2));
 			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
@@ -877,7 +877,7 @@ namespace dragon
 			tmpStyle.add(tmp).add("[@@/]");
 			str.replaceAll("%CURR_OF%", tmpStyle);
 		}
-		
+
 		ostd::RegexRichString rgxstr(str);
 		rgxstr.fg("InstAddr|Code|StackFrame|DBG BRK|INT Handler|BIOS Mode|SubRoutine", "Magenta");
 		rgxstr.fg("IP|SP|FP|RV|PP|FL|ACC", "Cyan");
@@ -1062,7 +1062,7 @@ namespace dragon
 		Utils::printFullLine('=', ostd::ConsoleColors::Yellow);
 
 		const dragon::DragonRuntime::tMachineDebugInfo& minfo = dragon::DragonRuntime::getMachineInfoDiff();
-		
+
 		auto& callStack = minfo.callStack;
 		int32_t level = -1;
 		ostd::String ch_ang_u = "";
@@ -1124,7 +1124,7 @@ namespace dragon
 			rgx.fg("0x[0-9A-Fa-f]+|0b[0-1]+|(?<!\\w)[0-9]+(?!\\w)", "BrightYellow"); //Number Constants
 			rgx.fg(ostd::String("[\\").add(ch_ang_u).add("\\|\\").add(ch_ang_d).add("]"), "darkgray");
 			rgx.fg("\\$\\w+", "Green"); //Labels
-			
+
 			out.fg(ostd::ConsoleColors::BrightGray).p("|").reset();
 			if (call.interrupts_disabled)
 				out.fg(ostd::ConsoleColors::BrightGray);
@@ -1174,7 +1174,7 @@ namespace dragon
 		tmpCommand = "(p)rint [word] <addr/symbol>";
 		tmpCommand.addRightPadding(commandLength);
 		out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Used to print values from memory. Valid [size] values are: byte/word/dword/qword.").reset().nl();
-		
+
 		out.nl().fg(ostd::ConsoleColors::Cyan).p("The letters in parenthesis can be used as the short version of the command.").nl();
 		out.p("Square brackets represent optional parameters. If they have an '=' and a value, that is the default if not specified.").reset().nl();
 
@@ -1691,7 +1691,7 @@ namespace dragon
 		tmpCommand = "display";
 		tmpCommand.addRightPadding(commandLength);
 		out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Used to enable/disable the Virtual Display for the runtime.").reset().nl();
-		
+
 		out.nl().fg(ostd::ConsoleColors::Cyan).p("The letters in parenthesis can be used as the short version of the command.").nl();
 		out.p("Square brackets represent optional parameters. If they have an '=' and a value, that is the default if not specified.").reset().nl();
 
@@ -1728,7 +1728,7 @@ namespace dragon
 		tmpCommand = "--help";
 		tmpCommand.addRightPadding(commandLength);
 		out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Displays this help message.").reset().nl();
-		
+
 		out.nl().fg(ostd::ConsoleColors::Magenta).p("Usage: ./ddb <machine-config-file> [...options...]").reset().nl();
 		out.nl();
 	}
