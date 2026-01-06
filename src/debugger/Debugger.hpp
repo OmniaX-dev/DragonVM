@@ -63,7 +63,7 @@ namespace dragon
 				static void removeBreakPoint(uint16_t addr);
 				static bool isBreakPoint(uint16_t addr);
 				static void addBreakPoint(uint16_t addr);
-			};
+		};
 		public: class Display
 		{
 			public:

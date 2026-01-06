@@ -2,6 +2,7 @@
 
 #include <ostd/IOHandlers.hpp>
 #include "GlobalData.hpp"
+#include <unordered_map>
 
 namespace dragon
 {
@@ -19,7 +20,7 @@ namespace dragon
 			static int32_t tool_new_dpt(int argc, char** argv);
 			static void print_application_help(void);
 			static int32_t get_tool(int argc, char** argv, ostd::String& outTool);
-			
+
 		private:
 			inline static ostd::ConsoleOutputHandler out;
 
