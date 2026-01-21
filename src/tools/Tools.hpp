@@ -18,6 +18,7 @@ namespace dragon
 			static int32_t tool_load_binary(int argc, char** argv);
 			static int32_t tool_read_dpt(int argc, char** argv);
 			static int32_t tool_new_dpt(int argc, char** argv);
+			static int32_t tool_print_disassembly(int argc, char** argv);
 			static void print_application_help(void);
 			static int32_t get_tool(int argc, char** argv, ostd::String& outTool);
 
@@ -51,6 +52,9 @@ namespace dragon
 			inline static constexpr int32_t ErrorNewDPTDiskOverflow = 19;
 			inline static constexpr int32_t ErrorNewDPTUnknownFlag = 20;
 			inline static constexpr int32_t ErrorNewDPTTooManyPartitions = 21;
+			inline static constexpr int32_t ErrorPrintDisassemblyTooFewArgs = 22;
+			inline static constexpr int32_t ErrorPrintDisassemblyInvalidFile = 23;
+			inline static constexpr int32_t ErrorPrintDisassemblyInvalidArg = 24;
 
 	};
 }

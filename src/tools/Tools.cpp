@@ -1,9 +1,12 @@
 #include "Tools.hpp"
 
+#include <ostd/Color.hpp>
+#include <ostd/IOHandlers.hpp>
 #include <ostd/Utils.hpp>
 #include <fstream>
 #include "../hardware/VirtualHardDrive.hpp"
 #include "GlobalData.hpp"
+#include "debugger/DisassemblyLoader.hpp"
 #include <ostd/Serial.hpp>
 
 namespace dragon
@@ -48,6 +51,12 @@ namespace dragon
 		else if (tool == "new-dpt")
 		{
 			rValue = tool_new_dpt(argc, argv);
+			if (rValue != ErrorNoError)
+				return rValue;
+		}
+		else if (tool == "print-disassembly")
+		{
+			rValue = tool_print_disassembly(argc, argv);
 			if (rValue != ErrorNoError)
 				return rValue;
 		}
@@ -251,7 +260,7 @@ namespace dragon
 			}
 			if (flags_str.len() > 0)
 				flags_str.substr(0, flags_str.len() - 1);
-			
+
 			out.fg(ostd::ConsoleColors::Yellow).p(flags_str).fg(ostd::ConsoleColors::Cyan).nl();
 		}
 		out.fg(ostd::ConsoleColors::BrightGray);
@@ -287,7 +296,7 @@ namespace dragon
 			return -1;
 		};
 		auto make_bytestream = [](uint16_t size, ostd::Byte value = 0xFF) -> ostd::ByteStream {
-			
+
 			ostd::ByteStream stream;
 			for (int16_t i = 0; i < size; i++)
 				stream.push_back(value);
@@ -306,7 +315,7 @@ namespace dragon
 		bool has_args = true;
 		bool part_started = false;
 		tPartData _part_data;
-		uint32_t part_start_addr = data::DPTStructure::DiskStartAddr; 
+		uint32_t part_start_addr = data::DPTStructure::DiskStartAddr;
 		while (has_args)
 		{
 			ostd::String arg = argv[arg_index];
@@ -427,7 +436,7 @@ namespace dragon
 			dpt_block.w_String(addr, part.label, false, true);
 			addr += data::DPTStructure::EntryLabelSizeBytes;
 		}
-		
+
 		int16_t index = 0;
 		for (auto& b : dpt_block.getData())
 		{
@@ -439,6 +448,79 @@ namespace dragon
 		out.p("  Disk Path: ").p(vdisk_file.cpp_str()).nl();
 		out.p("  DPT Block Address: ").p(ostd::Utils::getHexStr(data::DPTStructure::DiskAddress, true, 4).cpp_str()).nl();
 		out.p("  DPT Block Size: ").p(data::DPTStructure::DPTBlockSizeBytes).nl();
+		return ErrorNoError;
+	}
+
+	int32_t Tools::tool_print_disassembly(int argc, char** argv)
+	{
+		using TableList = std::vector<code::Assembler::tDisassemblyLine>;
+		if (argc < 3)
+		{
+			out.fg(ostd::ConsoleColors::Red).p("Error: too few arguments.").nl();
+			out.fg(ostd::ConsoleColors::Red).p("  Usage: ./dtools print-disassembly <disassembly_file>").reset().nl();
+			return ErrorPrintDisassemblyTooFewArgs;
+		}
+		ostd::String arg1 = argv[2];
+		arg1.trim();
+		TableList codeTable;
+		TableList labelTable;
+		TableList dataTable;
+		if (arg1 == "-d")
+		{
+			if (argc < 4)
+			{
+				out.fg(ostd::ConsoleColors::Red).p("Error: too few arguments.").nl();
+				out.fg(ostd::ConsoleColors::Red).p("  Usage: ./dtools print-disassembly -d <disassembly_directory>").reset().nl();
+				return ErrorPrintDisassemblyTooFewArgs;
+			}
+			dragon::DisassemblyLoader::loadDirectory(argv[3]);
+			codeTable = dragon::DisassemblyLoader::getCodeTable();
+			labelTable = dragon::DisassemblyLoader::getLabelTable();
+			dataTable = dragon::DisassemblyLoader::getDataTable();
+		}
+		else if (arg1 == "-f")
+		{
+			const auto& table = dragon::DisassemblyLoader::loadFile(argv[3]);
+			if (!table.isInitialized())
+			{
+				out.fg(ostd::ConsoleColors::Red).p("Error: Invalid disassembly file.").reset().nl();
+				return ErrorPrintDisassemblyInvalidFile;
+			}
+			codeTable = table.getCodeTable();
+			labelTable = table.getLabelTable();
+			dataTable = table.getDataTable();
+		}
+		else
+		{
+			out.fg(ostd::ConsoleColors::Red).p("Error: invalid argument.").nl();
+			out.fg(ostd::ConsoleColors::Red).p("  Usage: ./dtools print-disassembly -d <disassembly_directory>").reset().nl();
+			return ErrorPrintDisassemblyInvalidArg;
+		}
+		out.bg(ostd::ConsoleColors::White).fg(ostd::ConsoleColors::Black).p("DATA:").reset().nl();
+		for (const auto& line : dataTable)
+		{
+			out.fg(ostd::ConsoleColors::BrightGray).p(ostd::Utils::getHexStr(line.addr, true, 2)).p("\t\t");
+			out.fg(ostd::ConsoleColors::Green).p(line.code).p("\t\t");
+			out.fg(ostd::ConsoleColors::Blue).p(line.size).p(" bytes\t\t");
+			out.reset().nl();
+		}
+		out.nl();
+		out.bg(ostd::ConsoleColors::White).fg(ostd::ConsoleColors::Black).p("LABELS:").reset().nl();
+		for (const auto& line : labelTable)
+		{
+			out.fg(ostd::ConsoleColors::BrightGray).p(ostd::Utils::getHexStr(line.addr, true, 2)).p("\t\t");
+			out.fg(ostd::ConsoleColors::Green).p(line.code).p("\t\t");
+			out.reset().nl();
+		}
+		out.nl();
+		out.bg(ostd::ConsoleColors::White).fg(ostd::ConsoleColors::Black).p("CODE:").reset().nl();
+		for (const auto& line : codeTable)
+		{
+			out.fg(ostd::ConsoleColors::BrightGray).p(ostd::Utils::getHexStr(line.addr, true, 2)).p("\t\t");
+			out.fg(ostd::ConsoleColors::Green).p(line.code).p("\t\t");
+			out.reset().nl();
+		}
+		out.nl();
 		return ErrorNoError;
 	}
 
@@ -468,6 +550,13 @@ namespace dragon
 		out.p("    -s                           Used to specify the partition's size.").nl();
 		out.p("    -l (optional)                Used to specify the partition's label.").nl();
 		out.p("    -f (optional)                Used to specify one single flag for the partition. Use multiple -f parameters for multiple flags.").nl().nl();
+
+		out.fg(ostd::ConsoleColors::Blue).p("print-disassembly [-d <disassembly_directory>] | [-f <disassembly_file>]").nl();
+		out.fg(ostd::ConsoleColors::Green).p("The <print-disassembly> tool is used to parse and print disassembly tables.").nl();
+		out.p("    <disassembly_directory>      Path to the directory containing the disassembly files to parse. (Used only for -d option)").nl();
+		out.p("    <disassembly_file>           Path to the disassembly file to parse. (Used only for -f option)").nl();
+		out.p("    -d                           Used to specify a directory path (mutually exclusive with -f).").nl();
+		out.p("    -f                           Used to specify a file path (mutually exclusive with -d).").nl().nl();
 
 		out.fg(ostd::ConsoleColors::Magenta).p("Usage: ./dtools <tool_name> [...arguments...]").nl().nl().reset();
 	}

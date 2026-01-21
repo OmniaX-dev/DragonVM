@@ -94,6 +94,8 @@ list(APPEND TOOLS_SOURCE_FILES
 	${CMAKE_CURRENT_LIST_DIR}/src/tools/Tools.cpp
 
 	${CMAKE_CURRENT_LIST_DIR}/src/hardware/VirtualHardDrive.cpp
+
+	${CMAKE_CURRENT_LIST_DIR}/src/debugger/DisassemblyLoader.cpp
 )
 #-----------------------------------------------------------------------------------------
 
