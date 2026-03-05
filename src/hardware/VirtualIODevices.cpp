@@ -4,13 +4,12 @@
 #include "VirtualHardDrive.hpp"
 #include "MemoryMapper.hpp"
 #include "VirtualCPU.hpp"
-#include "VirtualRAM.hpp"
 
 #include "../runtime/DragonRuntime.hpp"
 #include "../gui/RawTextRenderer.hpp"
 
 //TODO: Fix all access functions (reads and writes) ensuring the address is not out of bounds.
-//		Right now the check is done, but just to push an error if out of bounds; the address 
+//		Right now the check is done, but just to push an error if out of bounds; the address
 //		gets still used even in that case, which is really dumb and will probably crash the
 //		runtime most of the time.
 
@@ -63,7 +62,7 @@ namespace dragon
 
 
 
-		
+
 		InterruptVector::InterruptVector(void)
 		{
 			uint32_t dataSize = data::MemoryMapAddresses::IntVector_End - data::MemoryMapAddresses::IntVector_Start;
@@ -111,7 +110,7 @@ namespace dragon
 
 
 
-		
+
 		void VirtualKeyboard::init(void)
 		{
 			uint32_t dataSize = data::MemoryMapAddresses::Keyboard_End - data::MemoryMapAddresses::Keyboard_Start;
@@ -223,7 +222,7 @@ namespace dragon
 			m_data[addr + 1] = value & 0xFF;
 			return value;
 		}
-		
+
 		int16_t VirtualKeyboard::__sdl_key_code_convert(int32_t keyCode)
 		{
 			switch (keyCode)
@@ -355,7 +354,7 @@ namespace dragon
 
 
 
-		
+
 
 		VirtualMouse::VirtualMouse(void)
 		{
@@ -389,7 +388,7 @@ namespace dragon
 
 
 
-		
+
 		VirtualBootloader::VirtualBootloader(void)
 		{
 			for (int32_t i = 0; i < 512; i++)
@@ -751,7 +750,7 @@ namespace dragon
 					return false; //TODO: Error
 				outTextCell.foregroundColor = outVal;
 				return true;
-			} 
+			}
 
 			bool Graphics::writeVRAM_16Colors(uint8_t x, uint8_t y, uint8_t character, uint8_t background, uint8_t foreground)
 			{

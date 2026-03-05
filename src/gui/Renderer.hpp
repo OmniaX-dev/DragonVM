@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ostd/Color.hpp>
-#include "../tools/SDLInclude.hpp"
+#include "../tools/SDLInclude.hpp"  // IWYU pragma: keep
 
 namespace dragon
 {
@@ -18,7 +18,7 @@ namespace dragon
 			inline uint32_t* getScreenPixels(void) { return m_pixels; }
 
 			void clear(const ostd::Color& color);
-			
+
 		private:
 			uint32_t* m_pixels { nullptr };
 			SDL_Texture* m_texture { nullptr };

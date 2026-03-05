@@ -3,7 +3,6 @@
 
 #include <ostd/Defines.hpp>
 #include <ostd/Utils.hpp>
-#include <iostream>
 
 #include "../runtime/DragonRuntime.hpp"
 
@@ -223,7 +222,7 @@ namespace dragon
 			{
 				case data::OpCodes::NoOp:
 				{
-					
+
 				}
 				break;
 				case data::OpCodes::DEBUG_Break:
@@ -306,7 +305,7 @@ namespace dragon
 					uint8_t destRegAddr = fetch8();
 					uint8_t srcRegAddr = fetch8();
 					uint16_t addr = readRegister(srcRegAddr);
-					int16_t value = m_memory.read16(addr); 
+					int16_t value = m_memory.read16(addr);
 					writeRegister16(destRegAddr, value);
 				}
 				break;
@@ -377,7 +376,7 @@ namespace dragon
 					uint16_t destAddr = fetch16();
 					uint8_t srcRegAddr = fetch8();
 					uint16_t addr = readRegister(srcRegAddr);
-					int8_t value = m_memory.read8(addr); 
+					int8_t value = m_memory.read8(addr);
 					m_memory.write8(destAddr, value);
 				}
 				break;
@@ -827,7 +826,7 @@ namespace dragon
 					int16_t arg_data = m_memory.read16(pp_val);
 					writeRegister16(data::Registers::PP, pp_val - 2);
 					writeRegister16(regAddr, arg_data);
-					std::cout << ostd::Utils::getHexStr(readRegister(data::Registers::IP), true, 2) << "\n";
+					// std::cout << ostd::Utils::getHexStr(readRegister(data::Registers::IP), true, 2) << "\n";
 				}
 				break;
 				case data::OpCodes::RetInt:

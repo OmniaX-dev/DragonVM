@@ -1,7 +1,5 @@
 #pragma once
 
-#include "../gui/Window.hpp"
-
 #include "../hardware/VirtualCPU.hpp"
 #include "../hardware/MemoryMapper.hpp"
 #include "../hardware/VirtualRAM.hpp"
@@ -90,7 +88,7 @@ namespace dragon
 			static int32_t loadArguments(int argc, char** argv, tCommandLineArgs& args);
 			static int32_t initMachine(const ostd::String& configFilePath,
 										bool verbose = false,
-										bool trackMachineInfoDiff = false, 
+										bool trackMachineInfoDiff = false,
 										bool hideVirtualDisplay = false,
 										bool rackCallStack = false,
 										bool debugModeEnabled = false);

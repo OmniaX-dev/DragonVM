@@ -70,7 +70,7 @@ namespace dragon
 					m_refreshScreen = false;
 				}
 			}
-			
+
 			m_redrawScreen = m_redrawScreen && !DragonRuntime::vGraphicsInterface.readFlag(hw::interface::Graphics::tFlags::ScreenRedrawDisabled);
 			if (m_redrawScreen)
 			{
@@ -81,7 +81,7 @@ namespace dragon
 
 		// static char c = 'A';
 
-		void VirtualDisplay::onUpdate(void)		
+		void VirtualDisplay::onUpdate(void)
 		{
 			auto& mem = DragonRuntime::memMap;
 			uint16_t vga_addr = data::MemoryMapAddresses::VideoCardInterface_Start;
@@ -154,7 +154,7 @@ namespace dragon
 					// 	if (c > 'Z')
 					// 		c = 'A';
 					// }
-					
+
 					DragonRuntime::vGraphicsInterface.writeVRAM_16Colors(static_cast<uint8_t>(x), static_cast<uint8_t>(y), textCell.character, textCell.backgroundColor, textCell.foregroundColor);
 				}
 				else if (signal == tSignalValues::ClearSCreen)
@@ -209,7 +209,10 @@ namespace dragon
 			}
 		}
 
-		void VirtualDisplay::onSlowUpdate(void) {  }
+		void VirtualDisplay::onSlowUpdate(void)
+		{
+			std::cout << (int)getFPS() << "\n";
+	 	}
 
 		void VirtualDisplay::__redraw_screen(void)
 		{
@@ -243,7 +246,7 @@ namespace dragon
 				{
 					m_singleTextLines.push_back(ostd::String().addChar(c));
 					auto& line = m_singleTextLines[m_singleTextLines.size() - 1];
-				if (invert_colors == 0)
+					if (invert_colors == 0)
 						RawTextRenderer::drawString(ostd::String().addChar(c), line.len() - 1, m_singleTextLines.size() - 1, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_fontPixels, config.singleColor_foreground, config.singleColor_background);
 					else
 						RawTextRenderer::drawString(ostd::String().addChar(c), line.len() - 1, m_singleTextLines.size() - 1, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_fontPixels, config.singleColor_background, config.singleColor_foreground);
@@ -316,6 +319,6 @@ namespace dragon
 		{
 			m_text16_palettes.push_back(new data::BiosVideoDefaultPalette); //TODO: Delete, Memory Leak
 		}
-		
+
 	}
 }

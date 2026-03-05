@@ -1,6 +1,5 @@
 #include "MemoryMapper.hpp"
 #include <ostd/Utils.hpp>
-#include <iostream>
 
 #include "../tools/GlobalData.hpp"
 

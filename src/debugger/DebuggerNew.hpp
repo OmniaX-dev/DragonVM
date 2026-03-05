@@ -2,6 +2,7 @@
 
 #include <ostd/Color.hpp>
 #include <ostd/Geometry.hpp>
+#include <ostd/Types.hpp>
 #include <ostd/Utils.hpp>
 #include <ostd/IOHandlers.hpp>
 #include <ogfx/WindowBase.hpp>
@@ -195,6 +196,12 @@ namespace dragon
 			void processErrors(void);
 			int32_t loadArguments(int argc, char** argv);
 			int32_t initRuntime(void);
+			ostd::String getCommandInput(void);
+			inline tDebuggerData& data(void) { return debugger; }
+			inline ostd::ConsoleOutputHandler& output(void) { return out; }
+			int32_t executeRuntime(void);
+			int32_t step_execution(bool& outUserQuit, bool exec_first_step = true);
+			int32_t normal_runtime(bool& outUserQuit);
 
 			//Display
 			void colorizeInstructionBody(const ostd::String& instBody, bool currentLine, const DisassemblyList& labelList);
@@ -206,7 +213,7 @@ namespace dragon
 			void onInitialize(void) override;
 			void handleSignal(ostd::tSignal& signal) override;
 			void onRender(void) override;
-			void onFixedUpdate(void) override;
+			void onFixedUpdate(double frameTime_s) override;
 			void onUpdate(void) override;
 
 		private:
@@ -224,8 +231,9 @@ namespace dragon
 			ostd::Vec2 m_consolePosition { 650, 8 };
 			// std::vector<code::Assembler::tDisassemblyLine> m_codeTable;
 			// int32_t m_codeRandomIndex { 0 };
+			ostd::ByteStream m_test;
 
+		public:
+			inline static const ostd::String InputCommandQuit = "//quit//";
 	};
-
-	uint32_t __debugger_entry_point(void);
 }

@@ -9,7 +9,6 @@
 #include "../tools/GlobalData.hpp"
 #include "../hardware/VirtualHardDrive.hpp"
 #include "../hardware/CPUExtensions.hpp"
-#include "../tools/Utils.hpp"
 
 namespace dragon
 {
@@ -128,7 +127,7 @@ namespace dragon
 				}
 				if (m_symbolTable.size() > 0)
 					out.nl();
-				
+
 				if (m_labelTable.size() > 0)
 					out.fg(ostd::ConsoleColors::Yellow).p("Labels:").nl();
 				for (auto& label : m_labelTable)
@@ -138,7 +137,7 @@ namespace dragon
 				}
 				if (m_labelTable.size() > 0)
 					out.nl();
-				
+
 				if (m_structDefs.size() > 0)
 					out.fg(ostd::ConsoleColors::Yellow).p("Structures:").nl();
 				for (auto& str : m_structDefs)
@@ -165,7 +164,7 @@ namespace dragon
 		}
 
 
-		
+
 		void Assembler::insertHeader(void)
 		{
 			if (m_code.size() == 0) return;
@@ -255,7 +254,7 @@ namespace dragon
 				// 	}
 				// 	m_exportSpecifications[export_name].content.push_back({ "## -- ", lineEdit });
 				// 	continue;
-				// } else 
+				// } else
 				if (tmpLineEdit.toLower().startsWith("@define "))
 				{
 					lineEdit.substr(8).trim();
@@ -527,7 +526,7 @@ namespace dragon
 			// 	{
 			// 		std::cout << "  " << d.first << "  ";
 			// 		for (auto& b : d.second)
-			// 			std::cout << ostd::Utils::getHexStr(b) << " "; 
+			// 			std::cout << ostd::Utils::getHexStr(b) << " ";
 			// 	}
 			// 	std::cout << "\n";
 			// }
@@ -763,7 +762,7 @@ namespace dragon
 			for (auto[name, exportSpec] : m_exports)
 			{
 				std::ofstream outFile(exportSpec.fileName.c_str());
-				for (auto& line : exportSpec.lines)	
+				for (auto& line : exportSpec.lines)
 					outFile << line << "\n";
 				outFile.close();
 				std::cout << "Created export file: " << exportSpec.fileName << " (" << name << ")\n";
@@ -791,7 +790,7 @@ namespace dragon
 				{
 					if (lineEdit.len() < 8)
 					{
-						//TODO: Error 
+						//TODO: Error
 						std::cout << "Invalid .fixed value: " << lineEdit << "\n";
 						return;
 					}
@@ -799,7 +798,7 @@ namespace dragon
 					lineEdit.trim();
 					if (!lineEdit.contains(","))
 					{
-						//TODO: Error 
+						//TODO: Error
 						std::cout << "Invalid .fixed value: " << lineEdit << "\n";
 						return;
 					}
@@ -809,14 +808,14 @@ namespace dragon
 					lineEdit.trim();
 					if (!lineEdit.isNumeric())
 					{
-						//TODO: Error 
+						//TODO: Error
 						std::cout << "Invalid .fixed size value: " << lineEdit << "\n";
 						return;
 					}
 					m_fixedFillValue = lineEdit.toInt();
 					if (!fixedSizeEdit.isNumeric())
 					{
-						//TODO: Error 
+						//TODO: Error
 						std::cout << "Invalid .fixed fill value: " << lineEdit << "\n";
 						return;
 					}
@@ -827,7 +826,7 @@ namespace dragon
 				{
 					if (lineEdit.len() < 8)
 					{
-						//TODO: Error 
+						//TODO: Error
 						std::cout << "Invalid .entry value: " << lineEdit << "\n";
 						return;
 					}
@@ -839,7 +838,7 @@ namespace dragon
 				{
 					if (lineEdit.len() < 9)
 					{
-						//TODO: Error 
+						//TODO: Error
 						std::cout << "Invalid .header value: " << lineEdit << "\n";
 						return;
 					}
@@ -851,7 +850,7 @@ namespace dragon
 				{
 					if (lineEdit.len() < 7)
 					{
-						//TODO: Error 
+						//TODO: Error
 						std::cout << "Invalid .load value: " << lineEdit << "\n";
 						return;
 					}
@@ -859,7 +858,7 @@ namespace dragon
 					lineEdit.trim();
 					if (!lineEdit.isNumeric())
 					{
-						//TODO: Error 
+						//TODO: Error
 						std::cout << "Invalid .load value: " << lineEdit << "\n";
 						return;
 					}
@@ -869,7 +868,7 @@ namespace dragon
 				}
 				else if (lineEdit.startsWith("."))
 				{
-					//TODO: Error 
+					//TODO: Error
 					std::cout << "Invalid section: " << lineEdit << "\n";
 					return;
 				}
@@ -881,7 +880,7 @@ namespace dragon
 						m_rawCodeSection.push_back(line);
 					else
 					{
-						//TODO: Error 
+						//TODO: Error
 						std::cout << "Invalid section: " << lineEdit << "\n";
 						return;
 					}
@@ -943,7 +942,7 @@ namespace dragon
 					std::cout << "Invalid data entry1: " << line << "\n";
 					continue;
 				}
-				
+
 				if (array)
 				{
 					uint16_t array_size = lineEdit.toInt();
@@ -1181,7 +1180,7 @@ namespace dragon
 					std::cout << "Invalid operand1 type; " << line << " (" << opEdit << ")\n";
 					exit(0);
 				}
-				
+
 				return;
 			}
 		}
@@ -2542,7 +2541,7 @@ namespace dragon
 		{
 			ostd::String lineEdit(line);
 			for (auto& symbol : m_symbolTable)
-			{		
+			{
 				ostd::String regex = "\\" + symbol.first.new_regexReplace("\\.", "\\.") + "(?!\\.)(?!\\w)";
 
 				// std::cout << "SYMBOL: " << symbol.first << "\n";

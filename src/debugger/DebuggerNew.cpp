@@ -8,6 +8,7 @@
 #include <ostd/IOHandlers.hpp>
 #include <ostd/Random.hpp>
 #include <ostd/String.hpp>
+#include <ostd/Utils.hpp>
 #include "DisassemblyLoader.hpp"
 #include "../runtime/DragonRuntime.hpp"
 
@@ -337,6 +338,233 @@ namespace dragon
 		return DragonRuntime::RETURN_VAL_EXIT_SUCCESS;
 	}
 
+	ostd::String DebuggerNew::getCommandInput(void)
+	{
+		// ostd::String cmd;
+		// ostd::KeyboardController kbc;
+		// ostd::eKeys key = ostd::eKeys::NoKeyPressed;
+
+		// while ((key = kbc.getPressedKey()) != ostd::eKeys::Enter)
+		// {
+		// 	if (key == ostd::eKeys::Escape)
+		// 		return InputCommandQuit;
+		// }
+		// return kbc.getInputString();
+
+		return "";
+	}
+
+	int32_t DebuggerNew::executeRuntime(void)
+	{
+		int32_t rValue = 0;
+		bool userQuit = false;
+		output().clear().fg(ostd::ConsoleColors::Green).p("Program running...").nl();
+		if (!data().args.step_exec)
+			output().fg(ostd::ConsoleColors::Yellow).p("Press <Escape> to enter in step-execution mode...").reset().nl();
+		while (!userQuit)
+		{
+			ostd::SignalHandler::refresh();
+			// if (closeEventListener.hasHappened())
+			// 	userQuit = true;
+			data().command.clr();
+			if (!userQuit && data().args.step_exec)
+				rValue = step_execution(userQuit, true);
+			else if (!userQuit)
+				rValue = normal_runtime(userQuit);
+			data().currentAddress = DragonRuntime::cpu.readRegister(data::Registers::IP);
+		}
+		output().nl().fg(ostd::ConsoleColors::Yellow).p("Execution terminated.").nl().nl().reset();
+		return rValue;
+	}
+
+	int32_t DebuggerNew::step_execution(bool& outUserQuit, bool exec_first_step)
+	{
+		if (exec_first_step && !DragonRuntime::cpu.isHalted())
+			DragonRuntime::runStep(data().trackedAddresses);
+		// Display::printStep();
+		processErrors();
+		if (DragonRuntime::cpu.isInDebugBreakPoint())
+			output().fg(ostd::ConsoleColors::Red).p("Reached Debug Break Point.").reset().nl();
+		// Display::printPrompt();
+		data().command = getCommandInput();
+		data().command.trim().toLower();
+		while (data().command != "")
+		{
+			if (data().command == "q" || data().command == "quit" || data().command == InputCommandQuit)
+			{
+				output().nl();
+				outUserQuit = true;
+				data().command = "";
+			}
+			else if (data().command == "c" || data().command == "continue")
+			{
+				data().args.step_exec = false;
+				data().command = "";
+				output().clear().fg(ostd::ConsoleColors::Green).p("Program running...").nl();
+				output().fg(ostd::ConsoleColors::Yellow).p("Press <Escape> to enter in step-execution mode...").reset().nl();
+			}
+			else if (data().command.startsWith("p ") || data().command.startsWith("print "))
+			{
+				data().command.substr(data().command.indexOf(" ") + 1).trim();
+				const uint8_t TYPE_STRING = 0;
+				const uint8_t TYPE_BYTE = 1;
+				const uint8_t TYPE_WORD = 2;
+				const uint8_t TYPE_DWORD = 4;
+				const uint8_t TYPE_QWORD = 8;
+				uint8_t type = TYPE_WORD;
+				if (data().command.contains(" "))
+				{
+					ostd::String size_str = data().command.new_substr(0, data().command.indexOf(" ")).trim();
+					data().command.substr(data().command.indexOf(" ") + 1).trim();
+					if (size_str == "byte") type = TYPE_BYTE;
+					else if (size_str == "word") type = TYPE_WORD;
+					else if (size_str == "dword") type = TYPE_DWORD;
+					else if (size_str == "qword") type = TYPE_QWORD;
+					else if (size_str == "string") type = TYPE_STRING;
+				}
+				if (data().command.isNumeric())
+				{
+					if (type == TYPE_STRING)
+						type = TYPE_WORD;
+					uint16_t addr = data().command.toInt();
+					uint16_t end_addr = addr;
+					ostd::String tmp = "";
+					tmp.add("*(").add(ostd::Utils::getHexStr(addr, true, 2));
+					if (type != TYPE_BYTE)
+					{
+						end_addr = addr + type - 1;
+						if (end_addr < addr)
+							end_addr = addr;
+						else
+							tmp.add("-").add(ostd::Utils::getHexStr(end_addr, true, 2));
+					}
+					tmp.add(")");
+					ostd::RegexRichString rgx(tmp);
+					rgx.fg("\\(|\\)|-", "darkgray");
+					rgx.fg("\\*", "red");
+					rgx.fg("0x[0-9A-Fa-f]+|0b[0-1]+|(?<!\\w)[0-9]+(?!\\w)", "cyan"); //Number Constants
+					output().pStyled(rgx);
+					output().fg(ostd::ConsoleColors::White).p(" = ");
+					output().fg(ostd::ConsoleColors::Gray).p("[");
+					for (uint16_t a = addr; a <= end_addr; a++)
+					{
+						uint8_t value = DragonRuntime::memMap.read8(a);
+						output().fg(ostd::ConsoleColors::BrightRed).p(ostd::Utils::getHexStr(value, true, 1));
+						if (a < end_addr)
+							output().p(" ");
+					}
+					output().fg(ostd::ConsoleColors::Gray).p("]");
+					output().reset().nl();
+				}
+				else if (data().command.startsWith("$"))
+				{
+					uint16_t size = 0;
+					uint16_t addr = findSymbol(debugger.data, data().command, &size);
+					if (addr == 0)
+						addr = findSymbol(debugger.labels, data().command, &size);
+					if (addr == 0)
+						output().fg(ostd::ConsoleColors::Red).p("Unknown symbol for <print> command.").reset().nl();
+					else
+					{
+						ostd::String tmp = "";
+						tmp.add("*(").add(ostd::Utils::getHexStr(addr, true, 2));
+						if (size > 1)
+							tmp.add("-").add(ostd::Utils::getHexStr((uint16_t)(addr + size - 1), true, 2));
+						tmp.add(")");
+						ostd::RegexRichString rgx(tmp);
+						rgx.fg("\\(|\\)|-", "darkgray");
+						rgx.fg("\\*", "red");
+						rgx.fg("0x[0-9A-Fa-f]+|0b[0-1]+|(?<!\\w)[0-9]+(?!\\w)", "cyan"); //Number Constants
+						output().pStyled(rgx);
+						output().fg(ostd::ConsoleColors::White).p(" = ");
+						output().fg(ostd::ConsoleColors::Gray).p("[");
+						if (type == TYPE_STRING)
+							output().fg(ostd::ConsoleColors::BrightRed).p("\"");
+						for (uint16_t a = addr; a < addr + size; a++)
+						{
+							uint8_t value = DragonRuntime::memMap.read8(a);
+							if (type == TYPE_STRING)
+							{
+								output().fg(ostd::ConsoleColors::BrightRed).pChar((char)value);
+								continue;
+							}
+							output().fg(ostd::ConsoleColors::BrightRed).p(ostd::Utils::getHexStr(value, true, 1));
+							if (a < addr + size - 1)
+								output().p(" ");
+						}
+						if (type == TYPE_STRING)
+							output().fg(ostd::ConsoleColors::BrightRed).p("\"");
+						output().fg(ostd::ConsoleColors::Gray).p("]");
+						output().reset().nl();
+					}
+				}
+				else
+				{
+					output().fg(ostd::ConsoleColors::Red).p("Invalid value for <print> command.").reset().nl();
+				}
+				// Display::printPrompt();
+				data().command = getCommandInput();
+			}
+			else if (data().command.startsWith("b ") || data().command.startsWith("break "))
+			{//0x2C1D
+				data().command.substr(data().command.indexOf(" ") + 1).trim();
+				uint16_t addr = 0;
+				bool valid = false;
+				if (data().command.isNumeric())
+				{
+					addr = (uint16_t)data().command.toInt();
+					valid = true;
+				}
+				else if (data().command.startsWith("$"))
+				{
+					addr = findSymbol(debugger.labels, data().command);
+					if (addr == 0x0000 || addr == 0xFFFF)
+						output().fg(ostd::ConsoleColors::Red).p("Invalid symbol: ").p(data().command).reset().nl();
+					else
+						valid = true;
+				}
+				else
+				{
+					output().fg(ostd::ConsoleColors::Red).p("Invalid value for <break> command.").reset().nl();
+				}
+				if (valid)
+				{
+					if (isBreakPoint(addr))
+					{
+						removeBreakPoint(addr);
+						output().fg(ostd::ConsoleColors::Yellow).p("Breakpoint removed at address: ").p(ostd::Utils::getHexStr(addr, true, 2)).reset().nl();
+					}
+					else
+					{
+						addBreakPoint(addr);
+						output().fg(ostd::ConsoleColors::Yellow).p("Breakpoint set at address: ").p(ostd::Utils::getHexStr(addr, true, 2)).reset().nl();
+					}
+				}
+				// Display::printPrompt();
+				data().command = getCommandInput();
+			}
+			else
+				data().command = "";//Display::changeScreen();
+		}
+		return DragonRuntime::RETURN_VAL_EXIT_SUCCESS;
+	}
+
+	int32_t DebuggerNew::normal_runtime(bool& outUserQuit)
+	{
+		bool result = DragonRuntime::runStep(data().trackedAddresses);
+		if (isBreakPoint((uint16_t)DragonRuntime::cpu.readRegister(data::Registers::IP)))
+		{
+			data().args.step_exec = true;
+			return step_execution(outUserQuit, false);
+		}
+		bool hasError = DragonRuntime::hasError();
+		bool enableStepExec = !result || hasError || DragonRuntime::cpu.isInDebugBreakPoint();
+		data().args.step_exec = enableStepExec;
+		if (enableStepExec)
+			return step_execution(outUserQuit, false);
+		return DragonRuntime::RETURN_VAL_EXIT_SUCCESS;
+	}
+
 
 
 
@@ -455,9 +683,9 @@ namespace dragon
 		m_gfx.init(*this);
 		m_gfx.setFont("res/Courier Prime.ttf");
 
-		float w = getWindowWidth();
+		float w = m_consolePosition.x - 12;
 		float h = 40.0f;
-		m_textInput.create({ 0.0f, (float)(getWindowHeight() - h) }, { w, h }, "MainInputTXT");
+		m_textInput.create({ 0.0f, (float)(getWindowHeight() - h) }, { w, h }, "CmdTxt");
 		m_textInput.setEventListener(m_sigHandler);
 		m_textInput.getTheme().extraPaddingTop = 3;
 
@@ -472,6 +700,8 @@ namespace dragon
 		m_wout.setConsolePosition(m_consolePosition);
 		m_wout.setWrapMode(ogfx::WindowBaseOutputHandler::eWrapMode::TripleDots);
 		m_wout.setDefaultForegroundColor({ 180, 180, 180, 255 });
+
+		std::cout << STR_BOOL(ostd::Utils::loadByteStreamFromFile("./test.dds", m_test)) << "\n";
  	}
 
 	void DebuggerNew::handleSignal(ostd::tSignal& signal)
@@ -517,45 +747,23 @@ namespace dragon
 		m_gfx.outlinedRect(m_wout.getConsoleBounds(), { 0, 0, 20, 255 }, { 255, 255, 255, 200 }, 2);
 
 		m_wout.beginFrame();
-		printStep();
-		// for (int32_t i = m_codeRandomIndex; i < m_codeRandomIndex + m_consoleSize.y; i++)
-		// {
-		// 	if (i >= m_codeTable.size()) break;
-		// 	auto code = m_codeTable[i];
-		// 	m_wout.tab().fg({ 100, 100, 100, 255 }).p(ostd::Utils::getHexStr(code.addr, true, 2));
-		// 	m_wout.clear().tab().tab();
-		// 	// colorCodeInstructions(code.code, m_wout);
-		// }
+		ostd::Utils::printByteStream(m_test, 0, 16, 16, m_wout, 8, 4, "HELLO");
+		// printStep();
 
-		// m_textInput.render(m_gfx);
+		m_textInput.render(m_gfx);
 		// m_testBtn.render(m_gfx);
 	}
 
-	void DebuggerNew::onFixedUpdate(void)
+	void DebuggerNew::onFixedUpdate(double frameTime_s)
 	{
 		m_textInput.fixedUpdate();
 		m_testBtn.fixedUpdate();
+		// std::cout << getFPS() << "\n";
 	}
 
 	void DebuggerNew::onUpdate(void)
 	{
 		m_textInput.update();
 		m_testBtn.update();
-	}
-
-
-
-
-	uint32_t __debugger_entry_point(void)
-	{
-		DebuggerNew window;
-		window.initialize(1600, 1000, "DragonVM Live Debugger");
-		window.setClearColor({ 0, 2	, 15 });
-
-		while (window.isRunning())
-		{
-			window.update();
-		}
-		return 0;
 	}
 }

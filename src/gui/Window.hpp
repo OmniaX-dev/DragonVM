@@ -1,13 +1,13 @@
 #pragma once
 
-#include "../tools/SDLInclude.hpp"
+#include "../tools/SDLInclude.hpp"  // IWYU pragma: keep
 #include <ostd/Utils.hpp>
 #include <ostd/Signals.hpp>
 #include <ostd/IOHandlers.hpp>
 
 namespace dragon
 {
-	class Window : public  ostd::BaseObject
+	class Window : public ostd::BaseObject
 	{
 		public:
 			inline Window(void) {  }
@@ -73,8 +73,8 @@ namespace dragon
 			{
 				setTypeName("dragon::WindowResizedData");
 				validate();
-			} 
-		
+			}
+
 		public:
 			int32_t new_width;
 			int32_t new_height;
