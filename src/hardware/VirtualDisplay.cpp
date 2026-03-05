@@ -1,5 +1,5 @@
 #include "VirtualDisplay.hpp"
-#include "../gui/RawTextRenderer.hpp"
+#include <ogfx/PixelRenderer.hpp>
 #include "../runtime/DragonRuntime.hpp"
 #include "../tools/GlobalData.hpp"
 
@@ -10,7 +10,7 @@ namespace dragon
 		void VirtualDisplay::onInitialize(void)
 		{
 			m_renderer.initialize(*this);
-			RawTextRenderer::initialize();
+			ogfx::PixelRenderer::TextRenderer::initialize();
 
 			text16_load_palettes();
 			m_currentPaletteID = DragonRuntime::machine_config.text16_palette;
@@ -44,9 +44,9 @@ namespace dragon
 					{
 						auto& line = m_singleTextLines[i];
 						if (invert_colors == 0)
-							RawTextRenderer::drawString(line, 0, i, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_fontPixels, config.singleColor_foreground, config.singleColor_background);
+							ogfx::PixelRenderer::TextRenderer::drawString(line, 0, i, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_font.m_fontPixels, config.singleColor_foreground, config.singleColor_background);
 						else
-							RawTextRenderer::drawString(line, 0, i, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_fontPixels, config.singleColor_background, config.singleColor_foreground);
+							ogfx::PixelRenderer::TextRenderer::drawString(line, 0, i, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_font.m_fontPixels, config.singleColor_background, config.singleColor_foreground);
 					}
 					m_refreshScreen = false;
 				}
@@ -58,14 +58,14 @@ namespace dragon
 					uint8_t clear_color = mem.read8(vga_addr + tRegisters::ClearColor);
 					ostd::Color clearColor = m_text16_Currentpalette->getColor(clear_color);
 					m_renderer.clear(clearColor);
-					for (int32_t i = 0; i < RawTextRenderer::CONSOLE_CHARS_V * RawTextRenderer::CONSOLE_CHARS_H; i++)
+					for (int32_t i = 0; i < ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_V * ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H; i++)
 					{
 						auto& cell = m_text16_buffer[i];
 						ostd::Color background = m_text16_Currentpalette->getColor(cell.backgroundColor);
 						ostd::Color foreground = m_text16_Currentpalette->getColor(cell.foregroundColor);
 						char character = static_cast<char>(cell.character);
-						auto xy = CONVERT_1D_2D(i, RawTextRenderer::CONSOLE_CHARS_H);
-						RawTextRenderer::drawString(ostd::String().addChar(character), xy.x, xy.y, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_fontPixels, foreground, background);
+						auto xy = CONVERT_1D_2D(i, ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H);
+						ogfx::PixelRenderer::TextRenderer::drawString(ostd::String().addChar(character), xy.x, xy.y, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_font.m_fontPixels, foreground, background);
 					}
 					m_refreshScreen = false;
 				}
@@ -147,9 +147,9 @@ namespace dragon
 					int16_t y = mem.read16(vga_addr + tRegisters::MemControllerY);
 
 					//TODO: Remove this override used for testing purposes
-					// for (int32_t i = 0; i < RawTextRenderer::CONSOLE_CHARS_V * RawTextRenderer::CONSOLE_CHARS_H; i++)
+					// for (int32_t i = 0; i < ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_V * ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H; i++)
 					// {
-					// 	auto xy = CONVERT_1D_2D(i, RawTextRenderer::CONSOLE_CHARS_H);
+					// 	auto xy = CONVERT_1D_2D(i, ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H);
 					// 	DragonRuntime::vGraphicsInterface.writeVRAM_16Colors(static_cast<uint8_t>(xy.x), static_cast<uint8_t>(xy.y), c++, 0, 15);
 					// 	if (c > 'Z')
 					// 		c = 'A';
@@ -189,7 +189,7 @@ namespace dragon
 			mem.write8(vga_addr + tRegisters::Signal, tSignalValues::Continue);
 		}
 
-		void VirtualDisplay::onFixedUpdate(void)
+		void VirtualDisplay::onFixedUpdate(double frameTime_s)
 		{
 			auto& config = DragonRuntime::machine_config;
 			auto& mem = DragonRuntime::memMap;
@@ -200,19 +200,14 @@ namespace dragon
 			{
 				m_refreshScreen = true;
 				dragon::hw::interface::Graphics::tText16_Cell outTextCell;
-				for (int32_t i = 0; i < RawTextRenderer::CONSOLE_CHARS_V * RawTextRenderer::CONSOLE_CHARS_H; i++)
+				for (int32_t i = 0; i < ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_V * ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H; i++)
 				{
-					auto xy = CONVERT_1D_2D(i, RawTextRenderer::CONSOLE_CHARS_H);
+					auto xy = CONVERT_1D_2D(i, ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H);
 					DragonRuntime::vGraphicsInterface.readVRAM_16Colors(xy.x, xy.y, outTextCell);
 					m_text16_buffer[i] = outTextCell;
 				}
 			}
 		}
-
-		void VirtualDisplay::onSlowUpdate(void)
-		{
-			std::cout << (int)getFPS() << "\n";
-	 	}
 
 		void VirtualDisplay::__redraw_screen(void)
 		{
@@ -232,9 +227,9 @@ namespace dragon
 			{
 				m_singleTextLines.push_back(ostd::String().addChar(c));
 				if (invert_colors == 0)
-					RawTextRenderer::drawString(ostd::String().addChar(c), 0, 0, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_fontPixels, config.singleColor_foreground, config.singleColor_background);
+					ogfx::PixelRenderer::TextRenderer::drawString(ostd::String().addChar(c), 0, 0, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_font.m_fontPixels, config.singleColor_foreground, config.singleColor_background);
 				else
-					RawTextRenderer::drawString(ostd::String().addChar(c), 0, 0, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_fontPixels, config.singleColor_background, config.singleColor_foreground);
+					ogfx::PixelRenderer::TextRenderer::drawString(ostd::String().addChar(c), 0, 0, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_font.m_fontPixels, config.singleColor_background, config.singleColor_foreground);
 				return;
 			}
 			auto& line = m_singleTextLines[m_singleTextLines.size() - 1];
@@ -242,26 +237,26 @@ namespace dragon
 				m_singleTextLines.push_back("");
 			else if (isprint(c))
 			{
-				if (line.len() == RawTextRenderer::CONSOLE_CHARS_H)
+				if (line.len() == ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H)
 				{
 					m_singleTextLines.push_back(ostd::String().addChar(c));
 					auto& line = m_singleTextLines[m_singleTextLines.size() - 1];
 					if (invert_colors == 0)
-						RawTextRenderer::drawString(ostd::String().addChar(c), line.len() - 1, m_singleTextLines.size() - 1, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_fontPixels, config.singleColor_foreground, config.singleColor_background);
+						ogfx::PixelRenderer::TextRenderer::drawString(ostd::String().addChar(c), line.len() - 1, m_singleTextLines.size() - 1, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_font.m_fontPixels, config.singleColor_foreground, config.singleColor_background);
 					else
-						RawTextRenderer::drawString(ostd::String().addChar(c), line.len() - 1, m_singleTextLines.size() - 1, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_fontPixels, config.singleColor_background, config.singleColor_foreground);
+						ogfx::PixelRenderer::TextRenderer::drawString(ostd::String().addChar(c), line.len() - 1, m_singleTextLines.size() - 1, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_font.m_fontPixels, config.singleColor_background, config.singleColor_foreground);
 				}
 				else
 				{
 					line.addChar(c);
 					if (invert_colors == 0)
-						RawTextRenderer::drawString(ostd::String().addChar(c), line.len() - 1, m_singleTextLines.size() - 1, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_fontPixels, config.singleColor_foreground, config.singleColor_background);
+						ogfx::PixelRenderer::TextRenderer::drawString(ostd::String().addChar(c), line.len() - 1, m_singleTextLines.size() - 1, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_font.m_fontPixels, config.singleColor_foreground, config.singleColor_background);
 					else
-						RawTextRenderer::drawString(ostd::String().addChar(c), line.len() - 1, m_singleTextLines.size() - 1, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_fontPixels, config.singleColor_background, config.singleColor_foreground);
+						ogfx::PixelRenderer::TextRenderer::drawString(ostd::String().addChar(c), line.len() - 1, m_singleTextLines.size() - 1, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_font.m_fontPixels, config.singleColor_background, config.singleColor_foreground);
 				}
 			}
 			else return;
-			if (m_singleTextLines.size() == RawTextRenderer::CONSOLE_CHARS_V + 1)
+			if (m_singleTextLines.size() == ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_V + 1)
 			{
 				m_refreshScreen = true;
 				m_singleTextLines.erase(m_singleTextLines.begin());
@@ -270,7 +265,7 @@ namespace dragon
 
 		void VirtualDisplay::single_text_add_char_to_buffer(char c)
 		{
-			if (c == '\n' || m_singleTextBuffer.len() == RawTextRenderer::CONSOLE_CHARS_H)
+			if (c == '\n' || m_singleTextBuffer.len() == ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H)
 			{
 				single_text_print_buffer_and_flush();
 				single_text_add_char_to_line(c);
@@ -311,7 +306,7 @@ namespace dragon
 
 		void VirtualDisplay::text16_init_buffer(void)
 		{
-			for (int32_t i = 0; i < RawTextRenderer::CONSOLE_CHARS_V * RawTextRenderer::CONSOLE_CHARS_H; i++)
+			for (int32_t i = 0; i < ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_V * ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H; i++)
 				m_text16_buffer.push_back({ 0, 0, ' ' });
 		}
 

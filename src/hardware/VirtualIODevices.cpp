@@ -6,7 +6,7 @@
 #include "VirtualCPU.hpp"
 
 #include "../runtime/DragonRuntime.hpp"
-#include "../gui/RawTextRenderer.hpp"
+#include <ogfx/PixelRenderer.hpp>
 
 //TODO: Fix all access functions (reads and writes) ensuring the address is not out of bounds.
 //		Right now the check is done, but just to push an error if out of bounds; the address
@@ -173,18 +173,18 @@ namespace dragon
 			const auto& state = SDL_GetKeyboardState(nullptr);
 			if (signal.ID == ostd::tBuiltinSignals::KeyPressed || signal.ID == ostd::tBuiltinSignals::KeyReleased)
 			{
-				KeyEventData& ked = (KeyEventData&)signal.userData;
+				ogfx::KeyEventData& ked = (ogfx::KeyEventData&)signal.userData;
 				m_modifiersBitFiels = __construct_modifiers_bitfield();
 				__write16(tRegisters::Modifiers, (int16_t)m_modifiersBitFiels.value);
 				__write16(tRegisters::KeyCode, __sdl_key_code_convert(ked.keyCode));
-				if (ked.eventType == KeyEventData::eKeyEvent::Pressed)
+				if (ked.eventType == ogfx::KeyEventData::eKeyEvent::Pressed)
 					cpu.handleInterrupt(data::InterruptCodes::KeyPressed, true);
-				else if (ked.eventType == KeyEventData::eKeyEvent::Pressed)
+				else if (ked.eventType == ogfx::KeyEventData::eKeyEvent::Pressed)
 					cpu.handleInterrupt(data::InterruptCodes::KeyReleased, true);
 			}
 			else if (signal.ID == ostd::tBuiltinSignals::TextEntered)
 			{
-				KeyEventData& ked = (KeyEventData&)signal.userData;
+				ogfx::KeyEventData& ked = (ogfx::KeyEventData&)signal.userData;
 				m_modifiersBitFiels = __construct_modifiers_bitfield();
 				__write16(tRegisters::Modifiers, (int16_t)m_modifiersBitFiels.value);
 				__write16(tRegisters::KeyCode, (int16_t)ked.text);
@@ -661,7 +661,7 @@ namespace dragon
 			{
 				m_videoMemory.init(0xFFFF);
 				m_vramStart = data::MemoryMapAddresses::VideoCardInterface_End - data::MemoryMapAddresses::VideoCardInterface_Start;
-				m_16Color_frameSize = RawTextRenderer::CONSOLE_CHARS_H * RawTextRenderer::CONSOLE_CHARS_V * m_16Color_cellSize;
+				m_16Color_frameSize = ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H * ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_V * m_16Color_cellSize;
 				m_16Color_currentFrameAddr = m_vramStart;
 				m_16Color_secondFrameAddr = m_vramStart + m_16Color_frameSize;
 			}
@@ -737,7 +737,7 @@ namespace dragon
 
 			bool Graphics::readVRAM_16Colors(uint8_t x, uint8_t y, Graphics::tText16_Cell& outTextCell)
 			{
-				uint16_t cellOffset = static_cast<uint16_t>(CONVERT_2D_1D(x, y, RawTextRenderer::CONSOLE_CHARS_H)) * 4;
+				uint16_t cellOffset = static_cast<uint16_t>(CONVERT_2D_1D(x, y, ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H)) * 4;
 				cellOffset += m_16Color_currentFrameAddr;
 				int8_t outVal = 0;
 				if (!m_videoMemory.r_Byte(cellOffset + tText16_CellStructure::character, outVal))
@@ -754,7 +754,7 @@ namespace dragon
 
 			bool Graphics::writeVRAM_16Colors(uint8_t x, uint8_t y, uint8_t character, uint8_t background, uint8_t foreground)
 			{
-				uint16_t cellOffset = static_cast<uint16_t>(CONVERT_2D_1D(x, y, RawTextRenderer::CONSOLE_CHARS_H)) * 4;
+				uint16_t cellOffset = static_cast<uint16_t>(CONVERT_2D_1D(x, y, ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H)) * 4;
 				if (!readFlag(tFlags::DoubleBufferingEnabled))
 					cellOffset += m_16Color_currentFrameAddr;
 				else
@@ -800,7 +800,7 @@ namespace dragon
 
 			void Graphics::scroll_16Colors(void)
 			{
-				int32_t line_len = (RawTextRenderer::CONSOLE_CHARS_H * 4);
+				int32_t line_len = (ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H * 4);
 				for (int32_t i = m_16Color_currentFrameAddr + line_len; i < m_16Color_currentFrameAddr + m_16Color_frameSize; i += 4)
 				{
 					int32_t k = i;

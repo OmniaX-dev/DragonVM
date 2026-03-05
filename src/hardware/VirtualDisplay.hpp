@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../gui/Window.hpp"
-#include "../gui/Renderer.hpp"
+#include <ogfx/WindowBase.hpp>
+#include <ogfx/PixelRenderer.hpp>
 #include "../hardware/VirtualIODevices.hpp"
 
 namespace dragon
@@ -9,13 +9,13 @@ namespace dragon
 	namespace data { class IBiosVideoPalette; }
 	namespace hw
 	{
-		class VirtualDisplay : public Window
+		class VirtualDisplay : public ogfx::WindowBase
 		{
 			public: struct tRegisters
 			{
-				inline static constexpr uint8_t VideoMode = 0x00;	
-				inline static constexpr uint8_t ClearColor = 0x01;	
-				inline static constexpr uint8_t Palette = 0x02;	
+				inline static constexpr uint8_t VideoMode = 0x00;
+				inline static constexpr uint8_t ClearColor = 0x01;
+				inline static constexpr uint8_t Palette = 0x02;
 				inline static constexpr uint8_t Signal = 0x03;
 				inline static constexpr uint8_t TextSingleCharacter = 0x04;
 				inline static constexpr uint8_t TextSingleInvertColors = 0x05;
@@ -31,35 +31,36 @@ namespace dragon
 			};
 			public: struct tVideoModeValues
 			{
-				inline static constexpr uint8_t TextSingleColor = 0x00;	
-				inline static constexpr uint8_t Text16Colors = 0x01;	
+				inline static constexpr uint8_t TextSingleColor = 0x00;
+				inline static constexpr uint8_t Text16Colors = 0x01;
 			};
 			public: struct tSignalValues
 			{
-				inline static constexpr uint8_t Continue = 0x00;	
+				inline static constexpr uint8_t Continue = 0x00;
 
-				inline static constexpr uint8_t TextSingleColor_DirectPrintChar = 0x02;	
-				inline static constexpr uint8_t TextSingleColor_StoreChar = 0x03;	
-				inline static constexpr uint8_t TextSingleColor_DirectPrintBuffAndFlush = 0x04;	
-				inline static constexpr uint8_t TextSingleColor_FlushBuffer = 0x05;	
-				inline static constexpr uint8_t TextSingleColor_DirectPrintBuffNoFlush = 0x06;	
+				inline static constexpr uint8_t TextSingleColor_DirectPrintChar = 0x02;
+				inline static constexpr uint8_t TextSingleColor_StoreChar = 0x03;
+				inline static constexpr uint8_t TextSingleColor_DirectPrintBuffAndFlush = 0x04;
+				inline static constexpr uint8_t TextSingleColor_FlushBuffer = 0x05;
+				inline static constexpr uint8_t TextSingleColor_DirectPrintBuffNoFlush = 0x06;
 				inline static constexpr uint8_t TextSingleColor_DirectPrintString = 0x07;
 
 				inline static constexpr uint8_t Text16Color_SwapBuffers = 0x10;
 				inline static constexpr uint8_t Text16Color_WriteMemory = 0x11;
 				inline static constexpr uint8_t Text16Color_Scroll = 0x12;
 
-				inline static constexpr uint8_t RefreshScreen = 0xE0;	
-				inline static constexpr uint8_t ClearSCreen = 0xE1;	
-				inline static constexpr uint8_t RedrawScreen = 0xE2;	
+				inline static constexpr uint8_t RefreshScreen = 0xE0;
+				inline static constexpr uint8_t ClearSCreen = 0xE1;
+				inline static constexpr uint8_t RedrawScreen = 0xE2;
 			};
 			public:
+				inline void setFont(const ostd::String& fontPath) { m_font.init(fontPath); }
+
 				void onInitialize(void) override;
 				void onDestroy(void) override;
 				void onRender(void) override;
 				void onUpdate(void) override;
-				void onFixedUpdate(void) override;
-				void onSlowUpdate(void) override;
+				void onFixedUpdate(double frameTime_s) override;
 
 				inline void redrawScreen(void) { m_redrawScreen = true; }
 
@@ -79,7 +80,8 @@ namespace dragon
 				void text16_load_palettes(void);
 
 			private:
-				Renderer m_renderer;
+				ogfx::PixelRenderer m_renderer;
+				ogfx::PixelRenderer::Font m_font;
 
 				std::vector<ostd::String> m_singleTextLines;
 				ostd::String m_singleTextBuffer { "" };

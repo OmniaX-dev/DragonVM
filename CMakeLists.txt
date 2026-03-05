@@ -33,10 +33,6 @@ list(APPEND RUNTIME_SOURCE_FILES
 	${CMAKE_CURRENT_LIST_DIR}/src/runtime/DragonRuntime.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/runtime/ConfigLoader.cpp
 
-	${CMAKE_CURRENT_LIST_DIR}/src/gui/Window.cpp
-	${CMAKE_CURRENT_LIST_DIR}/src/gui/RawTextRenderer.cpp
-	${CMAKE_CURRENT_LIST_DIR}/src/gui/Renderer.cpp
-
 	${CMAKE_CURRENT_LIST_DIR}/src/hardware/VirtualCPU.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/hardware/VirtualRAM.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/hardware/MemoryMapper.cpp
@@ -54,10 +50,6 @@ list(APPEND DEBUGGER_SOURCE_FILES
 	${CMAKE_CURRENT_LIST_DIR}/src/debugger/DisassemblyLoader.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/debugger/Debugger.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/debugger/DebuggerNew.cpp
-
-	${CMAKE_CURRENT_LIST_DIR}/src/gui/Window.cpp
-	${CMAKE_CURRENT_LIST_DIR}/src/gui/RawTextRenderer.cpp
-	${CMAKE_CURRENT_LIST_DIR}/src/gui/Renderer.cpp
 
 	${CMAKE_CURRENT_LIST_DIR}/src/hardware/VirtualCPU.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/hardware/VirtualRAM.cpp
@@ -188,7 +180,7 @@ endif (UNIX)
 target_link_libraries(${RUNTIME_TARGET} SDL2main SDL2 SDL2_image)
 target_link_libraries(${DEBUGGER_TARGET} SDL2main SDL2 SDL2_image)
 
-target_link_libraries(${RUNTIME_TARGET} ostd)
+target_link_libraries(${RUNTIME_TARGET} ostd ogfx)
 target_link_libraries(${DEBUGGER_TARGET} ostd ogfx)
 target_link_libraries(${ASSEMBLER_TARGET} ostd)
 target_link_libraries(${TOOLS_TARGET} ostd)
