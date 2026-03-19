@@ -1,7 +1,7 @@
 #pragma once
 
 #include "IMemoryDevice.hpp"
-#include <ostd/String.hpp>
+#include <ostd/string/String.hpp>
 #include <vector>
 
 namespace dragon

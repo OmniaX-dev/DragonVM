@@ -4,8 +4,8 @@
 .header KERNEL0_BOOT
 
 @include <../../sdk/bios_api.dss>
-@include <../drivers/keyboard_driver.dss>
 @include <../drivers/display_driver.dss>
+@include <../drivers/keyboard_driver.dss>
 @include <memory.dss>
 
 
@@ -30,7 +30,7 @@ _kernel0_main:
 	call $_print_string
 	## debug_break
 _infinite_loop_0:
-	jmp $_infinite_loop_0
+	## jmp $_infinite_loop_0
 
 	mov [$cursor_x], 0
 
@@ -58,16 +58,18 @@ _infinite_loop:
 
 ## =========================================================================================================================
 _key_pressed:
-	## debug_break
+	debug_break
 	mov R1, [Keyboard_Registers.KEYCODE]
 
 	mov ACC, KeyCodes.Return
 	jeq $_key_pressed_enter, R1
 
-	mov ACC, KeyCodes.LowerCase_a
-	jls $_key_pressed_end, R1
-	mov ACC,  KeyCodes.LowerCase_z
-	jgr $_key_pressed_end, R1
+	push R1
+	push 1
+	call $_is_char_printable
+
+	mov ACC, RV
+	jne $_key_pressed_end, 1
 	push R1
 	mov R2, [$cursor_x]
 	push R2
@@ -86,5 +88,18 @@ _key_pressed_enter:
 	jmp $_key_pressed_end
 
 _key_pressed_end:
+	ret
+
+
+_is_char_printable:
+	arg R9
+	mov ACC, KeyCodes.Spacebar
+	jls $_is_char_printable_false, R9
+	mov ACC, KeyCodes.LowerCase_z
+	jgr $_is_char_printable_false, R9
+	mov RV, 1
+	ret
+_is_char_printable_false:
+	mov RV, 0
 	ret
 ## =========================================================================================================================

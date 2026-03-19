@@ -1,7 +1,7 @@
 #pragma once
 
 #include <fstream>
-#include <ostd/Utils.hpp>
+#include <ostd/utils/Utils.hpp>
 
 namespace dragon
 {
@@ -20,7 +20,7 @@ namespace dragon
 				bool writeBuffer(uint32_t addr);
 
 				void unmount(void);
-				
+
 				inline bool isInitialized(void) const { return m_initialized; }
 				inline uint64_t getSize(void) const { return m_fileSize; };
 				inline bool isSame(VirtualHardDrive& vhdd) { return m_diskID == vhdd.m_diskID; }

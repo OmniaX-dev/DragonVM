@@ -1,3 +1,4 @@
+#include <ostd/utils/Defines.hpp>
 #include "Tools.hpp"
 
 int main(int argc, char** argv)

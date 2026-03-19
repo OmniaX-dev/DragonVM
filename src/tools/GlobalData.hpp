@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ostd/Types.hpp>
-#include <ostd/Color.hpp>
+#include <ostd/data_types/Types.hpp>
+#include <ostd/data_types/Color.hpp>
 
 namespace dragon
 {
@@ -294,7 +294,8 @@ namespace dragon
 				inline static constexpr uint8_t BIOSModeImm = 0x02;
 				inline static constexpr uint8_t DEBUG_StartProfile = 0x03;
 				inline static constexpr uint8_t DEBUG_StopProfile = 0x04;
-			
+				inline static constexpr uint8_t DEBUG_DumpRAM = 0x05;
+
 				inline static constexpr uint8_t MovImmReg = 0x10;
 				inline static constexpr uint8_t MovRegReg = 0x11;
 				inline static constexpr uint8_t MovRegMem = 0x12;
@@ -352,7 +353,7 @@ namespace dragon
 				inline static constexpr uint8_t NotReg = 0x6A;
 				inline static constexpr uint8_t NegReg = 0x6B;
 				inline static constexpr uint8_t NegByteReg = 0x6C;
-				
+
 				inline static constexpr uint8_t JmpNotEqImm = 0x70;
 				inline static constexpr uint8_t JmpNotEqReg = 0x71;
 				inline static constexpr uint8_t JmpEqImm = 0x72;
@@ -383,7 +384,7 @@ namespace dragon
 				inline static constexpr uint8_t Ext14 = 0xED;
 				inline static constexpr uint8_t Ext15 = 0xEE;
 				inline static constexpr uint8_t Ext16 = 0xEF;
-				
+
 				inline static constexpr uint8_t ZeroFlag = 0xF0;
 				inline static constexpr uint8_t SetFlag = 0xF1;
 				inline static constexpr uint8_t ToggleFlag = 0xF2;
@@ -394,7 +395,7 @@ namespace dragon
 				static ostd::String getOpCodeString(uint8_t opCode);
 				static uint8_t getInstructionSIze(uint8_t opCode);
 		};
-	
+
 		class DefaultValues
 		{
 			public:

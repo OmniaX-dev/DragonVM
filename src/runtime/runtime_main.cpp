@@ -1,4 +1,5 @@
-#include <ostd/Utils.hpp>
+#include <ostd/utils/Defines.hpp>
+#include <ostd/utils/Utils.hpp>
 #include "DragonRuntime.hpp"
 
 int main(int argc, char** argv)

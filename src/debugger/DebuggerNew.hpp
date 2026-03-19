@@ -1,10 +1,10 @@
 #pragma once
 
-#include <ostd/Color.hpp>
-#include <ostd/Geometry.hpp>
-#include <ostd/Types.hpp>
-#include <ostd/Utils.hpp>
-#include <ostd/IOHandlers.hpp>
+#include <ostd/data_types/Color.hpp>
+#include <ostd/math/Geometry.hpp>
+#include <ostd/data_types/Types.hpp>
+#include <ostd/utils/Utils.hpp>
+#include <ostd/io/IOHandlers.hpp>
 #include <ogfx/WindowBase.hpp>
 #include <ogfx/BasicRenderer.hpp>
 #include <ogfx/RawTextInput.hpp>

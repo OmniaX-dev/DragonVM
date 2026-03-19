@@ -1,7 +1,7 @@
 #include "Utils.hpp"
-#include <ostd/Serial.hpp>
-#include <ostd/Utils.hpp>
-#include <ostd/Random.hpp>
+#include <ostd/io/Serial.hpp>
+#include <ostd/utils/Utils.hpp>
+#include <ostd/math/Random.hpp>
 
 namespace dragon
 {

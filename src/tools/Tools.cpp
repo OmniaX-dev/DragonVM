@@ -1,13 +1,13 @@
 #include "Tools.hpp"
 
-#include <ostd/Color.hpp>
-#include <ostd/IOHandlers.hpp>
-#include <ostd/Utils.hpp>
+#include <ostd/data_types/Color.hpp>
+#include <ostd/io/IOHandlers.hpp>
+#include <ostd/utils/Utils.hpp>
 #include <fstream>
 #include "../hardware/VirtualHardDrive.hpp"
 #include "GlobalData.hpp"
 #include "debugger/DisassemblyLoader.hpp"
-#include <ostd/Serial.hpp>
+#include <ostd/io/Serial.hpp>
 
 namespace dragon
 {

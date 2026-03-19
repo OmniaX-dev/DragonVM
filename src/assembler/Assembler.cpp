@@ -1,10 +1,10 @@
 #include "Assembler.hpp"
-#include <ostd/File.hpp>
+#include <ostd/io/File.hpp>
 #include <iostream>
 #include <fstream>
-#include <ostd/Utils.hpp>
-#include <ostd/Serial.hpp>
-#include <ostd/IOHandlers.hpp>
+#include <ostd/utils/Utils.hpp>
+#include <ostd/io/Serial.hpp>
+#include <ostd/io/IOHandlers.hpp>
 
 #include "../tools/GlobalData.hpp"
 #include "../hardware/VirtualHardDrive.hpp"
@@ -1141,6 +1141,11 @@ namespace dragon
 			if (ostd::String(line).toLower().startsWith("debug_break"))
 			{
 				m_code.push_back(data::OpCodes::DEBUG_Break);
+				return;
+			}
+			else if (ostd::String(line).toLower().startsWith("debug_ram_dump"))
+			{
+				m_code.push_back(data::OpCodes::DEBUG_DumpRAM);
 				return;
 			}
 			else if (ostd::String(line).toLower().startsWith("debug_profile_stop"))

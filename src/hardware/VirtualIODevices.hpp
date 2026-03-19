@@ -2,8 +2,9 @@
 
 #include "IMemoryDevice.hpp"
 #include "../tools/GlobalData.hpp"
-#include <ostd/Serial.hpp>
+#include <ostd/io/Serial.hpp>
 #include <fstream>
+#include <unordered_map>
 
 namespace dragon
 {

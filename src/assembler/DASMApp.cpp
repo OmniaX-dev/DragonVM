@@ -1,5 +1,5 @@
 #include "Assembler.hpp"
-#include <ostd/Random.hpp>
+#include <ostd/math/Random.hpp>
 
 namespace dragon
 {

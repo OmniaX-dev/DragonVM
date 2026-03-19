@@ -1,8 +1,8 @@
 #include "VirtualCPU.hpp"
 #include "../tools/GlobalData.hpp"
 
-#include <ostd/Defines.hpp>
-#include <ostd/Utils.hpp>
+#include <iostream>
+#include <ostd/utils/Utils.hpp>
 
 #include "../runtime/DragonRuntime.hpp"
 
@@ -209,6 +209,7 @@ namespace dragon
 			m_currentExtension = nullptr;
 			m_currentExtInst = 0x00;
 			m_isDebugBreakPoint = false;
+			m_ramDumped = false;
 			m_isOffsetAddressingEnabled = readFlag(data::Flags::OffsetModeEnabled);
 			if (m_isOffsetAddressingEnabled)
 				m_currentOffset = readRegister(data::Registers::OFFSET);
@@ -228,6 +229,13 @@ namespace dragon
 				case data::OpCodes::DEBUG_Break:
 				{
 					m_isDebugBreakPoint = true;
+				}
+				break;
+				case data::OpCodes::DEBUG_DumpRAM:
+				{
+					ostd::Utils::saveByteStreamToFile(*DragonRuntime::ram.getByteStream(), "ram_dump.bin");
+					m_isDebugBreakPoint = true;
+					m_ramDumped = true;
 				}
 				break;
 				case data::OpCodes::BIOSModeImm:
@@ -796,9 +804,17 @@ namespace dragon
 				break;
 				case data::OpCodes::CallImm:
 				{
+					bool test = false;
+					if (readRegister(data::Registers::IP) == 0x2CF1)
+						test = true;
 					uint16_t subroutineAddr = fetch16();
 					pushStackFrame();
 					writeRegister16(data::Registers::IP, subroutineAddr);
+					if (test)
+					{
+						std::cout << ostd::Utils::getHexStr(subroutineAddr, true, 2) << "\n";
+						std::cin.get();
+					}
 					m_subroutineCounter++;
 				}
 				break;
@@ -820,6 +836,11 @@ namespace dragon
 				break;
 				case data::OpCodes::ArgReg:
 				{
+					if (isInDebugBreakPoint())
+					{
+						std::cout << ostd::Utils::getHexStr(readRegister(data::Registers::IP));
+						std::cin.get();
+					}
 					uint8_t regAddr = fetch8();
 					if (!isInSubRoutine()) break;
 					int16_t pp_val = readRegister(data::Registers::PP);

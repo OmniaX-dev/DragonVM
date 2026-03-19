@@ -3,12 +3,11 @@
 #include <cstdint>
 #include <ogfx/BasicRenderer.hpp>
 #include <ogfx/WindowBase.hpp>
-#include <ostd/Defines.hpp>
-#include <ostd/Geometry.hpp>
-#include <ostd/IOHandlers.hpp>
-#include <ostd/Random.hpp>
-#include <ostd/String.hpp>
-#include <ostd/Utils.hpp>
+#include <ostd/math/Geometry.hpp>
+#include <ostd/io/IOHandlers.hpp>
+#include <ostd/math/Random.hpp>
+#include <ostd/string/String.hpp>
+#include <ostd/utils/Utils.hpp>
 #include "DisassemblyLoader.hpp"
 #include "../runtime/DragonRuntime.hpp"
 
@@ -701,7 +700,7 @@ namespace dragon
 		m_wout.setWrapMode(ogfx::WindowBaseOutputHandler::eWrapMode::TripleDots);
 		m_wout.setDefaultForegroundColor({ 180, 180, 180, 255 });
 
-		std::cout << STR_BOOL(ostd::Utils::loadByteStreamFromFile("./test.dds", m_test)) << "\n";
+		std::cout << STR_BOOL(ostd::Utils::loadByteStreamFromFile("./bios.bin", m_test)) << "\n";
  	}
 
 	void DebuggerNew::handleSignal(ostd::tSignal& signal)

@@ -1,5 +1,4 @@
 #include "DragonRuntime.hpp"
-#include <ostd/Defines.hpp>
 #include <ogfx/PixelRenderer.hpp>
 
 namespace dragon
@@ -386,7 +385,7 @@ namespace dragon
 				// out.fg(ostd::ConsoleColors::Red).p(getAvgClockSpeed()).nl().reset();
 				acc = 0;
 			}
-			if (acc2 == (1000 / screenRedrawRate))
+			if (acc2 == (1000.0 / screenRedrawRate))
 			{
 				vDisplay.redrawScreen();
 				acc2 = 0;
@@ -407,7 +406,7 @@ namespace dragon
 		bool running = cpu.execute() && vDisplay.isRunning();
 		uint8_t screenRedrawRate = vCMOS.read8(data::CMOSRegisters::ScreenRedrawRate);
 		vDisplay.update();
-		if (s_enableScreenRedrawDelay && s_stepAcc2 == (1000 / screenRedrawRate))
+		if (s_enableScreenRedrawDelay && s_stepAcc2 == (1000.0 / screenRedrawRate))
 		{
 			vDisplay.redrawScreen();
 			s_stepAcc2 = 0;

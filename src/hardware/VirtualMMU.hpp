@@ -1,12 +1,12 @@
 #pragma once
 
-#include <ostd/Serial.hpp>
+#include <ostd/io/Serial.hpp>
 
 namespace dragon
 {
 	namespace hw
 	{
-		class VirtualMMU //TODO: Implement for later use 
+		class VirtualMMU //TODO: Implement for later use
 		{
 			public:
 				inline VirtualMMU(void) { init(); }

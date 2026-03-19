@@ -1,3 +1,4 @@
+#include <ostd/utils/Defines.hpp>
 #include "Assembler.hpp"
 
 int main(int argc, char** argv)

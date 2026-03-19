@@ -3,7 +3,7 @@ Bios = dragon/bios.bin
 CMOS = dragon/cmos.dr
 
 cpuext = extmov, extalu
-fixed_clock = false
+fixed_clock = true
 clock_rate_sec = 5000
 memory_extension_pages = 16
 

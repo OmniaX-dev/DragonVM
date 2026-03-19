@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ostd/Types.hpp>
-#include <ostd/String.hpp>
+#include <ostd/data_types/Types.hpp>
+#include <ostd/string/String.hpp>
 
 namespace dragon
 {
@@ -9,5 +9,5 @@ namespace dragon
 	{
 		public:
 			static ostd::String genRandomName(uint8_t length);
-	};	
+	};
 }

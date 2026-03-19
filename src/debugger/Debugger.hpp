@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ostd/Utils.hpp>
-#include <ostd/IOHandlers.hpp>
+#include <ostd/utils/Utils.hpp>
+#include <ostd/io/IOHandlers.hpp>
 #include "../assembler/Assembler.hpp"
 
 namespace dragon
@@ -87,7 +87,7 @@ namespace dragon
 			static inline ostd::ConsoleOutputHandler& output(void) { return out; }
 			static int32_t topLevelPrompt(void);
 			static int32_t executeRuntime(void);
-		
+
 		private:
 			static int32_t step_execution(bool& outUserQuit, bool exec_first_step = true);
 			static int32_t normal_runtime(bool& outUserQuit);

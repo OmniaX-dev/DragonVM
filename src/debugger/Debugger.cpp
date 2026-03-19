@@ -1,8 +1,7 @@
 #include "Debugger.hpp"
 #include "../runtime/DragonRuntime.hpp"
 #include "DisassemblyLoader.hpp"
-#include <ostd/Defines.hpp>
-#include <ostd/Console.hpp>
+#include <ostd/io/Console.hpp>
 
 namespace dragon
 {
@@ -1438,6 +1437,8 @@ namespace dragon
 		processErrors();
 		if (DragonRuntime::cpu.isInDebugBreakPoint())
 			output().fg(ostd::ConsoleColors::Red).p("Reached Debug Break Point.").reset().nl();
+		if (DragonRuntime::cpu.isRamDumped())
+			output().fg(ostd::ConsoleColors::Red).p("RAM Dumped to <ram_dump.bin>.").reset().nl();
 		Display::printPrompt();
 		data().command = getCommandInput();
 		data().command.trim().toLower();

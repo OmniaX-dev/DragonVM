@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ostd/Serial.hpp>
+#include <ostd/io/Serial.hpp>
 #include "IMemoryDevice.hpp"
 
 namespace dragon

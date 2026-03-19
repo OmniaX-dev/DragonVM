@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ostd/Utils.hpp>
-#include <ostd/IOHandlers.hpp>
+#include <ostd/utils/Utils.hpp>
+#include <ostd/io/IOHandlers.hpp>
 #include <unordered_map>
 
 namespace dragon
@@ -26,7 +26,7 @@ namespace dragon
                 inline static std::vector<ostd::String> m_lines;
                 inline static std::vector<ostd::String> m_guards;
                 inline static ostd::String m_directory { "" };
-        }; 
+        };
 
 		class Assembler
 		{
@@ -170,7 +170,7 @@ namespace dragon
 				inline static std::vector<tStructDefinition> m_structDefs;
 				inline static std::vector<tDisassemblyLine> m_disassembly;
 
-				inline static std::unordered_map<ostd::String, tExportSpec> m_exports; 
+				inline static std::unordered_map<ostd::String, tExportSpec> m_exports;
 
 				inline static ostd::ConsoleOutputHandler out;
 

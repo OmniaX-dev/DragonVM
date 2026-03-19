@@ -1,5 +1,5 @@
 #include "VirtualIODevices.hpp"
-#include <ostd/Utils.hpp>
+#include <ostd/utils/Utils.hpp>
 
 #include "VirtualHardDrive.hpp"
 #include "MemoryMapper.hpp"

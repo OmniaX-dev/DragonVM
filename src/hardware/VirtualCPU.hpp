@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ostd/Types.hpp>
-#include <ostd/Utils.hpp>
-#include <ostd/Bitfields.hpp>
+#include <ostd/data_types/Types.hpp>
+#include <ostd/utils/Utils.hpp>
+#include <ostd/data_types/Bitfields.hpp>
 #include "IMemoryDevice.hpp"
 
 #include "../debugger/Debugger.hpp"
@@ -43,6 +43,7 @@ namespace dragon
 				inline bool isHalted(void) const { return m_halt; }
 				inline uint8_t getCurrentInstruction(void) const { return m_currentInst; }
 				inline bool isInDebugBreakPoint(void) const { return m_isDebugBreakPoint; }
+				inline bool isRamDumped(void) const { return m_ramDumped; }
 				inline bool isInBIOSMOde(void) const { return m_biosMode; }
 				inline bool isInSubRoutine(void) const { return m_subroutineCounter > 0; }
 				inline int32_t getSubRoutineCounter(void) const { return m_subroutineCounter; }
@@ -50,7 +51,7 @@ namespace dragon
 				inline uint8_t getCurrentCPUExtensionInstruction(void) const { return m_currentExtInst; }
 				inline bool isOffsetAddressingModeEnabled(void) const { return m_isOffsetAddressingEnabled; }
 				inline uint16_t getCurrentOffset(void) const { return m_currentOffset; }
- 
+
 			private:
 				void __debug_store_stack_frame_string_on_push(void);
 
@@ -65,6 +66,7 @@ namespace dragon
 				bool m_biosMode { true };
 				int32_t m_interruptHandlerCount { 0 };
 				bool m_isDebugBreakPoint { false };
+				bool m_ramDumped { false };
 				bool m_debugModeEnabled { false };
 				int32_t m_subroutineCounter { 0 };
 				bool m_debugProfilerStarted { false };

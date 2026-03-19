@@ -1,6 +1,6 @@
 #include "ConfigLoader.hpp"
-#include <ostd/File.hpp>
-#include <ostd/Utils.hpp>
+#include <ostd/io/File.hpp>
+#include <ostd/utils/Utils.hpp>
 #include "../hardware/CPUExtensions.hpp"
 
 namespace dragon
@@ -95,8 +95,8 @@ namespace dragon
 				lineEdit.trim().toLower();
 				if (!lineEdit.isNumeric()) continue; //TODO: Error
 				config.memory_extension_pages = lineEdit.toInt();
-				
-				//TODO: Warnings 
+
+				//TODO: Warnings
 				if (config.memory_extension_pages < 0)
 					config.memory_extension_pages = 0;
 				if (config.memory_extension_pages > data::DefaultValues::MaxMemoryExtensionPages)
