@@ -2,6 +2,7 @@
 #include <ostd/io/File.hpp>
 #include <iostream>
 #include <fstream>
+#include <ostd/io/FileSystem.hpp>
 #include <ostd/io/Serial.hpp>
 #include <ostd/io/IOHandlers.hpp>
 #include <ostd/io/Memory.hpp>
@@ -51,7 +52,7 @@ namespace dragon
 			replaceLabelRefs();
 			combineDataAndCode();
 			createExportFiles();
-			if (Application::args.disassembly_file_path.trim() != "")
+			if (Application::args.final_stage_path.trim() != "")
 				saveCurrentStageToFile();
 			m_programSize = m_code.size();
 			if (m_fixedSize > 0 && m_code.size() > m_fixedSize)
@@ -774,7 +775,8 @@ namespace dragon
 
 		void Assembler::saveCurrentStageToFile(void)
 		{
-
+			std::cout << "LINES: " << (int)m_lines.size() << "\n";
+			ostd::FileSystem::writeTextFile(Application::args.final_stage_path, m_lines);
 		}
 
 

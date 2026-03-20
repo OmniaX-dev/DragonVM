@@ -18,7 +18,7 @@ printf "\n${green}2) bootsector.dss\n${clear}"
 
 printf "\n${green}Compiling DragonOS...\n${clear}"
 printf "\n${green}1) kernel0.dss\n${clear}"
-./dasm dss/DragonOS/kernel0/kernel0.dss -o dragon/kernel0.bin -I dss $1
+./dasm dss/DragonOS/kernel0/kernel0.dss -o dragon/kernel0.bin -I dss --save-final-stage ./kernel0_final_stage.txt $1
 ./dtools load-binary dragon/disk1.dr dragon/kernel0.bin 0x00018000
 
 printf "\n"

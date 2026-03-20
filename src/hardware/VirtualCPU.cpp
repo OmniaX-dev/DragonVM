@@ -1,7 +1,6 @@
 #include "VirtualCPU.hpp"
 #include "../tools/GlobalData.hpp"
 
-#include <iostream>
 #include <ostd/io/Memory.hpp>
 
 #include "../runtime/DragonRuntime.hpp"
@@ -804,17 +803,9 @@ namespace dragon
 				break;
 				case data::OpCodes::CallImm:
 				{
-					bool test = false;
-					if (readRegister(data::Registers::IP) == 0x2CF1)
-						test = true;
 					uint16_t subroutineAddr = fetch16();
 					pushStackFrame();
 					writeRegister16(data::Registers::IP, subroutineAddr);
-					if (test)
-					{
-						std::cout << ostd::String::getHexStr(subroutineAddr, true, 2) << "\n";
-						std::cin.get();
-					}
 					m_subroutineCounter++;
 				}
 				break;
@@ -836,18 +827,12 @@ namespace dragon
 				break;
 				case data::OpCodes::ArgReg:
 				{
-					if (isInDebugBreakPoint())
-					{
-						std::cout << ostd::String::getHexStr(readRegister(data::Registers::IP));
-						std::cin.get();
-					}
 					uint8_t regAddr = fetch8();
 					if (!isInSubRoutine()) break;
 					int16_t pp_val = readRegister(data::Registers::PP);
 					int16_t arg_data = m_memory.read16(pp_val);
 					writeRegister16(data::Registers::PP, pp_val - 2);
 					writeRegister16(regAddr, arg_data);
-					// std::cout << ostd::String::getHexStr(readRegister(data::Registers::IP), true, 2) << "\n";
 				}
 				break;
 				case data::OpCodes::RetInt:

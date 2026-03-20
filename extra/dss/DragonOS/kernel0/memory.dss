@@ -11,6 +11,5 @@
 .code
 
 _init_memory_handler:
+	nop
 	ret
-
-_alloc_memory:
