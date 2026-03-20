@@ -2,9 +2,10 @@
 #include <ostd/io/File.hpp>
 #include <iostream>
 #include <fstream>
-#include <ostd/utils/Utils.hpp>
 #include <ostd/io/Serial.hpp>
 #include <ostd/io/IOHandlers.hpp>
+#include <ostd/io/Memory.hpp>
+#include <ostd/math/MathUtils.hpp>
 
 #include "../tools/GlobalData.hpp"
 #include "../hardware/VirtualHardDrive.hpp"
@@ -50,6 +51,8 @@ namespace dragon
 			replaceLabelRefs();
 			combineDataAndCode();
 			createExportFiles();
+			if (Application::args.disassembly_file_path.trim() != "")
+				saveCurrentStageToFile();
 			m_programSize = m_code.size();
 			if (m_fixedSize > 0 && m_code.size() > m_fixedSize)
 				std::cout << "Warning: Fixed size specified but exceeded: (" << (int)m_code.size() << "/" << (int)m_fixedSize << " bytes)\n";
@@ -66,7 +69,7 @@ namespace dragon
 		{
 			assembleFromFile(sourceFileName);
 			if (m_code.size() == 0) return {  };
-            ostd::Utils::saveByteStreamToFile(m_code, binaryFileName);
+            ostd::Memory::saveByteStreamToFile(m_code, binaryFileName);
 			return m_code;
 		}
 
@@ -118,11 +121,11 @@ namespace dragon
 					out.fg(ostd::ConsoleColors::Yellow).p("Symbols:").nl();
 				for (auto& symbol : m_symbolTable)
 				{
-					out.fg(ostd::ConsoleColors::Red).p(ostd::Utils::getHexStr(symbol.second.address, true, 2));
+					out.fg(ostd::ConsoleColors::Red).p(ostd::String::getHexStr(symbol.second.address, true, 2));
 					out.fg(ostd::ConsoleColors::Magenta).p("  ").p(symbol.first);
 					out.fg(ostd::ConsoleColors::Blue).nl().p("  ");
 					for (auto& b : symbol.second.bytes)
-						out.p(ostd::Utils::getHexStr(b, false, 1)).p(".");
+						out.p(ostd::String::getHexStr(b, false, 1)).p(".");
 					out.nl();
 				}
 				if (m_symbolTable.size() > 0)
@@ -133,7 +136,7 @@ namespace dragon
 				for (auto& label : m_labelTable)
 				{
 					out.fg(ostd::ConsoleColors::Magenta).p(label.first.new_fixedLength(symbol_len));
-					out.fg(ostd::ConsoleColors::Red).p(ostd::Utils::getHexStr(label.second.address, true, 2)).nl();
+					out.fg(ostd::ConsoleColors::Red).p(ostd::String::getHexStr(label.second.address, true, 2)).nl();
 				}
 				if (m_labelTable.size() > 0)
 					out.nl();
@@ -155,9 +158,9 @@ namespace dragon
 				out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Fixed Size:  ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p((int)m_fixedSize).p(" bytes").nl();
 				out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Program Size:").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p((int)m_programSize).p(" bytes").nl();
 				out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Data Size:   ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p((int)m_dataSize).p(" bytes").nl();
-				out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Fixed Fill:  ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p(ostd::Utils::getHexStr(m_fixedFillValue, true, 1)).nl();
-				out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Load Address:").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p(ostd::Utils::getHexStr(m_loadAddress, true, 2)).nl();
-				out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Entry Point: ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p(ostd::Utils::getHexStr(m_dataSize + m_loadAddress + 3, true, 2)).nl();
+				out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Fixed Fill:  ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p(ostd::String::getHexStr(m_fixedFillValue, true, 1)).nl();
+				out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Load Address:").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p(ostd::String::getHexStr(m_loadAddress, true, 2)).nl();
+				out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Entry Point: ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p(ostd::String::getHexStr(m_dataSize + m_loadAddress + 3, true, 2)).nl();
 			}
 
 			out.nl();
@@ -426,7 +429,7 @@ namespace dragon
 					m_structDefs.push_back(struct_def);
 					ostd::String size_def = "@define ";
 					size_def.add(struct_def.name).add(".").add("SIZE").add(" ");
-					size_def.add(ostd::Utils::getHexStr(struct_def.size, true, 2));
+					size_def.add(ostd::String::getHexStr(struct_def.size, true, 2));
 					newLines.push_back(size_def);
 					in_struct = false;
 					continue;
@@ -526,7 +529,7 @@ namespace dragon
 			// 	{
 			// 		std::cout << "  " << d.first << "  ";
 			// 		for (auto& b : d.second)
-			// 			std::cout << ostd::Utils::getHexStr(b) << " ";
+			// 			std::cout << ostd::String::getHexStr(b) << " ";
 			// 	}
 			// 	std::cout << "\n";
 			// }
@@ -614,9 +617,9 @@ namespace dragon
 						for (int32_t i = 0; i < member.data.size(); i++, data_index++)
 						{
 							if (has_init_data)
-								newLine.add(ostd::Utils::getHexStr(init_data[data_index], true, 2));
+								newLine.add(ostd::String::getHexStr(init_data[data_index], true, 2));
 							else
-								newLine.add(ostd::Utils::getHexStr(member.data[i], true, 2));
+								newLine.add(ostd::String::getHexStr(member.data[i], true, 2));
 							newLine.add(",");
 						}
 						newLine.substr(0, newLine.len() - 1);
@@ -767,6 +770,11 @@ namespace dragon
 				outFile.close();
 				std::cout << "Created export file: " << exportSpec.fileName << " (" << name << ")\n";
 			}
+		}
+
+		void Assembler::saveCurrentStageToFile(void)
+		{
+
 		}
 
 
@@ -1292,7 +1300,7 @@ namespace dragon
 				if (opType == eOperandType::Immediate || opType == eOperandType::Label)
 				{
 					// if (opType == eOperandType::Label)
-					// 	std::cout << ostd::Utils::getHexStr(word, true, 2) << "\n";
+					// 	std::cout << ostd::String::getHexStr(word, true, 2) << "\n";
 					m_code[m_code.size() - 1] = data::OpCodes::PushImm;
 					// m_code.push_back(data::OpCodes::PushImm);
 					m_code.push_back((uint8_t)((word & 0xFF00) >> 8));
@@ -2512,7 +2520,7 @@ namespace dragon
 			newCode.push_back((uint8_t)(entryAddr & 0x00FF));
 			if (m_dataSize > 0)
 				m_disassembly.insert(m_disassembly.begin(), { (uint16_t)(m_loadAddress + 3), "[----------DATA_SECTION----------]" });
-			m_disassembly.insert(m_disassembly.begin(), { m_loadAddress, ostd::String("jmp ").add(ostd::Utils::getHexStr(entryAddr, true, 2)) });
+			m_disassembly.insert(m_disassembly.begin(), { m_loadAddress, ostd::String("jmp ").add(ostd::String::getHexStr(entryAddr, true, 2)) });
 			for (auto& d : m_symbolTable)
 			{
 				symbols.push_back(d.second);
@@ -2552,7 +2560,7 @@ namespace dragon
 				// std::cout << "SYMBOL: " << symbol.first << "\n";
 				// std::cout << "LINE: " << lineEdit << "\n";
 				// std::cout << "REGEX: " << regex << "\n";
-				lineEdit.regexReplace(regex, ostd::Utils::getHexStr(symbol.second.address, true, 2), false);
+				lineEdit.regexReplace(regex, ostd::String::getHexStr(symbol.second.address, true, 2), false);
 				// std::cout << "NEW_LINE: " << lineEdit << "\n\n";
 			}
 			return lineEdit;
@@ -2630,15 +2638,15 @@ namespace dragon
 					m_labelTable[opEdit].references.push_back(m_code.size());
 				outOp = (int16_t)labelAddr;
 				// std::cout << "LABEL: " << opEdit << "\n";
-				// std::cout << "     : " << ostd::Utils::getHexStr(labelAddr, true, 2) << "\n";
-				// std::cout << "     : " << ostd::Utils::getHexStr(outOp, true, 2) << "\n";
+				// std::cout << "     : " << ostd::String::getHexStr(labelAddr, true, 2) << "\n";
+				// std::cout << "     : " << ostd::String::getHexStr(outOp, true, 2) << "\n";
 				return eOperandType::Label;
 			}
 			if (opEdit.startsWith("{") && opEdit.endsWith("}"))
 			{
 				opEdit = opEdit.substr(1, opEdit.len() - 1);
 				opEdit.trim();
-				outOp = (int16_t)ostd::Utils::solveIntegerExpression(opEdit);
+				outOp = (int16_t)ostd::MathUtils::solveIntegerExpression(opEdit);
 				return eOperandType::Immediate;
 			}
 			if (opEdit.startsWith("[") && opEdit.endsWith("]"))
@@ -2649,7 +2657,7 @@ namespace dragon
 				{
 					opEdit = opEdit.substr(1, opEdit.len() - 1);
 					opEdit.trim();
-					outOp = (int16_t)ostd::Utils::solveIntegerExpression(opEdit);
+					outOp = (int16_t)ostd::MathUtils::solveIntegerExpression(opEdit);
 					return eOperandType::DerefMemory;
 				}
 				if (!opEdit.isNumeric())

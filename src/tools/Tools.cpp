@@ -1,12 +1,12 @@
 #include "Tools.hpp"
 
-#include <ostd/data_types/Color.hpp>
+#include <ostd/data/Color.hpp>
 #include <ostd/io/IOHandlers.hpp>
-#include <ostd/utils/Utils.hpp>
 #include <fstream>
 #include "../hardware/VirtualHardDrive.hpp"
 #include "GlobalData.hpp"
 #include "debugger/DisassemblyLoader.hpp"
+#include <ostd/io/Memory.hpp>
 #include <ostd/io/Serial.hpp>
 
 namespace dragon
@@ -84,12 +84,12 @@ namespace dragon
 		}
 		ostd::String dest = argv[2];
 		ostd::String str_size = argv[3];
-		if (!ostd::Utils::isInt(str_size))
+		if (!str_size.isInt())
 		{
 			out.fg(ostd::ConsoleColors::Red).p("Error: <size_in_bytes> parameter must be integer.").reset().nl();
 			return ErrorNewVDiskNonIntSize;
 		}
-		bool result = createVirtualHardDrive(ostd::Utils::strToInt(str_size), dest);
+		bool result = createVirtualHardDrive(str_size.toInt(), dest);
 		if (!result)
 		{
 			out.fg(ostd::ConsoleColors::Red).p("Error: Unable to create virtual disk.").reset().nl();
@@ -112,7 +112,7 @@ namespace dragon
 		ostd::String vdisk_file = argv[2];
 		ostd::String data_file = argv[3];
 		ostd::String str_addr = argv[4];
-		if (!ostd::Utils::isInt(str_addr))
+		if (!str_addr.isInt())
 		{
 			out.fg(ostd::ConsoleColors::Red).p("Error: <destination_address> parameter must be integer.").reset().nl();
 			return ErrorLoadProgNonIntAddr;
@@ -124,13 +124,13 @@ namespace dragon
 			return ErrorLoadProgUnableToLoadVDisk;
 		}
 		ostd::ByteStream code;
-		if (!ostd::Utils::loadByteStreamFromFile(data_file, code))
+		if (!ostd::Memory::loadByteStreamFromFile(data_file, code))
 		{
 			out.fg(ostd::ConsoleColors::Red).p("Error: Unable to load data file.").reset().nl();
 			return ErrorLoadProgUnableToLoadDataFile;
 		}
 		int16_t index = 0;
-		uint32_t addr = (uint32_t)ostd::Utils::strToInt(str_addr);
+		uint32_t addr = (uint32_t)str_addr.toInt();
 		for (auto& b : code)
 		{
 			vHDD.write(addr + index, b);
@@ -140,7 +140,7 @@ namespace dragon
 		out.nl().fg(ostd::ConsoleColors::Green).p("Success. Data written to Virtual Disk:").nl();
 		out.p("  Data Path: ").p(data_file.cpp_str()).nl();
 		out.p("  Disk Path: ").p(vdisk_file.cpp_str()).nl();
-		out.p("  Data Address: ").p(ostd::Utils::getHexStr(addr, true, 4).cpp_str()).nl();
+		out.p("  Data Address: ").p(ostd::String::getHexStr(addr, true, 4).cpp_str()).nl();
 		out.p("  Size: ").p(code.size()).reset().nl();
 		return ErrorNoError;
 	}
@@ -248,8 +248,8 @@ namespace dragon
 			out.fg(ostd::ConsoleColors::Cyan).p("  ");
 			out.p(part.label.new_fixedLength(len));
 			print_part_size(part.size, out, len);
-			out.p(ostd::Utils::getHexStr(part.startAddress, true, 4).new_fixedLength(len));
-			out.p(ostd::Utils::getHexStr(part.startAddress + part.size, true, 4).new_fixedLength(len));
+			out.p(ostd::String::getHexStr(part.startAddress, true, 4).new_fixedLength(len));
+			out.p(ostd::String::getHexStr(part.startAddress + part.size, true, 4).new_fixedLength(len));
 			ostd::String flags_str = "";
 			for (uint8_t bit = 0; bit < sizeof(part.flags) * 8; bit++)
 			{
@@ -365,7 +365,7 @@ namespace dragon
 						out.fg(ostd::ConsoleColors::Red).p("Error: No partition size specified.").reset().nl();
 						return ErrorNewDPTNoPartitionSize;
 					}
-					else if (!ostd::Utils::isInt(argv[arg_index + 1]))
+					else if (!ostd::String(argv[arg_index + 1]).isInt())
 					{
 						out.fg(ostd::ConsoleColors::Red).p("Error: Partition size must be an integer.").reset().nl();
 						return ErrorNewDPTInvalidPartitionSize;
@@ -446,7 +446,7 @@ namespace dragon
 		vHDD.unmount();
 		out.nl().fg(ostd::ConsoleColors::Green).p("Success. DPT Block created on Virtual Disk:").nl();
 		out.p("  Disk Path: ").p(vdisk_file.cpp_str()).nl();
-		out.p("  DPT Block Address: ").p(ostd::Utils::getHexStr(data::DPTStructure::DiskAddress, true, 4).cpp_str()).nl();
+		out.p("  DPT Block Address: ").p(ostd::String::getHexStr(data::DPTStructure::DiskAddress, true, 4).cpp_str()).nl();
 		out.p("  DPT Block Size: ").p(data::DPTStructure::DPTBlockSizeBytes).nl();
 		return ErrorNoError;
 	}
@@ -499,7 +499,7 @@ namespace dragon
 		out.bg(ostd::ConsoleColors::White).fg(ostd::ConsoleColors::Black).p("DATA:").reset().nl();
 		for (const auto& line : dataTable)
 		{
-			out.fg(ostd::ConsoleColors::BrightGray).p(ostd::Utils::getHexStr(line.addr, true, 2)).p("\t\t");
+			out.fg(ostd::ConsoleColors::BrightGray).p(ostd::String::getHexStr(line.addr, true, 2)).p("\t\t");
 			out.fg(ostd::ConsoleColors::Green).p(line.code).p("\t\t");
 			out.fg(ostd::ConsoleColors::Blue).p(line.size).p(" bytes\t\t");
 			out.reset().nl();
@@ -508,7 +508,7 @@ namespace dragon
 		out.bg(ostd::ConsoleColors::White).fg(ostd::ConsoleColors::Black).p("LABELS:").reset().nl();
 		for (const auto& line : labelTable)
 		{
-			out.fg(ostd::ConsoleColors::BrightGray).p(ostd::Utils::getHexStr(line.addr, true, 2)).p("\t\t");
+			out.fg(ostd::ConsoleColors::BrightGray).p(ostd::String::getHexStr(line.addr, true, 2)).p("\t\t");
 			out.fg(ostd::ConsoleColors::Green).p(line.code).p("\t\t");
 			out.reset().nl();
 		}
@@ -516,7 +516,7 @@ namespace dragon
 		out.bg(ostd::ConsoleColors::White).fg(ostd::ConsoleColors::Black).p("CODE:").reset().nl();
 		for (const auto& line : codeTable)
 		{
-			out.fg(ostd::ConsoleColors::BrightGray).p(ostd::Utils::getHexStr(line.addr, true, 2)).p("\t\t");
+			out.fg(ostd::ConsoleColors::BrightGray).p(ostd::String::getHexStr(line.addr, true, 2)).p("\t\t");
 			out.fg(ostd::ConsoleColors::Green).p(line.code).p("\t\t");
 			out.reset().nl();
 		}

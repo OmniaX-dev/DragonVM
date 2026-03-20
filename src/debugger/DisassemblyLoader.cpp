@@ -2,9 +2,11 @@
 
 #include <ostd/io/File.hpp>
 #include <ostd/io/FileSystem.hpp>
+#include <ostd/io/Memory.hpp>
 #include <ostd/io/Serial.hpp>
 
 #include <algorithm>
+#include <ostd/string/String.hpp>
 
 namespace dragon
 {
@@ -13,7 +15,7 @@ namespace dragon
 	void DisassemblyTable::init(const ostd::String& filePath)
 	{
 		ostd::ByteStream stream;
-		if (!ostd::Utils::loadByteStreamFromFile(filePath, stream))
+		if (!ostd::Memory::loadByteStreamFromFile(filePath, stream))
 		{
 			m_initialized = false;
 			return;
@@ -75,7 +77,7 @@ namespace dragon
 					int32_t opCodeLen = 10;
 					if (part1.len() < opCodeLen)
 					{
-						codeEdit = part1 + ostd::Utils::duplicateChar(' ', opCodeLen - part1.len()) + part2;
+						codeEdit = part1 + ostd::String::duplicateChar(' ', opCodeLen - part1.len()) + part2;
 						line.code = codeEdit;
 					}
 				}

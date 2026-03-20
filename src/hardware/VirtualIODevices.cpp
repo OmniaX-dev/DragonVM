@@ -1,5 +1,4 @@
 #include "VirtualIODevices.hpp"
-#include <ostd/utils/Utils.hpp>
 
 #include "VirtualHardDrive.hpp"
 #include "MemoryMapper.hpp"
@@ -7,6 +6,7 @@
 
 #include "../runtime/DragonRuntime.hpp"
 #include <ogfx/PixelRenderer.hpp>
+#include <ostd/io/Memory.hpp>
 
 //TODO: Fix all access functions (reads and writes) ensuring the address is not out of bounds.
 //		Right now the check is done, but just to push an error if out of bounds; the address
@@ -19,38 +19,38 @@ namespace dragon
 	{
 		void VirtualBIOS::init(const ostd::String& biosFilePath)
 		{
-			bool loaded = ostd::Utils::loadByteStreamFromFile(biosFilePath, m_bios);
+			bool loaded = ostd::Memory::loadByteStreamFromFile(biosFilePath, m_bios);
 			if (!loaded)
 				data::ErrorHandler::pushError(data::ErrorCodes::BIOS_FailedToLoad, "Failed to load BIOS data.");
 			if (m_bios.size() != 4096) //TODO: Hardcoded
-				data::ErrorHandler::pushError(data::ErrorCodes::BIOS_InvalidSize, ostd::String("Invalid BIOS size: ").add(ostd::Utils::getHexStr(m_bios.size(), true, 2)));
+				data::ErrorHandler::pushError(data::ErrorCodes::BIOS_InvalidSize, ostd::String("Invalid BIOS size: ").add(ostd::String::getHexStr(m_bios.size(), true, 2)));
 			m_initialized = true;
 		}
 
 		int8_t VirtualBIOS::read8(uint16_t addr)
 		{
 			if (addr >= m_bios.size())
-				data::ErrorHandler::pushError(data::ErrorCodes::BIOS_InvalidAddress, ostd::String("Invalid Byte BIOS location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)));
+				data::ErrorHandler::pushError(data::ErrorCodes::BIOS_InvalidAddress, ostd::String("Invalid Byte BIOS location at address: ").add(ostd::String::getHexStr(addr, true, 2)));
 			return m_bios[addr];
 		}
 
 		int16_t VirtualBIOS::read16(uint16_t addr)
 		{
 			if (addr >= m_bios.size() - 1)
-				data::ErrorHandler::pushError(data::ErrorCodes::BIOS_InvalidAddress, ostd::String("Invalid Word BIOS location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)));
+				data::ErrorHandler::pushError(data::ErrorCodes::BIOS_InvalidAddress, ostd::String("Invalid Word BIOS location at address: ").add(ostd::String::getHexStr(addr, true, 2)));
 			return ((m_bios[addr + 0] <<  8) & 0xFF00U)
 				 | ( m_bios[addr + 1]        & 0x00FFU);
 		}
 
 		int8_t VirtualBIOS::write8(uint16_t addr, int8_t value)
 		{
-			data::ErrorHandler::pushError(data::ErrorCodes::BIOS_WriteAttempt, ostd::String("Attempting to write to BIOS memory map: ").add(ostd::Utils::getHexStr(addr, true, 2)));
+			data::ErrorHandler::pushError(data::ErrorCodes::BIOS_WriteAttempt, ostd::String("Attempting to write to BIOS memory map: ").add(ostd::String::getHexStr(addr, true, 2)));
 			return 0x00;
 		}
 
 		int16_t VirtualBIOS::write16(uint16_t addr, int16_t value)
 		{
-			data::ErrorHandler::pushError(data::ErrorCodes::BIOS_WriteAttempt, ostd::String("Attempting to write to BIOS memory map: ").add(ostd::Utils::getHexStr(addr, true, 2)));
+			data::ErrorHandler::pushError(data::ErrorCodes::BIOS_WriteAttempt, ostd::String("Attempting to write to BIOS memory map: ").add(ostd::String::getHexStr(addr, true, 2)));
 			return 0x0000;
 		}
 
@@ -73,14 +73,14 @@ namespace dragon
 		int8_t InterruptVector::read8(uint16_t addr)
 		{
 			if (addr >= m_data.size())
-				data::ErrorHandler::pushError(data::ErrorCodes::IntVector_InvalidAddress, ostd::String("Invalid Byte IntVector location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)));
+				data::ErrorHandler::pushError(data::ErrorCodes::IntVector_InvalidAddress, ostd::String("Invalid Byte IntVector location at address: ").add(ostd::String::getHexStr(addr, true, 2)));
 			return m_data[addr];
 		}
 
 		int16_t InterruptVector::read16(uint16_t addr)
 		{
 			if (addr >= m_data.size() - 1)
-				data::ErrorHandler::pushError(data::ErrorCodes::IntVector_InvalidAddress, ostd::String("Invalid Word IntVector location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)));
+				data::ErrorHandler::pushError(data::ErrorCodes::IntVector_InvalidAddress, ostd::String("Invalid Word IntVector location at address: ").add(ostd::String::getHexStr(addr, true, 2)));
 			return ((m_data[addr + 0] <<  8) & 0xFF00U)
 				 | ( m_data[addr + 1]        & 0x00FFU);
 		}
@@ -88,7 +88,7 @@ namespace dragon
 		int8_t InterruptVector::write8(uint16_t addr, int8_t value)
 		{
 			if (addr >= m_data.size())
-				data::ErrorHandler::pushError(data::ErrorCodes::IntVector_InvalidAddress, ostd::String("Invalid Word IntVector location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)));
+				data::ErrorHandler::pushError(data::ErrorCodes::IntVector_InvalidAddress, ostd::String("Invalid Word IntVector location at address: ").add(ostd::String::getHexStr(addr, true, 2)));
 			m_data[addr] = value;
 			return value;
 		}
@@ -96,7 +96,7 @@ namespace dragon
 		int16_t InterruptVector::write16(uint16_t addr, int16_t value)
 		{
 			if (addr >= m_data.size() - 1)
-				data::ErrorHandler::pushError(data::ErrorCodes::IntVector_InvalidAddress, ostd::String("Invalid Word IntVector location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)));
+				data::ErrorHandler::pushError(data::ErrorCodes::IntVector_InvalidAddress, ostd::String("Invalid Word IntVector location at address: ").add(ostd::String::getHexStr(addr, true, 2)));
 			m_data[addr + 0] = (value >> 8) & 0xFF;
 			m_data[addr + 1] = value & 0xFF;
 			return value;
@@ -126,14 +126,14 @@ namespace dragon
 		int8_t VirtualKeyboard::read8(uint16_t addr)
 		{
 			if (addr >= m_data.size())
-				data::ErrorHandler::pushError(data::ErrorCodes::IntVector_InvalidAddress, ostd::String("Invalid Byte KeyboardController location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)));
+				data::ErrorHandler::pushError(data::ErrorCodes::IntVector_InvalidAddress, ostd::String("Invalid Byte KeyboardController location at address: ").add(ostd::String::getHexStr(addr, true, 2)));
 			return m_data[addr];
 		}
 
 		int16_t VirtualKeyboard::read16(uint16_t addr)
 		{
 			if (addr >= m_data.size() - 1)
-				data::ErrorHandler::pushError(data::ErrorCodes::IntVector_InvalidAddress, ostd::String("Invalid Word KeyboardController location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)));
+				data::ErrorHandler::pushError(data::ErrorCodes::IntVector_InvalidAddress, ostd::String("Invalid Word KeyboardController location at address: ").add(ostd::String::getHexStr(addr, true, 2)));
 			return ((m_data[addr + 0] <<  8) & 0xFF00U)
 				 | ( m_data[addr + 1]        & 0x00FFU);
 		}
@@ -141,10 +141,10 @@ namespace dragon
 		int8_t VirtualKeyboard::write8(uint16_t addr, int8_t value)
 		{
 			if (addr >= m_data.size())
-				data::ErrorHandler::pushError(data::ErrorCodes::IntVector_InvalidAddress, ostd::String("Invalid Word KeyboardController location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)));
+				data::ErrorHandler::pushError(data::ErrorCodes::IntVector_InvalidAddress, ostd::String("Invalid Word KeyboardController location at address: ").add(ostd::String::getHexStr(addr, true, 2)));
 			if (!DragonRuntime::cpu.isInBIOSMOde())
 			{
-				data::ErrorHandler::pushError(data::ErrorCodes::AccessViolation_BiosModeRequired, ostd::String("Attempting to write byte to KeyboardController while not in BIOS mode. Address: ").add(ostd::Utils::getHexStr(addr, true, 2)));
+				data::ErrorHandler::pushError(data::ErrorCodes::AccessViolation_BiosModeRequired, ostd::String("Attempting to write byte to KeyboardController while not in BIOS mode. Address: ").add(ostd::String::getHexStr(addr, true, 2)));
 				return 0;
 			}
 			return __write8(addr, value);
@@ -153,10 +153,10 @@ namespace dragon
 		int16_t VirtualKeyboard::write16(uint16_t addr, int16_t value)
 		{
 			if (addr >= m_data.size() - 1)
-				data::ErrorHandler::pushError(data::ErrorCodes::IntVector_InvalidAddress, ostd::String("Invalid Word KeyboardController location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)));
+				data::ErrorHandler::pushError(data::ErrorCodes::IntVector_InvalidAddress, ostd::String("Invalid Word KeyboardController location at address: ").add(ostd::String::getHexStr(addr, true, 2)));
 			if (!DragonRuntime::cpu.isInBIOSMOde())
 			{
-				data::ErrorHandler::pushError(data::ErrorCodes::AccessViolation_BiosModeRequired, ostd::String("Attempting to write word to KeyboardController while not in BIOS mode. Address: ").add(ostd::Utils::getHexStr(addr, true, 2)));
+				data::ErrorHandler::pushError(data::ErrorCodes::AccessViolation_BiosModeRequired, ostd::String("Attempting to write word to KeyboardController while not in BIOS mode. Address: ").add(ostd::String::getHexStr(addr, true, 2)));
 				return 0;
 			}
 			return __write16(addr, value);
@@ -398,14 +398,14 @@ namespace dragon
 		int8_t VirtualBootloader::read8(uint16_t addr)
 		{
 			if (addr >= m_mbr.size())
-				data::ErrorHandler::pushError(data::ErrorCodes::BIOS_InvalidAddress, ostd::String("Invalid Byte MBR location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)));
+				data::ErrorHandler::pushError(data::ErrorCodes::BIOS_InvalidAddress, ostd::String("Invalid Byte MBR location at address: ").add(ostd::String::getHexStr(addr, true, 2)));
 			return m_mbr[addr];
 		}
 
 		int16_t VirtualBootloader::read16(uint16_t addr)
 		{
 			if (addr >= m_mbr.size() - 1)
-				data::ErrorHandler::pushError(data::ErrorCodes::BIOS_InvalidAddress, ostd::String("Invalid Word MBR location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)));
+				data::ErrorHandler::pushError(data::ErrorCodes::BIOS_InvalidAddress, ostd::String("Invalid Word MBR location at address: ").add(ostd::String::getHexStr(addr, true, 2)));
 			return ((m_mbr[addr + 0] <<  8) & 0xFF00U)
 				 | ( m_mbr[addr + 1]        & 0x00FFU);
 		}
@@ -413,7 +413,7 @@ namespace dragon
 		int8_t VirtualBootloader::write8(uint16_t addr, int8_t value)
 		{
 			if (addr >= m_mbr.size())
-				data::ErrorHandler::pushError(data::ErrorCodes::IntVector_InvalidAddress, ostd::String("Invalid Word IntVector location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)));
+				data::ErrorHandler::pushError(data::ErrorCodes::IntVector_InvalidAddress, ostd::String("Invalid Word IntVector location at address: ").add(ostd::String::getHexStr(addr, true, 2)));
 			m_mbr[addr] = value;
 			return value;
 		}
@@ -421,7 +421,7 @@ namespace dragon
 		int16_t VirtualBootloader::write16(uint16_t addr, int16_t value)
 		{
 			if (addr >= m_mbr.size() - 1)
-				data::ErrorHandler::pushError(data::ErrorCodes::IntVector_InvalidAddress, ostd::String("Invalid Word IntVector location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)));
+				data::ErrorHandler::pushError(data::ErrorCodes::IntVector_InvalidAddress, ostd::String("Invalid Word IntVector location at address: ").add(ostd::String::getHexStr(addr, true, 2)));
 			m_mbr[addr + 0] = (value >> 8) & 0xFF;
 			m_mbr[addr + 1] = value & 0xFF;
 			return value;
@@ -887,7 +887,7 @@ namespace dragon
 				}
 				if (addr >= m_size)
 				{
-					data::ErrorHandler::pushError(data::ErrorCodes::CMOS_InvalidAddress, ostd::String("Invalid Byte CMOS location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)));
+					data::ErrorHandler::pushError(data::ErrorCodes::CMOS_InvalidAddress, ostd::String("Invalid Byte CMOS location at address: ").add(ostd::String::getHexStr(addr, true, 2)));
 					return false;
 				}
 				int8_t value = 0;
@@ -905,7 +905,7 @@ namespace dragon
 				}
 				if (addr >= m_size - 1)
 				{
-					data::ErrorHandler::pushError(data::ErrorCodes::CMOS_InvalidAddress, ostd::String("Invalid Word CMOS location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)));
+					data::ErrorHandler::pushError(data::ErrorCodes::CMOS_InvalidAddress, ostd::String("Invalid Word CMOS location at address: ").add(ostd::String::getHexStr(addr, true, 2)));
 					return 0;
 				}
 				int8_t b1 = read8(addr);
@@ -923,12 +923,12 @@ namespace dragon
 				}
 				if (addr >= m_size)
 				{
-					data::ErrorHandler::pushError(data::ErrorCodes::CMOS_InvalidAddress, ostd::String("Invalid Byte CMOS location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)));
+					data::ErrorHandler::pushError(data::ErrorCodes::CMOS_InvalidAddress, ostd::String("Invalid Byte CMOS location at address: ").add(ostd::String::getHexStr(addr, true, 2)));
 					return 0;
 				}
 				if (!DragonRuntime::cpu.isInBIOSMOde())
 				{
-					data::ErrorHandler::pushError(data::ErrorCodes::AccessViolation_BiosModeRequired, ostd::String("Attempting to write byte to CMOS while not in BIOS mode. Address: ").add(ostd::Utils::getHexStr(addr, true, 2)));
+					data::ErrorHandler::pushError(data::ErrorCodes::AccessViolation_BiosModeRequired, ostd::String("Attempting to write byte to CMOS while not in BIOS mode. Address: ").add(ostd::String::getHexStr(addr, true, 2)));
 					return 0;
 				}
 				m_dataFile.seekp(addr);
@@ -945,12 +945,12 @@ namespace dragon
 				}
 				if (addr >= m_size - 1)
 				{
-					data::ErrorHandler::pushError(data::ErrorCodes::CMOS_InvalidAddress, ostd::String("Invalid Word CMOS location at address: ").add(ostd::Utils::getHexStr(addr, true, 2)));
+					data::ErrorHandler::pushError(data::ErrorCodes::CMOS_InvalidAddress, ostd::String("Invalid Word CMOS location at address: ").add(ostd::String::getHexStr(addr, true, 2)));
 					return 0;
 				}
 				if (!DragonRuntime::cpu.isInBIOSMOde())
 				{
-					data::ErrorHandler::pushError(data::ErrorCodes::AccessViolation_BiosModeRequired, ostd::String("Attempting to write word to CMOS while not in BIOS mode. Address: ").add(ostd::Utils::getHexStr(addr, true, 2)));
+					data::ErrorHandler::pushError(data::ErrorCodes::AccessViolation_BiosModeRequired, ostd::String("Attempting to write word to CMOS while not in BIOS mode. Address: ").add(ostd::String::getHexStr(addr, true, 2)));
 					return 0;
 				}
 				int8_t b1 = (value >> 8) & 0xFF;

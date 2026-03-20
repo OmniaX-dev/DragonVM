@@ -1,6 +1,7 @@
 #include "Assembler.hpp"
 #include <ostd/math/Random.hpp>
 #include <ostd/io/FileSystem.hpp>
+#include <ostd/utils/Hash.hpp>
 
 namespace dragon
 {
@@ -57,6 +58,16 @@ namespace dragon
 						args.disassembly_file_path = argv[i];
 						args.save_disassembly = true;
 					}
+					else if (edit == "--save-final-stage")
+					{
+						if (i == argc - 1)
+							return RETURN_VAL_MISSING_PARAM;
+						i++;
+						ostd::String final_path = argv[i];
+						if (!ostd::FileSystem::ensureFile(final_path))
+							return RETURN_VAL_INVALID_PARAM;
+						args.final_stage_path = final_path;
+					}
 					else if (edit == "--help")
 					{
 						print_application_help();
@@ -88,7 +99,7 @@ namespace dragon
 				if (!disable_extmov)
 					args.cpu_extensions.push_back("extmov");
 				if (args.save_disassembly && args.disassembly_file_path == "")
-					args.disassembly_file_path = "disassembly/" + ostd::Utils::md5(args.dest_file_path) + ".dds";
+					args.disassembly_file_path = "disassembly/" + ostd::Hash::md5(args.dest_file_path) + ".dds";
 			}
 			return RETURN_VAL_EXIT_SUCCESS;
 		}
@@ -101,6 +112,9 @@ namespace dragon
 			ostd::String tmpCommand = "--save-disassembly <destination-directory>";
 			tmpCommand.addRightPadding(commandLength);
 			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Saves debug information in the destination directory. (Enabled by default in debug mode.)").reset().nl();
+			tmpCommand = "--save-final-stage <destination-file>";
+			tmpCommand.addRightPadding(commandLength);
+			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Saves the final full stripped code to the specified file.").reset().nl();
 			tmpCommand = "--verbose";
 			tmpCommand.addRightPadding(commandLength);
 			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Shows more information about the assembled program.").reset().nl();

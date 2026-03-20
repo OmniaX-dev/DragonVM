@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ostd/data_types/Types.hpp>
-#include <ostd/utils/Utils.hpp>
-#include <ostd/data_types/Bitfields.hpp>
+#include <ostd/data/Types.hpp>
+#include <ostd/data/Bitfields.hpp>
+#include <ostd/utils/Time.hpp>
 #include "IMemoryDevice.hpp"
 
 #include "../debugger/Debugger.hpp"

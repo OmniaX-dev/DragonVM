@@ -1,6 +1,5 @@
 #include "ConfigLoader.hpp"
 #include <ostd/io/File.hpp>
-#include <ostd/utils/Utils.hpp>
 #include "../hardware/CPUExtensions.hpp"
 
 namespace dragon

@@ -1,6 +1,5 @@
 #pragma once
 
-#include <ostd/utils/Utils.hpp>
 #include <ostd/io/IOHandlers.hpp>
 #include "../assembler/Assembler.hpp"
 

@@ -2,7 +2,7 @@
 
 #include "../assembler/Assembler.hpp"
 
-#include <ostd/data_types/Types.hpp>
+#include <ostd/data/Types.hpp>
 
 namespace dragon
 {

@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ostd/data_types/Types.hpp>
-#include <ostd/data_types/Color.hpp>
+#include <ostd/data/Types.hpp>
+#include <ostd/data/Color.hpp>
 
 namespace dragon
 {

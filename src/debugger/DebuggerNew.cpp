@@ -3,11 +3,11 @@
 #include <cstdint>
 #include <ogfx/BasicRenderer.hpp>
 #include <ogfx/WindowBase.hpp>
+#include <ostd/io/Memory.hpp>
 #include <ostd/math/Geometry.hpp>
 #include <ostd/io/IOHandlers.hpp>
 #include <ostd/math/Random.hpp>
 #include <ostd/string/String.hpp>
-#include <ostd/utils/Utils.hpp>
 #include "DisassemblyLoader.hpp"
 #include "../runtime/DragonRuntime.hpp"
 
@@ -256,7 +256,7 @@ namespace dragon
 		while (dragon::data::ErrorHandler::hasError())
 		{
 			auto err = dragon::data::ErrorHandler::popError();
-			out.nl().fg(ostd::ConsoleColors::Red).p("Error ").p(ostd::Utils::getHexStr(err.code, true, 8).cpp_str()).p(": ").p(err.text.cpp_str()).nl();
+			out.nl().fg(ostd::ConsoleColors::Red).p("Error ").p(ostd::String::getHexStr(err.code, true, 8).cpp_str()).p(": ").p(err.text.cpp_str()).nl();
 		}
 		debugger.args.step_exec = true;
 	}
@@ -428,14 +428,14 @@ namespace dragon
 					uint16_t addr = data().command.toInt();
 					uint16_t end_addr = addr;
 					ostd::String tmp = "";
-					tmp.add("*(").add(ostd::Utils::getHexStr(addr, true, 2));
+					tmp.add("*(").add(ostd::String::getHexStr(addr, true, 2));
 					if (type != TYPE_BYTE)
 					{
 						end_addr = addr + type - 1;
 						if (end_addr < addr)
 							end_addr = addr;
 						else
-							tmp.add("-").add(ostd::Utils::getHexStr(end_addr, true, 2));
+							tmp.add("-").add(ostd::String::getHexStr(end_addr, true, 2));
 					}
 					tmp.add(")");
 					ostd::RegexRichString rgx(tmp);
@@ -448,7 +448,7 @@ namespace dragon
 					for (uint16_t a = addr; a <= end_addr; a++)
 					{
 						uint8_t value = DragonRuntime::memMap.read8(a);
-						output().fg(ostd::ConsoleColors::BrightRed).p(ostd::Utils::getHexStr(value, true, 1));
+						output().fg(ostd::ConsoleColors::BrightRed).p(ostd::String::getHexStr(value, true, 1));
 						if (a < end_addr)
 							output().p(" ");
 					}
@@ -466,9 +466,9 @@ namespace dragon
 					else
 					{
 						ostd::String tmp = "";
-						tmp.add("*(").add(ostd::Utils::getHexStr(addr, true, 2));
+						tmp.add("*(").add(ostd::String::getHexStr(addr, true, 2));
 						if (size > 1)
-							tmp.add("-").add(ostd::Utils::getHexStr((uint16_t)(addr + size - 1), true, 2));
+							tmp.add("-").add(ostd::String::getHexStr((uint16_t)(addr + size - 1), true, 2));
 						tmp.add(")");
 						ostd::RegexRichString rgx(tmp);
 						rgx.fg("\\(|\\)|-", "darkgray");
@@ -487,7 +487,7 @@ namespace dragon
 								output().fg(ostd::ConsoleColors::BrightRed).pChar((char)value);
 								continue;
 							}
-							output().fg(ostd::ConsoleColors::BrightRed).p(ostd::Utils::getHexStr(value, true, 1));
+							output().fg(ostd::ConsoleColors::BrightRed).p(ostd::String::getHexStr(value, true, 1));
 							if (a < addr + size - 1)
 								output().p(" ");
 						}
@@ -531,12 +531,12 @@ namespace dragon
 					if (isBreakPoint(addr))
 					{
 						removeBreakPoint(addr);
-						output().fg(ostd::ConsoleColors::Yellow).p("Breakpoint removed at address: ").p(ostd::Utils::getHexStr(addr, true, 2)).reset().nl();
+						output().fg(ostd::ConsoleColors::Yellow).p("Breakpoint removed at address: ").p(ostd::String::getHexStr(addr, true, 2)).reset().nl();
 					}
 					else
 					{
 						addBreakPoint(addr);
-						output().fg(ostd::ConsoleColors::Yellow).p("Breakpoint set at address: ").p(ostd::Utils::getHexStr(addr, true, 2)).reset().nl();
+						output().fg(ostd::ConsoleColors::Yellow).p("Breakpoint set at address: ").p(ostd::String::getHexStr(addr, true, 2)).reset().nl();
 					}
 				}
 				// Display::printPrompt();
@@ -587,7 +587,7 @@ namespace dragon
 				if (index + labelEdit.len() < instEdit.len() && isValidLabelNameChar(instEdit.at(index + labelEdit.len())))
 					continue;
 				ostd::String instStr = instEdit;
-				instStr.cpp_str_ref().replace(index, labelEdit.len(), labelEdit.cpp_str() + "[@@ style foreground:brightgray](" + ostd::Utils::getHexStr(label.addr, true, 2).cpp_str() + ")[@@/]");
+				instStr.cpp_str_ref().replace(index, labelEdit.len(), labelEdit.cpp_str() + "[@@ style foreground:brightgray](" + ostd::String::getHexStr(label.addr, true, 2).cpp_str() + ")[@@/]");
 				instEdit = instStr;
 			}
 		}
@@ -644,7 +644,7 @@ namespace dragon
 			m_wout.fg(ostd::ConsoleColors::Gray).p(label.cpp_str()).p("  ");
 			if (currentLine)
 			{
-				m_wout.fg(ostd::ConsoleColors::Black).bg(ostd::ConsoleColors::Yellow).p(ostd::Utils::getHexStr(_da.addr, true, 2).cpp_str()).p("  ").reset();;
+				m_wout.fg(ostd::ConsoleColors::Black).bg(ostd::ConsoleColors::Yellow).p(ostd::String::getHexStr(_da.addr, true, 2).cpp_str()).p("  ").reset();;
 			}
 			else
 			{
@@ -654,7 +654,7 @@ namespace dragon
 					m_wout.fg(ostd::ConsoleColors::Red);
 				else
 					m_wout.fg(ostd::ConsoleColors::BrightGray);
-				m_wout.p(ostd::Utils::getHexStr(_da.addr, true, 2).cpp_str()).p("  ");
+				m_wout.p(ostd::String::getHexStr(_da.addr, true, 2).cpp_str()).p("  ");
 			}
 			if (specialSection)
 				m_wout.fg(ostd::ConsoleColors::Cyan).p(_da.code.cpp_str()).nl();
@@ -700,7 +700,7 @@ namespace dragon
 		m_wout.setWrapMode(ogfx::WindowBaseOutputHandler::eWrapMode::TripleDots);
 		m_wout.setDefaultForegroundColor({ 180, 180, 180, 255 });
 
-		std::cout << STR_BOOL(ostd::Utils::loadByteStreamFromFile("./bios.bin", m_test)) << "\n";
+		std::cout << STR_BOOL(ostd::Memory::loadByteStreamFromFile("./bios.bin", m_test)) << "\n";
  	}
 
 	void DebuggerNew::handleSignal(ostd::tSignal& signal)
@@ -746,7 +746,7 @@ namespace dragon
 		m_gfx.outlinedRect(m_wout.getConsoleBounds(), { 0, 0, 20, 255 }, { 255, 255, 255, 200 }, 2);
 
 		m_wout.beginFrame();
-		ostd::Utils::printByteStream(m_test, 0, 16, 16, m_wout, 8, 4, "HELLO");
+		ostd::Memory::printByteStream(m_test, 0, 16, 16, m_wout, 8, 4, "HELLO");
 		// printStep();
 
 		m_textInput.render(m_gfx);

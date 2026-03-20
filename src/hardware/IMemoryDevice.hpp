@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ostd/data_types/BaseObject.hpp>
+#include <ostd/data/BaseObject.hpp>
 
 namespace dragon
 {

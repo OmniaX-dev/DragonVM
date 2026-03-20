@@ -1,6 +1,5 @@
 #pragma once
 
-#include <ostd/utils/Utils.hpp>
 #include <ostd/io/IOHandlers.hpp>
 #include <unordered_map>
 #include <vector>
@@ -96,6 +95,7 @@ namespace dragon
 					bool debug_mode { false };
 					bool save_exports { true };
 					ostd::String disassembly_file_path { "" };
+					ostd::String final_stage_path { "" };
 					std::vector<ostd::String> cpu_extensions;
 					std::vector<ostd::String> include_directories;
 				};
@@ -133,6 +133,7 @@ namespace dragon
 				static void createExports(void);
 				static void replaceExportBuiltinVars(void);
 				static void createExportFiles(void);
+				static void saveCurrentStageToFile(void);
 
 				static void parseSections(void);
 				static void parseDataSection(void);

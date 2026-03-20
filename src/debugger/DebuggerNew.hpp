@@ -1,9 +1,8 @@
 #pragma once
 
-#include <ostd/data_types/Color.hpp>
+#include <ostd/data/Color.hpp>
 #include <ostd/math/Geometry.hpp>
-#include <ostd/data_types/Types.hpp>
-#include <ostd/utils/Utils.hpp>
+#include <ostd/data/Types.hpp>
 #include <ostd/io/IOHandlers.hpp>
 #include <ogfx/WindowBase.hpp>
 #include <ogfx/BasicRenderer.hpp>

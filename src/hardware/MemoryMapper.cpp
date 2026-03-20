@@ -1,7 +1,6 @@
 #include "MemoryMapper.hpp"
 #include <ostd/io/Serial.hpp>
-#include <ostd/data_types/Types.hpp>
-#include <ostd/utils/Utils.hpp>
+#include <ostd/data/Types.hpp>
 
 #include "../tools/GlobalData.hpp"
 
@@ -69,7 +68,7 @@ namespace dragon
 				if (address >= region.startAddress && address <= region.endAddress)
 					return &region;
 			}
-			data::ErrorHandler::pushError(data::ErrorCodes::MM_RegionNotFound, ostd::String("Memory device not found for address: ").add(ostd::Utils::getHexStr(address, true, 2)));
+			data::ErrorHandler::pushError(data::ErrorCodes::MM_RegionNotFound, ostd::String("Memory device not found for address: ").add(ostd::String::getHexStr(address, true, 2)));
 			return nullptr; //TODO: Error
 		}
 	}

@@ -1,5 +1,7 @@
 #include "DragonRuntime.hpp"
 #include <ogfx/PixelRenderer.hpp>
+#include <ostd/io/Memory.hpp>
+#include <ostd/utils/Time.hpp>
 
 namespace dragon
 {
@@ -25,39 +27,39 @@ namespace dragon
 
 	void DragonRuntime::printRegisters(dragon::hw::VirtualCPU& cpu)
 	{
-		out.fg("green").p("IP:  ").fg("white").p(ostd::Utils::getHexStr(cpu.readRegister(dragon::data::Registers::IP), true, 2).cpp_str());
+		out.fg("green").p("IP:  ").fg("white").p(ostd::String::getHexStr(cpu.readRegister(dragon::data::Registers::IP), true, 2).cpp_str());
 		out.p("      ");
-		out.fg("yellow").p("R1:  ").fg("white").p(ostd::Utils::getHexStr(cpu.readRegister(dragon::data::Registers::R1), true, 2).cpp_str());
+		out.fg("yellow").p("R1:  ").fg("white").p(ostd::String::getHexStr(cpu.readRegister(dragon::data::Registers::R1), true, 2).cpp_str());
 		out.p("      ");
-		out.fg("yellow").p("R2:  ").fg("white").p(ostd::Utils::getHexStr(cpu.readRegister(dragon::data::Registers::R2), true, 2).cpp_str()).nl();
+		out.fg("yellow").p("R2:  ").fg("white").p(ostd::String::getHexStr(cpu.readRegister(dragon::data::Registers::R2), true, 2).cpp_str()).nl();
 
-		out.fg("green").p("SP:  ").fg("white").p(ostd::Utils::getHexStr(cpu.readRegister(dragon::data::Registers::SP), true, 2).cpp_str());
+		out.fg("green").p("SP:  ").fg("white").p(ostd::String::getHexStr(cpu.readRegister(dragon::data::Registers::SP), true, 2).cpp_str());
 		out.p("      ");
-		out.fg("yellow").p("R3:  ").fg("white").p(ostd::Utils::getHexStr(cpu.readRegister(dragon::data::Registers::R3), true, 2).cpp_str());
+		out.fg("yellow").p("R3:  ").fg("white").p(ostd::String::getHexStr(cpu.readRegister(dragon::data::Registers::R3), true, 2).cpp_str());
 		out.p("      ");
-		out.fg("yellow").p("R4:  ").fg("white").p(ostd::Utils::getHexStr(cpu.readRegister(dragon::data::Registers::R4), true, 2).cpp_str()).nl();
+		out.fg("yellow").p("R4:  ").fg("white").p(ostd::String::getHexStr(cpu.readRegister(dragon::data::Registers::R4), true, 2).cpp_str()).nl();
 
-		out.fg("green").p("FP:  ").fg("white").p(ostd::Utils::getHexStr(cpu.readRegister(dragon::data::Registers::FP), true, 2).cpp_str());
+		out.fg("green").p("FP:  ").fg("white").p(ostd::String::getHexStr(cpu.readRegister(dragon::data::Registers::FP), true, 2).cpp_str());
 		out.p("      ");
-		out.fg("yellow").p("R5:  ").fg("white").p(ostd::Utils::getHexStr(cpu.readRegister(dragon::data::Registers::R5), true, 2).cpp_str());
+		out.fg("yellow").p("R5:  ").fg("white").p(ostd::String::getHexStr(cpu.readRegister(dragon::data::Registers::R5), true, 2).cpp_str());
 		out.p("      ");
-		out.fg("yellow").p("R6:  ").fg("white").p(ostd::Utils::getHexStr(cpu.readRegister(dragon::data::Registers::R6), true, 2).cpp_str()).nl();
+		out.fg("yellow").p("R6:  ").fg("white").p(ostd::String::getHexStr(cpu.readRegister(dragon::data::Registers::R6), true, 2).cpp_str()).nl();
 
-		out.fg("green").p("RV:  ").fg("white").p(ostd::Utils::getHexStr(cpu.readRegister(dragon::data::Registers::RV), true, 2).cpp_str());
+		out.fg("green").p("RV:  ").fg("white").p(ostd::String::getHexStr(cpu.readRegister(dragon::data::Registers::RV), true, 2).cpp_str());
 		out.p("      ");
-		out.fg("yellow").p("R7:  ").fg("white").p(ostd::Utils::getHexStr(cpu.readRegister(dragon::data::Registers::R7), true, 2).cpp_str());
+		out.fg("yellow").p("R7:  ").fg("white").p(ostd::String::getHexStr(cpu.readRegister(dragon::data::Registers::R7), true, 2).cpp_str());
 		out.p("      ");
-		out.fg("yellow").p("R8:  ").fg("white").p(ostd::Utils::getHexStr(cpu.readRegister(dragon::data::Registers::R8), true, 2).cpp_str()).nl();
+		out.fg("yellow").p("R8:  ").fg("white").p(ostd::String::getHexStr(cpu.readRegister(dragon::data::Registers::R8), true, 2).cpp_str()).nl();
 
-		out.fg("green").p("PP:  ").fg("white").p(ostd::Utils::getHexStr(cpu.readRegister(dragon::data::Registers::PP), true, 2).cpp_str());
+		out.fg("green").p("PP:  ").fg("white").p(ostd::String::getHexStr(cpu.readRegister(dragon::data::Registers::PP), true, 2).cpp_str());
 		out.p("      ");
-		out.fg("yellow").p("R9:  ").fg("white").p(ostd::Utils::getHexStr(cpu.readRegister(dragon::data::Registers::R9), true, 2).cpp_str());
+		out.fg("yellow").p("R9:  ").fg("white").p(ostd::String::getHexStr(cpu.readRegister(dragon::data::Registers::R9), true, 2).cpp_str());
 		out.p("      ");
-		out.fg("yellow").p("R10: ").fg("white").p(ostd::Utils::getHexStr(cpu.readRegister(dragon::data::Registers::R10), true, 2).cpp_str()).nl();
+		out.fg("yellow").p("R10: ").fg("white").p(ostd::String::getHexStr(cpu.readRegister(dragon::data::Registers::R10), true, 2).cpp_str()).nl();
 
-		out.fg("green").p("ACC: ").fg("white").p(ostd::Utils::getHexStr(cpu.readRegister(dragon::data::Registers::ACC), true, 2).cpp_str());
+		out.fg("green").p("ACC: ").fg("white").p(ostd::String::getHexStr(cpu.readRegister(dragon::data::Registers::ACC), true, 2).cpp_str());
 		out.p("      ");
-		out.fg("yellow").p("FL:  ").fg("white").p(ostd::Utils::getBinStr(cpu.readRegister(dragon::data::Registers::FL), true, 2).cpp_str());
+		out.fg("yellow").p("FL:  ").fg("white").p(ostd::String::getBinStr(cpu.readRegister(dragon::data::Registers::FL), true, 2).cpp_str());
 	}
 
 	void DragonRuntime::processErrors(void)
@@ -65,7 +67,7 @@ namespace dragon
 		while (dragon::data::ErrorHandler::hasError())
 		{
 			auto err = dragon::data::ErrorHandler::popError();
-			out.nl().fg(ostd::ConsoleColors::Red).p("Error ").p(ostd::Utils::getHexStr(err.code, true, 8).cpp_str()).p(": ").p(err.text.cpp_str()).nl();
+			out.nl().fg(ostd::ConsoleColors::Red).p("Error ").p(ostd::String::getHexStr(err.code, true, 8).cpp_str()).p(": ").p(err.text.cpp_str()).nl();
 		}
 	}
 
@@ -183,9 +185,9 @@ namespace dragon
 			out.fg(ostd::ConsoleColors::Magenta).p("  Initializing Memory Mapper:").nl();
 			out.fg(ostd::ConsoleColors::Magenta).p("    vBIOS: ");
 			out.fg(ostd::ConsoleColors::BrightYellow);
-			out.p(ostd::Utils::getHexStr(dragon::data::MemoryMapAddresses::BIOS_Start, true, 2).cpp_str());
+			out.p(ostd::String::getHexStr(dragon::data::MemoryMapAddresses::BIOS_Start, true, 2).cpp_str());
 			out.p(" to ");
-			out.p(ostd::Utils::getHexStr(dragon::data::MemoryMapAddresses::BIOS_End, true, 2).cpp_str());
+			out.p(ostd::String::getHexStr(dragon::data::MemoryMapAddresses::BIOS_End, true, 2).cpp_str());
 			out.p(" (remap=false)").nl();
 		}
 		memMap.mapDevice(vBIOS, dragon::data::MemoryMapAddresses::BIOS_Start, dragon::data::MemoryMapAddresses::BIOS_End, false, "BIOS");
@@ -193,9 +195,9 @@ namespace dragon
 		{
 			out.fg(ostd::ConsoleColors::Magenta).p("    vCMOS: ");
 			out.fg(ostd::ConsoleColors::BrightYellow);
-			out.p(ostd::Utils::getHexStr(dragon::data::MemoryMapAddresses::CMOS_Start, true, 2).cpp_str());
+			out.p(ostd::String::getHexStr(dragon::data::MemoryMapAddresses::CMOS_Start, true, 2).cpp_str());
 			out.p(" to ");
-			out.p(ostd::Utils::getHexStr(dragon::data::MemoryMapAddresses::CMOS_End, true, 2).cpp_str());
+			out.p(ostd::String::getHexStr(dragon::data::MemoryMapAddresses::CMOS_End, true, 2).cpp_str());
 			out.p(" (remap=true)").nl();
 		}
 		memMap.mapDevice(vCMOS, dragon::data::MemoryMapAddresses::CMOS_Start, dragon::data::MemoryMapAddresses::CMOS_End, true, "CMOS");
@@ -203,9 +205,9 @@ namespace dragon
 		{
 			out.fg(ostd::ConsoleColors::Magenta).p("    intVec: ");
 			out.fg(ostd::ConsoleColors::BrightYellow);
-			out.p(ostd::Utils::getHexStr(dragon::data::MemoryMapAddresses::IntVector_Start, true, 2).cpp_str());
+			out.p(ostd::String::getHexStr(dragon::data::MemoryMapAddresses::IntVector_Start, true, 2).cpp_str());
 			out.p(" to ");
-			out.p(ostd::Utils::getHexStr(dragon::data::MemoryMapAddresses::IntVector_End, true, 2).cpp_str());
+			out.p(ostd::String::getHexStr(dragon::data::MemoryMapAddresses::IntVector_End, true, 2).cpp_str());
 			out.p(" (remap=true)").nl();
 		}
 		memMap.mapDevice(intVec, dragon::data::MemoryMapAddresses::IntVector_Start, dragon::data::MemoryMapAddresses::IntVector_End, true, "intVec");
@@ -213,9 +215,9 @@ namespace dragon
 		{
 			out.fg(ostd::ConsoleColors::Magenta).p("    vKeyboard: ");
 			out.fg(ostd::ConsoleColors::BrightYellow);
-			out.p(ostd::Utils::getHexStr(dragon::data::MemoryMapAddresses::Keyboard_Start, true, 2).cpp_str());
+			out.p(ostd::String::getHexStr(dragon::data::MemoryMapAddresses::Keyboard_Start, true, 2).cpp_str());
 			out.p(" to ");
-			out.p(ostd::Utils::getHexStr(dragon::data::MemoryMapAddresses::Keyboard_End, true, 2).cpp_str());
+			out.p(ostd::String::getHexStr(dragon::data::MemoryMapAddresses::Keyboard_End, true, 2).cpp_str());
 			out.p(" (remap=false)").nl();
 		}
 		memMap.mapDevice(vKeyboard, dragon::data::MemoryMapAddresses::Keyboard_Start, dragon::data::MemoryMapAddresses::Keyboard_End, true, "Keyb.");
@@ -223,9 +225,9 @@ namespace dragon
 		{
 			out.fg(ostd::ConsoleColors::Magenta).p("    vMouse: ");
 			out.fg(ostd::ConsoleColors::BrightYellow);
-			out.p(ostd::Utils::getHexStr(dragon::data::MemoryMapAddresses::Mouse_Start, true, 2).cpp_str());
+			out.p(ostd::String::getHexStr(dragon::data::MemoryMapAddresses::Mouse_Start, true, 2).cpp_str());
 			out.p(" to ");
-			out.p(ostd::Utils::getHexStr(dragon::data::MemoryMapAddresses::Mouse_End, true, 2).cpp_str());
+			out.p(ostd::String::getHexStr(dragon::data::MemoryMapAddresses::Mouse_End, true, 2).cpp_str());
 			out.p(" (remap=false)").nl();
 		}
 		memMap.mapDevice(vMouse, dragon::data::MemoryMapAddresses::Mouse_Start, dragon::data::MemoryMapAddresses::Mouse_End, false, "Mouse");
@@ -233,9 +235,9 @@ namespace dragon
 		{
 			out.fg(ostd::ConsoleColors::Magenta).p("    vMBR: ");
 			out.fg(ostd::ConsoleColors::BrightYellow);
-			out.p(ostd::Utils::getHexStr(dragon::data::MemoryMapAddresses::MBR_Start, true, 2).cpp_str());
+			out.p(ostd::String::getHexStr(dragon::data::MemoryMapAddresses::MBR_Start, true, 2).cpp_str());
 			out.p(" to ");
-			out.p(ostd::Utils::getHexStr(dragon::data::MemoryMapAddresses::MBR_End, true, 2).cpp_str());
+			out.p(ostd::String::getHexStr(dragon::data::MemoryMapAddresses::MBR_End, true, 2).cpp_str());
 			out.p(" (remap=true)").nl();
 		}
 		memMap.mapDevice(vMBR, dragon::data::MemoryMapAddresses::MBR_Start, dragon::data::MemoryMapAddresses::MBR_End, true, "MBR");
@@ -243,9 +245,9 @@ namespace dragon
 		{
 			out.fg(ostd::ConsoleColors::Magenta).p("    vDiskInterface: ");
 			out.fg(ostd::ConsoleColors::BrightYellow);
-			out.p(ostd::Utils::getHexStr(dragon::data::MemoryMapAddresses::DiskInterface_Start, true, 2).cpp_str());
+			out.p(ostd::String::getHexStr(dragon::data::MemoryMapAddresses::DiskInterface_Start, true, 2).cpp_str());
 			out.p(" to ");
-			out.p(ostd::Utils::getHexStr(dragon::data::MemoryMapAddresses::DiskInterface_End, true, 2).cpp_str());
+			out.p(ostd::String::getHexStr(dragon::data::MemoryMapAddresses::DiskInterface_End, true, 2).cpp_str());
 			out.p(" (remap=true)").nl();
 		}
 		memMap.mapDevice(vDiskInterface, dragon::data::MemoryMapAddresses::DiskInterface_Start, dragon::data::MemoryMapAddresses::DiskInterface_End, true, "Disk");
@@ -253,9 +255,9 @@ namespace dragon
 		{
 			out.fg(ostd::ConsoleColors::Magenta).p("    vGraphicsInterface: ");
 			out.fg(ostd::ConsoleColors::BrightYellow);
-			out.p(ostd::Utils::getHexStr(dragon::data::MemoryMapAddresses::VideoCardInterface_Start, true, 2).cpp_str());
+			out.p(ostd::String::getHexStr(dragon::data::MemoryMapAddresses::VideoCardInterface_Start, true, 2).cpp_str());
 			out.p(" to ");
-			out.p(ostd::Utils::getHexStr(dragon::data::MemoryMapAddresses::VideoCardInterface_End, true, 2).cpp_str());
+			out.p(ostd::String::getHexStr(dragon::data::MemoryMapAddresses::VideoCardInterface_End, true, 2).cpp_str());
 			out.p(" (remap=true)").nl();
 		}
 		memMap.mapDevice(vGraphicsInterface, dragon::data::MemoryMapAddresses::VideoCardInterface_Start, dragon::data::MemoryMapAddresses::VideoCardInterface_End, true, "VGA");
@@ -263,9 +265,9 @@ namespace dragon
 		{
 			out.fg(ostd::ConsoleColors::Magenta).p("    vSerialInterface: ");
 			out.fg(ostd::ConsoleColors::BrightYellow);
-			out.p(ostd::Utils::getHexStr(dragon::data::MemoryMapAddresses::SerialInterface_Start, true, 2).cpp_str());
+			out.p(ostd::String::getHexStr(dragon::data::MemoryMapAddresses::SerialInterface_Start, true, 2).cpp_str());
 			out.p(" to ");
-			out.p(ostd::Utils::getHexStr(dragon::data::MemoryMapAddresses::SerialInterface_End, true, 2).cpp_str());
+			out.p(ostd::String::getHexStr(dragon::data::MemoryMapAddresses::SerialInterface_End, true, 2).cpp_str());
 			out.p(" (remap=true)").nl();
 		}
 		memMap.mapDevice(vSerialInterface, dragon::data::MemoryMapAddresses::SerialInterface_Start, dragon::data::MemoryMapAddresses::SerialInterface_End, true, "serial");
@@ -273,9 +275,9 @@ namespace dragon
 		{
 			out.fg(ostd::ConsoleColors::Magenta).p("    RAM: ");
 			out.fg(ostd::ConsoleColors::BrightYellow);
-			out.p(ostd::Utils::getHexStr(dragon::data::MemoryMapAddresses::Memory_Start, true, 2).cpp_str());
+			out.p(ostd::String::getHexStr(dragon::data::MemoryMapAddresses::Memory_Start, true, 2).cpp_str());
 			out.p(" to ");
-			out.p(ostd::Utils::getHexStr(dragon::data::MemoryMapAddresses::Memory_End, true, 2).cpp_str());
+			out.p(ostd::String::getHexStr(dragon::data::MemoryMapAddresses::Memory_End, true, 2).cpp_str());
 			out.p(" (remap=false)").nl();
 		}
 		memMap.mapDevice(ram, dragon::data::MemoryMapAddresses::Memory_Start, dragon::data::MemoryMapAddresses::Memory_End, false, "RAM");
@@ -285,7 +287,7 @@ namespace dragon
 
 		uint16_t reset_ip_addr = 0x0000;
 		if (verbose)
-			out.fg(ostd::ConsoleColors::BrightYellow).p("    Reset IP register: ").p(ostd::Utils::getHexStr(reset_ip_addr, true, 2).cpp_str()).nl();
+			out.fg(ostd::ConsoleColors::BrightYellow).p("    Reset IP register: ").p(ostd::String::getHexStr(reset_ip_addr, true, 2).cpp_str()).nl();
 		cpu.writeRegister16(dragon::data::Registers::IP, reset_ip_addr);
 
 		if (verbose)
@@ -394,7 +396,7 @@ namespace dragon
 			acc++;
 			acc2++;
 			if (_time < clock_speed_us && fixed_clock)
-				ostd::Utils::sleep(clock_speed_us - _time, ostd::eTimeUnits::Microseconds);
+				ostd::Time::sleep(clock_speed_us - _time, ostd::eTimeUnits::Microseconds);
 		}
 	}
 
@@ -425,7 +427,7 @@ namespace dragon
 	void DragonRuntime::forceLoad(const ostd::String& filePath, uint16_t loadAddress)
 	{
 		ostd::ByteStream code;
-		ostd::Utils::loadByteStreamFromFile(filePath, code);
+		ostd::Memory::loadByteStreamFromFile(filePath, code);
 
 		int16_t index = 0;
 		for (auto& b : code)
