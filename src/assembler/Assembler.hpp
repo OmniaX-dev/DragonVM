@@ -3,6 +3,7 @@
 #include <ostd/utils/Utils.hpp>
 #include <ostd/io/IOHandlers.hpp>
 #include <unordered_map>
+#include <vector>
 
 namespace dragon
 {
@@ -96,6 +97,7 @@ namespace dragon
 					bool save_exports { true };
 					ostd::String disassembly_file_path { "" };
 					std::vector<ostd::String> cpu_extensions;
+					std::vector<ostd::String> include_directories;
 				};
 
 				public:
@@ -108,6 +110,7 @@ namespace dragon
 					inline static const int32_t RETURN_VAL_CLOSE_PROGRAM = 512;
 					inline static const int32_t RETURN_VAL_TOO_FEW_ARGUMENTS = 1;
 					inline static const int32_t RETURN_VAL_MISSING_PARAM = 2;
+					inline static const int32_t RETURN_VAL_INVALID_PARAM = 3;
 			};
 
 			public:

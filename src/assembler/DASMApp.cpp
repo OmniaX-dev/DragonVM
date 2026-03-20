@@ -1,5 +1,6 @@
 #include "Assembler.hpp"
 #include <ostd/math/Random.hpp>
+#include <ostd/io/FileSystem.hpp>
 
 namespace dragon
 {
@@ -34,6 +35,19 @@ namespace dragon
 							return RETURN_VAL_MISSING_PARAM;
 						i++;
 						args.dest_file_path = argv[i];
+					}
+					else if (edit == "-I" || edit == "--include-path")
+					{
+						if (i == argc - 1)
+							return RETURN_VAL_MISSING_PARAM;
+						i++;
+						ostd::String _include = argv[i];
+						_include.trim();
+						if (!_include.endsWith("/"))
+							_include.add("/");
+						if (!ostd::FileSystem::directoryExists(_include))
+							return RETURN_VAL_INVALID_PARAM;
+						args.include_directories.push_back(_include);
 					}
 					else if (edit == "--save-disassembly")
 					{
@@ -111,6 +125,9 @@ namespace dragon
 			tmpCommand = "--debug, -D";
 			tmpCommand.addRightPadding(commandLength);
 			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Used to enable debug mode.").reset().nl();
+			tmpCommand = "--include-path, -I <include-directory-path>";
+			tmpCommand.addRightPadding(commandLength);
+			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Used specify an include directory path (absolute or relative to the <dasm> executable location).").reset().nl();
 			tmpCommand = "--help";
 			tmpCommand.addRightPadding(commandLength);
 			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Displays this help message.").reset().nl();

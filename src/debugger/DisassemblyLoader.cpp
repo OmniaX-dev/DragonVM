@@ -1,6 +1,7 @@
 #include "DisassemblyLoader.hpp"
 
 #include <ostd/io/File.hpp>
+#include <ostd/io/FileSystem.hpp>
 #include <ostd/io/Serial.hpp>
 
 #include <algorithm>
@@ -92,7 +93,7 @@ namespace dragon
 
 	void DisassemblyLoader::loadDirectory(const ostd::String& directoryPath)
 	{
-		auto list = ostd::Utils::listFilesInDirectory(directoryPath);
+		auto list = ostd::FileSystem::listFilesInDirectory(directoryPath);
 		for (auto& path : list)
 			loadFile(path.string());
 	}
