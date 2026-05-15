@@ -20,7 +20,7 @@ namespace dragon
 			public:
 				inline SignalListener(void) {  }
 				void init(void);
-				void handleSignal(ostd::tSignal& signal) override;
+				void handleSignal(ostd::Signal& signal) override;
 
 			public:
 				inline static const int32_t Signal_HardwareInterruptOccurred = ostd::SignalHandler::newCustomSignal(8129);

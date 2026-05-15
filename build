@@ -72,5 +72,23 @@ else
 	    ./ddb config/testMachine.dvm --verbose-load
 		backtrack_changes
 	    cd ..
+	elif [[ "$1" == "gdb" ]]; then
+	    printf "\n\033[0;32mDebugging Test Application...\n\n\033[0m"
+	    cd bin
+		./reload_env.sh
+  		gdb -batch \
+		    -ex 'set pagination off' \
+		    -ex 'set print pretty on' \
+		    -ex 'set logging file gdb-last.log' \
+		    -ex 'set logging overwrite on' \
+		    -ex 'set logging on' \
+		    -ex 'handle SIGPIPE nostop noprint pass' \
+		    -ex run \
+		    -ex 'bt full' \
+		    -ex 'info locals' \
+		    -ex 'info args' \
+		    -ex quit \
+	        --args ./dvm config/testMachine.dvm
+	    cd ..
     fi
 fi

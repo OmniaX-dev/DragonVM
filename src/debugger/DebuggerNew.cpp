@@ -1,13 +1,14 @@
 #include "DebuggerNew.hpp"
 #include <SDL2/SDL_keycode.h>
 #include <cstdint>
-#include <ogfx/BasicRenderer.hpp>
-#include <ogfx/WindowBase.hpp>
+#include <ogfx/render/BasicRenderer.hpp>
+#include <ogfx/gui/Window.hpp>
 #include <ostd/io/Memory.hpp>
 #include <ostd/math/Geometry.hpp>
 #include <ostd/io/IOHandlers.hpp>
 #include <ostd/math/Random.hpp>
 #include <ostd/string/String.hpp>
+#include <ostd/utils/Signals.hpp>
 #include "DisassemblyLoader.hpp"
 #include "../runtime/DragonRuntime.hpp"
 
@@ -15,20 +16,20 @@ namespace ogfx
 {
 	namespace gui
 	{
-		Button::EventListener::EventListener(Button& _parent) : parent(_parent)
+		CustomButton::EventListener::EventListener(CustomButton& _parent) : parent(_parent)
 		{
-			connectSignal(ostd::tBuiltinSignals::KeyPressed);
-			connectSignal(ostd::tBuiltinSignals::KeyReleased);
-			connectSignal(ostd::tBuiltinSignals::MouseMoved);
-			connectSignal(ostd::tBuiltinSignals::MousePressed);
-			connectSignal(ostd::tBuiltinSignals::MouseReleased);
-			connectSignal(ostd::tBuiltinSignals::OnGuiEvent);
-			connectSignal(ostd::tBuiltinSignals::WindowResized);
+			connectSignal(ostd::BuiltinSignals::KeyPressed);
+			connectSignal(ostd::BuiltinSignals::KeyReleased);
+			connectSignal(ostd::BuiltinSignals::MouseMoved);
+			connectSignal(ostd::BuiltinSignals::MousePressed);
+			connectSignal(ostd::BuiltinSignals::MouseReleased);
+			connectSignal(ostd::BuiltinSignals::OnGuiEvent);
+			connectSignal(ostd::BuiltinSignals::WindowResized);
 		}
 
-		void Button::EventListener::handleSignal(ostd::tSignal& signal)
+		void CustomButton::EventListener::handleSignal(ostd::Signal& signal)
 		{
-			if (signal.ID == ostd::tBuiltinSignals::KeyPressed)
+			if (signal.ID == ostd::BuiltinSignals::KeyPressed)
 			{
 				if (m_lastEvent != eEventType::KeyPressed)
 				{
@@ -51,7 +52,7 @@ namespace ogfx
 				{
 				}
 			}
-			else if (signal.ID == ostd::tBuiltinSignals::MouseMoved)
+			else if (signal.ID == ostd::BuiltinSignals::MouseMoved)
 			{
 				auto& data = (ogfx::MouseEventData&)signal.userData;
 				if (parent.contains((float)data.position_x, (float)data.position_y))
@@ -59,7 +60,7 @@ namespace ogfx
 				else
 					parent.m_mouseInside = false;
 			}
-			else if (signal.ID == ostd::tBuiltinSignals::MousePressed)
+			else if (signal.ID == ostd::BuiltinSignals::MousePressed)
 			{
 				auto& data = (ogfx::MouseEventData&)signal.userData;
 				if (data.button == ogfx::MouseEventData::eButton::Left && parent.m_gfx != nullptr && parent.m_mouseInside)
@@ -70,7 +71,7 @@ namespace ogfx
 					parent.m_pressed = true;
 				}
 			}
-			else if (signal.ID == ostd::tBuiltinSignals::MouseReleased)
+			else if (signal.ID == ostd::BuiltinSignals::MouseReleased)
 			{
 				auto& data = (ogfx::MouseEventData&)signal.userData;
 				if (data.button == ogfx::MouseEventData::eButton::Left && parent.m_gfx != nullptr)
@@ -78,7 +79,7 @@ namespace ogfx
 					if (parent.m_pressed)
 					{
 						ActionEventData aed(parent, parent.getName(), eActionEventType::Pressed, ostd::BaseObject::InvalidRef());
-						ostd::SignalHandler::emitSignal(Button::actionEventSignalID, ostd::tSignalPriority::RealTime, aed);
+						ostd::SignalHandler::emitSignal(CustomButton::actionEventSignalID, ostd::Signal::Priority::RealTime, aed);
 					}
 					parent.m_pressed = false;
 				}
@@ -90,7 +91,7 @@ namespace ogfx
 
 
 
-		Button& Button::create(const ostd::Vec2& position, const ostd::Vec2& size, const ostd::String& name)
+		CustomButton& CustomButton::create(const ostd::Vec2& position, const ostd::Vec2& size, const ostd::String& name)
 		{
 			setPosition(position);
 			setSize(size);
@@ -100,7 +101,7 @@ namespace ogfx
 			return *this;
 		}
 
-		void Button::render(ogfx::BasicRenderer2D& gfx)
+		void CustomButton::render(ogfx::BasicRenderer2D& gfx)
 		{
 			m_gfx = &gfx;
 			ostd::Color backgroundColor = m_theme.backgroundColor;
@@ -121,34 +122,34 @@ namespace ogfx
 			gfx.outlinedRect(*this, backgroundColor, borderColor, 2);
 			if (m_text.len() > 0)
 			{
-				ostd::IPoint strSize = gfx.getStringSize(m_text, m_theme.fontSize);
+				ostd::IPoint strSize = gfx.getStringDimensions(m_text, m_theme.fontSize);
 				ostd::Vec2 txtPos = getPosition() + ostd::Vec2 { (getw() / 2.0f) - (strSize.x / 2.0f), (geth() / 2.0f) - (strSize.y / 2.0f) };
 				gfx.drawString(m_text, txtPos, textColor, m_theme.fontSize);
 			}
 			onRender(gfx);
 		}
 
-		void Button::update(void)
+		void CustomButton::update(void)
 		{
 			onUpdate();
 		}
 
-		void Button::fixedUpdate(void)
+		void CustomButton::fixedUpdate(void)
 		{
 			onFixedUpdate();
 		}
 
-		void Button::setText(const ostd::String& text)
+		void CustomButton::setText(const ostd::String& text)
 		{
 			m_text = text;
 		}
 
-		void Button::appendText(const ostd::String& text)
+		void CustomButton::appendText(const ostd::String& text)
 		{
 			m_text.add(text);
 		}
 
-		void Button::setTheme(Theme theme)
+		void CustomButton::setTheme(Theme theme)
 		{
 			m_theme = theme;
 		}
@@ -256,7 +257,7 @@ namespace dragon
 		while (dragon::data::ErrorHandler::hasError())
 		{
 			auto err = dragon::data::ErrorHandler::popError();
-			out.nl().fg(ostd::ConsoleColors::Red).p("Error ").p(ostd::String::getHexStr(err.code, true, 8).cpp_str()).p(": ").p(err.text.cpp_str()).nl();
+			out().nl().fg(ostd::ConsoleColors::Red).p("Error ").p(ostd::String::getHexStr(err.code, true, 8).cpp_str()).p(": ").p(err.text.cpp_str()).nl();
 		}
 		debugger.args.step_exec = true;
 	}
@@ -265,8 +266,8 @@ namespace dragon
 	{
 		if (argc < 2)
 		{
-			out.fg(ostd::ConsoleColors::Red).p("Error: too few arguments.").nl();
-			out.fg(ostd::ConsoleColors::Red).p("Use the --help option for more info.").reset().nl();
+			out().fg(ostd::ConsoleColors::Red).p("Error: too few arguments.").nl();
+			out().fg(ostd::ConsoleColors::Red).p("Use the --help option for more info.").reset().nl();
 			return DragonRuntime::RETURN_VAL_TOO_FEW_ARGUMENTS;
 		}
 		else
@@ -345,8 +346,8 @@ namespace dragon
 
 		// while ((key = kbc.getPressedKey()) != ostd::eKeys::Enter)
 		// {
-		// 	if (key == ostd::eKeys::Escape)
-		// 		return InputCommandQuit;
+		//     if (key == ostd::eKeys::Escape)
+		//         return InputCommandQuit;
 		// }
 		// return kbc.getInputString();
 
@@ -357,14 +358,14 @@ namespace dragon
 	{
 		int32_t rValue = 0;
 		bool userQuit = false;
-		output().clear().fg(ostd::ConsoleColors::Green).p("Program running...").nl();
+		out().clear().fg(ostd::ConsoleColors::Green).p("Program running...").nl();
 		if (!data().args.step_exec)
-			output().fg(ostd::ConsoleColors::Yellow).p("Press <Escape> to enter in step-execution mode...").reset().nl();
+			out().fg(ostd::ConsoleColors::Yellow).p("Press <Escape> to enter in step-execution mode...").reset().nl();
 		while (!userQuit)
 		{
-			ostd::SignalHandler::refresh();
+			ostd::SignalHandler::handleDelegateSignals();
 			// if (closeEventListener.hasHappened())
-			// 	userQuit = true;
+			//     userQuit = true;
 			data().command.clr();
 			if (!userQuit && data().args.step_exec)
 				rValue = step_execution(userQuit, true);
@@ -372,7 +373,7 @@ namespace dragon
 				rValue = normal_runtime(userQuit);
 			data().currentAddress = DragonRuntime::cpu.readRegister(data::Registers::IP);
 		}
-		output().nl().fg(ostd::ConsoleColors::Yellow).p("Execution terminated.").nl().nl().reset();
+		out().nl().fg(ostd::ConsoleColors::Yellow).p("Execution terminated.").nl().nl().reset();
 		return rValue;
 	}
 
@@ -383,7 +384,7 @@ namespace dragon
 		// Display::printStep();
 		processErrors();
 		if (DragonRuntime::cpu.isInDebugBreakPoint())
-			output().fg(ostd::ConsoleColors::Red).p("Reached Debug Break Point.").reset().nl();
+			out().fg(ostd::ConsoleColors::Red).p("Reached Debug Break Point.").reset().nl();
 		// Display::printPrompt();
 		data().command = getCommandInput();
 		data().command.trim().toLower();
@@ -391,7 +392,7 @@ namespace dragon
 		{
 			if (data().command == "q" || data().command == "quit" || data().command == InputCommandQuit)
 			{
-				output().nl();
+				out().nl();
 				outUserQuit = true;
 				data().command = "";
 			}
@@ -399,8 +400,8 @@ namespace dragon
 			{
 				data().args.step_exec = false;
 				data().command = "";
-				output().clear().fg(ostd::ConsoleColors::Green).p("Program running...").nl();
-				output().fg(ostd::ConsoleColors::Yellow).p("Press <Escape> to enter in step-execution mode...").reset().nl();
+				out().clear().fg(ostd::ConsoleColors::Green).p("Program running...").nl();
+				out().fg(ostd::ConsoleColors::Yellow).p("Press <Escape> to enter in step-execution mode...").reset().nl();
 			}
 			else if (data().command.startsWith("p ") || data().command.startsWith("print "))
 			{
@@ -442,18 +443,18 @@ namespace dragon
 					rgx.fg("\\(|\\)|-", "darkgray");
 					rgx.fg("\\*", "red");
 					rgx.fg("0x[0-9A-Fa-f]+|0b[0-1]+|(?<!\\w)[0-9]+(?!\\w)", "cyan"); //Number Constants
-					output().pStyled(rgx);
-					output().fg(ostd::ConsoleColors::White).p(" = ");
-					output().fg(ostd::ConsoleColors::Gray).p("[");
+					out().pStyled(rgx);
+					out().fg(ostd::ConsoleColors::White).p(" = ");
+					out().fg(ostd::ConsoleColors::Gray).p("[");
 					for (uint16_t a = addr; a <= end_addr; a++)
 					{
 						uint8_t value = DragonRuntime::memMap.read8(a);
-						output().fg(ostd::ConsoleColors::BrightRed).p(ostd::String::getHexStr(value, true, 1));
+						out().fg(ostd::ConsoleColors::BrightRed).p(ostd::String::getHexStr(value, true, 1));
 						if (a < end_addr)
-							output().p(" ");
+							out().p(" ");
 					}
-					output().fg(ostd::ConsoleColors::Gray).p("]");
-					output().reset().nl();
+					out().fg(ostd::ConsoleColors::Gray).p("]");
+					out().reset().nl();
 				}
 				else if (data().command.startsWith("$"))
 				{
@@ -462,7 +463,7 @@ namespace dragon
 					if (addr == 0)
 						addr = findSymbol(debugger.labels, data().command, &size);
 					if (addr == 0)
-						output().fg(ostd::ConsoleColors::Red).p("Unknown symbol for <print> command.").reset().nl();
+						out().fg(ostd::ConsoleColors::Red).p("Unknown symbol for <print> command.").reset().nl();
 					else
 					{
 						ostd::String tmp = "";
@@ -474,32 +475,32 @@ namespace dragon
 						rgx.fg("\\(|\\)|-", "darkgray");
 						rgx.fg("\\*", "red");
 						rgx.fg("0x[0-9A-Fa-f]+|0b[0-1]+|(?<!\\w)[0-9]+(?!\\w)", "cyan"); //Number Constants
-						output().pStyled(rgx);
-						output().fg(ostd::ConsoleColors::White).p(" = ");
-						output().fg(ostd::ConsoleColors::Gray).p("[");
+						out().pStyled(rgx);
+						out().fg(ostd::ConsoleColors::White).p(" = ");
+						out().fg(ostd::ConsoleColors::Gray).p("[");
 						if (type == TYPE_STRING)
-							output().fg(ostd::ConsoleColors::BrightRed).p("\"");
+							out().fg(ostd::ConsoleColors::BrightRed).p("\"");
 						for (uint16_t a = addr; a < addr + size; a++)
 						{
 							uint8_t value = DragonRuntime::memMap.read8(a);
 							if (type == TYPE_STRING)
 							{
-								output().fg(ostd::ConsoleColors::BrightRed).pChar((char)value);
+								out().fg(ostd::ConsoleColors::BrightRed).pChar((char)value);
 								continue;
 							}
-							output().fg(ostd::ConsoleColors::BrightRed).p(ostd::String::getHexStr(value, true, 1));
+							out().fg(ostd::ConsoleColors::BrightRed).p(ostd::String::getHexStr(value, true, 1));
 							if (a < addr + size - 1)
-								output().p(" ");
+								out().p(" ");
 						}
 						if (type == TYPE_STRING)
-							output().fg(ostd::ConsoleColors::BrightRed).p("\"");
-						output().fg(ostd::ConsoleColors::Gray).p("]");
-						output().reset().nl();
+							out().fg(ostd::ConsoleColors::BrightRed).p("\"");
+						out().fg(ostd::ConsoleColors::Gray).p("]");
+						out().reset().nl();
 					}
 				}
 				else
 				{
-					output().fg(ostd::ConsoleColors::Red).p("Invalid value for <print> command.").reset().nl();
+					out().fg(ostd::ConsoleColors::Red).p("Invalid value for <print> command.").reset().nl();
 				}
 				// Display::printPrompt();
 				data().command = getCommandInput();
@@ -518,25 +519,25 @@ namespace dragon
 				{
 					addr = findSymbol(debugger.labels, data().command);
 					if (addr == 0x0000 || addr == 0xFFFF)
-						output().fg(ostd::ConsoleColors::Red).p("Invalid symbol: ").p(data().command).reset().nl();
+						out().fg(ostd::ConsoleColors::Red).p("Invalid symbol: ").p(data().command).reset().nl();
 					else
 						valid = true;
 				}
 				else
 				{
-					output().fg(ostd::ConsoleColors::Red).p("Invalid value for <break> command.").reset().nl();
+					out().fg(ostd::ConsoleColors::Red).p("Invalid value for <break> command.").reset().nl();
 				}
 				if (valid)
 				{
 					if (isBreakPoint(addr))
 					{
 						removeBreakPoint(addr);
-						output().fg(ostd::ConsoleColors::Yellow).p("Breakpoint removed at address: ").p(ostd::String::getHexStr(addr, true, 2)).reset().nl();
+						out().fg(ostd::ConsoleColors::Yellow).p("Breakpoint removed at address: ").p(ostd::String::getHexStr(addr, true, 2)).reset().nl();
 					}
 					else
 					{
 						addBreakPoint(addr);
-						output().fg(ostd::ConsoleColors::Yellow).p("Breakpoint set at address: ").p(ostd::String::getHexStr(addr, true, 2)).reset().nl();
+						out().fg(ostd::ConsoleColors::Yellow).p("Breakpoint set at address: ").p(ostd::String::getHexStr(addr, true, 2)).reset().nl();
 					}
 				}
 				// Display::printPrompt();
@@ -670,17 +671,16 @@ namespace dragon
 	void DebuggerNew::onInitialize(void)
 	{
 		enableSignals();
-		connectSignal(ostd::tBuiltinSignals::KeyReleased);
+		connectSignal(ostd::BuiltinSignals::KeyReleased);
 		connectSignal(ogfx::gui::RawTextInput::actionEventSignalID);
-		connectSignal(ogfx::gui::Button::actionEventSignalID);
-		enableMouseDragEvent(false);
+		connectSignal(ogfx::gui::CustomButton::actionEventSignalID);
 
 		// DisassemblyLoader::loadDirectory("disassembly");
 		// m_codeTable = DisassemblyLoader::getCodeTable();
 		// m_codeRandomIndex = ostd::Random::geti32(0, m_codeTable.size() - m_consoleSize.y - 1);
 
 		m_gfx.init(*this);
-		m_gfx.setFont("res/Courier Prime.ttf");
+		m_gfx.openFont("res/Courier Prime.ttf");
 
 		float w = m_consolePosition.x - 12;
 		float h = 40.0f;
@@ -697,21 +697,21 @@ namespace dragon
 		m_wout.setFontSize(22);
 		m_wout.setConsoleMaxCharacters(m_consoleSize);
 		m_wout.setConsolePosition(m_consolePosition);
-		m_wout.setWrapMode(ogfx::WindowBaseOutputHandler::eWrapMode::TripleDots);
+		m_wout.setWrapMode(ogfx::GraphicsWindowOutputHandler::eWrapMode::TripleDots);
 		m_wout.setDefaultForegroundColor({ 180, 180, 180, 255 });
 
 		std::cout << STR_BOOL(ostd::Memory::loadByteStreamFromFile("./bios.bin", m_test)) << "\n";
- 	}
+	 }
 
-	void DebuggerNew::handleSignal(ostd::tSignal& signal)
+	void DebuggerNew::handleSignal(ostd::Signal& signal)
 	{
-		if (signal.ID == ostd::tBuiltinSignals::KeyReleased)
+		if (signal.ID == ostd::BuiltinSignals::KeyReleased)
 		{
 			auto& evtData = (ogfx::KeyEventData&)signal.userData;
 			if (evtData.keyCode == SDLK_ESCAPE)
 				close();
 			// else if (evtData.keyCode == SDLK_SPACE)
-			// 	m_codeRandomIndex = ostd::Random::geti32(0, m_codeTable.size() - m_consoleSize.y - 1);
+			//     m_codeRandomIndex = ostd::Random::geti32(0, m_codeTable.size() - m_consoleSize.y - 1);
 		}
 		else if (signal.ID == ogfx::gui::RawTextInput::actionEventSignalID)
 		{
@@ -720,23 +720,23 @@ namespace dragon
 				return;
 			if (data.eventType == ogfx::gui::RawTextInput::eActionEventType::Enter)
 			{
-				out.fg(ostd::ConsoleColors::Green).p(data.sender.getText()).reset().nl();
+				out().fg(ostd::ConsoleColors::Green).p(data.sender.getText()).reset().nl();
 				data.sender.setText("");
 			}
 			else if (data.eventType == ogfx::gui::RawTextInput::eActionEventType::Tab)
 			{
-				out.fg(ostd::ConsoleColors::Red).p("TAB").reset().nl();
+				out().fg(ostd::ConsoleColors::Red).p("TAB").reset().nl();
 				data.sender.appendText("TAB");
 			}
 		}
-		else if (signal.ID == ogfx::gui::Button::actionEventSignalID)
+		else if (signal.ID == ogfx::gui::CustomButton::actionEventSignalID)
 		{
-			auto& data = (ogfx::gui::Button::ActionEventData&)signal.userData;
+			auto& data = (ogfx::gui::CustomButton::ActionEventData&)signal.userData;
 			if (data.senderName != "TestBTN")
 				return;
-			if (data.eventType == ogfx::gui::Button::eActionEventType::Pressed)
+			if (data.eventType == ogfx::gui::CustomButton::eActionEventType::Pressed)
 			{
-				out.fg(ostd::ConsoleColors::Green).p(data.sender.getText()).reset().nl();
+				out().fg(ostd::ConsoleColors::Green).p(data.sender.getText()).reset().nl();
 			}
 		}
 	}

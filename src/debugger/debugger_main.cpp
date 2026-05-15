@@ -6,8 +6,6 @@
 
 int main(int argc, char** argv)
 {
-	ostd::SignalHandler::init();
-
 	//Loading commandline arguments
 	int32_t rValue = dragon::Debugger::loadArguments(argc, argv);
 	if (rValue == dragon::DragonRuntime::RETURN_VAL_CLOSE_DEBUGGER)
@@ -38,18 +36,18 @@ int main(int argc, char** argv)
 	// //Loading commandline arguments
 	// int32_t rValue = debuggerInstance.loadArguments(argc, argv);
 	// if (rValue == dragon::DragonRuntime::RETURN_VAL_CLOSE_DEBUGGER)
-	// 	return 0;
+	//     return 0;
 	// if (rValue != 0) return rValue;
 
 	// //Initializing the runtime
 	// rValue = debuggerInstance.initRuntime();
 	// if (rValue == dragon::DragonRuntime::RETURN_VAL_CLOSE_DEBUGGER)
-	// 	return 0;
+	//     return 0;
 	// if (rValue != 0) return rValue;
 
 	// while (debuggerInstance.isRunning())
 	// {
-	// 	debuggerInstance.update();
+	//     debuggerInstance.update();
 	// }
 
 	return 0;

@@ -42,7 +42,7 @@ namespace dragon
 		struct tCloseEventListener : public ostd::BaseObject
 		{
 			void init(void);
-			void handleSignal(ostd::tSignal& signal);
+			void handleSignal(ostd::Signal& signal);
 			inline bool hasHappened(void) const { return m_mainWindowClosed; }
 
 			private:

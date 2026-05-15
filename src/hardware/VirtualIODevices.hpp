@@ -233,7 +233,7 @@ namespace dragon
 
 				ostd::ByteStream* getByteStream(void) override;
 
-				void handleSignal(ostd::tSignal& signal) override;
+				void handleSignal(ostd::Signal& signal) override;
 
 			private:
 				ostd::BitField_16 __construct_modifiers_bitfield(void);

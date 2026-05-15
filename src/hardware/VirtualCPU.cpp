@@ -180,7 +180,7 @@ namespace dragon
 				interruptData.addr = intValue;
 				interruptData.inst_addr = 0x0000;
 				interruptData.interrupts_disabled = !readFlag(data::Flags::InterruptsEnabled);
-				ostd::SignalHandler::emitSignal(DragonRuntime::SignalListener::Signal_HardwareInterruptOccurred, ostd::tSignalPriority::RealTime, interruptData);
+				ostd::SignalHandler::emitSignal(DragonRuntime::SignalListener::Signal_HardwareInterruptOccurred, ostd::Signal::Priority::RealTime, interruptData);
 			}
 		}
 

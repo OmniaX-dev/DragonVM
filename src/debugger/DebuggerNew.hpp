@@ -4,10 +4,10 @@
 #include <ostd/math/Geometry.hpp>
 #include <ostd/data/Types.hpp>
 #include <ostd/io/IOHandlers.hpp>
-#include <ogfx/WindowBase.hpp>
-#include <ogfx/BasicRenderer.hpp>
-#include <ogfx/RawTextInput.hpp>
-#include <ogfx/WindowBaseOutputHandler.hpp>
+#include <ogfx/gui/Window.hpp>
+#include <ogfx/render/BasicRenderer.hpp>
+#include <ogfx/gui/RawTextInput.hpp>
+#include <ogfx/gui/WindowOutputHandler.hpp>
 #include "../assembler/Assembler.hpp"
 
 
@@ -15,19 +15,19 @@ namespace ogfx
 {
 	namespace gui
 	{
-		class Button : public ostd::Rectangle
+		class CustomButton : public ostd::Rectangle
 		{
 			public: class EventListener : public ostd::BaseObject
 			{
 				public: enum class eEventType { None = 0, MousePressed, KeyPressed, KeyReleased };
 				public:
-					EventListener(Button& _parent);
-					virtual void handleSignal(ostd::tSignal& signal) override;
-					inline virtual void onSignalHandled(ostd::tSignal& signal) {  }
-					inline Button& getParent(void) { return parent; }
+					EventListener(CustomButton& _parent);
+					virtual void handleSignal(ostd::Signal& signal) override;
+					inline virtual void onSignalHandled(ostd::Signal& signal) {  }
+					inline CustomButton& getParent(void) { return parent; }
 
 				private:
-					Button& parent;
+					CustomButton& parent;
 					eEventType m_lastEvent { eEventType::None };
 			};
 			public: class Theme
@@ -50,61 +50,61 @@ namespace ogfx
 			public: struct tDefaultThemes
 			{
 				inline static const Theme DebugTheme {
-					{ 220, 	220, 	255 },	//Text Color
-					{ 10, 	20, 	120 },	//Border Color
-					{ 0, 	0, 		22 },	//Background Color
+					{ 220,     220,     255 },    //Text Color
+					{ 10,     20,     120 },    //Border Color
+					{ 0,     0,         22 },    //Background Color
 
-					{ 220, 	220, 	255 },	//Text Color Hover
-					{ 10, 	20, 	120 },	//Border Color Hover
-					{ 0, 	0, 		22 },	//Background Color Hover
+					{ 220,     220,     255 },    //Text Color Hover
+					{ 10,     20,     120 },    //Border Color Hover
+					{ 0,     0,         22 },    //Background Color Hover
 
-					{ 220, 	220, 	255 },	//Text Color Pressed
-					{ 10, 	20, 	120 },	//Border Color Pressed
-					{ 0, 	0, 		22 },	//Background Color Pressed
+					{ 220,     220,     255 },    //Text Color Pressed
+					{ 10,     20,     120 },    //Border Color Pressed
+					{ 0,     0,         22 },    //Background Color Pressed
 
-					20						//Font Size
+					20                        //Font Size
 				};
 				inline static const Theme DefaultTheme {
-					{ 120, 	120, 	180 },	//Text Color
-					{ 10, 	20, 	120 },	//Border Color
-					{ 0, 	2, 		10 },	//Background Color
+					{ 120,     120,     180 },    //Text Color
+					{ 10,     20,     120 },    //Border Color
+					{ 0,     2,         10 },    //Background Color
 
-					{ 120, 	120, 	210 },	//Text Color Hover
-					{ 10, 	20, 	180 },	//Border Color Hover
-					{ 0, 	2, 		50 },	//Background Color Hover
+					{ 120,     120,     210 },    //Text Color Hover
+					{ 10,     20,     180 },    //Border Color Hover
+					{ 0,     2,         50 },    //Background Color Hover
 
-					{ 120, 	120, 	120 },	//Text Color Pressed
-					{ 10, 	20, 	60 },	//Border Color Pressed
-					{ 0, 	2, 		0 },	//Background Color Pressed
+					{ 120,     120,     120 },    //Text Color Pressed
+					{ 10,     20,     60 },    //Border Color Pressed
+					{ 0,     2,         0 },    //Background Color Pressed
 
-					20						//Font Size
+					20                        //Font Size
 				};
 			};
 			public: enum eActionEventType { None = 0, Pressed };
 			public: class ActionEventData : public ostd::BaseObject
 			{
 				public:
-					inline ActionEventData(Button& _sender, const ostd::String& _senderName, eActionEventType _eventType, ostd::BaseObject& _userData) :
+					inline ActionEventData(CustomButton& _sender, const ostd::String& _senderName, eActionEventType _eventType, ostd::BaseObject& _userData) :
 																																								sender(_sender),
 																																								senderName(_senderName),
 																																								eventType(_eventType),
 																																								userData(_userData)
 					{
-						setTypeName("ogfx::gui::Button::ActionEventData");
+						setTypeName("ogfx::gui::CustomButton::ActionEventData");
 						validate();
 					}
 
 				public:
-					Button& sender;
+					CustomButton& sender;
 					ostd::String senderName { "" };
 					eActionEventType eventType { eActionEventType::None };
 					ostd::BaseObject& userData { ostd::BaseObject::InvalidRef() };
 			};
 
 			public:
-				inline Button(void) { create({ 0.0f, 0.0f }, { 200.0f, 30.0f }, "UnnamedButton"); }
-				inline Button(const ostd::Vec2& position, const ostd::Vec2& size, const ostd::String& name) { create(position, size, name); }
-				Button& create(const ostd::Vec2& position, const ostd::Vec2& size, const ostd::String& name);
+				inline CustomButton(void) { create({ 0.0f, 0.0f }, { 200.0f, 30.0f }, "UnnamedButton"); }
+				inline CustomButton(const ostd::Vec2& position, const ostd::Vec2& size, const ostd::String& name) { create(position, size, name); }
+				CustomButton& create(const ostd::Vec2& position, const ostd::Vec2& size, const ostd::String& name);
 
 				virtual void render(ogfx::BasicRenderer2D& gfx);
 				virtual void update(void);
@@ -149,7 +149,7 @@ namespace dragon
 {
 	typedef std::vector<dragon::code::Assembler::tDisassemblyLine> DisassemblyList;
 
-	class DebuggerNew : public ogfx::WindowBase
+	class DebuggerNew : public ogfx::GraphicsWindow
 	{
 		public: struct tCommandLineArgs
 		{
@@ -197,7 +197,6 @@ namespace dragon
 			int32_t initRuntime(void);
 			ostd::String getCommandInput(void);
 			inline tDebuggerData& data(void) { return debugger; }
-			inline ostd::ConsoleOutputHandler& output(void) { return out; }
 			int32_t executeRuntime(void);
 			int32_t step_execution(bool& outUserQuit, bool exec_first_step = true);
 			int32_t normal_runtime(bool& outUserQuit);
@@ -210,7 +209,7 @@ namespace dragon
 			//General
 			inline DebuggerNew(void) : m_sigHandler(m_textInput, *this), m_btnSigHandler(m_testBtn) {  }
 			void onInitialize(void) override;
-			void handleSignal(ostd::tSignal& signal) override;
+			void handleSignal(ostd::Signal& signal) override;
 			void onRender(void) override;
 			void onFixedUpdate(double frameTime_s) override;
 			void onUpdate(void) override;
@@ -222,10 +221,10 @@ namespace dragon
 			ogfx::gui::RawTextInputEventListener m_sigHandler;
 			ogfx::gui::RawTextInputNumberCharacterFilter m_numCharFilter;
 
-			ogfx::gui::Button m_testBtn;
-			ogfx::gui::Button::EventListener m_btnSigHandler;
+			ogfx::gui::CustomButton m_testBtn;
+			ogfx::gui::CustomButton::EventListener m_btnSigHandler;
 
-			ogfx::WindowBaseOutputHandler m_wout;
+			ogfx::GraphicsWindowOutputHandler m_wout;
 			ostd::IPoint m_consoleSize { 300, 50 };
 			ostd::Vec2 m_consolePosition { 650, 8 };
 			// std::vector<code::Assembler::tDisassemblyLine> m_codeTable;

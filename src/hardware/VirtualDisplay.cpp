@@ -1,5 +1,5 @@
 #include "VirtualDisplay.hpp"
-#include <ogfx/PixelRenderer.hpp>
+#include <ogfx/render/PixelRenderer.hpp>
 #include "../runtime/DragonRuntime.hpp"
 #include "../tools/GlobalData.hpp"
 

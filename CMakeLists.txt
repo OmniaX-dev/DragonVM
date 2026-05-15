@@ -177,8 +177,8 @@ if (UNIX)
 	target_link_libraries(${DEBUGGER_TARGET} xcb xcb-randr boost_regex)
 endif (UNIX)
 
-target_link_libraries(${RUNTIME_TARGET} SDL2main SDL2 SDL2_image)
-target_link_libraries(${DEBUGGER_TARGET} SDL2main SDL2 SDL2_image)
+target_link_libraries(${RUNTIME_TARGET} SDL3 SDL3_image)
+target_link_libraries(${DEBUGGER_TARGET} SDL3 SDL3_image)
 
 target_link_libraries(${RUNTIME_TARGET} ostd ogfx)
 target_link_libraries(${DEBUGGER_TARGET} ostd ogfx)

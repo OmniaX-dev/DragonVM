@@ -80,7 +80,7 @@ namespace dragon
 
 				std::vector<ostd::String> m_debug_stackFrameStrings;
 
-				ostd::Timer m_profilerTimer;
+				ostd::Counter m_profilerTimer;
 
 			friend class dragon::DragonRuntime;
 			friend class dragon::Debugger::Display;

@@ -5,6 +5,7 @@
 #include <ostd/io/Memory.hpp>
 #include <ostd/string/String.hpp>
 #include <ostd/utils/Time.hpp>
+#include <ostd/utils/Signals.hpp>
 
 namespace dragon
 {
@@ -15,12 +16,12 @@ namespace dragon
 	{
 		validate();
 		enableSignals();
-		connectSignal(ostd::tBuiltinSignals::WindowClosed);
+		connectSignal(ostd::BuiltinSignals::WindowClosed);
 	}
 
-	void Debugger::tCloseEventListener::handleSignal(ostd::tSignal& signal)
+	void Debugger::tCloseEventListener::handleSignal(ostd::Signal& signal)
 	{
-		m_mainWindowClosed = signal.ID == ostd::tBuiltinSignals::WindowClosed;
+		m_mainWindowClosed = signal.ID == ostd::BuiltinSignals::WindowClosed;
 	}
 
 
@@ -365,11 +366,11 @@ namespace dragon
 			// ostd::String currCode = " (";
 			// currCode.add(minfo.currentInstructionOpCode).add(") ");
 			// for (int32_t i = 0; i < minfo.currentInstructionFootprintSize; i++)
-			// 	currCode.add(ostd::String::getHexStr(minfo.currentInstructionFootprint[i], false, 1)).add(" ");
+			//     currCode.add(ostd::String::getHexStr(minfo.currentInstructionFootprint[i], false, 1)).add(" ");
 			// tmp.add(currCode);
 			// tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
 			// // if (currCode != prevCode)
-			// // 	tmpStyle = "[@@style foreground:Black,background:BrightRed]";
+			// //     tmpStyle = "[@@style foreground:Black,background:BrightRed]";
 			// // else
 			// tmpStyle = "[@@style foreground:Blue]";
 			// tmpStyle.add(tmp).add("[@@/]");
@@ -1418,7 +1419,7 @@ namespace dragon
 			output().fg(ostd::ConsoleColors::Yellow).p("Press <Escape> to enter in step-execution mode...").reset().nl();
 		while (!userQuit)
 		{
-			ostd::SignalHandler::refresh();
+			ostd::SignalHandler::handleDelegateSignals();
 			if (closeEventListener.hasHappened())
 				userQuit = true;
 			data().command.clr();

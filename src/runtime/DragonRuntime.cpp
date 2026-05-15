@@ -1,5 +1,5 @@
 #include "DragonRuntime.hpp"
-#include <ogfx/PixelRenderer.hpp>
+#include <ogfx/render/PixelRenderer.hpp>
 #include <ostd/io/Memory.hpp>
 #include <ostd/utils/Time.hpp>
 
@@ -13,7 +13,7 @@ namespace dragon
 		connectSignal(Signal_HardwareInterruptOccurred);
 	}
 
-	void DragonRuntime::SignalListener::handleSignal(ostd::tSignal& signal)
+	void DragonRuntime::SignalListener::handleSignal(ostd::Signal& signal)
 	{
 		if (signal.ID == Signal_HardwareInterruptOccurred)
 		{
@@ -135,7 +135,6 @@ namespace dragon
 										bool trackCallStack,
 										bool debugModeEnabled)
 	{
-		ostd::SignalHandler::init();
 		s_signalListener.init();
 		vKeyboard.init();
 		if (verbose)
@@ -358,21 +357,21 @@ namespace dragon
 		uint64_t avg_count = 0;
 		uint64_t _time = 0;
 		double avg_tot = 0;
-		ostd::Timer clock_timer;
+		ostd::Counter clock_timer;
 		bool running = true;
 		bool fixed_clock = machine_config.fixed_clock;
-		ostd::Timer _timer;
+		ostd::Counter _timer;
 		while (running || vDiskInterface.isBusy())
 		{
 			clock_timer.startCount(ostd::eTimeUnits::Microseconds);
-			ostd::SignalHandler::refresh();
+			ostd::SignalHandler::handleDelegateSignals();
 			uint16_t addr = cpu.readRegister(dragon::data::Registers::IP);
 			uint16_t spAddr = cpu.readRegister(dragon::data::Registers::SP);
 			uint8_t screenRedrawRate = vCMOS.read8(data::CMOSRegisters::ScreenRedrawRate);
 			// _timer.start(true, "Profiling", ostd::eTimeUnits::Microseconds, &out);
 			running = cpu.execute() && vDisplay.isRunning();
 			// _timer.end(true);
-			vDisplay.update();
+			vDisplay.mainLoop();
 			vDiskInterface.cycleStep();
 			if (dragon::data::ErrorHandler::hasError())
 			{
@@ -407,7 +406,7 @@ namespace dragon
 		__track_call_stack(&s_machineInfo);
 		bool running = cpu.execute() && vDisplay.isRunning();
 		uint8_t screenRedrawRate = vCMOS.read8(data::CMOSRegisters::ScreenRedrawRate);
-		vDisplay.update();
+		vDisplay.mainLoop();
 		if (s_enableScreenRedrawDelay && s_stepAcc2 == (1000.0 / screenRedrawRate))
 		{
 			vDisplay.redrawScreen();
@@ -502,7 +501,7 @@ namespace dragon
 		else
 		{
 			//if (int_op_code >= data::OpCodes::Ext01 && int_op_code <= data::OpCodes::Ext16)
-			//	minfo.currentInstructionAddress = minfo.previousInstructionAddress;
+			//    minfo.currentInstructionAddress = minfo.previousInstructionAddress;
 			//else
 				minfo.currentInstructionAddress = instAddr;
 			minfo.currentInstructionFootprintSize = instSize;

@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ogfx/WindowBase.hpp>
-#include <ogfx/PixelRenderer.hpp>
+#include <ogfx/gui/Window.hpp>
+#include <ogfx/render/PixelRenderer.hpp>
 #include "../hardware/VirtualIODevices.hpp"
 
 namespace dragon
@@ -9,7 +9,7 @@ namespace dragon
 	namespace data { class IBiosVideoPalette; }
 	namespace hw
 	{
-		class VirtualDisplay : public ogfx::WindowBase
+		class VirtualDisplay : public ogfx::GraphicsWindow
 		{
 			public: struct tRegisters
 			{

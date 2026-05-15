@@ -5,7 +5,7 @@
 #include <fstream>
 #include "../hardware/VirtualHardDrive.hpp"
 #include "GlobalData.hpp"
-#include "debugger/DisassemblyLoader.hpp"
+#include "../debugger/DisassemblyLoader.hpp"
 #include <ostd/io/Memory.hpp>
 #include <ostd/io/Serial.hpp>
 

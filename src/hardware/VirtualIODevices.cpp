@@ -5,13 +5,13 @@
 #include "VirtualCPU.hpp"
 
 #include "../runtime/DragonRuntime.hpp"
-#include <ogfx/PixelRenderer.hpp>
+#include <ogfx/render/PixelRenderer.hpp>
 #include <ostd/io/Memory.hpp>
 
 //TODO: Fix all access functions (reads and writes) ensuring the address is not out of bounds.
-//		Right now the check is done, but just to push an error if out of bounds; the address
-//		gets still used even in that case, which is really dumb and will probably crash the
-//		runtime most of the time.
+//        Right now the check is done, but just to push an error if out of bounds; the address
+//        gets still used even in that case, which is really dumb and will probably crash the
+//        runtime most of the time.
 
 namespace dragon
 {
@@ -118,9 +118,9 @@ namespace dragon
 				m_data.push_back(0x00);
 			enableSignals();
 			validate();
-			connectSignal(ostd::tBuiltinSignals::KeyPressed);
-			connectSignal(ostd::tBuiltinSignals::KeyReleased);
-			connectSignal(ostd::tBuiltinSignals::TextEntered);
+			connectSignal(ostd::BuiltinSignals::KeyPressed);
+			connectSignal(ostd::BuiltinSignals::KeyReleased);
+			connectSignal(ostd::BuiltinSignals::TextEntered);
 		}
 
 		int8_t VirtualKeyboard::read8(uint16_t addr)
@@ -167,11 +167,11 @@ namespace dragon
 			return &m_data;
 		}
 
-		void VirtualKeyboard::handleSignal(ostd::tSignal& signal)
+		void VirtualKeyboard::handleSignal(ostd::Signal& signal)
 		{
 			auto& cpu = DragonRuntime::cpu;
 			const auto& state = SDL_GetKeyboardState(nullptr);
-			if (signal.ID == ostd::tBuiltinSignals::KeyPressed || signal.ID == ostd::tBuiltinSignals::KeyReleased)
+			if (signal.ID == ostd::BuiltinSignals::KeyPressed || signal.ID == ostd::BuiltinSignals::KeyReleased)
 			{
 				ogfx::KeyEventData& ked = (ogfx::KeyEventData&)signal.userData;
 				m_modifiersBitFiels = __construct_modifiers_bitfield();
@@ -182,12 +182,12 @@ namespace dragon
 				else if (ked.eventType == ogfx::KeyEventData::eKeyEvent::Pressed)
 					cpu.handleInterrupt(data::InterruptCodes::KeyReleased, true);
 			}
-			else if (signal.ID == ostd::tBuiltinSignals::TextEntered)
+			else if (signal.ID == ostd::BuiltinSignals::TextEntered)
 			{
 				ogfx::KeyEventData& ked = (ogfx::KeyEventData&)signal.userData;
 				m_modifiersBitFiels = __construct_modifiers_bitfield();
 				__write16(tRegisters::Modifiers, (int16_t)m_modifiersBitFiels.value);
-				__write16(tRegisters::KeyCode, (int16_t)ked.text);
+				__write16(tRegisters::KeyCode, (int16_t)ked.text[0]);
 				cpu.handleInterrupt(data::InterruptCodes::TextEntered, true);
 			}
 		}
@@ -196,17 +196,17 @@ namespace dragon
 		{
 			ostd::BitField_16 bitfield;
 			auto mod_state = SDL_GetModState();
-			ostd::Bits::val(bitfield, tModifierBits::LeftShift, (mod_state & KMOD_LSHIFT));
-			ostd::Bits::val(bitfield, tModifierBits::LeftControl, (mod_state & KMOD_LCTRL));
-			ostd::Bits::val(bitfield, tModifierBits::LeftAlt, (mod_state & KMOD_LALT));
-			ostd::Bits::val(bitfield, tModifierBits::LeftSuper, (mod_state & KMOD_LGUI));
-			ostd::Bits::val(bitfield, tModifierBits::RightShift, (mod_state & KMOD_RSHIFT));
-			ostd::Bits::val(bitfield, tModifierBits::RightControl, (mod_state & KMOD_RCTRL));
-			ostd::Bits::val(bitfield, tModifierBits::RightAlt, (mod_state & KMOD_RALT));
-			ostd::Bits::val(bitfield, tModifierBits::RightSuper, (mod_state & KMOD_RGUI));
-			ostd::Bits::val(bitfield, tModifierBits::CapsLock, (mod_state & KMOD_CAPS));
-			ostd::Bits::val(bitfield, tModifierBits::NumLock, (mod_state & KMOD_NUM));
-			ostd::Bits::val(bitfield, tModifierBits::ScrolLLock, (mod_state & KMOD_SCROLL));
+			ostd::Bits::val(bitfield, tModifierBits::LeftShift, (mod_state & SDL_KMOD_LSHIFT));
+			ostd::Bits::val(bitfield, tModifierBits::LeftControl, (mod_state & SDL_KMOD_LCTRL));
+			ostd::Bits::val(bitfield, tModifierBits::LeftAlt, (mod_state & SDL_KMOD_LALT));
+			ostd::Bits::val(bitfield, tModifierBits::LeftSuper, (mod_state & SDL_KMOD_LGUI));
+			ostd::Bits::val(bitfield, tModifierBits::RightShift, (mod_state & SDL_KMOD_RSHIFT));
+			ostd::Bits::val(bitfield, tModifierBits::RightControl, (mod_state & SDL_KMOD_RCTRL));
+			ostd::Bits::val(bitfield, tModifierBits::RightAlt, (mod_state & SDL_KMOD_RALT));
+			ostd::Bits::val(bitfield, tModifierBits::RightSuper, (mod_state & SDL_KMOD_RGUI));
+			ostd::Bits::val(bitfield, tModifierBits::CapsLock, (mod_state & SDL_KMOD_CAPS));
+			ostd::Bits::val(bitfield, tModifierBits::NumLock, (mod_state & SDL_KMOD_NUM));
+			ostd::Bits::val(bitfield, tModifierBits::ScrolLLock, (mod_state & SDL_KMOD_SCROLL));
 			return bitfield;
 		}
 
@@ -283,12 +283,12 @@ namespace dragon
 				case SDLK_TAB: return (int16_t)eKeys::Tab;
 				case SDLK_SPACE: return (int16_t)eKeys::Spacebar;
 				case SDLK_EXCLAIM: return (int16_t)eKeys::ExclamationMark;
-				case SDLK_QUOTEDBL: return (int16_t)eKeys::DoubleQuote;
+				case SDLK_DBLAPOSTROPHE: return (int16_t)eKeys::DoubleQuote;
 				case SDLK_HASH: return (int16_t)eKeys::Hash;
 				case SDLK_PERCENT: return (int16_t)eKeys::Percent;
 				case SDLK_DOLLAR: return (int16_t)eKeys::DollarSign;
 				case SDLK_AMPERSAND: return (int16_t)eKeys::Ampersand;
-				case SDLK_QUOTE: return (int16_t)eKeys::SingleQuote;
+				case SDLK_APOSTROPHE: return (int16_t)eKeys::SingleQuote;
 				case SDLK_LEFTPAREN: return (int16_t)eKeys::LeftParenthesis;
 				case SDLK_RIGHTPAREN: return (int16_t)eKeys::RightParenthesis;
 				case SDLK_ASTERISK: return (int16_t)eKeys::Asterisk;
@@ -319,33 +319,33 @@ namespace dragon
 				case SDLK_RIGHTBRACKET: return (int16_t)eKeys::RightBracket;
 				case SDLK_CARET: return (int16_t)eKeys::Caret;
 				case SDLK_UNDERSCORE: return (int16_t)eKeys::Underscore;
-				case SDLK_BACKQUOTE: return (int16_t)eKeys::BackQuote;
-				case SDLK_a: return (int16_t)eKeys::LowerCase_a;
-				case SDLK_b: return (int16_t)eKeys::LowerCase_b;
-				case SDLK_c: return (int16_t)eKeys::LowerCase_c;
-				case SDLK_d: return (int16_t)eKeys::LowerCase_d;
-				case SDLK_e: return (int16_t)eKeys::LowerCase_e;
-				case SDLK_f: return (int16_t)eKeys::LowerCase_f;
-				case SDLK_g: return (int16_t)eKeys::LowerCase_g;
-				case SDLK_h: return (int16_t)eKeys::LowerCase_h;
-				case SDLK_i: return (int16_t)eKeys::LowerCase_i;
-				case SDLK_j: return (int16_t)eKeys::LowerCase_j;
-				case SDLK_k: return (int16_t)eKeys::LowerCase_k;
-				case SDLK_l: return (int16_t)eKeys::LowerCase_l;
-				case SDLK_m: return (int16_t)eKeys::LowerCase_m;
-				case SDLK_n: return (int16_t)eKeys::LowerCase_n;
-				case SDLK_o: return (int16_t)eKeys::LowerCase_o;
-				case SDLK_p: return (int16_t)eKeys::LowerCase_p;
-				case SDLK_q: return (int16_t)eKeys::LowerCase_q;
-				case SDLK_r: return (int16_t)eKeys::LowerCase_r;
-				case SDLK_s: return (int16_t)eKeys::LowerCase_s;
-				case SDLK_t: return (int16_t)eKeys::LowerCase_t;
-				case SDLK_u: return (int16_t)eKeys::LowerCase_u;
-				case SDLK_v: return (int16_t)eKeys::LowerCase_v;
-				case SDLK_w: return (int16_t)eKeys::LowerCase_w;
-				case SDLK_x: return (int16_t)eKeys::LowerCase_x;
-				case SDLK_y: return (int16_t)eKeys::LowerCase_y;
-				case SDLK_z: return (int16_t)eKeys::LowerCase_z;
+				case SDLK_GRAVE: return (int16_t)eKeys::BackQuote;
+				case SDLK_A: return (int16_t)eKeys::LowerCase_a;
+				case SDLK_B: return (int16_t)eKeys::LowerCase_b;
+				case SDLK_C: return (int16_t)eKeys::LowerCase_c;
+				case SDLK_D: return (int16_t)eKeys::LowerCase_d;
+				case SDLK_E: return (int16_t)eKeys::LowerCase_e;
+				case SDLK_F: return (int16_t)eKeys::LowerCase_f;
+				case SDLK_G: return (int16_t)eKeys::LowerCase_g;
+				case SDLK_H: return (int16_t)eKeys::LowerCase_h;
+				case SDLK_I: return (int16_t)eKeys::LowerCase_i;
+				case SDLK_J: return (int16_t)eKeys::LowerCase_j;
+				case SDLK_K: return (int16_t)eKeys::LowerCase_k;
+				case SDLK_L: return (int16_t)eKeys::LowerCase_l;
+				case SDLK_M: return (int16_t)eKeys::LowerCase_m;
+				case SDLK_N: return (int16_t)eKeys::LowerCase_n;
+				case SDLK_O: return (int16_t)eKeys::LowerCase_o;
+				case SDLK_P: return (int16_t)eKeys::LowerCase_p;
+				case SDLK_Q: return (int16_t)eKeys::LowerCase_q;
+				case SDLK_R: return (int16_t)eKeys::LowerCase_r;
+				case SDLK_S: return (int16_t)eKeys::LowerCase_s;
+				case SDLK_T: return (int16_t)eKeys::LowerCase_t;
+				case SDLK_U: return (int16_t)eKeys::LowerCase_u;
+				case SDLK_V: return (int16_t)eKeys::LowerCase_v;
+				case SDLK_W: return (int16_t)eKeys::LowerCase_w;
+				case SDLK_X: return (int16_t)eKeys::LowerCase_x;
+				case SDLK_Y: return (int16_t)eKeys::LowerCase_y;
+				case SDLK_Z: return (int16_t)eKeys::LowerCase_z;
 				default: return (int16_t)eKeys::UpperCase_A;
 			}
 			return (int16_t)eKeys::UpperCase_A;
@@ -911,7 +911,7 @@ namespace dragon
 				int8_t b1 = read8(addr);
 				int8_t b2 = read8(addr + 1);
 				return ((b1 <<  8) & 0xFF00U)
-					  | (b2 	   & 0x00FFU);
+					  | (b2        & 0x00FFU);
 			}
 
 			int8_t CMOS::write8(uint16_t addr, int8_t value)
