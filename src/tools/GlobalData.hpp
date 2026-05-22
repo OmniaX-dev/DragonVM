@@ -5,6 +5,7 @@
 
 namespace dragon
 {
+	using AddressType = u16;
 	namespace hw { class VirtualCPU; }
 	namespace data
 	{
@@ -13,49 +14,107 @@ namespace dragon
 		class ErrorCodes
 		{
 			public:
-				inline static constexpr uint64_t NoError 							= 			0x0000000000000000;
-				inline static constexpr uint64_t AccessViolation_BiosModeRequired	= 			0x0000000000000001;
+				inline static constexpr uint64_t NoError                             =             0x0000000000000000;
+				inline static constexpr uint64_t AccessViolation_BiosModeRequired    =             0x0000000000000001;
 
-				inline static constexpr uint64_t MM_RegionNotFound 					= 			0x1000000000000000;
+				inline static constexpr uint64_t MM_RegionNotFound                     =             0x1000000000000000;
+				inline static constexpr uint64_t MM_AtomicNotSupported                     =             0x1000000000000001;
 
-				inline static constexpr uint64_t CPU_UnknownInstruction 			= 			0x2000000000000000;
-				inline static constexpr uint64_t CPU_UnsupportedExtension 			= 			0x2000000000000001;
-				inline static constexpr uint64_t CPU_StackOverflow		 			= 			0x2000000000000002;
+				inline static constexpr uint64_t CPU_UnknownInstruction             =             0x2000000000000000;
+				inline static constexpr uint64_t CPU_UnsupportedExtension             =             0x2000000000000001;
+				inline static constexpr uint64_t CPU_StackOverflow                     =             0x2000000000000002;
 
-				inline static constexpr uint64_t BIOS_FailedToLoad 					= 			0x3000000000000000;
-				inline static constexpr uint64_t BIOS_InvalidSize 					= 			0x3000000000000001;
-				inline static constexpr uint64_t BIOS_WriteAttempt 					= 			0x3000000000000002;
-				inline static constexpr uint64_t BIOS_InvalidAddress 				= 			0x3000000000000003;
+				inline static constexpr uint64_t BIOS_FailedToLoad                     =             0x3000000000000000;
+				inline static constexpr uint64_t BIOS_InvalidSize                     =             0x3000000000000001;
+				inline static constexpr uint64_t BIOS_WriteAttempt                     =             0x3000000000000002;
+				inline static constexpr uint64_t BIOS_InvalidAddress                 =             0x3000000000000003;
 
-				inline static constexpr uint64_t HardDrive_UnableToMount			= 			0x4000000000000000;
-				inline static constexpr uint64_t HardDrive_Uninitialized			= 			0x4000000000000001;
-				inline static constexpr uint64_t HardDrive_ReadOverflow				= 			0x4000000000000002;
-				inline static constexpr uint64_t HardDrive_WriteOverflow			= 			0x4000000000000003;
-				inline static constexpr uint64_t HardDrive_BuffWriteOverflow		= 			0x4000000000000004;
-				inline static constexpr uint64_t HardDrive_EmptyBuffer				= 			0x4000000000000005;
-				inline static constexpr uint64_t HardDrive_InvalidConfiguration		= 			0x4000000000000006;
-				inline static constexpr uint64_t HardDrive_ReadFailed				= 			0x4000000000000007;
-				inline static constexpr uint64_t HardDrive_WriteFailed				= 			0x4000000000000008;
-				inline static constexpr uint64_t HardDrive_MemoryOverflow			= 			0x4000000000000009;
-				inline static constexpr uint64_t HardDrive_InvalidDiskSelected		= 			0x400000000000000A;
-				inline static constexpr uint64_t HardDrive_EndOfDisk				= 			0x400000000000000B;
-				inline static constexpr uint64_t HardDrive_ControllerReadFailed		= 			0x400000000000000C;
-				inline static constexpr uint64_t HardDrive_ControllerWriteFailed	= 			0x400000000000000D;
-				inline static constexpr uint64_t HardDrive_DisconnectInvalid		= 			0x400000000000000E;
-				inline static constexpr uint64_t HardDrive_DiskAlreadyConnected		= 			0x400000000000000F;
+				inline static constexpr uint64_t HardDrive_UnableToMount            =             0x4000000000000000;
+				inline static constexpr uint64_t HardDrive_Uninitialized            =             0x4000000000000001;
+				inline static constexpr uint64_t HardDrive_ReadOverflow                =             0x4000000000000002;
+				inline static constexpr uint64_t HardDrive_WriteOverflow            =             0x4000000000000003;
+				inline static constexpr uint64_t HardDrive_BuffWriteOverflow        =             0x4000000000000004;
+				inline static constexpr uint64_t HardDrive_EmptyBuffer                =             0x4000000000000005;
+				inline static constexpr uint64_t HardDrive_InvalidConfiguration        =             0x4000000000000006;
+				inline static constexpr uint64_t HardDrive_ReadFailed                =             0x4000000000000007;
+				inline static constexpr uint64_t HardDrive_WriteFailed                =             0x4000000000000008;
+				inline static constexpr uint64_t HardDrive_MemoryOverflow            =             0x4000000000000009;
+				inline static constexpr uint64_t HardDrive_InvalidDiskSelected        =             0x400000000000000A;
+				inline static constexpr uint64_t HardDrive_EndOfDisk                =             0x400000000000000B;
+				inline static constexpr uint64_t HardDrive_ControllerReadFailed        =             0x400000000000000C;
+				inline static constexpr uint64_t HardDrive_ControllerWriteFailed    =             0x400000000000000D;
+				inline static constexpr uint64_t HardDrive_DisconnectInvalid        =             0x400000000000000E;
+				inline static constexpr uint64_t HardDrive_DiskAlreadyConnected        =             0x400000000000000F;
 
-				inline static constexpr uint64_t CMOS_InvalidAddress				= 			0x5000000000000000;
-				inline static constexpr uint64_t CMOS_UnableToMount					= 			0x5000000000000001;
-				inline static constexpr uint64_t CMOS_InvalidSize					= 			0x5000000000000002;
-				inline static constexpr uint64_t CMOS_Uninitialized					= 			0x5000000000000003;
+				inline static constexpr uint64_t CMOS_InvalidAddress                =             0x5000000000000000;
+				inline static constexpr uint64_t CMOS_UnableToMount                    =             0x5000000000000001;
+				inline static constexpr uint64_t CMOS_InvalidSize                    =             0x5000000000000002;
+				inline static constexpr uint64_t CMOS_Uninitialized                    =             0x5000000000000003;
 
-				inline static constexpr uint64_t BIOSVideo_InvalidAddress 			= 			0x6000000000000000;
+				inline static constexpr uint64_t BIOSVideo_InvalidAddress             =             0x6000000000000000;
 
-				inline static constexpr uint64_t IntVector_InvalidAddress 			= 			0x7000000000000000;
+				inline static constexpr uint64_t IntVector_InvalidAddress             =             0x7000000000000000;
 
-				inline static constexpr uint64_t Graphics_MemoryReadFailed			= 			0x8000000000000000;
-				inline static constexpr uint64_t Graphics_MemoryWriteFailed			= 			0x8000000000000001;
+				inline static constexpr uint64_t Graphics_MemoryReadFailed            =             0x8000000000000000;
+				inline static constexpr uint64_t Graphics_MemoryWriteFailed            =             0x8000000000000001;
 
+		};
+
+		enum class ExceptionCause : u32
+		{
+			// === Instruction fetch faults ===
+			MisalignedFetch                                               = 0x0000'0000,   // PC not aligned to instruction boundary
+			InstructionBounds                                             = 0x0000'0001,   // PC outside any mapped region
+			InstructionPageFault                                          = 0x0000'0002,   // virt page not mapped (MMU on) or no X permission
+			InstructionPrivPageFault                                      = 0x0000'0003,   // privileged virt page not mapped (MMU on) or no X permission
+			UnknownInstruction                                            = 0x0000'0004,   // decoded opcode is not valid
+
+			// === Privilege ===
+			PrivilegeViolation                                            = 0x0000'1000,   // user mode executed a [PRIV] instruction
+
+			// === Memory access faults (loads) ===
+			MisalignedLoad                                                = 0x0000'2000,   // load address not naturally aligned
+			LoadBounds                                                    = 0x0000'2001,   // load address outside mapped region
+			LoadPageFault                                                 = 0x0000'2002,   // virt page not mapped or no R permission
+			LoadPrivPageFault                                             = 0x0000'2003,   // virt page not mapped or no R permission
+
+			// === Memory access faults (stores) ===
+			MisalignedStore                                               = 0x0000'3000,
+			StoreBounds                                                   = 0x0000'3001,
+			StorePageFault                                                = 0x0000'3002,  // virt page not mapped or no W permission
+			StorePrivPageFault                                            = 0x0000'3003,  // virt page not mapped or no W permission
+
+			// === Atomic op faults ===
+			AtomicNotSupported                                            = 0x0000'4000,  // CAS/XADD/XCHG on a device that can't (ROM, MMIO)
+
+			// === Arithmetic ===
+			DivideByZero                                                  = 0x0000'5000,
+
+			// === MMIO ===
+			BusUnmapped                                                   = 0x0000'6000,
+			ReadOnlyViolation                                             = 0x0000'6001,
+
+			// === Deliberate guest-initiated traps ===
+			Syscall                                                       = 0x0000'7000,  // syscall instruction
+			SoftwareInt                                                   = 0x0000'7001,  // int N instruction
+			TrapInstruction                                               = 0x0000'7002,  // explicit trap instr
+			Breakpoint                                                    = 0x0000'7003,  // brk for debugger
+
+			// === Asynchronous (external) ===
+			HardwareInterrupt                                             = 0x0000'F000,  // generic external IRQ; details in INT controller
+
+			// === Catastrophic ===
+			DoubleFault                                                   = 0x000F'FFFF,  // exception while handling exception
+
+			// Just in case
+			NoFault                                                       = 0xFFFF'FFFF,
+		};
+
+		struct GuestException
+		{
+			ExceptionCause cause;
+			AddressType fault_addr;     // VA for translation faults, PA for bus faults, 0 otherwise
+			String msg; // For debug
 		};
 
 		class ErrorHandler
@@ -127,22 +186,22 @@ namespace dragon
 			public:
 				inline BiosVideoDefaultPalette(void)
 				{
-					m_colors.push_back({ 0, 0, 0 });				// Black
-					m_colors.push_back({ 157, 157, 157 });			// Gray
-					m_colors.push_back({ 255, 255, 255 });			// White
-					m_colors.push_back({ 190, 38, 51 });			// Red
-					m_colors.push_back({ 224, 111, 139 });			// Pink
-					m_colors.push_back({ 73, 60, 43 });				// Brown
-					m_colors.push_back({ 164, 100, 34 });			// Dark Orange
-					m_colors.push_back({ 235, 137, 49 });			// Orange
-					m_colors.push_back({ 247, 226, 107 });			// Yellow
-					m_colors.push_back({ 47, 80, 42 });				// Dark Green
-					m_colors.push_back({ 68, 137, 26 });			// Green
-					m_colors.push_back({ 163, 206, 39 });			// Lime
-					m_colors.push_back({ 27, 38, 50 });				// Dark Blue
-					m_colors.push_back({ 0, 87, 132 });				// Blue
-					m_colors.push_back({ 49, 162, 242 });			// Light Blue
-					m_colors.push_back({ 178, 220, 239 });			// Sky
+					m_colors.push_back({ 0, 0, 0 });                // Black
+					m_colors.push_back({ 157, 157, 157 });            // Gray
+					m_colors.push_back({ 255, 255, 255 });            // White
+					m_colors.push_back({ 190, 38, 51 });            // Red
+					m_colors.push_back({ 224, 111, 139 });            // Pink
+					m_colors.push_back({ 73, 60, 43 });                // Brown
+					m_colors.push_back({ 164, 100, 34 });            // Dark Orange
+					m_colors.push_back({ 235, 137, 49 });            // Orange
+					m_colors.push_back({ 247, 226, 107 });            // Yellow
+					m_colors.push_back({ 47, 80, 42 });                // Dark Green
+					m_colors.push_back({ 68, 137, 26 });            // Green
+					m_colors.push_back({ 163, 206, 39 });            // Lime
+					m_colors.push_back({ 27, 38, 50 });                // Dark Blue
+					m_colors.push_back({ 0, 87, 132 });                // Blue
+					m_colors.push_back({ 49, 162, 242 });            // Light Blue
+					m_colors.push_back({ 178, 220, 239 });            // Sky
 				}
 
 				inline ostd::Color getColor(uint8_t col) override
@@ -203,12 +262,12 @@ namespace dragon
 				{
 					switch (code)
 					{
-						case DiskInterfaceFFinished: 	return "Disk_Interface_Finished";
-						case KeyPressed: 				return "Key_Pressed";
-						case KeyReleased: 				return "Key_Released";
-						case TextEntered: 				return "Text_Entered";
-						case Text16ModeScreenRefreshed:	return "Text16_Mode_Screen_Refreshed";
-						default:						return "UNKNOWN";
+						case DiskInterfaceFFinished:     return "Disk_Interface_Finished";
+						case KeyPressed:                 return "Key_Pressed";
+						case KeyReleased:                 return "Key_Released";
+						case TextEntered:                 return "Text_Entered";
+						case Text16ModeScreenRefreshed:    return "Text16_Mode_Screen_Refreshed";
+						default:                        return "UNKNOWN";
 					}
 					return "UNKNOWN";
 				}
@@ -217,59 +276,59 @@ namespace dragon
 		class CMOSRegisters
 		{
 			public:
-				inline static constexpr uint8_t MemoryStart			= 0x00;
-				inline static constexpr uint8_t MemorySize 			= 0x02;
-				inline static constexpr uint8_t ClockSpeed	 		= 0x04;
-				inline static constexpr uint8_t ScreenRedrawRate 	= 0x06;
-				inline static constexpr uint8_t ScreenWidth 		= 0x07;
-				inline static constexpr uint8_t ScreenHeight	 	= 0x09;
-				inline static constexpr uint8_t BootDisk	 		= 0x10;
-				inline static constexpr uint8_t StackSize	 		= 0x11;
+				inline static constexpr uint8_t MemoryStart            = 0x00;
+				inline static constexpr uint8_t MemorySize             = 0x02;
+				inline static constexpr uint8_t ClockSpeed             = 0x04;
+				inline static constexpr uint8_t ScreenRedrawRate     = 0x06;
+				inline static constexpr uint8_t ScreenWidth         = 0x07;
+				inline static constexpr uint8_t ScreenHeight         = 0x09;
+				inline static constexpr uint8_t BootDisk             = 0x10;
+				inline static constexpr uint8_t StackSize             = 0x11;
 
-				inline static constexpr uint8_t DiskList	 		= 0x7E;
+				inline static constexpr uint8_t DiskList             = 0x7E;
 		};
 
 		class DPTStructure
 		{
 			public: struct tFlags {
-				inline static constexpr uint8_t Boot 			= 0;
+				inline static constexpr uint8_t Boot             = 0;
 			};
 			public:
 
-				inline static constexpr uint16_t DPTID								= 0x000;
-				inline static constexpr uint16_t DPTVersionMaj						= 0x002;
-				inline static constexpr uint16_t DPTVersionMin						= 0x003;
-				inline static constexpr uint16_t PartitionCount						= 0x004;
+				inline static constexpr uint16_t DPTID                                = 0x000;
+				inline static constexpr uint16_t DPTVersionMaj                        = 0x002;
+				inline static constexpr uint16_t DPTVersionMin                        = 0x003;
+				inline static constexpr uint16_t PartitionCount                        = 0x004;
 
-				inline static constexpr uint16_t EntriesStart						= 0x00C;
+				inline static constexpr uint16_t EntriesStart                        = 0x00C;
 
-				inline static constexpr uint16_t EntryStartAddress					= 0x000;
-				inline static constexpr uint16_t EntryPartitionSize					= 0x004;
-				inline static constexpr uint16_t EntryFlags							= 0x008;
-				inline static constexpr uint16_t EntryPartitionLabel				= 0x024;
-
-
-
-				inline static constexpr uint16_t HeaderReservedSizeBytes			= 7;
-				inline static constexpr uint16_t DiskAddress						= 0x200;
-				inline static constexpr uint16_t DPT_ID_CODE						= 0xF1CA;
-				inline static constexpr uint16_t EntrySizeBytes						= 100;
-				inline static constexpr uint16_t EntryLabelSizeBytes				= 64;
-				inline static constexpr uint16_t EntryReservedSizeBytes				= 26;
-				inline static constexpr uint16_t HeaderSizeBytes					= 12;
-				inline static constexpr uint16_t DPTBlockSizeBytes					= 512;
-				inline static constexpr uint8_t CurrentDPTVersionMaj 				= 0x00;
-				inline static constexpr uint8_t CurrentDPTVersionMin 				= 0x02;
-				inline static constexpr uint32_t DiskStartAddr 						= 0x00000400;
-				inline static constexpr uint8_t MaxPartCount						= 5;
+				inline static constexpr uint16_t EntryStartAddress                    = 0x000;
+				inline static constexpr uint16_t EntryPartitionSize                    = 0x004;
+				inline static constexpr uint16_t EntryFlags                            = 0x008;
+				inline static constexpr uint16_t EntryPartitionLabel                = 0x024;
 
 
 
-				inline static constexpr uint16_t BootPart_IDAddr					= 0x0000;
-				inline static constexpr uint16_t BootPart_CodeStart					= 0x0020;
-				inline static constexpr uint16_t BootPart_ID_CODE					= 0xF1C4;
-				inline static constexpr uint16_t BootPart_CodeSizeBytes				= 1024;
-				inline static constexpr uint8_t BootPart_HeaderSizeBytes			= 32;
+				inline static constexpr uint16_t HeaderReservedSizeBytes            = 7;
+				inline static constexpr uint16_t DiskAddress                        = 0x200;
+				inline static constexpr uint16_t DPT_ID_CODE                        = 0xF1CA;
+				inline static constexpr uint16_t EntrySizeBytes                        = 100;
+				inline static constexpr uint16_t EntryLabelSizeBytes                = 64;
+				inline static constexpr uint16_t EntryReservedSizeBytes                = 26;
+				inline static constexpr uint16_t HeaderSizeBytes                    = 12;
+				inline static constexpr uint16_t DPTBlockSizeBytes                    = 512;
+				inline static constexpr uint8_t CurrentDPTVersionMaj                 = 0x00;
+				inline static constexpr uint8_t CurrentDPTVersionMin                 = 0x02;
+				inline static constexpr uint32_t DiskStartAddr                         = 0x00000400;
+				inline static constexpr uint8_t MaxPartCount                        = 5;
+
+
+
+				inline static constexpr uint16_t BootPart_IDAddr                    = 0x0000;
+				inline static constexpr uint16_t BootPart_CodeStart                    = 0x0020;
+				inline static constexpr uint16_t BootPart_ID_CODE                    = 0xF1C4;
+				inline static constexpr uint16_t BootPart_CodeSizeBytes                = 1024;
+				inline static constexpr uint8_t BootPart_HeaderSizeBytes            = 32;
 		};
 
 		class CPUExtension
