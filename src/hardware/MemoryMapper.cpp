@@ -1,5 +1,4 @@
 #include "MemoryMapper.hpp"
-#include <ostd/io/Serial.hpp>
 #include <ostd/data/Types.hpp>
 
 #include "../tools/GlobalData.hpp"

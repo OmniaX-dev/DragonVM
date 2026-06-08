@@ -3,7 +3,7 @@
 #include <ostd/io/File.hpp>
 #include <ostd/io/FileSystem.hpp>
 #include <ostd/io/Memory.hpp>
-#include <ostd/io/Serial.hpp>
+#include "../tools/LegacyOstdSerial.hpp"
 
 #include <algorithm>
 #include <ostd/string/String.hpp>

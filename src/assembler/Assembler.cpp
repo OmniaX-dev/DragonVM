@@ -3,7 +3,7 @@
 #include <iostream>
 #include <fstream>
 #include <ostd/io/FileSystem.hpp>
-#include <ostd/io/Serial.hpp>
+#include "../tools/LegacyOstdSerial.hpp"
 #include <ostd/io/IOHandlers.hpp>
 #include <ostd/io/Memory.hpp>
 #include <ostd/math/MathUtils.hpp>
@@ -36,7 +36,7 @@ namespace dragon
 			if (m_lines.size() == 0)
 				return {  }; //TODO: Error
 			// for (auto& line : m_lines)
-			// 	std::cout << line  << "\n";
+			//     std::cout << line  << "\n";
 			removeComments();
 			parseExportSpecifications();
 			createExports();
@@ -70,7 +70,7 @@ namespace dragon
 		{
 			assembleFromFile(sourceFileName);
 			if (m_code.size() == 0) return {  };
-            ostd::Memory::saveByteStreamToFile(m_code, binaryFileName);
+			ostd::Memory::saveByteStreamToFile(m_code, binaryFileName);
 			return m_code;
 		}
 
@@ -223,7 +223,7 @@ namespace dragon
 				return false;
 			};
 			// auto exportExists = [](const std::unordered_map<ostd::String, tExportSpec>& exports, const ostd::String& name) -> bool {
-			// 	return exports.count(name) > 0;
+			//     return exports.count(name) > 0;
 			// };
 			std::vector<tDefine> defines;
 			std::vector<ostd::String> newLines;
@@ -237,27 +237,27 @@ namespace dragon
 				// ostd::String export_name = "";
 				// if (tmpLineEdit.toLower().startsWith("@export_comment "))
 				// {
-				// 	lineEdit.substr(16).trim();
-				// 	if (!lineEdit.startsWith("/") || !lineEdit.contains(" "))
-				// 	{
-				// 		std::cout << "Invalid @export_comment directive: export specification not found: " << line << "\n";
-				// 		return;
-				// 	}
-				// 	export_name = lineEdit.new_substr(1, lineEdit.indexOf(" ")).trim();
-				// 	lineEdit.substr(lineEdit.indexOf(" ") + 1).trim();
-				// 	if (!lineEdit.startsWith("\"") || !lineEdit.endsWith("\""))
-				// 	{
-				// 		std::cout << "Invalid @export_comment directive: comment not found: " << line << "\n";
-				// 		return;
-				// 	}
-				// 	lineEdit.substr(1, lineEdit.len() - 1);
-				// 	if (!exportExists(m_exportSpecifications, export_name))
-				// 	{
-				// 		std::cout << "Invalid export specification: " << line << "\n";
-				// 		return;
-				// 	}
-				// 	m_exportSpecifications[export_name].content.push_back({ "## -- ", lineEdit });
-				// 	continue;
+				//     lineEdit.substr(16).trim();
+				//     if (!lineEdit.startsWith("/") || !lineEdit.contains(" "))
+				//     {
+				//         std::cout << "Invalid @export_comment directive: export specification not found: " << line << "\n";
+				//         return;
+				//     }
+				//     export_name = lineEdit.new_substr(1, lineEdit.indexOf(" ")).trim();
+				//     lineEdit.substr(lineEdit.indexOf(" ") + 1).trim();
+				//     if (!lineEdit.startsWith("\"") || !lineEdit.endsWith("\""))
+				//     {
+				//         std::cout << "Invalid @export_comment directive: comment not found: " << line << "\n";
+				//         return;
+				//     }
+				//     lineEdit.substr(1, lineEdit.len() - 1);
+				//     if (!exportExists(m_exportSpecifications, export_name))
+				//     {
+				//         std::cout << "Invalid export specification: " << line << "\n";
+				//         return;
+				//     }
+				//     m_exportSpecifications[export_name].content.push_back({ "## -- ", lineEdit });
+				//     continue;
 				// } else
 				if (tmpLineEdit.toLower().startsWith("@define "))
 				{
@@ -287,12 +287,12 @@ namespace dragon
 					defines.push_back({ define_name, define_value });
 					// if (export_name != "")
 					// {
-					// 	if (!exportExists(m_exportSpecifications, export_name))
-					// 	{
-					// 		std::cout << "Invalid export specification: " << line << "\n";
-					// 		return;
-					// 	}
-					// 	m_exportSpecifications[export_name].content.push_back({ define_name, define_value });
+					//     if (!exportExists(m_exportSpecifications, export_name))
+					//     {
+					//         std::cout << "Invalid export specification: " << line << "\n";
+					//         return;
+					//     }
+					//     m_exportSpecifications[export_name].content.push_back({ define_name, define_value });
 					// }
 					continue;
 				}
@@ -307,11 +307,11 @@ namespace dragon
 			}
 			// for (auto& exp : m_exportSpecifications)
 			// {
-			// 	for (auto& def : exp.second.content)
-			// 	{
-			// 		for (int32_t i = defines.size() - 1; i >= 0; i--)
-			// 			def.value.replaceAll(defines[i].name, defines[i].value.new_trim());
-			// 	}
+			//     for (auto& def : exp.second.content)
+			//     {
+			//         for (int32_t i = defines.size() - 1; i >= 0; i--)
+			//             def.value.replaceAll(defines[i].name, defines[i].value.new_trim());
+			//     }
 			// }
 			m_lines.clear();
 			m_lines = newLines;
@@ -525,14 +525,14 @@ namespace dragon
 
 			// for (auto& str : m_structDefs)
 			// {
-			// 	std::cout << str.name << "\n";
-			// 	for(auto& d : str.memberData)
-			// 	{
-			// 		std::cout << "  " << d.first << "  ";
-			// 		for (auto& b : d.second)
-			// 			std::cout << ostd::String::getHexStr(b) << " ";
-			// 	}
-			// 	std::cout << "\n";
+			//     std::cout << str.name << "\n";
+			//     for(auto& d : str.memberData)
+			//     {
+			//         std::cout << "  " << d.first << "  ";
+			//         for (auto& b : d.second)
+			//             std::cout << ostd::String::getHexStr(b) << " ";
+			//     }
+			//     std::cout << "\n";
 			// }
 			// std::cin.get();
 		}
@@ -901,7 +901,7 @@ namespace dragon
 		void Assembler::parseDataSection(void)
 		{
 			// for (auto& line : m_rawDataSection)
-			// 	std::cout << line << "\n";
+			//     std::cout << line << "\n";
 			for (auto& line : m_rawDataSection)
 			{
 				ostd::String lineEdit(line);
@@ -970,8 +970,8 @@ namespace dragon
 				if (lineEdit.isNumeric())
 				{
 					// union valueSplit {
-					// 	uint16_t value;
-					// 	uint8_t bytes[2];
+					//     uint16_t value;
+					//     uint8_t bytes[2];
 					// } split;
 					// split.value = lineEdit.toInt();
 					// symbol.bytes.push_back(split.bytes[0]);
@@ -1302,7 +1302,7 @@ namespace dragon
 				if (opType == eOperandType::Immediate || opType == eOperandType::Label)
 				{
 					// if (opType == eOperandType::Label)
-					// 	std::cout << ostd::String::getHexStr(word, true, 2) << "\n";
+					//     std::cout << ostd::String::getHexStr(word, true, 2) << "\n";
 					m_code[m_code.size() - 1] = data::OpCodes::PushImm;
 					// m_code.push_back(data::OpCodes::PushImm);
 					m_code.push_back((uint8_t)((word & 0xFF00) >> 8));

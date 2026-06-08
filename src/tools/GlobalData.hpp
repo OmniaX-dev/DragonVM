@@ -60,63 +60,6 @@ namespace dragon
 
 		};
 
-		enum class ExceptionCause : u32
-		{
-			// === Instruction fetch faults ===
-			MisalignedFetch                                               = 0x0000'0000,   // PC not aligned to instruction boundary
-			InstructionBounds                                             = 0x0000'0001,   // PC outside any mapped region
-			InstructionPageFault                                          = 0x0000'0002,   // virt page not mapped (MMU on) or no X permission
-			InstructionPrivPageFault                                      = 0x0000'0003,   // privileged virt page not mapped (MMU on) or no X permission
-			UnknownInstruction                                            = 0x0000'0004,   // decoded opcode is not valid
-
-			// === Privilege ===
-			PrivilegeViolation                                            = 0x0000'1000,   // user mode executed a [PRIV] instruction
-
-			// === Memory access faults (loads) ===
-			MisalignedLoad                                                = 0x0000'2000,   // load address not naturally aligned
-			LoadBounds                                                    = 0x0000'2001,   // load address outside mapped region
-			LoadPageFault                                                 = 0x0000'2002,   // virt page not mapped or no R permission
-			LoadPrivPageFault                                             = 0x0000'2003,   // virt page not mapped or no R permission
-
-			// === Memory access faults (stores) ===
-			MisalignedStore                                               = 0x0000'3000,
-			StoreBounds                                                   = 0x0000'3001,
-			StorePageFault                                                = 0x0000'3002,  // virt page not mapped or no W permission
-			StorePrivPageFault                                            = 0x0000'3003,  // virt page not mapped or no W permission
-
-			// === Atomic op faults ===
-			AtomicNotSupported                                            = 0x0000'4000,  // CAS/XADD/XCHG on a device that can't (ROM, MMIO)
-
-			// === Arithmetic ===
-			DivideByZero                                                  = 0x0000'5000,
-
-			// === MMIO ===
-			BusUnmapped                                                   = 0x0000'6000,
-			ReadOnlyViolation                                             = 0x0000'6001,
-
-			// === Deliberate guest-initiated traps ===
-			Syscall                                                       = 0x0000'7000,  // syscall instruction
-			SoftwareInt                                                   = 0x0000'7001,  // int N instruction
-			TrapInstruction                                               = 0x0000'7002,  // explicit trap instr
-			Breakpoint                                                    = 0x0000'7003,  // brk for debugger
-
-			// === Asynchronous (external) ===
-			HardwareInterrupt                                             = 0x0000'F000,  // generic external IRQ; details in INT controller
-
-			// === Catastrophic ===
-			DoubleFault                                                   = 0x000F'FFFF,  // exception while handling exception
-
-			// Just in case
-			NoFault                                                       = 0xFFFF'FFFF,
-		};
-
-		struct GuestException
-		{
-			ExceptionCause cause;
-			AddressType fault_addr;     // VA for translation faults, PA for bus faults, 0 otherwise
-			String msg; // For debug
-		};
-
 		class ErrorHandler
 		{
 			public: struct tError

@@ -44,6 +44,7 @@ list(APPEND RUNTIME_SOURCE_FILES
 
 	${CMAKE_CURRENT_LIST_DIR}/src/tools/Utils.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/tools/GlobalData.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/tools/LegacyOstdSerial.cpp
 )
 list(APPEND DEBUGGER_SOURCE_FILES
 	${CMAKE_CURRENT_LIST_DIR}/src/debugger/debugger_main.cpp
@@ -69,6 +70,7 @@ list(APPEND DEBUGGER_SOURCE_FILES
 
 	${CMAKE_CURRENT_LIST_DIR}/src/tools/Utils.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/tools/GlobalData.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/tools/LegacyOstdSerial.cpp
 )
 list(APPEND ASSEMBLER_SOURCE_FILES
 	${CMAKE_CURRENT_LIST_DIR}/src/assembler/assembler_main.cpp
@@ -79,11 +81,13 @@ list(APPEND ASSEMBLER_SOURCE_FILES
 	${CMAKE_CURRENT_LIST_DIR}/src/hardware/VirtualHardDrive.cpp
 
 	${CMAKE_CURRENT_LIST_DIR}/src/tools/Utils.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/tools/LegacyOstdSerial.cpp
 )
 list(APPEND TOOLS_SOURCE_FILES
 	${CMAKE_CURRENT_LIST_DIR}/src/tools/tools_main.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/tools/Utils.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/tools/Tools.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/tools/LegacyOstdSerial.cpp
 
 	${CMAKE_CURRENT_LIST_DIR}/src/hardware/VirtualHardDrive.cpp
 

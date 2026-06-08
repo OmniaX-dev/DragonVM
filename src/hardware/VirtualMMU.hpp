@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ostd/io/Serial.hpp>
+#include "../tools/LegacyOstdSerial.hpp"
 
 namespace dragon
 {

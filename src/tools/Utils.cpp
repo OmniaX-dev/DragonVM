@@ -1,5 +1,4 @@
 #include "Utils.hpp"
-#include <ostd/io/Serial.hpp>
 #include <ostd/math/Random.hpp>
 
 namespace dragon

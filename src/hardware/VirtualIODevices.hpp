@@ -2,7 +2,7 @@
 
 #include "IMemoryDevice.hpp"
 #include "../tools/GlobalData.hpp"
-#include <ostd/io/Serial.hpp>
+#include "../tools/LegacyOstdSerial.hpp"
 #include <fstream>
 #include <unordered_map>
 
