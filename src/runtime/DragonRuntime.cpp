@@ -17,50 +17,11 @@ namespace dragon
 	{
 		if (signal.ID == Signal_HardwareInterruptOccurred)
 		{
-			tCallInfo& interruptData = (tCallInfo&)signal.userData;
-			DragonRuntime::s_machineInfo.callStack.push_back(interruptData);
 		}
 	}
 
 
 
-
-	void DragonRuntime::printRegisters(dragon::hw::VirtualCPU& cpu)
-	{
-		out.fg("green").p("IP:  ").fg("white").p(String::getHexStr(cpu.readRegister(dragon::data::Registers::IP), true, 2).cpp_str());
-		out.p("      ");
-		out.fg("yellow").p("R1:  ").fg("white").p(String::getHexStr(cpu.readRegister(dragon::data::Registers::R1), true, 2).cpp_str());
-		out.p("      ");
-		out.fg("yellow").p("R2:  ").fg("white").p(String::getHexStr(cpu.readRegister(dragon::data::Registers::R2), true, 2).cpp_str()).nl();
-
-		out.fg("green").p("SP:  ").fg("white").p(String::getHexStr(cpu.readRegister(dragon::data::Registers::SP), true, 2).cpp_str());
-		out.p("      ");
-		out.fg("yellow").p("R3:  ").fg("white").p(String::getHexStr(cpu.readRegister(dragon::data::Registers::R3), true, 2).cpp_str());
-		out.p("      ");
-		out.fg("yellow").p("R4:  ").fg("white").p(String::getHexStr(cpu.readRegister(dragon::data::Registers::R4), true, 2).cpp_str()).nl();
-
-		out.fg("green").p("FP:  ").fg("white").p(String::getHexStr(cpu.readRegister(dragon::data::Registers::FP), true, 2).cpp_str());
-		out.p("      ");
-		out.fg("yellow").p("R5:  ").fg("white").p(String::getHexStr(cpu.readRegister(dragon::data::Registers::R5), true, 2).cpp_str());
-		out.p("      ");
-		out.fg("yellow").p("R6:  ").fg("white").p(String::getHexStr(cpu.readRegister(dragon::data::Registers::R6), true, 2).cpp_str()).nl();
-
-		out.fg("green").p("RV:  ").fg("white").p(String::getHexStr(cpu.readRegister(dragon::data::Registers::RV), true, 2).cpp_str());
-		out.p("      ");
-		out.fg("yellow").p("R7:  ").fg("white").p(String::getHexStr(cpu.readRegister(dragon::data::Registers::R7), true, 2).cpp_str());
-		out.p("      ");
-		out.fg("yellow").p("R8:  ").fg("white").p(String::getHexStr(cpu.readRegister(dragon::data::Registers::R8), true, 2).cpp_str()).nl();
-
-		out.fg("green").p("PP:  ").fg("white").p(String::getHexStr(cpu.readRegister(dragon::data::Registers::PP), true, 2).cpp_str());
-		out.p("      ");
-		out.fg("yellow").p("R9:  ").fg("white").p(String::getHexStr(cpu.readRegister(dragon::data::Registers::R9), true, 2).cpp_str());
-		out.p("      ");
-		out.fg("yellow").p("R10: ").fg("white").p(String::getHexStr(cpu.readRegister(dragon::data::Registers::R10), true, 2).cpp_str()).nl();
-
-		out.fg("green").p("ACC: ").fg("white").p(String::getHexStr(cpu.readRegister(dragon::data::Registers::ACC), true, 2).cpp_str());
-		out.p("      ");
-		out.fg("yellow").p("FL:  ").fg("white").p(String::getBinStr(cpu.readRegister(dragon::data::Registers::FL), true, 2).cpp_str());
-	}
 
 	void DragonRuntime::processErrors(void)
 	{
@@ -330,12 +291,7 @@ namespace dragon
 		if (info.verboseLoad)
 			out.fg(ostd::ConsoleColors::BrightYellow).p("    Loading CMOS Machine info").nl();
 
-
-
-
 		out.nl().nl();
-		s_trackMachineInfo = info.trackMachineInfoDiff;
-		s_trackCallStack = info.trackCallStack;
 		return RETURN_VAL_EXIT_SUCCESS;
 	}
 
@@ -363,9 +319,7 @@ namespace dragon
 			u16 addr = cpu.readRegister(dragon::data::Registers::IP);
 			u16 spAddr = cpu.readRegister(dragon::data::Registers::SP);
 			u8 screenRedrawRate = vCMOS.read8(data::CMOSRegisters::ScreenRedrawRate);
-			// _timer.start(true, "Profiling", ostd::eTimeUnits::Microseconds, &out);
 			running = cpu.execute() && vDisplay.isRunning();
-			// _timer.end(true);
 			vDisplay.mainLoop();
 			vDiskInterface.cycleStep();
 			if (dragon::data::ErrorHandler::hasError())
@@ -378,7 +332,6 @@ namespace dragon
 				avg_count++;
 				avg_tot += _time;
 				s_avgInstTime = (u64)std::round(avg_tot / avg_count);
-				// out.fg(ostd::ConsoleColors::Red).p(getAvgClockSpeed()).nl().reset();
 				acc = 0;
 			}
 			if (acc2 == (1000.0 / screenRedrawRate))
@@ -394,11 +347,8 @@ namespace dragon
 		}
 	}
 
-	bool DragonRuntime::runStep(std::vector<u16> trackedAddresses)
+	bool DragonRuntime::runStep(void)
 	{
-		std::sort(trackedAddresses.begin(), trackedAddresses.end());
-		__get_machine_footprint(&s_machineInfo, trackedAddresses, true);
-		__track_call_stack(&s_machineInfo);
 		bool running = cpu.execute() && vDisplay.isRunning();
 		u8 screenRedrawRate = vCMOS.read8(data::CMOSRegisters::ScreenRedrawRate);
 		vDisplay.mainLoop();
@@ -414,7 +364,6 @@ namespace dragon
 		s_stepAcc2++;
 		// vDisplay.redrawScreen(); // This is slow...maybe it should be on a 100ms rate, like in normal runtime mode
 		vDiskInterface.cycleStep();
-		__get_machine_footprint(&s_machineInfo, trackedAddresses, false);
 		return running || vDiskInterface.isBusy();
 	}
 
@@ -431,133 +380,8 @@ namespace dragon
 		}
 	}
 
-
-	void DragonRuntime::__get_machine_footprint(DragonRuntime::tMachineDebugInfo* machineInfo, std::vector<u16> trackedAddresses, bool previous)
+	void DragonRuntime::__print_application_help(void)
 	{
-		if (!s_trackMachineInfo || machineInfo == nullptr) return;
-		auto& minfo = *machineInfo;
-
-		if (previous)
-		{
-			minfo.vCPUHalt = cpu.m_halt;
-			minfo.trackedAddresses.clear();
-			minfo.previousInstructionTrackedValues.clear();
-			minfo.currentInstructionTrackedValues.clear();
-
-			for (i32 i = 0; i < 20; i++)
-			{
-				if (i < 5)
-				{
-					minfo.previousInstructionFootprint[i] = 0;
-					minfo.currentInstructionFootprint[i] = 0;
-				}
-				minfo.previousInstructionRegisters[i] = 0;
-				minfo.currentInstructionRegisters[i] = 0;
-			}
-
-			for (auto& addr : trackedAddresses)
-				minfo.trackedAddresses.push_back(addr);
-		}
-
-		u16 instAddr = cpu.readRegister(data::Registers::IP);
-		u8 int_op_code = memMap.read8(instAddr);
-		u8 instSize = data::OpCodes::getInstructionSIze(int_op_code);
-		String opCode = data::OpCodes::getOpCodeString(int_op_code);
-		u16 stackFrameSize = cpu.m_stackFrameSize;
-		i32 subRoutineCounter = cpu.m_subroutineCounter;
-
-		bool debugBreak = cpu.m_isDebugBreakPoint;
-		i32 intHandlerCount = cpu.m_interruptHandlerCount;
-		bool biosMode = cpu.m_biosMode;
-		bool isInSubRoutine = cpu.isInSubRoutine();
-
-		if (previous)
-		{
-			minfo.previousInstructionAddress = instAddr;
-			minfo.previousInstructionFootprintSize = instSize;
-			minfo.previousInstructionStackFrameSize = stackFrameSize;
-			minfo.previousInstructionOpCode = opCode;
-			minfo.previousSubRoutineCounter = subRoutineCounter;
-
-			for (i8 i = 0; i < instSize; i++)
-				minfo.previousInstructionFootprint[i] = memMap.read8(instAddr + i);
-
-			for (i8 i = 0; i < 20; i++)
-				minfo.previousInstructionRegisters[i] = cpu.readRegister(i);
-
-			for (auto& addr : minfo.trackedAddresses)
-				minfo.previousInstructionTrackedValues.push_back(memMap.read8(addr));
-
-			minfo.previousInstructionDebugBreak = debugBreak;
-			minfo.previousInstructionInterruptHandlerCount = intHandlerCount;
-			minfo.previousInstructionBiosMode = biosMode;
-			minfo.previousIsInSubRoutine = isInSubRoutine;
-		}
-		else
-		{
-			//if (int_op_code >= data::OpCodes::Ext01 && int_op_code <= data::OpCodes::Ext16)
-			//    minfo.currentInstructionAddress = minfo.previousInstructionAddress;
-			//else
-				minfo.currentInstructionAddress = instAddr;
-			minfo.currentInstructionFootprintSize = instSize;
-			minfo.currentInstructionStackFrameSize = stackFrameSize;
-			minfo.currentInstructionOpCode = opCode;
-			minfo.currentSubRoutineCounter = subRoutineCounter;
-
-			for (i8 i = 0; i < instSize; i++)
-				minfo.currentInstructionFootprint[i] = memMap.read8(minfo.currentInstructionAddress + i);
-
-			for (i8 i = 0; i < 20; i++)
-				minfo.currentInstructionRegisters[i] = cpu.readRegister(i);
-
-			for (auto& addr : minfo.trackedAddresses)
-				minfo.currentInstructionTrackedValues.push_back(memMap.read8(addr));
-
-			minfo.currentInstructionDebugBreak = debugBreak;
-			minfo.currentInstructionInterruptHandlerCount = intHandlerCount;
-			minfo.currentInstructionBiosMode = biosMode;
-			minfo.currentIsInSubRoutine = isInSubRoutine;
-		}
-	}
-
-	 void DragonRuntime::__track_call_stack(tMachineDebugInfo* machineInfo)
-	 {
-		if (!s_trackCallStack || machineInfo == nullptr) return;
-		auto& minfo = *machineInfo;
-
-		bool interrupts_enabled = cpu.readFlag(data::Flags::InterruptsEnabled);
-
-		u16 instAddr = cpu.readRegister(data::Registers::IP);
-		u8 inst = memMap.read8(instAddr);
-
-		if (inst == data::OpCodes::CallImm)
-		{
-			u16 call_addr = memMap.read16(instAddr + 1);
-			minfo.callStack.push_back({ "CALL IMM", call_addr, instAddr, !interrupts_enabled });
-		}
-		else if (inst == data::OpCodes::CallReg)
-		{
-			u8 reg_addr = memMap.read8(instAddr + 1);
-			u16 call_addr = cpu.readRegister(reg_addr);
-			minfo.callStack.push_back({ "CALL REG", call_addr, instAddr, !interrupts_enabled });
-		}
-		else if (interrupts_enabled && inst == data::OpCodes::Int)
-		{
-			u8 int_num = memMap.read8(instAddr + 1);
-			minfo.callStack.push_back({ "INT", int_num, instAddr, !interrupts_enabled });
-		}
-		else if (inst == data::OpCodes::Ret)
-		{
-			minfo.callStack.push_back({ "RET", 0x0000, instAddr, !interrupts_enabled });
-		}
-		else if (interrupts_enabled && inst == data::OpCodes::RetInt)
-		{
-			minfo.callStack.push_back({ "RET INT", 0x0000, instAddr, !interrupts_enabled });
-		}
-	 }
-
-	 void DragonRuntime::__print_application_help(void)
-	 {
 		i32 commandLength = 46;
 
 		out.nl().fg(ostd::ConsoleColors::Yellow).p("List of available parameters:").reset().nl();
@@ -573,5 +397,5 @@ namespace dragon
 
 		out.nl().fg(ostd::ConsoleColors::Magenta).p("Usage: ./dvm <machine-config-file> [...options...]").reset().nl();
 		out.nl();
-	 }
+	}
 }

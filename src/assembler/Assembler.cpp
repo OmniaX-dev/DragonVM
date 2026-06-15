@@ -775,7 +775,7 @@ namespace dragon
 
 		void Assembler::saveCurrentStageToFile(void)
 		{
-			std::cout << "LINES: " << (int)m_lines.size() << "\n";
+			// std::cout << "LINES: " << (int)m_lines.size() << "\n";
 			ostd::FileSystem::writeTextFile(Application::args.final_stage_path, m_lines);
 		}
 

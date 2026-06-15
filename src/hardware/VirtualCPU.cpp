@@ -82,11 +82,6 @@ namespace dragon
 
 		void VirtualCPU::pushStackFrame(void)
 		{
-			if (m_debugModeEnabled)
-			{
-				__debug_store_stack_frame_string_on_push();
-				return;
-			}
 			u16 argStartAddr = readRegister(data::Registers::SP) + 2;
 			u16 argCount = m_memory.read16(argStartAddr);
 			if (argCount == 0)
@@ -120,7 +115,6 @@ namespace dragon
 			u16 framePointerAddr = readRegister(data::Registers::FP);
 			writeRegister16(data::Registers::SP, framePointerAddr);
 			m_stackFrameSize = popFromStack();
-			// u16 tmpStackFrameSize = m_stackFrameSize;
 
 			writeRegister16(data::Registers::FP, popFromStack());
 			writeRegister16(data::Registers::IP, popFromStack());
@@ -139,12 +133,7 @@ namespace dragon
 
 			u16 nArgs = popFromStack();
 			for (i32 i = 0; i < nArgs; i++)
-			{
 				popFromStack();
-				// writeRegister(data::Registers::FP, readRegister(data::Registers::FP) - 2);
-			}
-
-			// writeRegister(data::Registers::FP, framePointerAddr + tmpStackFrameSize);
 		}
 
 		bool VirtualCPU::readFlag(u8 flg)
@@ -173,15 +162,15 @@ namespace dragon
 			m_subroutineCounter++;
 			m_interruptHandlerCount++;
 			writeRegister16(data::Registers::IP, handlerAddress);
-			if (m_debugModeEnabled && hardware)
-			{
-				DragonRuntime::tCallInfo interruptData;
-				interruptData.info = "HW INT";
-				interruptData.addr = intValue;
-				interruptData.inst_addr = 0x0000;
-				interruptData.interrupts_disabled = !readFlag(data::Flags::InterruptsEnabled);
-				ostd::SignalHandler::emitSignal(DragonRuntime::SignalListener::Signal_HardwareInterruptOccurred, ostd::Signal::Priority::RealTime, interruptData);
-			}
+			// if (m_debugModeEnabled && hardware)
+			// {
+			//     DragonRuntime::tCallInfo interruptData;
+			//     interruptData.info = "HW INT";
+			//     interruptData.addr = intValue;
+			//     interruptData.inst_addr = 0x0000;
+			//     interruptData.interrupts_disabled = !readFlag(data::Flags::InterruptsEnabled);
+			//     ostd::SignalHandler::emitSignal(DragonRuntime::SignalListener::Signal_HardwareInterruptOccurred, ostd::Signal::Priority::RealTime, interruptData);
+			// }
 		}
 
 		bool VirtualCPU::loadExtension(void)
@@ -222,33 +211,26 @@ namespace dragon
 			{
 				case data::OpCodes::NoOp:
 				{
-
+					//
 				}
 				break;
 				case data::OpCodes::DEBUG_Break:
 				{
+					if (!m_debugModeEnabled) break;
 					m_isDebugBreakPoint = true;
 				}
 				break;
 				case data::OpCodes::DEBUG_DumpRAM:
 				{
+					if (!m_debugModeEnabled) break;
 					ostd::Memory::saveByteStreamToFile(*DragonRuntime::ram.getByteStream(), "ram_dump.bin");
 					m_isDebugBreakPoint = true;
 					m_ramDumped = true;
 				}
 				break;
-				case data::OpCodes::BIOSModeImm:
-				{
-					u16 tmpAddr = m_currentAddr;
-					i8 value = fetch8();
-					if (tmpAddr >= data::MemoryMapAddresses::BIOS_End)
-						m_biosMode = false;
-					else
-						m_biosMode = value != 0;
-				}
-				break;
 				case data::OpCodes::DEBUG_StartProfile:
 				{
+					if (!m_debugModeEnabled) break;
 					i8 id = fetch8();
 					i8 timeUnit = fetch8();
 					ostd::eTimeUnits tu = ostd::eTimeUnits::Milliseconds;
@@ -264,9 +246,20 @@ namespace dragon
 				break;
 				case data::OpCodes::DEBUG_StopProfile:
 				{
+					if (!m_debugModeEnabled) break;
 					if (m_debugProfilerStarted)
 						m_profilerTimer.end(true);
 					m_debugProfilerStarted = false;
+				}
+				break;
+				case data::OpCodes::BIOSModeImm:
+				{
+					u16 tmpAddr = m_currentAddr;
+					i8 value = fetch8();
+					if (tmpAddr >= data::MemoryMapAddresses::BIOS_End)
+						m_biosMode = false;
+					else
+						m_biosMode = value != 0;
 				}
 				break;
 				case data::OpCodes::MovImmReg:
@@ -325,16 +318,6 @@ namespace dragon
 					m_memory.write16(destAddr, value);
 				}
 				break;
-				// case data::OpCodes::MovImmRegOffReg:
-				// {
-				// 	u8 destRegAddr = fetch8();
-				// 	u16 addr = fetch16();
-				// 	u8 offRegAddr = fetch8();
-				// 	i16 offset = readRegister(offRegAddr);
-				// 	i16 value = m_memory.read16(addr + offset);
-				// 	writeRegister(destRegAddr, value);
-				// }
-				// break;
 				case data::OpCodes::MovRegDerefReg:
 				{
 					u8 destRegAddr = fetch8();
@@ -821,7 +804,6 @@ namespace dragon
 				case data::OpCodes::Ret:
 				{
 					popStackFrame();
-					// m_subroutineCounter = ZERO(m_subroutineCounter - 1);
 					m_subroutineCounter--;
 				}
 				break;
@@ -839,7 +821,6 @@ namespace dragon
 				{
 					m_interruptHandlerCount--;
 					popStackFrame();
-					// m_subroutineCounter = ZERO(m_subroutineCounter - 1);
 					m_subroutineCounter--;
 				}
 				break;
@@ -902,61 +883,6 @@ namespace dragon
 			}
 
 			return true;
-		}
-
-		void VirtualCPU::__debug_store_stack_frame_string_on_push(void)
-		{
-			if (!m_debugModeEnabled) return;
-			String stackFrameString = "";
-
-			u16 argStartAddr = readRegister(data::Registers::SP) + 2;
-			u16 argCount = m_memory.read16(argStartAddr);
-			if (argCount == 0)
-				argStartAddr = 0;
-			else
-				argStartAddr += (argCount * 2);
-
-			stackFrameString.add("args: ").add(String::getHexStr(argStartAddr, true, 2)).add(", argc: ").add(argCount).add("\n");
-
-			pushToStack(readRegister(data::Registers::R1));
-			stackFrameString.add("R1: ").add(String::getHexStr(readRegister(data::Registers::R1), true, 2));
-			pushToStack(readRegister(data::Registers::R2));
-			stackFrameString.add(" R2: ").add(String::getHexStr(readRegister(data::Registers::R2), true, 2));
-			pushToStack(readRegister(data::Registers::R3));
-			stackFrameString.add(" R3: ").add(String::getHexStr(readRegister(data::Registers::R3), true, 2));
-			pushToStack(readRegister(data::Registers::R4));
-			stackFrameString.add(" R4: ").add(String::getHexStr(readRegister(data::Registers::R4), true, 2));
-			pushToStack(readRegister(data::Registers::R5));
-			stackFrameString.add(" R5: ").add(String::getHexStr(readRegister(data::Registers::R5), true, 2));
-			pushToStack(readRegister(data::Registers::R6));
-			stackFrameString.add(" R6: ").add(String::getHexStr(readRegister(data::Registers::R6), true, 2));
-			pushToStack(readRegister(data::Registers::R7));
-			stackFrameString.add(" R7: ").add(String::getHexStr(readRegister(data::Registers::R7), true, 2));
-			pushToStack(readRegister(data::Registers::R8));
-			stackFrameString.add(" R8: ").add(String::getHexStr(readRegister(data::Registers::R8), true, 2));
-			pushToStack(readRegister(data::Registers::R9));
-			stackFrameString.add(" R9: ").add(String::getHexStr(readRegister(data::Registers::R9), true, 2));
-			pushToStack(readRegister(data::Registers::R10));
-			stackFrameString.add(" R10: ").add(String::getHexStr(readRegister(data::Registers::R10), true, 2));
-			stackFrameString.add("\n");
-			pushToStack(readRegister(data::Registers::PP));
-			stackFrameString.add("PP: ").add(String::getHexStr(readRegister(data::Registers::PP), true, 2));
-			pushToStack(readRegister(data::Registers::ACC));
-			stackFrameString.add(" ACC: ").add(String::getHexStr(readRegister(data::Registers::ACC), true, 2));
-			pushToStack(readRegister(data::Registers::IP));
-			stackFrameString.add(" IP: ").add(String::getHexStr(readRegister(data::Registers::IP), true, 2));
-			pushToStack(readRegister(data::Registers::FP));
-			stackFrameString.add(" FP: ").add(String::getHexStr(readRegister(data::Registers::FP), true, 2));
-			stackFrameString.add("\n");
-			pushToStack(m_stackFrameSize);
-			stackFrameString.add("StackFrame: ").add(m_stackFrameSize).add(", ");
-
-			writeRegister16(data::Registers::PP, argStartAddr);
-			writeRegister16(data::Registers::FP, readRegister(data::Registers::SP));
-			stackFrameString.add("New FP: ").add(String::getHexStr(readRegister(data::Registers::FP), true, 2));
-			m_stackFrameSize = 0;
-
-			m_debug_stackFrameStrings.push_back(stackFrameString);
 		}
 	}
 }

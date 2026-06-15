@@ -5,7 +5,6 @@
 #include <ostd/utils/Time.hpp>
 #include "IMemoryDevice.hpp"
 
-#include "../debugger/Debugger.hpp"
 #include  "../tools/GlobalData.hpp"
 
 namespace dragon
@@ -53,9 +52,6 @@ namespace dragon
 				inline u16 getCurrentOffset(void) const { return m_currentOffset; }
 
 			private:
-				void __debug_store_stack_frame_string_on_push(void);
-
-			private:
 				i16 m_registers[20];
 				ostd::BitField_16 m_tempFlags;
 				IMemoryDevice& m_memory;
@@ -78,13 +74,9 @@ namespace dragon
 				data::CPUExtension* m_currentExtension { nullptr };
 				u8 m_currentExtInst { 0x00 };
 
-				std::vector<String> m_debug_stackFrameStrings;
-
 				ostd::Counter m_profilerTimer;
 
 			friend class dragon::DragonRuntime;
-			friend class dragon::Debugger::Display;
-			friend class dragon::Debugger;
 		};
 	}
 }
