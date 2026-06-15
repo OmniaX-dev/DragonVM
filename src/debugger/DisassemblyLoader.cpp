@@ -12,7 +12,7 @@ namespace dragon
 {
 	const DisassemblyTable DisassemblyTable::DefaultObject;
 
-	void DisassemblyTable::init(const ostd::String& filePath)
+	void DisassemblyTable::init(const String& filePath)
 	{
 		ostd::ByteStream stream;
 		if (!ostd::Memory::loadByteStreamFromFile(filePath, stream))
@@ -32,7 +32,7 @@ namespace dragon
 		int32_t line_addr = 0;
 		int16_t data_size = 1;
 		int8_t line_code_char = 0;
-		ostd::String header_string = "";
+		String header_string = "";
 		serializer.r_NullTerminatedString(0, header_string);
 		if (header_string != "{ DRAGON_DEBUG_DISASSEMBLY }") return;
 		addr += (header_string.len() + 1) * ostd::tTypeSize::BYTE;
@@ -42,7 +42,7 @@ namespace dragon
 			addr += ostd::tTypeSize::DWORD;
 			serializer.r_Word(addr, data_size);
 			addr += ostd::tTypeSize::WORD;
-			ostd::String code_line = "";
+			String code_line = "";
 			serializer.r_NullTerminatedString(addr, code_line);
 			addr += (code_line.len() + 1) * ostd::tTypeSize::BYTE;
 			if (code_line == "{ DATA }")
@@ -66,18 +66,18 @@ namespace dragon
 			line.size = data_size;
 			if (mode == MODE_CODE)
 			{
-				ostd::String codeEdit(line.code);
+				String codeEdit(line.code);
 				codeEdit.trim();
 				if (codeEdit.contains(" "))
 				{
-					ostd::String part1 = codeEdit.new_substr(0, codeEdit.indexOf(" "));
-					ostd::String part2 = codeEdit.new_substr(codeEdit.indexOf(" ") + 1);
+					String part1 = codeEdit.new_substr(0, codeEdit.indexOf(" "));
+					String part2 = codeEdit.new_substr(codeEdit.indexOf(" ") + 1);
 					part1.trim();
 					part2.trim();
 					int32_t opCodeLen = 10;
 					if (part1.len() < opCodeLen)
 					{
-						codeEdit = part1 + ostd::String::duplicateChar(' ', opCodeLen - part1.len()) + part2;
+						codeEdit = part1 + String::duplicateChar(' ', opCodeLen - part1.len()) + part2;
 						line.code = codeEdit;
 					}
 				}
@@ -93,14 +93,14 @@ namespace dragon
 
 
 
-	void DisassemblyLoader::loadDirectory(const ostd::String& directoryPath)
+	void DisassemblyLoader::loadDirectory(const String& directoryPath)
 	{
 		auto list = ostd::FileSystem::listFilesInDirectory(directoryPath);
 		for (auto& path : list)
 			loadFile(path.string());
 	}
 
-	const DisassemblyTable& DisassemblyLoader::loadFile(const ostd::String& filePath)
+	const DisassemblyTable& DisassemblyLoader::loadFile(const String& filePath)
 	{
 		DisassemblyTable table(filePath);
 		if (!table.isInitialized()) return DisassemblyTable::DefaultObject; //TODO: Error

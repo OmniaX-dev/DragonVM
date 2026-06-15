@@ -15,30 +15,30 @@ namespace dragon
 		class IncludePreprocessor
         {
             public:
-                static std::vector<ostd::String> loadEntryFile(const ostd::String& filePath);
+                static std::vector<String> loadEntryFile(const String& filePath);
 
             private:
-                static bool __can_file_be_included(std::vector<ostd::String>& lines);
+                static bool __can_file_be_included(std::vector<String>& lines);
                 static bool __include_loop(void);
-                static std::vector<ostd::String> __load_file(const ostd::String& filePath);
+                static std::vector<String> __load_file(const String& filePath);
 
             private:
-                inline static std::vector<ostd::String> m_lines;
-                inline static std::vector<ostd::String> m_guards;
-                inline static ostd::String m_directory { "" };
+                inline static std::vector<String> m_lines;
+                inline static std::vector<String> m_guards;
+                inline static String m_directory { "" };
         };
 
 		class Assembler
 		{
 			public: struct tDefine
 			{
-				ostd::String name;
-				ostd::String value;
+				String name;
+				String value;
 			};
 			public: struct tDisassemblyLine
 			{
 				uint32_t addr = 0;
-				ostd::String code = "";
+				String code = "";
 				uint16_t size = 1;
 				inline bool operator<(const tDisassemblyLine& second) const { return addr < second.addr; }
 				inline bool operator>(const tDisassemblyLine& second) const { return addr > second.addr; }
@@ -55,7 +55,7 @@ namespace dragon
 			};
 			public: struct tStructMember
 			{
-				ostd::String name;
+				String name;
 				std::vector<uint8_t> data;
 				int32_t position;
 				inline bool operator<(const tStructMember& second) const { return position < second.position; }
@@ -63,14 +63,14 @@ namespace dragon
 			};
 			public: struct tStructDefinition
 			{
-				ostd::String name;
+				String name;
 				std::vector<tStructMember> members;
 				int32_t size;
 			};
 			public: struct tExportSpec
 			{
-				ostd::String fileName { "" };
-				std::vector<ostd::String> lines;
+				String fileName { "" };
+				std::vector<String> lines;
 			};
 			public: enum class eOperandType
 			{
@@ -88,16 +88,16 @@ namespace dragon
 				public: struct tCommandLineArgs
 				{
 					inline tCommandLineArgs(void) {  }
-					ostd::String source_file_path { "" };
-					ostd::String dest_file_path { "" };
+					String source_file_path { "" };
+					String dest_file_path { "" };
 					bool save_disassembly { false };
 					int32_t verbose_level { 0xFF };
 					bool debug_mode { false };
 					bool save_exports { true };
-					ostd::String disassembly_file_path { "" };
-					ostd::String final_stage_path { "" };
-					std::vector<ostd::String> cpu_extensions;
-					std::vector<ostd::String> include_directories;
+					String disassembly_file_path { "" };
+					String final_stage_path { "" };
+					std::vector<String> cpu_extensions;
+					std::vector<String> include_directories;
 				};
 
 				public:
@@ -114,10 +114,10 @@ namespace dragon
 			};
 
 			public:
-				static ostd::ByteStream assembleFromFile(ostd::String fileName);
-				static ostd::ByteStream assembleToFile(ostd::String sourceFileName, ostd::String binaryFileName);
-				static ostd::ByteStream assembleToVirtualDisk(ostd::String fileName, hw::VirtualHardDrive& vhdd, uint32_t address);
-				static bool saveDisassemblyToFile(ostd::String fileName);
+				static ostd::ByteStream assembleFromFile(String fileName);
+				static ostd::ByteStream assembleToFile(String sourceFileName, String binaryFileName);
+				static ostd::ByteStream assembleToVirtualDisk(String fileName, hw::VirtualHardDrive& vhdd, uint32_t address);
+				static bool saveDisassemblyToFile(String fileName);
 				static void printProgramInfo(int32_t verbose_level = 1);
 
 			private:
@@ -139,28 +139,28 @@ namespace dragon
 				static void parseDataSection(void);
 				static void parseCodeSection(void);
 
-				static void parseDebugOperands(ostd::String line);
-				static void parse0Operand(ostd::String line);
-				static void parse1Operand(ostd::String line);
-				static void parse2Operand(ostd::String line);
-				static void parse3Operand(ostd::String line);
+				static void parseDebugOperands(String line);
+				static void parse0Operand(String line);
+				static void parse1Operand(String line);
+				static void parse2Operand(String line);
+				static void parse3Operand(String line);
 				static void combineDataAndCode(void);
 
-				static ostd::String replaceSymbols(ostd::String line);
+				static String replaceSymbols(String line);
 				static void replaceLabelRefs(void);
-				static eOperandType parseOperand(ostd::String op, int16_t& outOp);
-				static uint8_t parseRegister(ostd::String op);
+				static eOperandType parseOperand(String op, int16_t& outOp);
+				static uint8_t parseRegister(String op);
 
 			private:
-				inline static ostd::String m_rawSource { "" };
+				inline static String m_rawSource { "" };
 				inline static ostd::ByteStream m_code;
 
-				inline static std::vector<ostd::String> m_lines;
-				inline static std::vector<ostd::String> m_rawDataSection;
-				inline static std::vector<ostd::String> m_rawCodeSection;
+				inline static std::vector<String> m_lines;
+				inline static std::vector<String> m_rawDataSection;
+				inline static std::vector<String> m_rawCodeSection;
 
-				inline static std::unordered_map<ostd::String, tSymbol> m_symbolTable;
-				inline static std::unordered_map<ostd::String, tLabel> m_labelTable;
+				inline static std::unordered_map<String, tSymbol> m_symbolTable;
+				inline static std::unordered_map<String, tLabel> m_labelTable;
 
 				inline static uint16_t m_fixedSize { 0 };
 				inline static uint8_t m_fixedFillValue { 0x00 };
@@ -168,20 +168,20 @@ namespace dragon
 				inline static uint16_t m_currentDataAddr { 0x0000 };
 				inline static uint16_t m_dataSize { 0x0000 };
 				inline static uint16_t m_programSize { 0x0000 };
-				inline static ostd::String m_entry_lbl { "" };
-				inline static ostd::String m_headerStr { "" };
+				inline static String m_entry_lbl { "" };
+				inline static String m_headerStr { "" };
 
 				inline static std::vector<tStructDefinition> m_structDefs;
 				inline static std::vector<tDisassemblyLine> m_disassembly;
 
-				inline static std::unordered_map<ostd::String, tExportSpec> m_exports;
+				inline static std::unordered_map<String, tExportSpec> m_exports;
 
 				inline static ostd::ConsoleOutputHandler out;
 
 			public:
 				inline static bool saveExports { false };
 				inline static bool debugMode { false };
-				inline static std::vector<ostd::String> cpuExtensions;
+				inline static std::vector<String> cpuExtensions;
 		};
 	}
 }

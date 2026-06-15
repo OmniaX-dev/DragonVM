@@ -65,11 +65,11 @@ namespace dragon
 			public: struct tError
 			{
 				uint64_t code;
-				ostd::String text;
+				String text;
 			};
 
 			public:
-				inline static void pushError(uint64_t code, ostd::String text) { m_errorStack.push_back({ code, text }); }
+				inline static void pushError(uint64_t code, String text) { m_errorStack.push_back({ code, text }); }
 				inline static bool hasError(void) { return m_errorStack.size() > 0; }
 				inline static tError popError(void)
 				{
@@ -201,7 +201,7 @@ namespace dragon
 
 				inline static constexpr uint8_t Text16ModeScreenRefreshed = 0xE0;
 
-				inline static ostd::String getInterruptName(uint8_t code)
+				inline static String getInterruptName(uint8_t code)
 				{
 					switch (code)
 					{
@@ -278,14 +278,14 @@ namespace dragon
 		{
 			public:
 				inline virtual ~CPUExtension(void) {  }
-				inline CPUExtension(uint8_t code, ostd::String name) : m_code(code), m_name(name) {  }
-				virtual ostd::String getOpCodeString(uint8_t opCode) = 0;
+				inline CPUExtension(uint8_t code, String name) : m_code(code), m_name(name) {  }
+				virtual String getOpCodeString(uint8_t opCode) = 0;
 				virtual uint8_t getInstructionSIze(uint8_t opCode) = 0;
 				virtual bool execute(hw::VirtualCPU& vcpu) = 0;
 
 			public:
 				uint8_t m_code { 0x00 };
-				ostd::String m_name { "" };
+				String m_name { "" };
 		};
 
 		class OpCodes
@@ -394,7 +394,7 @@ namespace dragon
 				inline static constexpr uint8_t Int = 0xFE;
 				inline static constexpr uint8_t Halt = 0xFF;
 
-				static ostd::String getOpCodeString(uint8_t opCode);
+				static String getOpCodeString(uint8_t opCode);
 				static uint8_t getInstructionSIze(uint8_t opCode);
 		};
 

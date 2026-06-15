@@ -28,19 +28,28 @@ namespace dragon
 		public: struct tCallInfo : public ostd::BaseObject
 		{
 			inline tCallInfo(void) {  }
-			inline tCallInfo(const ostd::String& _info, uint16_t _addr, uint16_t _inst_addr, bool ints_disabled) : info(_info), addr(_addr), inst_addr(_inst_addr), interrupts_disabled(ints_disabled) {  }
-			ostd::String info;
+			inline tCallInfo(const String& _info, uint16_t _addr, uint16_t _inst_addr, bool ints_disabled) : info(_info), addr(_addr), inst_addr(_inst_addr), interrupts_disabled(ints_disabled) {  }
+			String info;
 			uint16_t addr;
 			uint16_t inst_addr;
 			bool interrupts_disabled;
 		};
 		public: struct tCommandLineArgs
 		{
-			ostd::String machine_config_path = "";
+			String machine_config_path = "";
 			bool verbose_load = false;
 			bool force_load = false;
-			ostd::String force_load_file = "";
+			String force_load_file = "";
 			uint16_t force_load_mem_offset = 0x00;
+		};
+		public: struct tRuntimeInitInfo
+		{
+			String configFilePath;
+			bool verboseLoad { false };
+			bool trackMachineInfoDiff { false };
+			bool hideVirtualDisplay { false };
+			bool trackCallStack { false };
+			bool debugModeEnabled { false };
 		};
 		public: struct tMachineDebugInfo
 		{
@@ -55,8 +64,8 @@ namespace dragon
 			int32_t previousSubRoutineCounter { 0x00000000 };
 			int32_t currentSubRoutineCounter { 0x00000000 };
 
-			ostd::String previousInstructionOpCode { "" };
-			ostd::String currentInstructionOpCode { "" };
+			String previousInstructionOpCode { "" };
+			String currentInstructionOpCode { "" };
 
 			int8_t previousInstructionFootprint[5] { 0x00, 0x00, 0x00, 0x00, 0x00 };
 			int8_t currentInstructionFootprint[5] { 0x00, 0x00, 0x00, 0x00, 0x00 };
@@ -86,16 +95,11 @@ namespace dragon
 			static void processErrors(void);
 			static std::vector<data::ErrorHandler::tError> getErrorList(void);
 			static int32_t loadArguments(int argc, char** argv, tCommandLineArgs& args);
-			static int32_t initMachine(const ostd::String& configFilePath,
-										bool verbose = false,
-										bool trackMachineInfoDiff = false,
-										bool hideVirtualDisplay = false,
-										bool rackCallStack = false,
-										bool debugModeEnabled = false);
+			static int32_t initMachine(const tRuntimeInitInfo& info);
 			static void shutdownMachine(void);
 			static void runMachine(void);
 			static bool runStep(std::vector<uint16_t> trackedAddresses = {  });
-			static void forceLoad(const ostd::String& filePath, uint16_t loadAddress);
+			static void forceLoad(const String& filePath, uint16_t loadAddress);
 
 			inline static const tMachineDebugInfo& getMachineInfoDiff(void) { return s_machineInfo; }
 			inline static bool hasError(void) { return data::ErrorHandler::hasError(); }

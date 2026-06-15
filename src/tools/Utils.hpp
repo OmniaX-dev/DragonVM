@@ -8,6 +8,6 @@ namespace dragon
 	class Utils
 	{
 		public:
-			static ostd::String genRandomName(uint8_t length);
+			static String genRandomName(uint8_t length);
 	};
 }

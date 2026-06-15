@@ -55,7 +55,7 @@ namespace dragon
 				};
 				public:
 					inline ExtMov(void) : data::CPUExtension(data::OpCodes::Ext01, "extmov") {  }
-					ostd::String getOpCodeString(uint8_t opCode) override;
+					String getOpCodeString(uint8_t opCode) override;
 					uint8_t getInstructionSIze(uint8_t opCode) override;
 					bool execute(VirtualCPU& vcpu) override;
 			};
@@ -94,7 +94,7 @@ namespace dragon
 				};
 				public:
 					inline ExtAlu(void) : data::CPUExtension(data::OpCodes::Ext02, "extalu") {  }
-					ostd::String getOpCodeString(uint8_t opCode) override;
+					String getOpCodeString(uint8_t opCode) override;
 					uint8_t getInstructionSIze(uint8_t opCode) override;
 					bool execute(VirtualCPU& vcpu) override;
 			};

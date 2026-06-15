@@ -43,12 +43,12 @@ namespace dragon
 			return region->device->write16(finalAddr, value);
 		}
 
-		void MemoryMapper::mapDevice(IMemoryDevice& device, uint16_t startAddr, uint16_t endAddr, bool remap, ostd::String name)
+		void MemoryMapper::mapDevice(IMemoryDevice& device, uint16_t startAddr, uint16_t endAddr, bool remap, String name)
 		{
 			m_regions.push_back({ &device, startAddr, endAddr, remap, name });
 		}
 
-		ostd::String MemoryMapper::getMemoryRegionName(uint16_t address)
+		String MemoryMapper::getMemoryRegionName(uint16_t address)
 		{
 			tMemoryRegion* region = findRegion(address);
 			if (region == nullptr) return "Invalid";
@@ -67,7 +67,7 @@ namespace dragon
 				if (address >= region.startAddress && address <= region.endAddress)
 					return &region;
 			}
-			data::ErrorHandler::pushError(data::ErrorCodes::MM_RegionNotFound, ostd::String("Memory device not found for address: ").add(ostd::String::getHexStr(address, true, 2)));
+			data::ErrorHandler::pushError(data::ErrorCodes::MM_RegionNotFound, String("Memory device not found for address: ").add(String::getHexStr(address, true, 2)));
 			return nullptr; //TODO: Error
 		}
 	}

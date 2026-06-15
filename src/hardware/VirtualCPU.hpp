@@ -78,7 +78,7 @@ namespace dragon
 				data::CPUExtension* m_currentExtension { nullptr };
 				uint8_t m_currentExtInst { 0x00 };
 
-				std::vector<ostd::String> m_debug_stackFrameStrings;
+				std::vector<String> m_debug_stackFrameStrings;
 
 				ostd::Counter m_profilerTimer;
 

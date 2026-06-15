@@ -19,8 +19,8 @@ namespace dragon
 		{
 			public:
 				inline VirtualBIOS(void) { m_initialized = 0; }
-				inline VirtualBIOS(const ostd::String& biosFilePath) { init(biosFilePath); }
-				void init(const ostd::String& biosFilePath);
+				inline VirtualBIOS(const String& biosFilePath) { init(biosFilePath); }
+				void init(const String& biosFilePath);
 				int8_t read8(uint16_t addr) override;
 				int16_t read16(uint16_t addr) override;
 				int8_t write8(uint16_t addr, int8_t value) override;
@@ -412,8 +412,8 @@ namespace dragon
 			{
 				public:
 					inline CMOS(void) { m_initialized = false; }
-					inline CMOS(const ostd::String& cmosFilePath) { init(cmosFilePath); }
-					void init(const ostd::String& cmosFilePath);
+					inline CMOS(const String& cmosFilePath) { init(cmosFilePath); }
+					void init(const String& cmosFilePath);
 					int8_t read8(uint16_t addr) override;
 					int16_t read16(uint16_t addr) override;
 					int8_t write8(uint16_t addr, int8_t value) override;

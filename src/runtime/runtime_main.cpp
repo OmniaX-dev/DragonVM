@@ -11,7 +11,10 @@ int main(int argc, char** argv)
 	if (rValue != 0) return rValue;
 
 	//Initializing the runtime
-	rValue = dragon::DragonRuntime::initMachine(args.machine_config_path, args.verbose_load);
+	dragon::DragonRuntime::tRuntimeInitInfo initInfo;
+	initInfo.configFilePath = args.machine_config_path;
+	initInfo.verboseLoad = args.verbose_load;
+	rValue = dragon::DragonRuntime::initMachine(initInfo);
 	if (rValue == dragon::DragonRuntime::RETURN_VAL_CLOSE_RUNTIME)
 		return 0;
 	if (rValue != 0) return rValue;

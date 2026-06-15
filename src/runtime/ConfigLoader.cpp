@@ -4,7 +4,7 @@
 
 namespace dragon
 {
-	const tMachineConfig MachineConfigLoader::loadConfig(const ostd::String& configFilePath)
+	const tMachineConfig MachineConfigLoader::loadConfig(const String& configFilePath)
 	{
 		tMachineConfig config;
 		ostd::TextFileBuffer file(configFilePath.cpp_str());
@@ -12,7 +12,7 @@ namespace dragon
 		auto lines = file.getLines();
 		for (auto& line : lines)
 		{
-			ostd::String lineEdit = line;
+			String lineEdit = line;
 			if (!lineEdit.contains("=")) continue; //TODO: Warning
 			auto tokens = lineEdit.tokenize("=");
 			if (tokens.count() != 2) continue; //TODO: Warning

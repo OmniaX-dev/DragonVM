@@ -5,7 +5,7 @@ namespace dragon
 {
 	namespace data
 	{
-		ostd::String OpCodes::getOpCodeString(uint8_t opCode)
+		String OpCodes::getOpCodeString(uint8_t opCode)
 		{
 			CPUExtension* ext = DragonRuntime::cpu.getCurrentCPUExtension();
 			if (ext != nullptr)

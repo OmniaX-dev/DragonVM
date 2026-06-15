@@ -54,7 +54,7 @@ namespace dragon
 				inline static constexpr uint8_t RedrawScreen = 0xE2;
 			};
 			public:
-				inline void setFont(const ostd::String& fontPath) { m_font.init(fontPath); }
+				inline void setFont(const String& fontPath) { m_font.init(fontPath); }
 
 				void onInitialize(void) override;
 				void onDestroy(void) override;
@@ -83,8 +83,8 @@ namespace dragon
 				ogfx::PixelRenderer m_renderer;
 				ogfx::PixelRenderer::Font m_font;
 
-				std::vector<ostd::String> m_singleTextLines;
-				ostd::String m_singleTextBuffer { "" };
+				std::vector<String> m_singleTextLines;
+				String m_singleTextBuffer { "" };
 
 				std::vector<hw::interface::Graphics::tText16_Cell> m_text16_buffer;
 				std::vector<data::IBiosVideoPalette*> m_text16_palettes;

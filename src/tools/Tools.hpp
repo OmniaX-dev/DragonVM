@@ -10,7 +10,7 @@ namespace dragon
 	{
 		public:
 			static inline ostd::ConsoleOutputHandler& output(void) { return out; }
-			static bool createVirtualHardDrive(uint32_t sizeInBytes, const ostd::String& dataFilePath);
+			static bool createVirtualHardDrive(uint32_t sizeInBytes, const String& dataFilePath);
 			static int32_t execute(int argc, char** argv);
 
 		private:
@@ -20,12 +20,12 @@ namespace dragon
 			static int32_t tool_new_dpt(int argc, char** argv);
 			static int32_t tool_print_disassembly(int argc, char** argv);
 			static void print_application_help(void);
-			static int32_t get_tool(int argc, char** argv, ostd::String& outTool);
+			static int32_t get_tool(int argc, char** argv, String& outTool);
 
 		private:
 			inline static ostd::ConsoleOutputHandler out;
 
-			inline static std::unordered_map<uint8_t, ostd::String> m_dpt_flags_str {
+			inline static std::unordered_map<uint8_t, String> m_dpt_flags_str {
 				{ data::DPTStructure::tFlags::Boot, "boot" }
 			};
 

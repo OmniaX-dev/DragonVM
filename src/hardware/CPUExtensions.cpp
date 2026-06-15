@@ -8,7 +8,7 @@ namespace dragon
 	{
 		namespace cpuext
 		{
-			ostd::String ExtMov::getOpCodeString(uint8_t opCode)
+			String ExtMov::getOpCodeString(uint8_t opCode)
 			{
 				switch (opCode)
 				{
@@ -467,7 +467,7 @@ namespace dragon
 
 
 
-			ostd::String ExtAlu::getOpCodeString(uint8_t opCode)
+			String ExtAlu::getOpCodeString(uint8_t opCode)
 			{
 				switch (opCode)
 				{

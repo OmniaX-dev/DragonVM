@@ -65,7 +65,7 @@ namespace dragon
 						ostd::Color foreground = m_text16_Currentpalette->getColor(cell.foregroundColor);
 						char character = static_cast<char>(cell.character);
 						auto xy = CONVERT_1D_2D(i, ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H);
-						ogfx::PixelRenderer::TextRenderer::drawString(ostd::String().addChar(character), xy.x, xy.y, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_font.m_fontPixels, foreground, background);
+						ogfx::PixelRenderer::TextRenderer::drawString(String().addChar(character), xy.x, xy.y, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_font.m_fontPixels, foreground, background);
 					}
 					m_refreshScreen = false;
 				}
@@ -225,11 +225,11 @@ namespace dragon
 			uint8_t invert_colors = mem.read8(vga_addr + tRegisters::TextSingleInvertColors);
 			if (m_singleTextLines.size() == 0)
 			{
-				m_singleTextLines.push_back(ostd::String().addChar(c));
+				m_singleTextLines.push_back(String().addChar(c));
 				if (invert_colors == 0)
-					ogfx::PixelRenderer::TextRenderer::drawString(ostd::String().addChar(c), 0, 0, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_font.m_fontPixels, config.singleColor_foreground, config.singleColor_background);
+					ogfx::PixelRenderer::TextRenderer::drawString(String().addChar(c), 0, 0, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_font.m_fontPixels, config.singleColor_foreground, config.singleColor_background);
 				else
-					ogfx::PixelRenderer::TextRenderer::drawString(ostd::String().addChar(c), 0, 0, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_font.m_fontPixels, config.singleColor_background, config.singleColor_foreground);
+					ogfx::PixelRenderer::TextRenderer::drawString(String().addChar(c), 0, 0, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_font.m_fontPixels, config.singleColor_background, config.singleColor_foreground);
 				return;
 			}
 			auto& line = m_singleTextLines[m_singleTextLines.size() - 1];
@@ -239,20 +239,20 @@ namespace dragon
 			{
 				if (line.len() == ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H)
 				{
-					m_singleTextLines.push_back(ostd::String().addChar(c));
+					m_singleTextLines.push_back(String().addChar(c));
 					auto& line = m_singleTextLines[m_singleTextLines.size() - 1];
 					if (invert_colors == 0)
-						ogfx::PixelRenderer::TextRenderer::drawString(ostd::String().addChar(c), line.len() - 1, m_singleTextLines.size() - 1, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_font.m_fontPixels, config.singleColor_foreground, config.singleColor_background);
+						ogfx::PixelRenderer::TextRenderer::drawString(String().addChar(c), line.len() - 1, m_singleTextLines.size() - 1, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_font.m_fontPixels, config.singleColor_foreground, config.singleColor_background);
 					else
-						ogfx::PixelRenderer::TextRenderer::drawString(ostd::String().addChar(c), line.len() - 1, m_singleTextLines.size() - 1, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_font.m_fontPixels, config.singleColor_background, config.singleColor_foreground);
+						ogfx::PixelRenderer::TextRenderer::drawString(String().addChar(c), line.len() - 1, m_singleTextLines.size() - 1, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_font.m_fontPixels, config.singleColor_background, config.singleColor_foreground);
 				}
 				else
 				{
 					line.addChar(c);
 					if (invert_colors == 0)
-						ogfx::PixelRenderer::TextRenderer::drawString(ostd::String().addChar(c), line.len() - 1, m_singleTextLines.size() - 1, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_font.m_fontPixels, config.singleColor_foreground, config.singleColor_background);
+						ogfx::PixelRenderer::TextRenderer::drawString(String().addChar(c), line.len() - 1, m_singleTextLines.size() - 1, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_font.m_fontPixels, config.singleColor_foreground, config.singleColor_background);
 					else
-						ogfx::PixelRenderer::TextRenderer::drawString(ostd::String().addChar(c), line.len() - 1, m_singleTextLines.size() - 1, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_font.m_fontPixels, config.singleColor_background, config.singleColor_foreground);
+						ogfx::PixelRenderer::TextRenderer::drawString(String().addChar(c), line.len() - 1, m_singleTextLines.size() - 1, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_font.m_fontPixels, config.singleColor_background, config.singleColor_foreground);
 				}
 			}
 			else return;

@@ -16,7 +16,7 @@ namespace dragon
 {
 	namespace code
 	{
-		ostd::ByteStream Assembler::assembleFromFile(ostd::String fileName)
+		ostd::ByteStream Assembler::assembleFromFile(String fileName)
 		{
 			m_rawSource = "";
 			m_code.clear();
@@ -66,7 +66,7 @@ namespace dragon
 			return m_code;
 		}
 
-		ostd::ByteStream Assembler::assembleToFile(ostd::String sourceFileName, ostd::String binaryFileName)
+		ostd::ByteStream Assembler::assembleToFile(String sourceFileName, String binaryFileName)
 		{
 			assembleFromFile(sourceFileName);
 			if (m_code.size() == 0) return {  };
@@ -74,7 +74,7 @@ namespace dragon
 			return m_code;
 		}
 
-		ostd::ByteStream Assembler::assembleToVirtualDisk(ostd::String fileName, hw::VirtualHardDrive& vhdd, uint32_t address)
+		ostd::ByteStream Assembler::assembleToVirtualDisk(String fileName, hw::VirtualHardDrive& vhdd, uint32_t address)
 		{
 			assembleFromFile(fileName);
 			if (m_code.size() == 0) return {  };
@@ -83,10 +83,10 @@ namespace dragon
 			return m_code;
 		}
 
-		bool Assembler::saveDisassemblyToFile(ostd::String fileName)
+		bool Assembler::saveDisassemblyToFile(String fileName)
 		{
 			if (m_code.size() == 0 || m_disassembly.size() == 0) return false;
-			ostd::String header_string = "{ DRAGON_DEBUG_DISASSEMBLY }";
+			String header_string = "{ DRAGON_DEBUG_DISASSEMBLY }";
 			uint64_t da_size = 0;
 			da_size += (header_string.len() + 1) * ostd::tTypeSize::BYTE;
 			da_size += m_disassembly.size() * ostd::tTypeSize::DWORD; //Addresses
@@ -122,11 +122,11 @@ namespace dragon
 					out.fg(ostd::ConsoleColors::Yellow).p("Symbols:").nl();
 				for (auto& symbol : m_symbolTable)
 				{
-					out.fg(ostd::ConsoleColors::Red).p(ostd::String::getHexStr(symbol.second.address, true, 2));
+					out.fg(ostd::ConsoleColors::Red).p(String::getHexStr(symbol.second.address, true, 2));
 					out.fg(ostd::ConsoleColors::Magenta).p("  ").p(symbol.first);
 					out.fg(ostd::ConsoleColors::Blue).nl().p("  ");
 					for (auto& b : symbol.second.bytes)
-						out.p(ostd::String::getHexStr(b, false, 1)).p(".");
+						out.p(String::getHexStr(b, false, 1)).p(".");
 					out.nl();
 				}
 				if (m_symbolTable.size() > 0)
@@ -137,7 +137,7 @@ namespace dragon
 				for (auto& label : m_labelTable)
 				{
 					out.fg(ostd::ConsoleColors::Magenta).p(label.first.new_fixedLength(symbol_len));
-					out.fg(ostd::ConsoleColors::Red).p(ostd::String::getHexStr(label.second.address, true, 2)).nl();
+					out.fg(ostd::ConsoleColors::Red).p(String::getHexStr(label.second.address, true, 2)).nl();
 				}
 				if (m_labelTable.size() > 0)
 					out.nl();
@@ -156,12 +156,12 @@ namespace dragon
 			if (verbose_level == 0 || verbose_level == 1)
 			{
 				out.fg(ostd::ConsoleColors::Yellow).p("Program data:").nl();
-				out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Fixed Size:  ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p((int)m_fixedSize).p(" bytes").nl();
-				out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Program Size:").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p((int)m_programSize).p(" bytes").nl();
-				out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Data Size:   ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p((int)m_dataSize).p(" bytes").nl();
-				out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Fixed Fill:  ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p(ostd::String::getHexStr(m_fixedFillValue, true, 1)).nl();
-				out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Load Address:").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p(ostd::String::getHexStr(m_loadAddress, true, 2)).nl();
-				out.fg(ostd::ConsoleColors::Cyan).p(ostd::String("Entry Point: ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p(ostd::String::getHexStr(m_dataSize + m_loadAddress + 3, true, 2)).nl();
+				out.fg(ostd::ConsoleColors::Cyan).p(String("Fixed Size:  ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p((int)m_fixedSize).p(" bytes").nl();
+				out.fg(ostd::ConsoleColors::Cyan).p(String("Program Size:").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p((int)m_programSize).p(" bytes").nl();
+				out.fg(ostd::ConsoleColors::Cyan).p(String("Data Size:   ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p((int)m_dataSize).p(" bytes").nl();
+				out.fg(ostd::ConsoleColors::Cyan).p(String("Fixed Fill:  ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p(String::getHexStr(m_fixedFillValue, true, 1)).nl();
+				out.fg(ostd::ConsoleColors::Cyan).p(String("Load Address:").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p(String::getHexStr(m_loadAddress, true, 2)).nl();
+				out.fg(ostd::ConsoleColors::Cyan).p(String("Entry Point: ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p(String::getHexStr(m_dataSize + m_loadAddress + 3, true, 2)).nl();
 			}
 
 			out.nl();
@@ -197,8 +197,8 @@ namespace dragon
 
 		void Assembler::removeComments(void)
 		{
-			std::vector<ostd::String> newLines;
-			ostd::String lineEdit;
+			std::vector<String> newLines;
+			String lineEdit;
 			for (auto& line : m_lines)
 			{
 				lineEdit = line;
@@ -214,7 +214,7 @@ namespace dragon
 
 		void Assembler::replaceDefines(void)
 		{
-			auto listContainsDefine = [](const std::vector<tDefine>& list, const ostd::String& name) -> bool {
+			auto listContainsDefine = [](const std::vector<tDefine>& list, const String& name) -> bool {
 				for (auto& def : list)
 				{
 					if (def.name == name)
@@ -222,19 +222,19 @@ namespace dragon
 				}
 				return false;
 			};
-			// auto exportExists = [](const std::unordered_map<ostd::String, tExportSpec>& exports, const ostd::String& name) -> bool {
+			// auto exportExists = [](const std::unordered_map<String, tExportSpec>& exports, const String& name) -> bool {
 			//     return exports.count(name) > 0;
 			// };
 			std::vector<tDefine> defines;
-			std::vector<ostd::String> newLines;
-			ostd::String lineEdit;
-			ostd::String tmpLineEdit;
+			std::vector<String> newLines;
+			String lineEdit;
+			String tmpLineEdit;
 			for (auto& line : m_lines)
 			{
 				lineEdit = line;
 				lineEdit.trim();
 				tmpLineEdit = lineEdit;
-				// ostd::String export_name = "";
+				// String export_name = "";
 				// if (tmpLineEdit.toLower().startsWith("@export_comment "))
 				// {
 				//     lineEdit.substr(16).trim();
@@ -277,8 +277,8 @@ namespace dragon
 						std::cout << "Invalid @define directive: " << line << "\n";
 						return;
 					}
-					ostd::String define_name = lineEdit.new_substr(0, lineEdit.indexOf(" ")).trim();
-					ostd::String define_value = lineEdit.new_substr(lineEdit.indexOf(" ") + 1).trim();
+					String define_name = lineEdit.new_substr(0, lineEdit.indexOf(" ")).trim();
+					String define_value = lineEdit.new_substr(lineEdit.indexOf(" ") + 1).trim();
 					if (listContainsDefine(defines, define_name))
 					{
 						std::cout << "Redefinition of @define value: " << line << "\n";
@@ -300,7 +300,7 @@ namespace dragon
 			}
 			for (auto& line : newLines)
 			{
-				ostd::String lineEdit(line);
+				String lineEdit(line);
 				for (int32_t i = defines.size() - 1; i >= 0; i--)
 					lineEdit.replaceAll(defines[i].name, defines[i].value.new_trim());
 				line = lineEdit;
@@ -319,11 +319,11 @@ namespace dragon
 
 		void Assembler::replaceGroupDefines(void)
 		{
-			std::vector<ostd::String> newLines;
-			ostd::String lineEdit;
+			std::vector<String> newLines;
+			String lineEdit;
 			bool in_group = false;
-			ostd::String group_name = "";
-			ostd::String export_name = "";
+			String group_name = "";
+			String export_name = "";
 			for (auto& line : m_lines)
 			{
 				lineEdit = line;
@@ -376,7 +376,7 @@ namespace dragon
 					std::cout << "Invalid definition inside group: " << line << "\n";
 					return;
 				}
-				ostd::String newLine = "@define " + export_name + " ";
+				String newLine = "@define " + export_name + " ";
 				newLine.add(group_name).add(".").add(lineEdit);
 				newLines.push_back(newLine);
 			}
@@ -386,10 +386,10 @@ namespace dragon
 
 		void Assembler::parseStructures(void)
 		{
-			std::vector<ostd::String> newLines;
-			ostd::String lineEdit;
+			std::vector<String> newLines;
+			String lineEdit;
 			bool in_struct = false;
-			ostd::String struct_name = "";
+			String struct_name = "";
 			tStructDefinition struct_def;
 			int32_t member_index = 0;
 			for (auto& line : m_lines)
@@ -428,9 +428,9 @@ namespace dragon
 						struct_def.size += data.data.size();
 					std::sort(struct_def.members.begin(), struct_def.members.end());
 					m_structDefs.push_back(struct_def);
-					ostd::String size_def = "@define ";
+					String size_def = "@define ";
 					size_def.add(struct_def.name).add(".").add("SIZE").add(" ");
-					size_def.add(ostd::String::getHexStr(struct_def.size, true, 2));
+					size_def.add(String::getHexStr(struct_def.size, true, 2));
 					newLines.push_back(size_def);
 					in_struct = false;
 					continue;
@@ -445,8 +445,8 @@ namespace dragon
 					std::cout << "Invalid definition inside struct. Size specification missing: " << line << "\n";
 					return;
 				}
-				ostd::String member_name = lineEdit.new_substr(0, lineEdit.indexOf(":")).trim();
-				ostd::String member_data = "";
+				String member_name = lineEdit.new_substr(0, lineEdit.indexOf(":")).trim();
+				String member_data = "";
 				lineEdit.substr(lineEdit.indexOf(":") + 1).trim();
 				if (member_name.contains(" "))
 				{
@@ -482,7 +482,7 @@ namespace dragon
 					auto tokens = member_data.tokenize(",");
 					if (tokens.count() == 1)
 					{
-						ostd::String tok = tokens.next();
+						String tok = tokens.next();
 						if (tok.isNumeric())
 						{
 							uint8_t data = (uint8_t)tok.toInt();
@@ -504,7 +504,7 @@ namespace dragon
 						}
 						while (tokens.hasNext())
 						{
-							ostd::String tok = tokens.next();
+							String tok = tokens.next();
 							if (tok.isNumeric())
 							{
 								uint8_t data = (uint8_t)tok.toInt();
@@ -530,7 +530,7 @@ namespace dragon
 			//     {
 			//         std::cout << "  " << d.first << "  ";
 			//         for (auto& b : d.second)
-			//             std::cout << ostd::String::getHexStr(b) << " ";
+			//             std::cout << String::getHexStr(b) << " ";
 			//     }
 			//     std::cout << "\n";
 			// }
@@ -539,8 +539,8 @@ namespace dragon
 
 		void Assembler::parseStructInstances(void)
 		{
-			std::vector<ostd::String> newLines;
-			ostd::String lineEdit;
+			std::vector<String> newLines;
+			String lineEdit;
 			for (auto& line : m_rawDataSection)
 			{
 				lineEdit = line;
@@ -549,11 +549,11 @@ namespace dragon
 				{
 					continue;
 				}
-				ostd::String symbolName = lineEdit.new_substr(0, lineEdit.indexOf(" "));
+				String symbolName = lineEdit.new_substr(0, lineEdit.indexOf(" "));
 				symbolName.trim();
 				lineEdit.substr(lineEdit.indexOf(" ") + 1);
 				lineEdit.trim();
-				ostd::String initialization_data = "";
+				String initialization_data = "";
 				bool has_init_data = false;
 				if (lineEdit.startsWith("<") && lineEdit.contains("="))
 				{
@@ -579,7 +579,7 @@ namespace dragon
 						auto tokens = initialization_data.tokenize(",");
 						while (tokens.hasNext())
 						{
-							ostd::String tok = tokens.next();
+							String tok = tokens.next();
 							if (!tok.isNumeric())
 							{
 								std::cout << "Invalid initialization data: " << lineEdit << "\n";
@@ -613,14 +613,14 @@ namespace dragon
 					newLines.push_back("!" + symbolName);
 					for (auto& member : struct_def.members)
 					{
-						ostd::String newLine = symbolName;
+						String newLine = symbolName;
 						newLine.add(".").add(member.name).add(" ");
 						for (int32_t i = 0; i < member.data.size(); i++, data_index++)
 						{
 							if (has_init_data)
-								newLine.add(ostd::String::getHexStr(init_data[data_index], true, 2));
+								newLine.add(String::getHexStr(init_data[data_index], true, 2));
 							else
-								newLine.add(ostd::String::getHexStr(member.data[i], true, 2));
+								newLine.add(String::getHexStr(member.data[i], true, 2));
 							newLine.add(",");
 						}
 						newLine.substr(0, newLine.len() - 1);
@@ -638,8 +638,8 @@ namespace dragon
 
 		void Assembler::parseExportSpecifications(void)
 		{
-			std::vector<ostd::String> newLines;
-			ostd::String lineEdit;
+			std::vector<String> newLines;
+			String lineEdit;
 			for (auto& line : m_lines)
 			{
 				lineEdit = line;
@@ -654,8 +654,8 @@ namespace dragon
 					std::cout << "Invalid @export directive: " << line << "\n";
 					return;
 				}
-				ostd::String exportName = lineEdit.new_substr(0, lineEdit.indexOf(" ")).trim();
-				ostd::String exportPath = lineEdit.new_substr(lineEdit.indexOf(" ") + 1).trim();
+				String exportName = lineEdit.new_substr(0, lineEdit.indexOf(" ")).trim();
+				String exportPath = lineEdit.new_substr(lineEdit.indexOf(" ") + 1).trim();
 				m_exports[exportName] = { exportPath, {  } };
 			}
 			m_lines.clear();
@@ -664,13 +664,13 @@ namespace dragon
 
 		void Assembler::createExports(void)
 		{
-			std::vector<ostd::String> newLines;
-			ostd::String lineEdit;
-			auto exportExists = [](const std::unordered_map<ostd::String, tExportSpec>& exportList, const ostd::String& exportName) -> bool {
+			std::vector<String> newLines;
+			String lineEdit;
+			auto exportExists = [](const std::unordered_map<String, tExportSpec>& exportList, const String& exportName) -> bool {
 				return exportList.count(exportName) > 0;
 			};
 			bool export_start = false;
-			ostd::String open_export = "";
+			String open_export = "";
 			for (auto& line : m_lines)
 			{
 				lineEdit = line;
@@ -688,8 +688,8 @@ namespace dragon
 						std::cout << "Invalid @export_comment directive: " << line << "\n";
 						return;
 					}
-					ostd::String exportName = lineEdit.new_substr(0, lineEdit.indexOf(" ")).trim();
-					ostd::String exportComment = lineEdit.new_substr(lineEdit.indexOf(" ") + 1).trim();
+					String exportName = lineEdit.new_substr(0, lineEdit.indexOf(" ")).trim();
+					String exportComment = lineEdit.new_substr(lineEdit.indexOf(" ") + 1).trim();
 					if (!exportExists(m_exports, exportName))
 					{
 						std::cout << "Invalid export name in @export_comment directive: " << line << "\n";
@@ -701,7 +701,7 @@ namespace dragon
 						return;
 					}
 					exportComment.substr(1, exportComment.len() - 1).replaceAll("\\n", "\n");
-					m_exports[exportName].lines.push_back(ostd::String("##").add(exportComment));
+					m_exports[exportName].lines.push_back(String("##").add(exportComment));
 				}
 				else if (lineEdit.startsWith("@raw_export_start "))
 				{
@@ -748,8 +748,8 @@ namespace dragon
 		void Assembler::replaceExportBuiltinVars(void)
 		{
 			if (!saveExports) return;
-			auto getVersionStr = []() -> ostd::String {
-				return ostd::String("").add(MAJ_V).add(".").add(MIN_V).add(".").add(BUILD_NR);
+			auto getVersionStr = []() -> String {
+				return String("").add(MAJ_V).add(".").add(MIN_V).add(".").add(BUILD_NR);
 			};
 			for (auto&[name, exportSpec] : m_exports)
 			{
@@ -790,7 +790,7 @@ namespace dragon
 
 			for (auto& line : m_lines)
 			{
-				ostd::String lineEdit(line);
+				String lineEdit(line);
 				lineEdit.trim();
 				if (lineEdit.startsWith(".data"))
 					currentSection = DATA_SECTION;
@@ -812,7 +812,7 @@ namespace dragon
 						std::cout << "Invalid .fixed value: " << lineEdit << "\n";
 						return;
 					}
-					ostd::String fixedSizeEdit = lineEdit.new_substr(0, lineEdit.indexOf(","));
+					String fixedSizeEdit = lineEdit.new_substr(0, lineEdit.indexOf(","));
 					fixedSizeEdit.trim();
 					lineEdit = lineEdit.substr(lineEdit.indexOf(",") + 1);
 					lineEdit.trim();
@@ -904,9 +904,9 @@ namespace dragon
 			//     std::cout << line << "\n";
 			for (auto& line : m_rawDataSection)
 			{
-				ostd::String lineEdit(line);
+				String lineEdit(line);
 				tSymbol symbol;
-				ostd::String symbolName = "";
+				String symbolName = "";
 				bool array = false;
 				if (lineEdit.startsWith("!"))
 				{
@@ -1036,7 +1036,7 @@ namespace dragon
 		{
 			for (auto& line : m_rawCodeSection)
 			{
-				ostd::String lineEdit(line);
+				String lineEdit(line);
 				uint32_t commaCount = lineEdit.count(",");
 				uint32_t spaceCount = lineEdit.count(" ");
 				if (lineEdit.endsWith(":") && commaCount == 0 && spaceCount == 0) //Labels
@@ -1051,7 +1051,7 @@ namespace dragon
 			tDisassemblyLine _disassembly_line;
 			for (auto& line : m_rawCodeSection)
 			{
-				ostd::String lineEdit(line);
+				String lineEdit(line);
 				uint32_t commaCount = lineEdit.count(",");
 				uint32_t spaceCount = lineEdit.count(" ");
 				if (lineEdit.endsWith(":") && commaCount == 0 && spaceCount == 0) //Labels
@@ -1086,7 +1086,7 @@ namespace dragon
 				else if (commaCount == 0 && spaceCount <= 0) //0 Operands
 				{
 					_disassembly_line.addr = m_dataSize + m_loadAddress + m_code.size() + 3;
-					ostd::String _tmp_edit(lineEdit);
+					String _tmp_edit(lineEdit);
 					if (_tmp_edit.toLower().trim().startsWith("debug_"))
 						parseDebugOperands(lineEdit);
 					else
@@ -1099,7 +1099,7 @@ namespace dragon
 				{
 					_disassembly_line.addr = m_dataSize + m_loadAddress + m_code.size() + 3;
 					lineEdit = replaceSymbols(lineEdit);
-					ostd::String _tmp_edit(lineEdit);
+					String _tmp_edit(lineEdit);
 					if (_tmp_edit.toLower().trim().startsWith("debug_"))
 						parseDebugOperands(lineEdit);
 					else
@@ -1112,7 +1112,7 @@ namespace dragon
 				{
 					_disassembly_line.addr = m_dataSize + m_loadAddress + m_code.size() + 3;
 					lineEdit = replaceSymbols(lineEdit);
-					ostd::String _tmp_edit(lineEdit);
+					String _tmp_edit(lineEdit);
 					if (_tmp_edit.toLower().trim().startsWith("debug_"))
 						parseDebugOperands(lineEdit);
 					else
@@ -1125,7 +1125,7 @@ namespace dragon
 				{
 					_disassembly_line.addr = m_dataSize + m_loadAddress + m_code.size() + 3;
 					lineEdit = replaceSymbols(lineEdit);
-					ostd::String _tmp_edit(lineEdit);
+					String _tmp_edit(lineEdit);
 					if (_tmp_edit.toLower().trim().startsWith("debug_"))
 						parseDebugOperands(lineEdit);
 					else
@@ -1144,31 +1144,31 @@ namespace dragon
 
 
 
-		void Assembler::parseDebugOperands(ostd::String line)
+		void Assembler::parseDebugOperands(String line)
 		{
 			if (!debugMode)
 				return;
-			if (ostd::String(line).toLower().startsWith("debug_break"))
+			if (String(line).toLower().startsWith("debug_break"))
 			{
 				m_code.push_back(data::OpCodes::DEBUG_Break);
 				return;
 			}
-			else if (ostd::String(line).toLower().startsWith("debug_ram_dump"))
+			else if (String(line).toLower().startsWith("debug_ram_dump"))
 			{
 				m_code.push_back(data::OpCodes::DEBUG_DumpRAM);
 				return;
 			}
-			else if (ostd::String(line).toLower().startsWith("debug_profile_stop"))
+			else if (String(line).toLower().startsWith("debug_profile_stop"))
 			{
 				m_code.push_back(data::OpCodes::DEBUG_StopProfile);
 				return;
 			}
-			else if (ostd::String(line).toLower().startsWith("debug_profile_start"))
+			else if (String(line).toLower().startsWith("debug_profile_start"))
 			{
-				ostd::String lineEdit(line);
-				ostd::String instEdit(lineEdit.new_substr(0, lineEdit.indexOf(" ")));
+				String lineEdit(line);
+				String instEdit(lineEdit.new_substr(0, lineEdit.indexOf(" ")));
 				instEdit.trim().toLower();
-				ostd::String opEdit(lineEdit.new_substr(lineEdit.indexOf(" ") + 1));
+				String opEdit(lineEdit.new_substr(lineEdit.indexOf(" ") + 1));
 				opEdit.trim();
 				int16_t word1 = 0x0000;
 				int16_t word2 = 0x0000;
@@ -1200,36 +1200,36 @@ namespace dragon
 			}
 		}
 
-		void Assembler::parse0Operand(ostd::String line)
+		void Assembler::parse0Operand(String line)
 		{
-			if (ostd::String(line).toLower().startsWith("nop"))
+			if (String(line).toLower().startsWith("nop"))
 			{
 				m_code.push_back(data::OpCodes::NoOp);
 				return;
 			}
-			else if (ostd::String(line).toLower().startsWith("ret"))
+			else if (String(line).toLower().startsWith("ret"))
 			{
 				m_code.push_back(data::OpCodes::Ret);
 				return;
 			}
-			else if (ostd::String(line).toLower().startsWith("rti"))
+			else if (String(line).toLower().startsWith("rti"))
 			{
 				m_code.push_back(data::OpCodes::RetInt);
 				return;
 			}
-			else if (ostd::String(line).toLower().startsWith("hlt"))
+			else if (String(line).toLower().startsWith("hlt"))
 			{
 				m_code.push_back(data::OpCodes::Halt);
 				return;
 			}
 		}
 
-		void Assembler::parse1Operand(ostd::String line)
+		void Assembler::parse1Operand(String line)
 		{
-			ostd::String lineEdit(line);
-			ostd::String instEdit(lineEdit.new_substr(0, lineEdit.indexOf(" ")));
+			String lineEdit(line);
+			String instEdit(lineEdit.new_substr(0, lineEdit.indexOf(" ")));
 			instEdit.trim().toLower();
-			ostd::String opEdit(lineEdit.new_substr(lineEdit.indexOf(" ") + 1));
+			String opEdit(lineEdit.new_substr(lineEdit.indexOf(" ") + 1));
 			opEdit.trim();
 			int16_t word = 0x0000;
 			if (STDVEC_CONTAINS(cpuExtensions, "extalu"))
@@ -1302,7 +1302,7 @@ namespace dragon
 				if (opType == eOperandType::Immediate || opType == eOperandType::Label)
 				{
 					// if (opType == eOperandType::Label)
-					//     std::cout << ostd::String::getHexStr(word, true, 2) << "\n";
+					//     std::cout << String::getHexStr(word, true, 2) << "\n";
 					m_code[m_code.size() - 1] = data::OpCodes::PushImm;
 					// m_code.push_back(data::OpCodes::PushImm);
 					m_code.push_back((uint8_t)((word & 0xFF00) >> 8));
@@ -1468,12 +1468,12 @@ namespace dragon
 			}
 		}
 
-		void Assembler::parse2Operand(ostd::String line)
+		void Assembler::parse2Operand(String line)
 		{
-			ostd::String lineEdit(line);
-			ostd::String instEdit(lineEdit.new_substr(0, lineEdit.indexOf(" ")));
+			String lineEdit(line);
+			String instEdit(lineEdit.new_substr(0, lineEdit.indexOf(" ")));
 			instEdit.trim().toLower();
-			ostd::String opEdit(lineEdit.new_substr(lineEdit.indexOf(" ") + 1));
+			String opEdit(lineEdit.new_substr(lineEdit.indexOf(" ") + 1));
 			opEdit.trim();
 			int16_t word = 0x0000;
 			auto st = opEdit.tokenize(",");
@@ -1859,12 +1859,12 @@ namespace dragon
 			}
 		}
 
-		void Assembler::parse3Operand(ostd::String line)
+		void Assembler::parse3Operand(String line)
 		{
-			ostd::String lineEdit(line);
-			ostd::String instEdit(lineEdit.new_substr(0, lineEdit.indexOf(" ")));
+			String lineEdit(line);
+			String instEdit(lineEdit.new_substr(0, lineEdit.indexOf(" ")));
 			instEdit.trim().toLower();
-			ostd::String opEdit(lineEdit.new_substr(lineEdit.indexOf(" ") + 1));
+			String opEdit(lineEdit.new_substr(lineEdit.indexOf(" ") + 1));
 			opEdit.trim();
 			if (STDVEC_CONTAINS(cpuExtensions, "extmov"))
 			{
@@ -1889,7 +1889,7 @@ namespace dragon
 						m_code.push_back((uint8_t)word1);
 						code_offset++;
 						eOperandType opType2 = parseOperand(st.next(), word2);
-						ostd::String op3 = st.next();
+						String op3 = st.next();
 						bool word_offset = false;
 						if (op3.startsWith("word"))
 						{
@@ -1973,7 +1973,7 @@ namespace dragon
 						m_code.push_back((uint8_t)(word1 & 0x00FF));
 						code_offset += 2;
 						eOperandType opType2 = parseOperand(st.next(), word2);
-						ostd::String op3 = st.next();
+						String op3 = st.next();
 						bool word_offset = false;
 						if (op3.startsWith("word"))
 						{
@@ -2046,7 +2046,7 @@ namespace dragon
 						m_code.push_back((uint8_t)word1);
 						code_offset++;
 						eOperandType opType2 = parseOperand(st.next(), word2);
-						ostd::String op3 = st.next();
+						String op3 = st.next();
 						bool word_offset = false;
 						if (op3.startsWith("word"))
 						{
@@ -2129,7 +2129,7 @@ namespace dragon
 						m_code.push_back((uint8_t)(word1 & 0x00FF));
 						code_offset += 2;
 						eOperandType opType2 = parseOperand(st.next(), word2);
-						ostd::String op3 = st.next();
+						String op3 = st.next();
 						bool word_offset = false;
 						if (op3.startsWith("word"))
 						{
@@ -2201,7 +2201,7 @@ namespace dragon
 						m_code.push_back((uint8_t)word1);
 						code_offset++;
 						eOperandType opType2 = parseOperand(st.next(), word2);
-						ostd::String op3 = st.next();
+						String op3 = st.next();
 						bool word_offset = false;
 						if (op3.startsWith("word"))
 						{
@@ -2283,7 +2283,7 @@ namespace dragon
 						m_code.push_back((uint8_t)word1);
 						code_offset++;
 						eOperandType opType2 = parseOperand(st.next(), word2);
-						ostd::String op3 = st.next();
+						String op3 = st.next();
 						bool word_offset = false;
 						if (op3.startsWith("word"))
 						{
@@ -2354,7 +2354,7 @@ namespace dragon
 						m_code.push_back((uint8_t)word1);
 						code_offset++;
 						eOperandType opType2 = parseOperand(st.next(), word2);
-						ostd::String op3 = st.next();
+						String op3 = st.next();
 						bool word_offset = false;
 						if (op3.startsWith("word"))
 						{
@@ -2436,7 +2436,7 @@ namespace dragon
 						m_code.push_back((uint8_t)word1);
 						code_offset++;
 						eOperandType opType2 = parseOperand(st.next(), word2);
-						ostd::String op3 = st.next();
+						String op3 = st.next();
 						bool word_offset = false;
 						if (op3.startsWith("word"))
 						{
@@ -2522,7 +2522,7 @@ namespace dragon
 			newCode.push_back((uint8_t)(entryAddr & 0x00FF));
 			if (m_dataSize > 0)
 				m_disassembly.insert(m_disassembly.begin(), { (uint16_t)(m_loadAddress + 3), "[----------DATA_SECTION----------]" });
-			m_disassembly.insert(m_disassembly.begin(), { m_loadAddress, ostd::String("jmp ").add(ostd::String::getHexStr(entryAddr, true, 2)) });
+			m_disassembly.insert(m_disassembly.begin(), { m_loadAddress, String("jmp ").add(String::getHexStr(entryAddr, true, 2)) });
 			for (auto& d : m_symbolTable)
 			{
 				symbols.push_back(d.second);
@@ -2552,17 +2552,17 @@ namespace dragon
 
 
 
-		ostd::String Assembler::replaceSymbols(ostd::String line)
+		String Assembler::replaceSymbols(String line)
 		{
-			ostd::String lineEdit(line);
+			String lineEdit(line);
 			for (auto& symbol : m_symbolTable)
 			{
-				ostd::String regex = "\\" + symbol.first.new_regexReplace("\\.", "\\.") + "(?!\\.)(?!\\w)";
+				String regex = "\\" + symbol.first.new_regexReplace("\\.", "\\.") + "(?!\\.)(?!\\w)";
 
 				// std::cout << "SYMBOL: " << symbol.first << "\n";
 				// std::cout << "LINE: " << lineEdit << "\n";
 				// std::cout << "REGEX: " << regex << "\n";
-				lineEdit.regexReplace(regex, ostd::String::getHexStr(symbol.second.address, true, 2), false);
+				lineEdit.regexReplace(regex, String::getHexStr(symbol.second.address, true, 2), false);
 				// std::cout << "NEW_LINE: " << lineEdit << "\n\n";
 			}
 			return lineEdit;
@@ -2580,9 +2580,9 @@ namespace dragon
 			}
 		}
 
-		Assembler::eOperandType Assembler::parseOperand(ostd::String op, int16_t& outOp)
+		Assembler::eOperandType Assembler::parseOperand(String op, int16_t& outOp)
 		{
-			ostd::String opEdit(op);
+			String opEdit(op);
 			bool derefReg = false;
 			if (opEdit.startsWith("*"))
 			{
@@ -2640,8 +2640,8 @@ namespace dragon
 					m_labelTable[opEdit].references.push_back(m_code.size());
 				outOp = (int16_t)labelAddr;
 				// std::cout << "LABEL: " << opEdit << "\n";
-				// std::cout << "     : " << ostd::String::getHexStr(labelAddr, true, 2) << "\n";
-				// std::cout << "     : " << ostd::String::getHexStr(outOp, true, 2) << "\n";
+				// std::cout << "     : " << String::getHexStr(labelAddr, true, 2) << "\n";
+				// std::cout << "     : " << String::getHexStr(outOp, true, 2) << "\n";
 				return eOperandType::Label;
 			}
 			if (opEdit.startsWith("{") && opEdit.endsWith("}"))
@@ -2673,9 +2673,9 @@ namespace dragon
 			return eOperandType::Error;
 		}
 
-		uint8_t Assembler::parseRegister(ostd::String op)
+		uint8_t Assembler::parseRegister(String op)
 		{
-			ostd::String opEdit(op);
+			String opEdit(op);
 			opEdit.trim().toLower();
 			if (opEdit == "r1") return data::Registers::R1;
 			if (opEdit == "r2") return data::Registers::R2;

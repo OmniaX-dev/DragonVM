@@ -11,7 +11,7 @@
 
 namespace dragon
 {
-	bool Tools::createVirtualHardDrive(uint32_t sizeInBytes, const ostd::String& dataFilePath)
+	bool Tools::createVirtualHardDrive(uint32_t sizeInBytes, const String& dataFilePath)
 	{
 		std::ofstream rf(dataFilePath.cpp_str(), std::ios::out | std::ios::binary);
 		if(!rf) return false;
@@ -25,7 +25,7 @@ namespace dragon
 
 	int32_t Tools::execute(int argc, char** argv)
 	{
-		ostd::String tool = "";
+		String tool = "";
 		int32_t rValue = get_tool(argc, argv, tool);
 		if (rValue != ErrorNoError)
 			return rValue;
@@ -82,8 +82,8 @@ namespace dragon
 			out.fg(ostd::ConsoleColors::Red).p("  Usage: ./dtools new-vdisk <destination_file> <size_in_bytes>").reset().nl();
 			return ErrorNewVDiskTooFewArgs;
 		}
-		ostd::String dest = argv[2];
-		ostd::String str_size = argv[3];
+		String dest = argv[2];
+		String str_size = argv[3];
 		if (!str_size.isInt())
 		{
 			out.fg(ostd::ConsoleColors::Red).p("Error: <size_in_bytes> parameter must be integer.").reset().nl();
@@ -109,9 +109,9 @@ namespace dragon
 			out.fg(ostd::ConsoleColors::Red).p("  Usage: ./dtools load-binary <virtual_disk_file> <data_file> <destination_address>").reset().nl();
 			return ErrorLoadProgTooFewArgs;
 		}
-		ostd::String vdisk_file = argv[2];
-		ostd::String data_file = argv[3];
-		ostd::String str_addr = argv[4];
+		String vdisk_file = argv[2];
+		String data_file = argv[3];
+		String str_addr = argv[4];
 		if (!str_addr.isInt())
 		{
 			out.fg(ostd::ConsoleColors::Red).p("Error: <destination_address> parameter must be integer.").reset().nl();
@@ -140,7 +140,7 @@ namespace dragon
 		out.nl().fg(ostd::ConsoleColors::Green).p("Success. Data written to Virtual Disk:").nl();
 		out.p("  Data Path: ").p(data_file.cpp_str()).nl();
 		out.p("  Disk Path: ").p(vdisk_file.cpp_str()).nl();
-		out.p("  Data Address: ").p(ostd::String::getHexStr(addr, true, 4).cpp_str()).nl();
+		out.p("  Data Address: ").p(String::getHexStr(addr, true, 4).cpp_str()).nl();
 		out.p("  Size: ").p(code.size()).reset().nl();
 		return ErrorNoError;
 	}
@@ -153,7 +153,7 @@ namespace dragon
 			out.fg(ostd::ConsoleColors::Red).p("  Usage: ./dtools read-dpt <virtual_disk_file>").reset().nl();
 			return ErrorReadDPTTooFewArgs;
 		}
-		ostd::String vdisk_file = argv[2];
+		String vdisk_file = argv[2];
 		dragon::hw::VirtualHardDrive vHDD(vdisk_file);
 		if (!vHDD.isInitialized())
 		{
@@ -199,7 +199,7 @@ namespace dragon
 			uint32_t startAddress { 0 };
 			uint32_t size { 0 };
 			ostd::BitField_16 flags { 0 };
-			ostd::String label { "" };
+			String label { "" };
 		};
 		std::vector<tPartitionData> partitionList;
 		for (int32_t i = 0; i < part_count; i++)
@@ -219,27 +219,27 @@ namespace dragon
 		out.fg(ostd::ConsoleColors::BrightRed).p("Disk: ").p(vdisk_file).p(" (").p(vHDD.getSize()).p(" bytes)").nl();
 		auto print_part_size = [](uint32_t size, ostd::ConsoleOutputHandler& out, uint16_t line_len) {
 			double dsize = size;
-			ostd::String units[4] = { " bytes", " Kb", " Mb", " Gb" };
+			String units[4] = { " bytes", " Kb", " Mb", " Gb" };
 			int32_t unit_index = 0;
 			while (dsize > 1024 && unit_index < 3)
 			{
 				unit_index++;
 				dsize /= 1024.0;
 			}
-			out.p(ostd::String("").add(dsize, 2).add(units[unit_index]).new_fixedLength(line_len));
+			out.p(String("").add(dsize, 2).add(units[unit_index]).new_fixedLength(line_len));
 		};
 		uint16_t len = 20;
 		out.nl().fg(ostd::ConsoleColors::BrightGray);
-		out.p(ostd::String("=").new_fixedLength(5 * len, '=')).nl();
+		out.p(String("=").new_fixedLength(5 * len, '=')).nl();
 		out.fg(ostd::ConsoleColors::Blue);
 		out.p("  ");
-		out.p(ostd::String("LABEL").new_fixedLength(len));
-		out.p(ostd::String("SIZE").new_fixedLength(len));
-		out.p(ostd::String("START").new_fixedLength(len));
-		out.p(ostd::String("END").new_fixedLength(len));
-		out.p(ostd::String("FLAGS").new_fixedLength(len));
+		out.p(String("LABEL").new_fixedLength(len));
+		out.p(String("SIZE").new_fixedLength(len));
+		out.p(String("START").new_fixedLength(len));
+		out.p(String("END").new_fixedLength(len));
+		out.p(String("FLAGS").new_fixedLength(len));
 		out.nl().fg(ostd::ConsoleColors::BrightGray);
-		out.p(ostd::String("=").new_fixedLength(5 * len, '=')).nl();
+		out.p(String("=").new_fixedLength(5 * len, '=')).nl();
 		for (int32_t i = 0; i < partitionList.size(); i++)
 		{
 			auto& part = partitionList[i];
@@ -248,9 +248,9 @@ namespace dragon
 			out.fg(ostd::ConsoleColors::Cyan).p("  ");
 			out.p(part.label.new_fixedLength(len));
 			print_part_size(part.size, out, len);
-			out.p(ostd::String::getHexStr(part.startAddress, true, 4).new_fixedLength(len));
-			out.p(ostd::String::getHexStr(part.startAddress + part.size, true, 4).new_fixedLength(len));
-			ostd::String flags_str = "";
+			out.p(String::getHexStr(part.startAddress, true, 4).new_fixedLength(len));
+			out.p(String::getHexStr(part.startAddress + part.size, true, 4).new_fixedLength(len));
+			String flags_str = "";
 			for (uint8_t bit = 0; bit < sizeof(part.flags) * 8; bit++)
 			{
 				if (m_dpt_flags_str.count(bit) == 0)
@@ -264,7 +264,7 @@ namespace dragon
 			out.fg(ostd::ConsoleColors::Yellow).p(flags_str).fg(ostd::ConsoleColors::Cyan).nl();
 		}
 		out.fg(ostd::ConsoleColors::BrightGray);
-		out.p(ostd::String("=").new_fixedLength(5 * len, '=')).nl();
+		out.p(String("=").new_fixedLength(5 * len, '=')).nl();
 		out.reset().nl();
 		return ErrorNoError;
 	}
@@ -277,7 +277,7 @@ namespace dragon
 			out.fg(ostd::ConsoleColors::Red).p("  Usage: ./dtools new-dpt <virtual_disk_file> -p -s SIZE [-l LABEL] [-f FLAG1] [-f FLAG2] [-p SIZE ...]").reset().nl();
 			return ErrorLoadProgTooFewArgs;
 		}
-		ostd::String vdisk_file = argv[2];
+		String vdisk_file = argv[2];
 		dragon::hw::VirtualHardDrive vHDD(vdisk_file);
 		if (!vHDD.isInitialized())
 		{
@@ -287,7 +287,7 @@ namespace dragon
 		uint64_t disk_size = vHDD.getSize();
 
 		auto& _dpt_flags_str = m_dpt_flags_str;
-		auto get_flag_from_str = [_dpt_flags_str](const ostd::String& flag_str) -> int8_t {
+		auto get_flag_from_str = [_dpt_flags_str](const String& flag_str) -> int8_t {
 			for (auto& flag : _dpt_flags_str)
 			{
 				if (flag.second == flag_str)
@@ -306,7 +306,7 @@ namespace dragon
 			uint32_t size { 0 };
 			uint32_t address { 0 };
 			std::vector<uint8_t> flags;
-			ostd::String label { "" };
+			String label { "" };
 		};
 
 		std::vector<tPartData> partitions;
@@ -318,7 +318,7 @@ namespace dragon
 		uint32_t part_start_addr = data::DPTStructure::DiskStartAddr;
 		while (has_args)
 		{
-			ostd::String arg = argv[arg_index];
+			String arg = argv[arg_index];
 			arg.trim();
 			if (part_started)
 			{
@@ -365,13 +365,13 @@ namespace dragon
 						out.fg(ostd::ConsoleColors::Red).p("Error: No partition size specified.").reset().nl();
 						return ErrorNewDPTNoPartitionSize;
 					}
-					else if (!ostd::String(argv[arg_index + 1]).isInt())
+					else if (!String(argv[arg_index + 1]).isInt())
 					{
 						out.fg(ostd::ConsoleColors::Red).p("Error: Partition size must be an integer.").reset().nl();
 						return ErrorNewDPTInvalidPartitionSize;
 					}
 					arg_index++;
-					uint32_t part_size = ostd::String(argv[arg_index]).toInt();
+					uint32_t part_size = String(argv[arg_index]).toInt();
 					if (part_start_addr + part_size > disk_size)
 					{
 						out.fg(ostd::ConsoleColors::Red).p("Error: Not enough space on disk.").reset().nl();
@@ -446,7 +446,7 @@ namespace dragon
 		vHDD.unmount();
 		out.nl().fg(ostd::ConsoleColors::Green).p("Success. DPT Block created on Virtual Disk:").nl();
 		out.p("  Disk Path: ").p(vdisk_file.cpp_str()).nl();
-		out.p("  DPT Block Address: ").p(ostd::String::getHexStr(data::DPTStructure::DiskAddress, true, 4).cpp_str()).nl();
+		out.p("  DPT Block Address: ").p(String::getHexStr(data::DPTStructure::DiskAddress, true, 4).cpp_str()).nl();
 		out.p("  DPT Block Size: ").p(data::DPTStructure::DPTBlockSizeBytes).nl();
 		return ErrorNoError;
 	}
@@ -460,7 +460,7 @@ namespace dragon
 			out.fg(ostd::ConsoleColors::Red).p("  Usage: ./dtools print-disassembly <disassembly_file>").reset().nl();
 			return ErrorPrintDisassemblyTooFewArgs;
 		}
-		ostd::String arg1 = argv[2];
+		String arg1 = argv[2];
 		arg1.trim();
 		TableList codeTable;
 		TableList labelTable;
@@ -499,7 +499,7 @@ namespace dragon
 		out.bg(ostd::ConsoleColors::White).fg(ostd::ConsoleColors::Black).p("DATA:").reset().nl();
 		for (const auto& line : dataTable)
 		{
-			out.fg(ostd::ConsoleColors::BrightGray).p(ostd::String::getHexStr(line.addr, true, 2)).p("\t\t");
+			out.fg(ostd::ConsoleColors::BrightGray).p(String::getHexStr(line.addr, true, 2)).p("\t\t");
 			out.fg(ostd::ConsoleColors::Green).p(line.code).p("\t\t");
 			out.fg(ostd::ConsoleColors::Blue).p(line.size).p(" bytes\t\t");
 			out.reset().nl();
@@ -508,7 +508,7 @@ namespace dragon
 		out.bg(ostd::ConsoleColors::White).fg(ostd::ConsoleColors::Black).p("LABELS:").reset().nl();
 		for (const auto& line : labelTable)
 		{
-			out.fg(ostd::ConsoleColors::BrightGray).p(ostd::String::getHexStr(line.addr, true, 2)).p("\t\t");
+			out.fg(ostd::ConsoleColors::BrightGray).p(String::getHexStr(line.addr, true, 2)).p("\t\t");
 			out.fg(ostd::ConsoleColors::Green).p(line.code).p("\t\t");
 			out.reset().nl();
 		}
@@ -516,7 +516,7 @@ namespace dragon
 		out.bg(ostd::ConsoleColors::White).fg(ostd::ConsoleColors::Black).p("CODE:").reset().nl();
 		for (const auto& line : codeTable)
 		{
-			out.fg(ostd::ConsoleColors::BrightGray).p(ostd::String::getHexStr(line.addr, true, 2)).p("\t\t");
+			out.fg(ostd::ConsoleColors::BrightGray).p(String::getHexStr(line.addr, true, 2)).p("\t\t");
 			out.fg(ostd::ConsoleColors::Green).p(line.code).p("\t\t");
 			out.reset().nl();
 		}
@@ -561,7 +561,7 @@ namespace dragon
 		out.fg(ostd::ConsoleColors::Magenta).p("Usage: ./dtools <tool_name> [...arguments...]").nl().nl().reset();
 	}
 
-	int32_t Tools::get_tool(int argc, char** argv, ostd::String& outTool)
+	int32_t Tools::get_tool(int argc, char** argv, String& outTool)
 	{
 		if (argc < 2)
 		{
@@ -569,7 +569,7 @@ namespace dragon
 			out.fg(ostd::ConsoleColors::Red).p("Use the --help option for more info.").reset().nl();
 			return ErrorTopLevelTooFewArgs;
 		}
-		ostd::String tool = argv[1];
+		String tool = argv[1];
 		tool = tool.trim().toLower();
 		outTool = tool;
 		return ErrorNoError;

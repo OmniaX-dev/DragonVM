@@ -29,7 +29,7 @@ namespace dragon
 				args.verbose_level = -1;
 				for (int32_t i = 2; i < argc; i++)
 				{
-					ostd::String edit(argv[i]);
+					String edit(argv[i]);
 					if (edit == "-o")
 					{
 						if (i == argc - 1)
@@ -42,7 +42,7 @@ namespace dragon
 						if (i == argc - 1)
 							return RETURN_VAL_MISSING_PARAM;
 						i++;
-						ostd::String _include = argv[i];
+						String _include = argv[i];
 						_include.trim();
 						if (!_include.endsWith("/"))
 							_include.add("/");
@@ -63,7 +63,7 @@ namespace dragon
 						if (i == argc - 1)
 							return RETURN_VAL_MISSING_PARAM;
 						i++;
-						ostd::String final_path = argv[i];
+						String final_path = argv[i];
 						if (!ostd::FileSystem::ensureFile(final_path))
 							return RETURN_VAL_INVALID_PARAM;
 						args.final_stage_path = final_path;
@@ -109,7 +109,7 @@ namespace dragon
 			int32_t commandLength = 46;
 
 			out.nl().fg(ostd::ConsoleColors::Yellow).p("List of available parameters:").reset().nl();
-			ostd::String tmpCommand = "--save-disassembly <destination-directory>";
+			String tmpCommand = "--save-disassembly <destination-directory>";
 			tmpCommand.addRightPadding(commandLength);
 			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Saves debug information in the destination directory. (Enabled by default in debug mode.)").reset().nl();
 			tmpCommand = "--save-final-stage <destination-file>";

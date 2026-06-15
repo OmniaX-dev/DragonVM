@@ -12,7 +12,7 @@ namespace dragon
 		public: struct tCommandLineArgs
 		{
 			inline tCommandLineArgs(void) {  }
-			ostd::String machine_config_path = "";
+			String machine_config_path = "";
 			bool verbose_load = false;
 			bool force_load = false;
 			bool step_exec = false;
@@ -21,7 +21,7 @@ namespace dragon
 			bool hide_virtual_display = true;
 			bool track_call_stack = true;
 			bool auto_track_all_data_symbols = true;
-			ostd::String force_load_file = "";
+			String force_load_file = "";
 			uint16_t force_load_mem_offset = 0x00;
 		};
 		public: struct tDebuggerData
@@ -32,11 +32,11 @@ namespace dragon
 			DisassemblyList labels;
 			DisassemblyList data;
 			std::vector<uint16_t> trackedAddresses;
-			ostd::String command;
+			String command;
 			int32_t labelLineLength { 40 };
 			uint16_t currentAddress { 0 };
 			bool userQuit { false };
-			ostd::String disassemblyDirectory { "disassembly" };
+			String disassemblyDirectory { "disassembly" };
 			std::vector<uint16_t> manualBreakPoints;
 		};
 		struct tCloseEventListener : public ostd::BaseObject
@@ -52,8 +52,8 @@ namespace dragon
 		{
 			public:
 				static DisassemblyList findCodeRegion(const DisassemblyList& code, uint16_t address, uint16_t codeRegionMargin);
-				static ostd::String findSymbol(const DisassemblyList& labels, uint16_t address, uint16_t* outSize = nullptr);
-				static uint16_t findSymbol(const DisassemblyList& labels, const ostd::String& symbol, uint16_t* outSize = nullptr);
+				static String findSymbol(const DisassemblyList& labels, uint16_t address, uint16_t* outSize = nullptr);
+				static uint16_t findSymbol(const DisassemblyList& labels, const String& symbol, uint16_t* outSize = nullptr);
 				static bool isValidLabelNameChar(char c);
 				static void clearConsoleLine(void);
 				static bool isEscapeKeyPressed(bool blocking = false);
@@ -66,8 +66,8 @@ namespace dragon
 		public: class Display
 		{
 			public:
-				static void colorizeInstructionBody(const ostd::String& instBody, bool currentLine, const DisassemblyList& labelList);
-				static void colorCodeInstructions(const ostd::String& inst, bool currentLine, const DisassemblyList& labelList);
+				static void colorizeInstructionBody(const String& instBody, bool currentLine, const DisassemblyList& labelList);
+				static void colorCodeInstructions(const String& inst, bool currentLine, const DisassemblyList& labelList);
 				static void printPrompt(void);
 				static void printStep(void);
 				static void printDiff(void);
@@ -75,13 +75,13 @@ namespace dragon
 				static void printStack(uint16_t nrows);
 				static void printCallStack(void);
 				static void printHelp(void);
-				static ostd::String changeScreen(void);
+				static String changeScreen(void);
 		};
 		public:
 			static void processErrors(void);
 			static int32_t loadArguments(int argc, char** argv);
 			static int32_t initRuntime(void);
-			static ostd::String getCommandInput(void);
+			static String getCommandInput(void);
 			static inline tDebuggerData& data(void) { return debugger; }
 			static inline ostd::ConsoleOutputHandler& output(void) { return out; }
 			static int32_t topLevelPrompt(void);
@@ -100,6 +100,6 @@ namespace dragon
 			static tCloseEventListener closeEventListener;
 
 		public:
-			inline static const ostd::String InputCommandQuit = "//quit//";
+			inline static const String InputCommandQuit = "//quit//";
 	};
 }

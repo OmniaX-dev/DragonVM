@@ -258,7 +258,7 @@ namespace dragon
 						tu = ostd::eTimeUnits::Nanoseconds;
 					else if (static_cast<eDebugProfilerTimeUnits>(timeUnit) == eDebugProfilerTimeUnits::Secs)
 						tu = ostd::eTimeUnits::Seconds;
-					m_profilerTimer.start(true, ostd::String("DebugProfiler [").add(ostd::String::getHexStr(id, true, 1)).add("]"), tu);
+					m_profilerTimer.start(true, String("DebugProfiler [").add(String::getHexStr(id, true, 1)).add("]"), tu);
 					m_debugProfilerStarted = true;
 				}
 				break;
@@ -888,14 +888,14 @@ namespace dragon
 				case data::OpCodes::Ext15:
 				case data::OpCodes::Ext16:
 				{
-					data::ErrorHandler::pushError(data::ErrorCodes::CPU_UnsupportedExtension, ostd::String("Unsupported Extension: ").add(ostd::String::getHexStr(inst, true, 1)));
+					data::ErrorHandler::pushError(data::ErrorCodes::CPU_UnsupportedExtension, String("Unsupported Extension: ").add(String::getHexStr(inst, true, 1)));
 					m_halt = true;
 					return false;
 				}
 				break;
 				default:
 				{
-					data::ErrorHandler::pushError(data::ErrorCodes::CPU_UnknownInstruction, ostd::String("Unknown instruction: ").add(ostd::String::getHexStr(inst, true, 1)));
+					data::ErrorHandler::pushError(data::ErrorCodes::CPU_UnknownInstruction, String("Unknown instruction: ").add(String::getHexStr(inst, true, 1)));
 					m_halt = true;
 					return false;
 				}
@@ -907,7 +907,7 @@ namespace dragon
 		void VirtualCPU::__debug_store_stack_frame_string_on_push(void)
 		{
 			if (!m_debugModeEnabled) return;
-			ostd::String stackFrameString = "";
+			String stackFrameString = "";
 
 			uint16_t argStartAddr = readRegister(data::Registers::SP) + 2;
 			uint16_t argCount = m_memory.read16(argStartAddr);
@@ -916,44 +916,44 @@ namespace dragon
 			else
 				argStartAddr += (argCount * 2);
 
-			stackFrameString.add("args: ").add(ostd::String::getHexStr(argStartAddr, true, 2)).add(", argc: ").add(argCount).add("\n");
+			stackFrameString.add("args: ").add(String::getHexStr(argStartAddr, true, 2)).add(", argc: ").add(argCount).add("\n");
 
 			pushToStack(readRegister(data::Registers::R1));
-			stackFrameString.add("R1: ").add(ostd::String::getHexStr(readRegister(data::Registers::R1), true, 2));
+			stackFrameString.add("R1: ").add(String::getHexStr(readRegister(data::Registers::R1), true, 2));
 			pushToStack(readRegister(data::Registers::R2));
-			stackFrameString.add(" R2: ").add(ostd::String::getHexStr(readRegister(data::Registers::R2), true, 2));
+			stackFrameString.add(" R2: ").add(String::getHexStr(readRegister(data::Registers::R2), true, 2));
 			pushToStack(readRegister(data::Registers::R3));
-			stackFrameString.add(" R3: ").add(ostd::String::getHexStr(readRegister(data::Registers::R3), true, 2));
+			stackFrameString.add(" R3: ").add(String::getHexStr(readRegister(data::Registers::R3), true, 2));
 			pushToStack(readRegister(data::Registers::R4));
-			stackFrameString.add(" R4: ").add(ostd::String::getHexStr(readRegister(data::Registers::R4), true, 2));
+			stackFrameString.add(" R4: ").add(String::getHexStr(readRegister(data::Registers::R4), true, 2));
 			pushToStack(readRegister(data::Registers::R5));
-			stackFrameString.add(" R5: ").add(ostd::String::getHexStr(readRegister(data::Registers::R5), true, 2));
+			stackFrameString.add(" R5: ").add(String::getHexStr(readRegister(data::Registers::R5), true, 2));
 			pushToStack(readRegister(data::Registers::R6));
-			stackFrameString.add(" R6: ").add(ostd::String::getHexStr(readRegister(data::Registers::R6), true, 2));
+			stackFrameString.add(" R6: ").add(String::getHexStr(readRegister(data::Registers::R6), true, 2));
 			pushToStack(readRegister(data::Registers::R7));
-			stackFrameString.add(" R7: ").add(ostd::String::getHexStr(readRegister(data::Registers::R7), true, 2));
+			stackFrameString.add(" R7: ").add(String::getHexStr(readRegister(data::Registers::R7), true, 2));
 			pushToStack(readRegister(data::Registers::R8));
-			stackFrameString.add(" R8: ").add(ostd::String::getHexStr(readRegister(data::Registers::R8), true, 2));
+			stackFrameString.add(" R8: ").add(String::getHexStr(readRegister(data::Registers::R8), true, 2));
 			pushToStack(readRegister(data::Registers::R9));
-			stackFrameString.add(" R9: ").add(ostd::String::getHexStr(readRegister(data::Registers::R9), true, 2));
+			stackFrameString.add(" R9: ").add(String::getHexStr(readRegister(data::Registers::R9), true, 2));
 			pushToStack(readRegister(data::Registers::R10));
-			stackFrameString.add(" R10: ").add(ostd::String::getHexStr(readRegister(data::Registers::R10), true, 2));
+			stackFrameString.add(" R10: ").add(String::getHexStr(readRegister(data::Registers::R10), true, 2));
 			stackFrameString.add("\n");
 			pushToStack(readRegister(data::Registers::PP));
-			stackFrameString.add("PP: ").add(ostd::String::getHexStr(readRegister(data::Registers::PP), true, 2));
+			stackFrameString.add("PP: ").add(String::getHexStr(readRegister(data::Registers::PP), true, 2));
 			pushToStack(readRegister(data::Registers::ACC));
-			stackFrameString.add(" ACC: ").add(ostd::String::getHexStr(readRegister(data::Registers::ACC), true, 2));
+			stackFrameString.add(" ACC: ").add(String::getHexStr(readRegister(data::Registers::ACC), true, 2));
 			pushToStack(readRegister(data::Registers::IP));
-			stackFrameString.add(" IP: ").add(ostd::String::getHexStr(readRegister(data::Registers::IP), true, 2));
+			stackFrameString.add(" IP: ").add(String::getHexStr(readRegister(data::Registers::IP), true, 2));
 			pushToStack(readRegister(data::Registers::FP));
-			stackFrameString.add(" FP: ").add(ostd::String::getHexStr(readRegister(data::Registers::FP), true, 2));
+			stackFrameString.add(" FP: ").add(String::getHexStr(readRegister(data::Registers::FP), true, 2));
 			stackFrameString.add("\n");
 			pushToStack(m_stackFrameSize);
 			stackFrameString.add("StackFrame: ").add(m_stackFrameSize).add(", ");
 
 			writeRegister16(data::Registers::PP, argStartAddr);
 			writeRegister16(data::Registers::FP, readRegister(data::Registers::SP));
-			stackFrameString.add("New FP: ").add(ostd::String::getHexStr(readRegister(data::Registers::FP), true, 2));
+			stackFrameString.add("New FP: ").add(String::getHexStr(readRegister(data::Registers::FP), true, 2));
 			m_stackFrameSize = 0;
 
 			m_debug_stackFrameStrings.push_back(stackFrameString);

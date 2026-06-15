@@ -53,7 +53,7 @@ namespace dragon
 		return codeRegion;
 	}
 
-	ostd::String Debugger::Utils::findSymbol(const DisassemblyList& list, uint16_t address, uint16_t* outSize)
+	String Debugger::Utils::findSymbol(const DisassemblyList& list, uint16_t address, uint16_t* outSize)
 	{
 		for (auto& line : list)
 		{
@@ -67,7 +67,7 @@ namespace dragon
 		return "";
 	}
 
-	uint16_t Debugger::Utils::findSymbol(const DisassemblyList& list, const ostd::String& symbol, uint16_t* outSize)
+	uint16_t Debugger::Utils::findSymbol(const DisassemblyList& list, const String& symbol, uint16_t* outSize)
 	{
 		for (auto& line : list)
 		{
@@ -116,7 +116,7 @@ namespace dragon
 	ostd::ConsoleOutputHandler& Debugger::Utils::printFullLine(char c, const ostd::ConsoleColors::tConsoleColor& foreground)
 	{
 		int32_t cw = ostd::BasicConsole::getConsoleWidth();
-		ostd::String str = ostd::String::duplicateChar(c, cw);
+		String str = String::duplicateChar(c, cw);
 		out.fg(foreground).p(str).reset().nl();
 		return out;
 	}
@@ -124,7 +124,7 @@ namespace dragon
 	ostd::ConsoleOutputHandler& Debugger::Utils::printFullLine(char c, const ostd::ConsoleColors::tConsoleColor& foreground, const ostd::ConsoleColors::tConsoleColor& background)
 	{
 		int32_t cw = ostd::BasicConsole::getConsoleWidth();
-		ostd::String str = ostd::String::duplicateChar(c, cw);
+		String str = String::duplicateChar(c, cw);
 		out.bg(background).fg(foreground).p(str).reset().nl();
 		return out;
 	}
@@ -161,7 +161,7 @@ namespace dragon
 
 
 	//Debugger::Display
-	void Debugger::Display::colorizeInstructionBody(const ostd::String& instBody, bool currentLine, const DisassemblyList& labelList)
+	void Debugger::Display::colorizeInstructionBody(const String& instBody, bool currentLine, const DisassemblyList& labelList)
 	{
 		ostd::RegexRichString rgxrstr(instBody);
 		rgxrstr.fg("\\{|\\}|\\+|\\*|\\-|\\/|\\(|\\)|\\[|\\]", "Red"); //Operators
@@ -169,18 +169,18 @@ namespace dragon
 		rgxrstr.fg("(?<!\\w)(r[1-9]|r10|fl|pp|rv|fp|sp|ip|acc)(?!\\w)", "BrightGreen", true); //Registers
 		rgxrstr.fg("\\%low", "Magenta");
 		rgxrstr.col("\\$\\w+", "Cyan", "Black"); //Labels
-		ostd::String instEdit = rgxrstr.getRawString();
+		String instEdit = rgxrstr.getRawString();
 		for (auto& label : labelList)
 		{
 			int32_t index = -1;
-			ostd::String labelEdit = label.code;
+			String labelEdit = label.code;
 			labelEdit.trim();
 			while ((index = instEdit.indexOf(labelEdit, index + 1)) != -1)
 			{
 				if (index + labelEdit.len() < instEdit.len() && Utils::isValidLabelNameChar(instEdit.at(index + labelEdit.len())))
 					continue;
-				ostd::String instStr = instEdit;
-				instStr.cpp_str_ref().replace(index, labelEdit.len(), labelEdit.cpp_str() + "[@@ style foreground:brightgray](" + ostd::String::getHexStr(label.addr, true, 2).cpp_str() + ")[@@/]");
+				String instStr = instEdit;
+				instStr.cpp_str_ref().replace(index, labelEdit.len(), labelEdit.cpp_str() + "[@@ style foreground:brightgray](" + String::getHexStr(label.addr, true, 2).cpp_str() + ")[@@/]");
 				instEdit = instStr;
 			}
 		}
@@ -192,11 +192,11 @@ namespace dragon
 		out.reset().reset();
 	}
 
-	void Debugger::Display::colorCodeInstructions(const ostd::String& inst, bool currentLine, const DisassemblyList& labelList)
+	void Debugger::Display::colorCodeInstructions(const String& inst, bool currentLine, const DisassemblyList& labelList)
 	{
-		ostd::String instEditor = inst;
-		ostd::String instBody = "";
-		ostd::String instHead = inst;
+		String instEditor = inst;
+		String instBody = "";
+		String instHead = inst;
 		instEditor.trim();
 		if (instEditor.contains(" "))
 		{
@@ -236,13 +236,13 @@ namespace dragon
 		{
 			auto& _da = codeRegion[i];
 			bool currentLine = _da.addr == debugger.currentAddress;
-			ostd::String label = Utils::findSymbol(debugger.labels, _da.addr);
+			String label = Utils::findSymbol(debugger.labels, _da.addr);
 			bool specialSection = _da.code.startsWith("[") &&_da.code.endsWith("]");
 			label.fixedLength(debugger.labelLineLength);
 			out.fg(ostd::ConsoleColors::Gray).p(label.cpp_str()).p("  ");
 			if (currentLine)
 			{
-				out.fg(ostd::ConsoleColors::Black).bg(ostd::ConsoleColors::Yellow).p(ostd::String::getHexStr(_da.addr, true, 2).cpp_str()).p("  ").reset();;
+				out.fg(ostd::ConsoleColors::Black).bg(ostd::ConsoleColors::Yellow).p(String::getHexStr(_da.addr, true, 2).cpp_str()).p("  ").reset();;
 			}
 			else
 			{
@@ -252,7 +252,7 @@ namespace dragon
 					out.fg(ostd::ConsoleColors::Red);
 				else
 					out.fg(ostd::ConsoleColors::BrightGray);
-				out.p(ostd::String::getHexStr(_da.addr, true, 2).cpp_str()).p("  ");
+				out.p(String::getHexStr(_da.addr, true, 2).cpp_str()).p("  ");
 			}
 			if (specialSection)
 				out.fg(ostd::ConsoleColors::Cyan).p(_da.code.cpp_str()).nl();
@@ -265,7 +265,7 @@ namespace dragon
 	void Debugger::Display::printDiff(void)
 	{
 		out.clear();
-		ostd::String str;
+		String str;
 		str.add("|===============|================PREV================|================CURR================|=====|===PREV====|===CURR====|");
 		str.add("\n");
 		str.add("| InstAddr:     |*%PREV_INST_ADDR%*******************|*%CURR_INST_ADDR%*******************| R1  |*%PREV_R1%*|*%CURR_R1%*|");
@@ -328,19 +328,19 @@ namespace dragon
 		str.replaceAll("*", "");
 		int32_t item_len = 36;
 		const dragon::DragonRuntime::tMachineDebugInfo& minfo = dragon::DragonRuntime::getMachineInfoDiff();
-		ostd::String tmp = " ", tmpStyle = "";
+		String tmp = " ", tmpStyle = "";
 
 		//Instruction Address
 		{
-			tmp.add(ostd::String::getHexStr(minfo.previousInstructionAddress, true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.previousInstructionAddress, true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			tmpStyle = "[@@style foreground:Blue]";
 			tmpStyle.add(tmp).add("[@@/]");
 			str.replaceAll("%PREV_INST_ADDR%", tmpStyle);
 
 			tmp = " ";
-			tmp.add(ostd::String::getHexStr(minfo.currentInstructionAddress, true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.currentInstructionAddress, true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			if (minfo.currentInstructionAddress != minfo.previousInstructionAddress)
 				tmpStyle = "[@@style foreground:Black,background:BrightRed]";
 			else
@@ -352,23 +352,23 @@ namespace dragon
 		//Code
 		{
 			tmp = " ", tmpStyle = "";
-			ostd::String prevCode = " (";
+			String prevCode = " (";
 			prevCode.add(minfo.previousInstructionOpCode).add(") ");
 			for (int32_t i = 0; i < minfo.previousInstructionFootprintSize; i++)
-				prevCode.add(ostd::String::getHexStr(minfo.previousInstructionFootprint[i], false, 1)).add(" ");
+				prevCode.add(String::getHexStr(minfo.previousInstructionFootprint[i], false, 1)).add(" ");
 			tmp.add(prevCode);
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			tmpStyle = "[@@style foreground:Blue]";
 			tmpStyle.add(tmp).add("[@@/]");
 			str.replaceAll("%CURR_CODE%", tmpStyle);
 
 			// tmp = " ";
-			// ostd::String currCode = " (";
+			// String currCode = " (";
 			// currCode.add(minfo.currentInstructionOpCode).add(") ");
 			// for (int32_t i = 0; i < minfo.currentInstructionFootprintSize; i++)
-			//     currCode.add(ostd::String::getHexStr(minfo.currentInstructionFootprint[i], false, 1)).add(" ");
+			//     currCode.add(String::getHexStr(minfo.currentInstructionFootprint[i], false, 1)).add(" ");
 			// tmp.add(currCode);
-			// tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			// tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			// // if (currCode != prevCode)
 			// //     tmpStyle = "[@@style foreground:Black,background:BrightRed]";
 			// // else
@@ -380,15 +380,15 @@ namespace dragon
 		//Stack Frame
 		{
 			tmp = " ", tmpStyle = "";
-			tmp.add(ostd::String::getHexStr(minfo.previousInstructionStackFrameSize, true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.previousInstructionStackFrameSize, true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			tmpStyle = "[@@style foreground:Blue]";
 			tmpStyle.add(tmp).add("[@@/]");
 			str.replaceAll("%PREV_STACK_FRAME%", tmpStyle);
 
 			tmp = " ";
-			tmp.add(ostd::String::getHexStr(minfo.currentInstructionStackFrameSize, true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.currentInstructionStackFrameSize, true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			if (minfo.currentInstructionStackFrameSize != minfo.previousInstructionStackFrameSize)
 				tmpStyle = "[@@style foreground:Black,background:BrightRed]";
 			else
@@ -401,14 +401,14 @@ namespace dragon
 		{
 			tmp = " ", tmpStyle = "";
 			tmp.add(STR_BOOL(minfo.previousInstructionDebugBreak));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			tmpStyle = "[@@style foreground:Blue]";
 			tmpStyle.add(tmp).add("[@@/]");
 			str.replaceAll("%PREV_DBG_BRK%", tmpStyle);
 
 			tmp = " ";
 			tmp.add(STR_BOOL(minfo.currentInstructionDebugBreak));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			if (minfo.currentInstructionDebugBreak != minfo.previousInstructionDebugBreak)
 				tmpStyle = "[@@style foreground:Black,background:BrightRed]";
 			else
@@ -421,14 +421,14 @@ namespace dragon
 		{
 			tmp = " ", tmpStyle = "";
 			tmp.add(minfo.previousInstructionInterruptHandlerCount);
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			tmpStyle = "[@@style foreground:Blue]";
 			tmpStyle.add(tmp).add("[@@/]");
 			str.replaceAll("%PREV_INT_HANDLER%", tmpStyle);
 
 			tmp = " ";
 			tmp.add(minfo.currentInstructionInterruptHandlerCount);
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			if (minfo.currentInstructionInterruptHandlerCount != minfo.previousInstructionInterruptHandlerCount)
 				tmpStyle = "[@@style foreground:Black,background:BrightRed]";
 			else
@@ -441,14 +441,14 @@ namespace dragon
 		{
 			tmp = " ", tmpStyle = "";
 			tmp.add(STR_BOOL(minfo.previousInstructionBiosMode));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			tmpStyle = "[@@style foreground:Blue]";
 			tmpStyle.add(tmp).add("[@@/]");
 			str.replaceAll("%PREV_BIOS_MODE%", tmpStyle);
 
 			tmp = " ";
 			tmp.add(STR_BOOL(minfo.currentInstructionBiosMode));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			if (minfo.currentInstructionBiosMode != minfo.previousInstructionBiosMode)
 				tmpStyle = "[@@style foreground:Black,background:BrightRed]";
 			else
@@ -462,8 +462,8 @@ namespace dragon
 			tmp = " ", tmpStyle = "";
 			tmp.add(minfo.previousSubRoutineCounter).add(" (");
 			tmp.add(STR_BOOL(minfo.previousIsInSubRoutine)).add(")");
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
-			ostd::String old_tmp = tmp;
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
+			String old_tmp = tmp;
 			tmpStyle = "[@@style foreground:Blue]";
 			tmpStyle.add(tmp).add("[@@/]");
 			str.replaceAll("%PREV_SUB_ROUTINE%", tmpStyle);
@@ -471,7 +471,7 @@ namespace dragon
 			tmp = " ";
 			tmp.add(minfo.currentSubRoutineCounter).add(" (");
 			tmp.add(STR_BOOL(minfo.currentIsInSubRoutine)).add(")");
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			if (old_tmp != tmp)
 				tmpStyle = "[@@style foreground:Black,background:BrightRed]";
 			else
@@ -483,15 +483,15 @@ namespace dragon
 		//System Registers
 		{
 			tmp = " ", tmpStyle = "";
-			tmp.add(ostd::String::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::IP], true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::IP], true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			tmpStyle = "[@@style foreground:Blue]";
 			tmpStyle.add(tmp).add("[@@/]");
 			str.replaceAll("%PREV_IP%", tmpStyle);
 
 			tmp = " ";
-			tmp.add(ostd::String::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::IP], true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::IP], true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			if (minfo.currentInstructionRegisters[dragon::data::Registers::IP] != minfo.previousInstructionRegisters[dragon::data::Registers::IP])
 				tmpStyle = "[@@style foreground:Black,background:BrightRed]";
 			else
@@ -503,15 +503,15 @@ namespace dragon
 
 
 			tmp = " ", tmpStyle = "";
-			tmp.add(ostd::String::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::SP], true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::SP], true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			tmpStyle = "[@@style foreground:Blue]";
 			tmpStyle.add(tmp).add("[@@/]");
 			str.replaceAll("%PREV_SP%", tmpStyle);
 
 			tmp = " ";
-			tmp.add(ostd::String::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::SP], true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::SP], true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			if (minfo.currentInstructionRegisters[dragon::data::Registers::SP] != minfo.previousInstructionRegisters[dragon::data::Registers::SP])
 				tmpStyle = "[@@style foreground:Black,background:BrightRed]";
 			else
@@ -523,15 +523,15 @@ namespace dragon
 
 
 			tmp = " ", tmpStyle = "";
-			tmp.add(ostd::String::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::FP], true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::FP], true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			tmpStyle = "[@@style foreground:Blue]";
 			tmpStyle.add(tmp).add("[@@/]");
 			str.replaceAll("%PREV_FP%", tmpStyle);
 
 			tmp = " ";
-			tmp.add(ostd::String::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::FP], true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::FP], true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			if (minfo.currentInstructionRegisters[dragon::data::Registers::FP] != minfo.previousInstructionRegisters[dragon::data::Registers::FP])
 				tmpStyle = "[@@style foreground:Black,background:BrightRed]";
 			else
@@ -543,15 +543,15 @@ namespace dragon
 
 
 			tmp = " ", tmpStyle = "";
-			tmp.add(ostd::String::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::RV], true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::RV], true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			tmpStyle = "[@@style foreground:Blue]";
 			tmpStyle.add(tmp).add("[@@/]");
 			str.replaceAll("%PREV_RV%", tmpStyle);
 
 			tmp = " ";
-			tmp.add(ostd::String::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::RV], true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::RV], true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			if (minfo.currentInstructionRegisters[dragon::data::Registers::RV] != minfo.previousInstructionRegisters[dragon::data::Registers::RV])
 				tmpStyle = "[@@style foreground:Black,background:BrightRed]";
 			else
@@ -563,15 +563,15 @@ namespace dragon
 
 
 			tmp = " ", tmpStyle = "";
-			tmp.add(ostd::String::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::PP], true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::PP], true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			tmpStyle = "[@@style foreground:Blue]";
 			tmpStyle.add(tmp).add("[@@/]");
 			str.replaceAll("%PREV_PP%", tmpStyle);
 
 			tmp = " ";
-			tmp.add(ostd::String::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::PP], true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::PP], true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			if (minfo.currentInstructionRegisters[dragon::data::Registers::PP] != minfo.previousInstructionRegisters[dragon::data::Registers::PP])
 				tmpStyle = "[@@style foreground:Black,background:BrightRed]";
 			else
@@ -583,15 +583,15 @@ namespace dragon
 
 
 			tmp = " ", tmpStyle = "";
-			tmp.add(ostd::String::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::FL], true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::FL], true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			tmpStyle = "[@@style foreground:Blue]";
 			tmpStyle.add(tmp).add("[@@/]");
 			str.replaceAll("%PREV_FL%", tmpStyle);
 
 			tmp = " ";
-			tmp.add(ostd::String::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::FL], true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::FL], true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			if (minfo.currentInstructionRegisters[dragon::data::Registers::FL] != minfo.previousInstructionRegisters[dragon::data::Registers::FL])
 				tmpStyle = "[@@style foreground:Black,background:BrightRed]";
 			else
@@ -603,15 +603,15 @@ namespace dragon
 
 
 			tmp = " ", tmpStyle = "";
-			tmp.add(ostd::String::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::ACC], true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::ACC], true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			tmpStyle = "[@@style foreground:Blue]";
 			tmpStyle.add(tmp).add("[@@/]");
 			str.replaceAll("%PREV_ACC%", tmpStyle);
 
 			tmp = " ";
-			tmp.add(ostd::String::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::ACC], true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::ACC], true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			if (minfo.currentInstructionRegisters[dragon::data::Registers::ACC] != minfo.previousInstructionRegisters[dragon::data::Registers::ACC])
 				tmpStyle = "[@@style foreground:Black,background:BrightRed]";
 			else
@@ -624,15 +624,15 @@ namespace dragon
 		//General Registers
 		{
 			tmp = " ", tmpStyle = "";
-			tmp.add(ostd::String::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::R1], true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::R1], true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			tmpStyle = "[@@style foreground:Blue]";
 			tmpStyle.add(tmp).add("[@@/]");
 			str.replaceAll("%PREV_R1%", tmpStyle);
 
 			tmp = " ";
-			tmp.add(ostd::String::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::R1], true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::R1], true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			if (minfo.currentInstructionRegisters[dragon::data::Registers::R1] != minfo.previousInstructionRegisters[dragon::data::Registers::R1])
 				tmpStyle = "[@@style foreground:Black,background:BrightRed]";
 			else
@@ -644,15 +644,15 @@ namespace dragon
 
 
 			tmp = " ", tmpStyle = "";
-			tmp.add(ostd::String::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::R2], true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::R2], true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			tmpStyle = "[@@style foreground:Blue]";
 			tmpStyle.add(tmp).add("[@@/]");
 			str.replaceAll("%PREV_R2%", tmpStyle);
 
 			tmp = " ";
-			tmp.add(ostd::String::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::R2], true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::R2], true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			if (minfo.currentInstructionRegisters[dragon::data::Registers::R2] != minfo.previousInstructionRegisters[dragon::data::Registers::R2])
 				tmpStyle = "[@@style foreground:Black,background:BrightRed]";
 			else
@@ -664,15 +664,15 @@ namespace dragon
 
 
 			tmp = " ", tmpStyle = "";
-			tmp.add(ostd::String::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::R3], true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::R3], true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			tmpStyle = "[@@style foreground:Blue]";
 			tmpStyle.add(tmp).add("[@@/]");
 			str.replaceAll("%PREV_R3%", tmpStyle);
 
 			tmp = " ";
-			tmp.add(ostd::String::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::R3], true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::R3], true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			if (minfo.currentInstructionRegisters[dragon::data::Registers::R3] != minfo.previousInstructionRegisters[dragon::data::Registers::R3])
 				tmpStyle = "[@@style foreground:Black,background:BrightRed]";
 			else
@@ -684,15 +684,15 @@ namespace dragon
 
 
 			tmp = " ", tmpStyle = "";
-			tmp.add(ostd::String::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::R4], true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::R4], true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			tmpStyle = "[@@style foreground:Blue]";
 			tmpStyle.add(tmp).add("[@@/]");
 			str.replaceAll("%PREV_R4%", tmpStyle);
 
 			tmp = " ";
-			tmp.add(ostd::String::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::R4], true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::R4], true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			if (minfo.currentInstructionRegisters[dragon::data::Registers::R4] != minfo.previousInstructionRegisters[dragon::data::Registers::R4])
 				tmpStyle = "[@@style foreground:Black,background:BrightRed]";
 			else
@@ -704,15 +704,15 @@ namespace dragon
 
 
 			tmp = " ", tmpStyle = "";
-			tmp.add(ostd::String::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::R5], true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::R5], true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			tmpStyle = "[@@style foreground:Blue]";
 			tmpStyle.add(tmp).add("[@@/]");
 			str.replaceAll("%PREV_R5%", tmpStyle);
 
 			tmp = " ";
-			tmp.add(ostd::String::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::R5], true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::R5], true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			if (minfo.currentInstructionRegisters[dragon::data::Registers::R5] != minfo.previousInstructionRegisters[dragon::data::Registers::R5])
 				tmpStyle = "[@@style foreground:Black,background:BrightRed]";
 			else
@@ -724,15 +724,15 @@ namespace dragon
 
 
 			tmp = " ", tmpStyle = "";
-			tmp.add(ostd::String::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::R6], true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::R6], true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			tmpStyle = "[@@style foreground:Blue]";
 			tmpStyle.add(tmp).add("[@@/]");
 			str.replaceAll("%PREV_R6%", tmpStyle);
 
 			tmp = " ";
-			tmp.add(ostd::String::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::R6], true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::R6], true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			if (minfo.currentInstructionRegisters[dragon::data::Registers::R6] != minfo.previousInstructionRegisters[dragon::data::Registers::R6])
 				tmpStyle = "[@@style foreground:Black,background:BrightRed]";
 			else
@@ -744,15 +744,15 @@ namespace dragon
 
 
 			tmp = " ", tmpStyle = "";
-			tmp.add(ostd::String::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::R7], true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::R7], true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			tmpStyle = "[@@style foreground:Blue]";
 			tmpStyle.add(tmp).add("[@@/]");
 			str.replaceAll("%PREV_R7%", tmpStyle);
 
 			tmp = " ";
-			tmp.add(ostd::String::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::R7], true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::R7], true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			if (minfo.currentInstructionRegisters[dragon::data::Registers::R7] != minfo.previousInstructionRegisters[dragon::data::Registers::R7])
 				tmpStyle = "[@@style foreground:Black,background:BrightRed]";
 			else
@@ -764,15 +764,15 @@ namespace dragon
 
 
 			tmp = " ", tmpStyle = "";
-			tmp.add(ostd::String::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::R8], true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::R8], true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			tmpStyle = "[@@style foreground:Blue]";
 			tmpStyle.add(tmp).add("[@@/]");
 			str.replaceAll("%PREV_R8%", tmpStyle);
 
 			tmp = " ";
-			tmp.add(ostd::String::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::R8], true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::R8], true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			if (minfo.currentInstructionRegisters[dragon::data::Registers::R8] != minfo.previousInstructionRegisters[dragon::data::Registers::R8])
 				tmpStyle = "[@@style foreground:Black,background:BrightRed]";
 			else
@@ -784,15 +784,15 @@ namespace dragon
 
 
 			tmp = " ", tmpStyle = "";
-			tmp.add(ostd::String::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::R9], true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::R9], true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			tmpStyle = "[@@style foreground:Blue]";
 			tmpStyle.add(tmp).add("[@@/]");
 			str.replaceAll("%PREV_R9%", tmpStyle);
 
 			tmp = " ";
-			tmp.add(ostd::String::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::R9], true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::R9], true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			if (minfo.currentInstructionRegisters[dragon::data::Registers::R9] != minfo.previousInstructionRegisters[dragon::data::Registers::R9])
 				tmpStyle = "[@@style foreground:Black,background:BrightRed]";
 			else
@@ -804,15 +804,15 @@ namespace dragon
 
 
 			tmp = " ", tmpStyle = "";
-			tmp.add(ostd::String::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::R10], true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::R10], true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			tmpStyle = "[@@style foreground:Blue]";
 			tmpStyle.add(tmp).add("[@@/]");
 			str.replaceAll("%PREV_R10%", tmpStyle);
 
 			tmp = " ";
-			tmp.add(ostd::String::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::R10], true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::R10], true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			if (minfo.currentInstructionRegisters[dragon::data::Registers::R10] != minfo.previousInstructionRegisters[dragon::data::Registers::R10])
 				tmpStyle = "[@@style foreground:Black,background:BrightRed]";
 			else
@@ -824,15 +824,15 @@ namespace dragon
 		//Special Registers
 		{
 			tmp = " ", tmpStyle = "";
-			tmp.add(ostd::String::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::S1], true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::S1], true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			tmpStyle = "[@@style foreground:Blue]";
 			tmpStyle.add(tmp).add("[@@/]");
 			str.replaceAll("%PREV_S1%", tmpStyle);
 
 			tmp = " ";
-			tmp.add(ostd::String::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::S1], true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::S1], true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			if (minfo.currentInstructionRegisters[dragon::data::Registers::S1] != minfo.previousInstructionRegisters[dragon::data::Registers::S1])
 				tmpStyle = "[@@style foreground:Black,background:BrightRed]";
 			else
@@ -844,15 +844,15 @@ namespace dragon
 
 
 			tmp = " ", tmpStyle = "";
-			tmp.add(ostd::String::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::S2], true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::S2], true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			tmpStyle = "[@@style foreground:Blue]";
 			tmpStyle.add(tmp).add("[@@/]");
 			str.replaceAll("%PREV_S2%", tmpStyle);
 
 			tmp = " ";
-			tmp.add(ostd::String::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::S2], true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::S2], true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			if (minfo.currentInstructionRegisters[dragon::data::Registers::S2] != minfo.previousInstructionRegisters[dragon::data::Registers::S2])
 				tmpStyle = "[@@style foreground:Black,background:BrightRed]";
 			else
@@ -864,15 +864,15 @@ namespace dragon
 
 
 			tmp = " ", tmpStyle = "";
-			tmp.add(ostd::String::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::OFFSET], true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.previousInstructionRegisters[dragon::data::Registers::OFFSET], true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			tmpStyle = "[@@style foreground:Blue]";
 			tmpStyle.add(tmp).add("[@@/]");
 			str.replaceAll("%PREV_OF%", tmpStyle);
 
 			tmp = " ";
-			tmp.add(ostd::String::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::OFFSET], true, 2));
-			tmp.addPadding(item_len, ' ', ostd::String::ePaddingBehavior::AllowOddExtraLeft);
+			tmp.add(String::getHexStr(minfo.currentInstructionRegisters[dragon::data::Registers::OFFSET], true, 2));
+			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
 			if (minfo.currentInstructionRegisters[dragon::data::Registers::OFFSET] != minfo.previousInstructionRegisters[dragon::data::Registers::OFFSET])
 				tmpStyle = "[@@style foreground:Black,background:BrightRed]";
 			else
@@ -906,7 +906,7 @@ namespace dragon
 		const dragon::DragonRuntime::tMachineDebugInfo& minfo = dragon::DragonRuntime::getMachineInfoDiff();
 		if (minfo.trackedAddresses.size() == 0) return;
 		int32_t cw = ostd::BasicConsole::getConsoleWidth();
-		ostd::String header = "|Symbol";
+		String header = "|Symbol";
 		header.addRightPadding(symbol_len);
 		header.add("|Bytes");
 		header.addRightPadding(header.len() + size_len - 6);
@@ -919,13 +919,13 @@ namespace dragon
 		header.add("|Current");
 		header.fixedLength(cw - 1);
 		header.addChar('|');
-		ostd::String border = ostd::String::duplicateChar('=', cw);
+		String border = String::duplicateChar('=', cw);
 		out.fg(ostd::ConsoleColors::Blue).p(border).nl();
 		ostd::RegexRichString rgx(header);
 		rgx.fg("\\|", "blue");
 		rgx.fg("Symbol|Bytes|Addr|Map|Previous|Current", "yellow");
 		out.pStyled(rgx).reset().nl();
-		ostd::String h_sep = ostd::String::duplicateChar('=', cw);
+		String h_sep = String::duplicateChar('=', cw);
 		h_sep.put(0, '|');
 		h_sep.put(symbol_len, '|');
 		h_sep.put(symbol_len + size_len, '|');
@@ -938,7 +938,7 @@ namespace dragon
 		{
 			uint16_t data_size = 1;
 			auto addr = minfo.trackedAddresses[i];
-			ostd::String symbol = Utils::findSymbol(debugger.data, addr, &data_size);
+			String symbol = Utils::findSymbol(debugger.data, addr, &data_size);
 			if (symbol == "")
 				symbol = Utils::findSymbol(debugger.labels, addr, &data_size);
 			bool no_symbol = false;
@@ -953,7 +953,7 @@ namespace dragon
 			else
 				out.fg(ostd::ConsoleColors::Blue).p("|").fg(ostd::ConsoleColors::Magenta).p(symbol).reset();
 
-			ostd::String tmp = "";
+			String tmp = "";
 			tmp.add(data_size);
 			tmp.fixedLength(size_len - 1);
 			if (no_symbol)
@@ -962,7 +962,7 @@ namespace dragon
 				out.fg(ostd::ConsoleColors::Blue).p("|").fg(ostd::ConsoleColors::BrightCyan).p(tmp).reset();
 
 			tmp = "";
-			tmp.add(ostd::String::getHexStr(addr, true, 2));
+			tmp.add(String::getHexStr(addr, true, 2));
 			tmp.fixedLength(addr_len - 1);
 			if (no_symbol)
 				out.fg(ostd::ConsoleColors::Blue).p("|").fg(ostd::ConsoleColors::Gray).p(tmp).reset();
@@ -978,9 +978,9 @@ namespace dragon
 			out.fg(ostd::ConsoleColors::Blue).p("|").fg(ostd::ConsoleColors::BrightYellow).p(tmp).reset();
 
 			tmp = "";
-			tmp.add(ostd::String::getHexStr(minfo.previousInstructionTrackedValues[i], false, 1));
+			tmp.add(String::getHexStr(minfo.previousInstructionTrackedValues[i], false, 1));
 			for (int32_t j = 1; j < data_size; j++)
-				tmp.add(".").add(ostd::String::getHexStr(minfo.previousInstructionTrackedValues[i + j], false, 1));
+				tmp.add(".").add(String::getHexStr(minfo.previousInstructionTrackedValues[i + j], false, 1));
 			tmp.fixedLength(prev_len - 1);
 			if (no_symbol)
 				out.fg(ostd::ConsoleColors::Blue).p("|").fg(ostd::ConsoleColors::Red).p(tmp).reset();
@@ -988,10 +988,10 @@ namespace dragon
 				out.fg(ostd::ConsoleColors::Blue).p("|").fg(ostd::ConsoleColors::BrightRed).p(tmp).reset();
 
 			tmp = "";
-			tmp.add(ostd::String::getHexStr(minfo.currentInstructionTrackedValues[i], false, 1));
+			tmp.add(String::getHexStr(minfo.currentInstructionTrackedValues[i], false, 1));
 			uint32_t tmp_i = i;
 			for (int32_t j = 1; j < data_size; j++, i++)
-				tmp.add(".").add(ostd::String::getHexStr(minfo.currentInstructionTrackedValues[i + 1], false, 1));
+				tmp.add(".").add(String::getHexStr(minfo.currentInstructionTrackedValues[i + 1], false, 1));
 			tmp.fixedLength(prev_len - 1);
 			bool data_different = false;
 			for (int32_t j = 0; j < data_size; j++)
@@ -1068,29 +1068,29 @@ namespace dragon
 
 		auto& callStack = minfo.callStack;
 		int32_t level = -1;
-		ostd::String ch_ang_u = "";
+		String ch_ang_u = "";
 		//TODO: Find a fix for the UTF characters
 		ch_ang_u.add("┌");
 		// ch_ang_u.addChar((unsigned char)218);
-		ostd::String ch_ang_l = "|";
-		ostd::String ch_ang_d = "";
+		String ch_ang_l = "|";
+		String ch_ang_d = "";
 		ch_ang_d.add("└");
 		// ch_ang_d.addChar((unsigned char)192);
 		for (auto& call : callStack)
 		{
-			ostd::String call_info = call.info.new_trim().toLower();
-			ostd::String subroutine_addr = ostd::String::getHexStr(call.addr, true, 2);
-			ostd::String subroutine_name = Utils::findSymbol(debugger.labels, call.addr);
-			ostd::String call_str = "";
+			String call_info = call.info.new_trim().toLower();
+			String subroutine_addr = String::getHexStr(call.addr, true, 2);
+			String subroutine_name = Utils::findSymbol(debugger.labels, call.addr);
+			String call_str = "";
 			bool dec_lvl = false;
 			if (call_info == "int")
 			{
-				call_str = ch_ang_u + "int " + ostd::String::getHexStr(call.addr, true, 1);
+				call_str = ch_ang_u + "int " + String::getHexStr(call.addr, true, 1);
 				level++;
 			}
 			else if (call_info == "hw int")
 			{
-				call_str = ch_ang_u + "hwi " + ostd::String::getHexStr(call.addr, true, 1) + " (" + data::InterruptCodes::getInterruptName(call.addr) + ")";
+				call_str = ch_ang_u + "hwi " + String::getHexStr(call.addr, true, 1) + " (" + data::InterruptCodes::getInterruptName(call.addr) + ")";
 				level++;
 			}
 			else if (call_info == "ret")
@@ -1114,7 +1114,7 @@ namespace dragon
 				level++;
 			}
 
-			ostd::String line_str = "";
+			String line_str = "";
 			for (int32_t i = 0; i < level; i++)
 				line_str.add("|   ");
 			line_str.add(call_str);
@@ -1125,7 +1125,7 @@ namespace dragon
 			rgx.fg("(?<![a-zA-Z\\_\\$\\.])hwi(?! [a-zA-Z\\_\\$\\.])", "Magenta");
 			rgx.fg("(?<![a-zA-Z\\_\\$\\.])call|ret(?! [a-zA-Z\\_\\$\\.])", "Red");
 			rgx.fg("0x[0-9A-Fa-f]+|0b[0-1]+|(?<!\\w)[0-9]+(?!\\w)", "BrightYellow"); //Number Constants
-			rgx.fg(ostd::String("[\\").add(ch_ang_u).add("\\|\\").add(ch_ang_d).add("]"), "darkgray");
+			rgx.fg(String("[\\").add(ch_ang_u).add("\\|\\").add(ch_ang_d).add("]"), "darkgray");
 			rgx.fg("\\$\\w+", "Green"); //Labels
 
 			out.fg(ostd::ConsoleColors::BrightGray).p("|").reset();
@@ -1133,7 +1133,7 @@ namespace dragon
 				out.fg(ostd::ConsoleColors::BrightGray);
 			else
 				out.fg(ostd::ConsoleColors::Magenta);
-			out.p(ostd::String::getHexStr(call.inst_addr, true, 2));
+			out.p(String::getHexStr(call.inst_addr, true, 2));
 			out.fg(ostd::ConsoleColors::BrightGray).p("| > ").reset();
 			out.pStyled(rgx).nl().reset();
 
@@ -1153,7 +1153,7 @@ namespace dragon
 		Utils::printFullLine('#', ostd::ConsoleColors::Black, ostd::ConsoleColors::Red);
 
 		out.nl().fg(ostd::ConsoleColors::Yellow).p("List of available commands:").reset().nl();
-		ostd::String tmpCommand = "(d)iff-view";
+		String tmpCommand = "(d)iff-view";
 		tmpCommand.addRightPadding(commandLength);
 		out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Used to show the state of the machine, comparing the current cycle with the last.").reset().nl();
 		tmpCommand = "(q)uit";
@@ -1188,7 +1188,7 @@ namespace dragon
 		Utils::isEscapeKeyPressed(true);
 	}
 
-	ostd::String Debugger::Display::changeScreen(void)
+	String Debugger::Display::changeScreen(void)
 	{
 		if (debugger.command == "diff-view" || debugger.command == "d")
 		{
@@ -1207,7 +1207,7 @@ namespace dragon
 		else if (debugger.command.startsWith("stack") || debugger.command.startsWith("s"))
 		{
 			uint16_t default_stack_rows = 8;
-			ostd::String params = debugger.command.new_trim();
+			String params = debugger.command.new_trim();
 			if (params == "stack" || params == "s")
 				printStack(default_stack_rows);
 			else if (params.contains(" "))
@@ -1250,7 +1250,7 @@ namespace dragon
 		while (dragon::data::ErrorHandler::hasError())
 		{
 			auto err = dragon::data::ErrorHandler::popError();
-			out.nl().fg(ostd::ConsoleColors::Red).p("Error ").p(ostd::String::getHexStr(err.code, true, 8).cpp_str()).p(": ").p(err.text.cpp_str()).nl();
+			out.nl().fg(ostd::ConsoleColors::Red).p("Error ").p(String::getHexStr(err.code, true, 8).cpp_str()).p(": ").p(err.text.cpp_str()).nl();
 		}
 		debugger.args.step_exec = true;
 	}
@@ -1273,7 +1273,7 @@ namespace dragon
 			}
 			for (int32_t i = 2; i < argc; i++)
 			{
-				ostd::String edit(argv[i]);
+				String edit(argv[i]);
 				if (edit == "--verbose-load")
 					debugger.args.verbose_load = true;
 				else if (edit == "--step-exec")
@@ -1311,12 +1311,15 @@ namespace dragon
 
 	int32_t Debugger::initRuntime(void)
 	{
-		int32_t init_state = dragon::DragonRuntime::initMachine(debugger.args.machine_config_path,
-																debugger.args.verbose_load,
-																debugger.args.track_step_diff,
-																debugger.args.hide_virtual_display,
-																debugger.args.track_call_stack,
-																true); //CPU Debug Mode Enabled
+
+		dragon::DragonRuntime::tRuntimeInitInfo initInfo;
+		initInfo.configFilePath = debugger.args.machine_config_path;
+		initInfo.verboseLoad = debugger.args.verbose_load;
+		initInfo.trackMachineInfoDiff = debugger.args.track_step_diff;
+		initInfo.hideVirtualDisplay = debugger.args.hide_virtual_display;
+		initInfo.trackCallStack = debugger.args.track_call_stack;
+		initInfo.debugModeEnabled = true;
+		int32_t init_state = dragon::DragonRuntime::initMachine(initInfo);
 		closeEventListener.init();
 		if (init_state != 0) return init_state; //TODO: Error
 
@@ -1331,9 +1334,9 @@ namespace dragon
 		return DragonRuntime::RETURN_VAL_EXIT_SUCCESS;
 	}
 
-	ostd::String Debugger::getCommandInput(void)
+	String Debugger::getCommandInput(void)
 	{
-		ostd::String cmd;
+		String cmd;
 		ostd::KeyboardController kbc;
 		ostd::eKeys key = ostd::eKeys::NoKeyPressed;
 
@@ -1344,7 +1347,7 @@ namespace dragon
 		}
 		return kbc.getInputString();
 
-		// ostd::String cmd;
+		// String cmd;
 		// std::getline(std::cin, cmd.cpp_str_ref());
 		// return cmd;
 	}
@@ -1472,7 +1475,7 @@ namespace dragon
 				uint8_t type = TYPE_WORD;
 				if (data().command.contains(" "))
 				{
-					ostd::String size_str = data().command.new_substr(0, data().command.indexOf(" ")).trim();
+					String size_str = data().command.new_substr(0, data().command.indexOf(" ")).trim();
 					data().command.substr(data().command.indexOf(" ") + 1).trim();
 					if (size_str == "byte") type = TYPE_BYTE;
 					else if (size_str == "word") type = TYPE_WORD;
@@ -1486,15 +1489,15 @@ namespace dragon
 						type = TYPE_WORD;
 					uint16_t addr = data().command.toInt();
 					uint16_t end_addr = addr;
-					ostd::String tmp = "";
-					tmp.add("*(").add(ostd::String::getHexStr(addr, true, 2));
+					String tmp = "";
+					tmp.add("*(").add(String::getHexStr(addr, true, 2));
 					if (type != TYPE_BYTE)
 					{
 						end_addr = addr + type - 1;
 						if (end_addr < addr)
 							end_addr = addr;
 						else
-							tmp.add("-").add(ostd::String::getHexStr(end_addr, true, 2));
+							tmp.add("-").add(String::getHexStr(end_addr, true, 2));
 					}
 					tmp.add(")");
 					ostd::RegexRichString rgx(tmp);
@@ -1507,7 +1510,7 @@ namespace dragon
 					for (uint16_t a = addr; a <= end_addr; a++)
 					{
 						uint8_t value = DragonRuntime::memMap.read8(a);
-						output().fg(ostd::ConsoleColors::BrightRed).p(ostd::String::getHexStr(value, true, 1));
+						output().fg(ostd::ConsoleColors::BrightRed).p(String::getHexStr(value, true, 1));
 						if (a < end_addr)
 							output().p(" ");
 					}
@@ -1524,10 +1527,10 @@ namespace dragon
 						output().fg(ostd::ConsoleColors::Red).p("Unknown symbol for <print> command.").reset().nl();
 					else
 					{
-						ostd::String tmp = "";
-						tmp.add("*(").add(ostd::String::getHexStr(addr, true, 2));
+						String tmp = "";
+						tmp.add("*(").add(String::getHexStr(addr, true, 2));
 						if (size > 1)
-							tmp.add("-").add(ostd::String::getHexStr((uint16_t)(addr + size - 1), true, 2));
+							tmp.add("-").add(String::getHexStr((uint16_t)(addr + size - 1), true, 2));
 						tmp.add(")");
 						ostd::RegexRichString rgx(tmp);
 						rgx.fg("\\(|\\)|-", "darkgray");
@@ -1546,7 +1549,7 @@ namespace dragon
 								output().fg(ostd::ConsoleColors::BrightRed).pChar((char)value);
 								continue;
 							}
-							output().fg(ostd::ConsoleColors::BrightRed).p(ostd::String::getHexStr(value, true, 1));
+							output().fg(ostd::ConsoleColors::BrightRed).p(String::getHexStr(value, true, 1));
 							if (a < addr + size - 1)
 								output().p(" ");
 						}
@@ -1590,12 +1593,12 @@ namespace dragon
 					if (Utils::isBreakPoint(addr))
 					{
 						Utils::removeBreakPoint(addr);
-						output().fg(ostd::ConsoleColors::Yellow).p("Breakpoint removed at address: ").p(ostd::String::getHexStr(addr, true, 2)).reset().nl();
+						output().fg(ostd::ConsoleColors::Yellow).p("Breakpoint removed at address: ").p(String::getHexStr(addr, true, 2)).reset().nl();
 					}
 					else
 					{
 						Utils::addBreakPoint(addr);
-						output().fg(ostd::ConsoleColors::Yellow).p("Breakpoint set at address: ").p(ostd::String::getHexStr(addr, true, 2)).reset().nl();
+						output().fg(ostd::ConsoleColors::Yellow).p("Breakpoint set at address: ").p(String::getHexStr(addr, true, 2)).reset().nl();
 					}
 				}
 				Display::printPrompt();
@@ -1655,7 +1658,7 @@ namespace dragon
 			else if (data().command.contains("[") && data().command.endsWith("]"))
 			{
 				uint16_t nbytes = 1;
-				ostd::String str_nbytes = data().command.new_substr(data().command.indexOf("[") + 1).trim();
+				String str_nbytes = data().command.new_substr(data().command.indexOf("[") + 1).trim();
 				str_nbytes.substr(0, str_nbytes.len() - 1);
 				data().command.substr(0, data().command.indexOf("[")).trim();
 				if (str_nbytes.isNumeric())
@@ -1678,7 +1681,7 @@ namespace dragon
 		Utils::printFullLine('#', ostd::ConsoleColors::Black, ostd::ConsoleColors::Red);
 
 		out.nl().fg(ostd::ConsoleColors::Yellow).p("List of available commands:").reset().nl();
-		ostd::String tmpCommand = "(r)un";
+		String tmpCommand = "(r)un";
 		tmpCommand.addRightPadding(commandLength);
 		out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Used to start the runtime.").reset().nl();
 		tmpCommand = "(q)uit";
@@ -1709,7 +1712,7 @@ namespace dragon
 		int32_t commandLength = 46;
 
 		out.nl().fg(ostd::ConsoleColors::Yellow).p("List of available parameters:").reset().nl();
-		ostd::String tmpCommand = "--verbose-load";
+		String tmpCommand = "--verbose-load";
 		tmpCommand.addRightPadding(commandLength);
 		out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Used to show more information while loading the virtual machine.").reset().nl();
 		tmpCommand = "--step-exec";

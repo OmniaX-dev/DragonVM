@@ -7,7 +7,7 @@ namespace dragon
 {
 	namespace code
 	{
-		std::vector<ostd::String> IncludePreprocessor::loadEntryFile(const ostd::String& filePath)
+		std::vector<String> IncludePreprocessor::loadEntryFile(const String& filePath)
 		{
 			m_guards.clear();
 			m_lines.clear();
@@ -20,10 +20,10 @@ namespace dragon
 			if (!__can_file_be_included(m_lines))
 				return {  }; //TODO: Error
 			if (!__include_loop()) return {  }; //TODO: Error
-			std::vector<ostd::String> newLines;
+			std::vector<String> newLines;
 			for (auto& line : m_lines)
 			{
-				ostd::String lineEdit = line.new_trim();
+				String lineEdit = line.new_trim();
 				if (lineEdit != "")
 					newLines.push_back(line);
 			}
@@ -32,12 +32,12 @@ namespace dragon
 			return m_lines;
 		}
 
-		bool IncludePreprocessor::__can_file_be_included(std::vector<ostd::String>& lines)
+		bool IncludePreprocessor::__can_file_be_included(std::vector<String>& lines)
 		{
-			ostd::String guard_name = "";
+			String guard_name = "";
 			for (auto& line : lines)
 			{
-				ostd::String lineEdit = line.new_trim();
+				String lineEdit = line.new_trim();
 				if (lineEdit.new_toLower().startsWith("@guard "))
 				{
 					guard_name = lineEdit.new_substr(7).trim();
@@ -57,7 +57,7 @@ namespace dragon
 
 		bool IncludePreprocessor::__include_loop(void)
 		{
-			std::vector<ostd::String> lines = m_lines;
+			std::vector<String> lines = m_lines;
 			bool included = false;
 			do
 			{
@@ -65,7 +65,7 @@ namespace dragon
 				uint32_t i = 0;
 				for ( ; i < lines.size(); i++)
 				{
-					ostd::String line = lines[i];
+					String line = lines[i];
 					line.trim();
 					if (line.new_toLower().startsWith("@include") && line.len() > 8)
 					{
@@ -90,15 +90,15 @@ namespace dragon
 			return true;
 		}
 
-		std::vector<ostd::String> IncludePreprocessor::__load_file(const ostd::String& filePath)
+		std::vector<String> IncludePreprocessor::__load_file(const String& filePath)
 		{
 			const auto& include_dirs = Assembler::Application::args.include_directories;
 
 			if (ostd::FileSystem::fileExists(m_directory + filePath))
 			{
 				ostd::TextFileBuffer file(m_directory + filePath);
-				ostd::String source = file.rawContent();
-				return ostd::String(source.replaceAll("\t", "    ")).tokenize("\n", false).getRawData();
+				String source = file.rawContent();
+				return String(source.replaceAll("\t", "    ")).tokenize("\n", false).getRawData();
 			}
 
 			for (const auto& dir : include_dirs)
@@ -106,8 +106,8 @@ namespace dragon
 				if (ostd::FileSystem::fileExists(dir + filePath))
 				{
 					ostd::TextFileBuffer file(dir + filePath);
-					ostd::String source = file.rawContent();
-					return ostd::String(source.replaceAll("\t", "    ")).tokenize("\n", false).getRawData();
+					String source = file.rawContent();
+					return String(source.replaceAll("\t", "    ")).tokenize("\n", false).getRawData();
 				}
 			}
 

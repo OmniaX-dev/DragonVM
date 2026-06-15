@@ -10,8 +10,8 @@ namespace dragon
 	{
 		public:
 			inline DisassemblyTable(void) { m_initialized = false; }
-			inline DisassemblyTable(const ostd::String& filePath) { init(filePath); }
-			void init(const ostd::String& filePath);
+			inline DisassemblyTable(const String& filePath) { init(filePath); }
+			void init(const String& filePath);
 
 			inline const std::vector<code::Assembler::tDisassemblyLine>& getCodeTable(void) const { return m_code; }
 			inline const std::vector<code::Assembler::tDisassemblyLine>& getDataTable(void) const { return m_data; }
@@ -27,7 +27,7 @@ namespace dragon
 			std::vector<code::Assembler::tDisassemblyLine> m_labels;
 			std::vector<code::Assembler::tDisassemblyLine> m_data;
 			bool m_initialized { false };
-			ostd::String m_filePath { "" };
+			String m_filePath { "" };
 
 		public:
 			static const DisassemblyTable DefaultObject;
@@ -36,8 +36,8 @@ namespace dragon
 	class DisassemblyLoader
 	{
 		public:
-			static void loadDirectory(const ostd::String& directoryPath);
-			static const DisassemblyTable& loadFile(const ostd::String& filePath);
+			static void loadDirectory(const String& directoryPath);
+			static const DisassemblyTable& loadFile(const String& filePath);
 
 			static std::vector<code::Assembler::tDisassemblyLine> getCodeTable(void);
 			static std::vector<code::Assembler::tDisassemblyLine> getDataTable(void);

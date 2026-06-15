@@ -11,8 +11,8 @@ namespace dragon
 		{
 			public:
 				inline VirtualHardDrive(void) { m_initialized = false; }
-				inline VirtualHardDrive(const ostd::String& dataFilePath) { init(dataFilePath); }
-				void init(const ostd::String& dataFilePath);
+				inline VirtualHardDrive(const String& dataFilePath) { init(dataFilePath); }
+				void init(const String& dataFilePath);
 
 				bool read(uint32_t addr, uint16_t size, ostd::ByteStream& outData);
 				bool write(uint32_t addr, int8_t value);

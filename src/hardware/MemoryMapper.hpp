@@ -16,7 +16,7 @@ namespace dragon
 				uint16_t startAddress { 0x0000 };
 				uint16_t endAddress { 0x0000 };
 				bool remap { false };
-				ostd::String name { "" };
+				String name { "" };
 			};
 
 			public:
@@ -26,9 +26,9 @@ namespace dragon
 				int8_t write8(uint16_t addr, int8_t value) override;
 				int16_t write16(uint16_t addr, int16_t value) override;
 
-				void mapDevice(IMemoryDevice& device, uint16_t startAddr, uint16_t endAddr, bool remap = false, ostd::String name = "");
+				void mapDevice(IMemoryDevice& device, uint16_t startAddr, uint16_t endAddr, bool remap = false, String name = "");
 
-				ostd::String getMemoryRegionName(uint16_t address);
+				String getMemoryRegionName(uint16_t address);
 
 				ostd::ByteStream* getByteStream(void) override;
 

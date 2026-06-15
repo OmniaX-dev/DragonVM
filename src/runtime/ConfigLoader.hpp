@@ -8,13 +8,13 @@ namespace dragon
 {
 	struct tMachineConfig
 	{
-		std::map<int32_t, ostd::String> vdisk_paths;
+		std::map<int32_t, String> vdisk_paths;
 		std::map<int32_t, data::CPUExtension*> cpuext_list;
 		int32_t clock_rate_sec { 500 };
 		uint8_t memory_extension_pages { 0 };
 		bool fixed_clock { true };
-		ostd::String bios_path;
-		ostd::String cmos_path;
+		String bios_path;
+		String cmos_path;
 		ostd::Color singleColor_background;
 		ostd::Color singleColor_foreground;
 		uint8_t text16_palette { 0 };
@@ -32,7 +32,7 @@ namespace dragon
 	class MachineConfigLoader
 	{
 		public:
-			static const tMachineConfig loadConfig(const ostd::String& configFilePath);
+			static const tMachineConfig loadConfig(const String& configFilePath);
 
 		private:
 			static const tMachineConfig& validate_machine_config(tMachineConfig& config);
