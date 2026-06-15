@@ -84,7 +84,7 @@ namespace dragon
 		return list;
 	}
 
-	int32_t DragonRuntime::loadArguments(int argc, char** argv, tCommandLineArgs& args)
+	i32 DragonRuntime::loadArguments(int argc, char** argv, tCommandLineArgs& args)
 	{
 		if (argc < 2)
 		{
@@ -100,7 +100,7 @@ namespace dragon
 				__print_application_help();
 				return DragonRuntime::RETURN_VAL_CLOSE_RUNTIME;
 			}
-			for (int32_t i = 2; i < argc; i++)
+			for (i32 i = 2; i < argc; i++)
 			{
 				String edit(argv[i]);
 				if (edit == "--verbose-load")
@@ -115,7 +115,7 @@ namespace dragon
 					edit = argv[i];
 					if (!edit.isNumeric())
 						return RETURN_VAL_PARAMETER_NOT_NUMERIC;
-					args.force_load_mem_offset = (uint16_t)edit.toInt();
+					args.force_load_mem_offset = (u16)edit.toInt();
 					args.force_load = true;
 				}
 				else if (edit == "--help")
@@ -128,7 +128,7 @@ namespace dragon
 		return RETURN_VAL_EXIT_SUCCESS;
 	}
 
-	int32_t DragonRuntime::initMachine(const tRuntimeInitInfo& info)
+	i32 DragonRuntime::initMachine(const tRuntimeInitInfo& info)
 	{
 		s_signalListener.init();
 		vKeyboard.init();
@@ -139,8 +139,8 @@ namespace dragon
 
 		if (info.verboseLoad)
 			out.fg(ostd::ConsoleColors::Magenta).p("  Initializing virtual display:").nl();
-		int32_t w = ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H * ogfx::PixelRenderer::TextRenderer::FONT_CHAR_W; //60 * 16;
-		int32_t h = ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_V * ogfx::PixelRenderer::TextRenderer::FONT_CHAR_H; //60 * 9;
+		i32 w = ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H * ogfx::PixelRenderer::TextRenderer::FONT_CHAR_W; //60 * 16;
+		i32 h = ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_V * ogfx::PixelRenderer::TextRenderer::FONT_CHAR_H; //60 * 9;
 		vDisplay.initialize(w, h, "DragonVM");
 		vDisplay.setFont("font.bmp");
 		if (info.hideVirtualDisplay)
@@ -279,7 +279,7 @@ namespace dragon
 		if (info.verboseLoad)
 			out.fg(ostd::ConsoleColors::Magenta).p("  Initializing vCPU reset sequence:").nl();
 
-		uint16_t reset_ip_addr = 0x0000;
+		u16 reset_ip_addr = 0x0000;
 		if (info.verboseLoad)
 			out.fg(ostd::ConsoleColors::BrightYellow).p("    Reset IP register: ").p(String::getHexStr(reset_ip_addr, true, 2).cpp_str()).nl();
 		cpu.writeRegister16(dragon::data::Registers::IP, reset_ip_addr);
@@ -309,19 +309,19 @@ namespace dragon
 			out.fg(ostd::ConsoleColors::BrightYellow).p("    Fixed clock enabled: ").p(STR_BOOL(machine_config.fixed_clock)).nl();
 			if (machine_config.fixed_clock)
 				out.fg(ostd::ConsoleColors::BrightYellow).p("    Clock speed: ").p(machine_config.clock_rate_sec).p(" Hz").nl();
-			out.fg(ostd::ConsoleColors::BrightYellow).p("    Screen redraw rate: ").p((int32_t)machine_config.screen_redraw_rate_per_second).p(" Hz").nl();
+			out.fg(ostd::ConsoleColors::BrightYellow).p("    Screen redraw rate: ").p((i32)machine_config.screen_redraw_rate_per_second).p(" Hz").nl();
 		}
 
 		vCMOS.write16(data::CMOSRegisters::MemoryStart, data::MemoryMapAddresses::Memory_Start);
 		vCMOS.write16(data::CMOSRegisters::MemorySize, data::MemoryMapAddresses::Memory_End);
 		vCMOS.write16(data::CMOSRegisters::ClockSpeed, machine_config.clock_rate_sec);
 		vCMOS.write8(data::CMOSRegisters::ScreenRedrawRate, machine_config.screen_redraw_rate_per_second);
-		vCMOS.write16(data::CMOSRegisters::ScreenWidth, static_cast<int16_t>(ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H));
-		vCMOS.write16(data::CMOSRegisters::ScreenHeight, static_cast<int16_t>(ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_V));
+		vCMOS.write16(data::CMOSRegisters::ScreenWidth, static_cast<i16>(ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H));
+		vCMOS.write16(data::CMOSRegisters::ScreenHeight, static_cast<i16>(ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_V));
 		vCMOS.write16(data::CMOSRegisters::StackSize, 0x1000);
 		ostd::BitField_16 disk_list_bitfield;
 		disk_list_bitfield.value = 0;
-		for (int32_t i = 0; i < 16; i++)
+		for (i32 i = 0; i < 16; i++)
 		{
 			if (vDisks.count(i) > 0)
 				ostd::Bits::set(disk_list_bitfield, i);
@@ -346,12 +346,12 @@ namespace dragon
 
 	void DragonRuntime::runMachine(void)
 	{
-		double clock_speed_us = 1000000.0 / machine_config.clock_rate_sec;
-		double acc = 0;
-		double acc2 = 0;
-		uint64_t avg_count = 0;
-		uint64_t _time = 0;
-		double avg_tot = 0;
+		f64 clock_speed_us = 1000000.0 / machine_config.clock_rate_sec;
+		f64 acc = 0;
+		f64 acc2 = 0;
+		u64 avg_count = 0;
+		u64 _time = 0;
+		f64 avg_tot = 0;
 		ostd::Counter clock_timer;
 		bool running = true;
 		bool fixed_clock = machine_config.fixed_clock;
@@ -360,9 +360,9 @@ namespace dragon
 		{
 			clock_timer.startCount(ostd::eTimeUnits::Microseconds);
 			ostd::SignalHandler::handleDelegateSignals();
-			uint16_t addr = cpu.readRegister(dragon::data::Registers::IP);
-			uint16_t spAddr = cpu.readRegister(dragon::data::Registers::SP);
-			uint8_t screenRedrawRate = vCMOS.read8(data::CMOSRegisters::ScreenRedrawRate);
+			u16 addr = cpu.readRegister(dragon::data::Registers::IP);
+			u16 spAddr = cpu.readRegister(dragon::data::Registers::SP);
+			u8 screenRedrawRate = vCMOS.read8(data::CMOSRegisters::ScreenRedrawRate);
 			// _timer.start(true, "Profiling", ostd::eTimeUnits::Microseconds, &out);
 			running = cpu.execute() && vDisplay.isRunning();
 			// _timer.end(true);
@@ -377,7 +377,7 @@ namespace dragon
 			{
 				avg_count++;
 				avg_tot += _time;
-				s_avgInstTime = (uint64_t)std::round(avg_tot / avg_count);
+				s_avgInstTime = (u64)std::round(avg_tot / avg_count);
 				// out.fg(ostd::ConsoleColors::Red).p(getAvgClockSpeed()).nl().reset();
 				acc = 0;
 			}
@@ -394,13 +394,13 @@ namespace dragon
 		}
 	}
 
-	bool DragonRuntime::runStep(std::vector<uint16_t> trackedAddresses)
+	bool DragonRuntime::runStep(std::vector<u16> trackedAddresses)
 	{
 		std::sort(trackedAddresses.begin(), trackedAddresses.end());
 		__get_machine_footprint(&s_machineInfo, trackedAddresses, true);
 		__track_call_stack(&s_machineInfo);
 		bool running = cpu.execute() && vDisplay.isRunning();
-		uint8_t screenRedrawRate = vCMOS.read8(data::CMOSRegisters::ScreenRedrawRate);
+		u8 screenRedrawRate = vCMOS.read8(data::CMOSRegisters::ScreenRedrawRate);
 		vDisplay.mainLoop();
 		if (s_enableScreenRedrawDelay && s_stepAcc2 == (1000.0 / screenRedrawRate))
 		{
@@ -418,12 +418,12 @@ namespace dragon
 		return running || vDiskInterface.isBusy();
 	}
 
-	void DragonRuntime::forceLoad(const String& filePath, uint16_t loadAddress)
+	void DragonRuntime::forceLoad(const String& filePath, u16 loadAddress)
 	{
 		ostd::ByteStream code;
 		ostd::Memory::loadByteStreamFromFile(filePath, code);
 
-		int16_t index = 0;
+		i16 index = 0;
 		for (auto& b : code)
 		{
 			ram.write8(dragon::data::MemoryMapAddresses::Memory_Start + loadAddress + index, b);
@@ -432,7 +432,7 @@ namespace dragon
 	}
 
 
-	void DragonRuntime::__get_machine_footprint(DragonRuntime::tMachineDebugInfo* machineInfo, std::vector<uint16_t> trackedAddresses, bool previous)
+	void DragonRuntime::__get_machine_footprint(DragonRuntime::tMachineDebugInfo* machineInfo, std::vector<u16> trackedAddresses, bool previous)
 	{
 		if (!s_trackMachineInfo || machineInfo == nullptr) return;
 		auto& minfo = *machineInfo;
@@ -444,7 +444,7 @@ namespace dragon
 			minfo.previousInstructionTrackedValues.clear();
 			minfo.currentInstructionTrackedValues.clear();
 
-			for (int32_t i = 0; i < 20; i++)
+			for (i32 i = 0; i < 20; i++)
 			{
 				if (i < 5)
 				{
@@ -459,15 +459,15 @@ namespace dragon
 				minfo.trackedAddresses.push_back(addr);
 		}
 
-		uint16_t instAddr = cpu.readRegister(data::Registers::IP);
-		uint8_t int_op_code = memMap.read8(instAddr);
-		uint8_t instSize = data::OpCodes::getInstructionSIze(int_op_code);
+		u16 instAddr = cpu.readRegister(data::Registers::IP);
+		u8 int_op_code = memMap.read8(instAddr);
+		u8 instSize = data::OpCodes::getInstructionSIze(int_op_code);
 		String opCode = data::OpCodes::getOpCodeString(int_op_code);
-		uint16_t stackFrameSize = cpu.m_stackFrameSize;
-		int32_t subRoutineCounter = cpu.m_subroutineCounter;
+		u16 stackFrameSize = cpu.m_stackFrameSize;
+		i32 subRoutineCounter = cpu.m_subroutineCounter;
 
 		bool debugBreak = cpu.m_isDebugBreakPoint;
-		int32_t intHandlerCount = cpu.m_interruptHandlerCount;
+		i32 intHandlerCount = cpu.m_interruptHandlerCount;
 		bool biosMode = cpu.m_biosMode;
 		bool isInSubRoutine = cpu.isInSubRoutine();
 
@@ -479,10 +479,10 @@ namespace dragon
 			minfo.previousInstructionOpCode = opCode;
 			minfo.previousSubRoutineCounter = subRoutineCounter;
 
-			for (int8_t i = 0; i < instSize; i++)
+			for (i8 i = 0; i < instSize; i++)
 				minfo.previousInstructionFootprint[i] = memMap.read8(instAddr + i);
 
-			for (int8_t i = 0; i < 20; i++)
+			for (i8 i = 0; i < 20; i++)
 				minfo.previousInstructionRegisters[i] = cpu.readRegister(i);
 
 			for (auto& addr : minfo.trackedAddresses)
@@ -504,10 +504,10 @@ namespace dragon
 			minfo.currentInstructionOpCode = opCode;
 			minfo.currentSubRoutineCounter = subRoutineCounter;
 
-			for (int8_t i = 0; i < instSize; i++)
+			for (i8 i = 0; i < instSize; i++)
 				minfo.currentInstructionFootprint[i] = memMap.read8(minfo.currentInstructionAddress + i);
 
-			for (int8_t i = 0; i < 20; i++)
+			for (i8 i = 0; i < 20; i++)
 				minfo.currentInstructionRegisters[i] = cpu.readRegister(i);
 
 			for (auto& addr : minfo.trackedAddresses)
@@ -527,23 +527,23 @@ namespace dragon
 
 		bool interrupts_enabled = cpu.readFlag(data::Flags::InterruptsEnabled);
 
-		uint16_t instAddr = cpu.readRegister(data::Registers::IP);
-		uint8_t inst = memMap.read8(instAddr);
+		u16 instAddr = cpu.readRegister(data::Registers::IP);
+		u8 inst = memMap.read8(instAddr);
 
 		if (inst == data::OpCodes::CallImm)
 		{
-			uint16_t call_addr = memMap.read16(instAddr + 1);
+			u16 call_addr = memMap.read16(instAddr + 1);
 			minfo.callStack.push_back({ "CALL IMM", call_addr, instAddr, !interrupts_enabled });
 		}
 		else if (inst == data::OpCodes::CallReg)
 		{
-			uint8_t reg_addr = memMap.read8(instAddr + 1);
-			uint16_t call_addr = cpu.readRegister(reg_addr);
+			u8 reg_addr = memMap.read8(instAddr + 1);
+			u16 call_addr = cpu.readRegister(reg_addr);
 			minfo.callStack.push_back({ "CALL REG", call_addr, instAddr, !interrupts_enabled });
 		}
 		else if (interrupts_enabled && inst == data::OpCodes::Int)
 		{
-			uint8_t int_num = memMap.read8(instAddr + 1);
+			u8 int_num = memMap.read8(instAddr + 1);
 			minfo.callStack.push_back({ "INT", int_num, instAddr, !interrupts_enabled });
 		}
 		else if (inst == data::OpCodes::Ret)
@@ -558,7 +558,7 @@ namespace dragon
 
 	 void DragonRuntime::__print_application_help(void)
 	 {
-		int32_t commandLength = 46;
+		i32 commandLength = 46;
 
 		out.nl().fg(ostd::ConsoleColors::Yellow).p("List of available parameters:").reset().nl();
 		String tmpCommand = "--verbose-load";

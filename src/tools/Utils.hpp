@@ -8,6 +8,6 @@ namespace dragon
 	class Utils
 	{
 		public:
-			static String genRandomName(uint8_t length);
+			static String genRandomName(u8 length);
 	};
 }

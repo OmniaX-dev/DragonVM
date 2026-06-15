@@ -7,7 +7,7 @@
 int main(int argc, char** argv)
 {
 	//Loading commandline arguments
-	int32_t rValue = dragon::Debugger::loadArguments(argc, argv);
+	i32 rValue = dragon::Debugger::loadArguments(argc, argv);
 	if (rValue == dragon::DragonRuntime::RETURN_VAL_CLOSE_DEBUGGER)
 		return 0;
 	if (rValue != 0) return rValue;
@@ -34,7 +34,7 @@ int main(int argc, char** argv)
 	// debuggerInstance.setClearColor({ 5, 0, 0 });
 
 	// //Loading commandline arguments
-	// int32_t rValue = debuggerInstance.loadArguments(argc, argv);
+	// i32 rValue = debuggerInstance.loadArguments(argc, argv);
 	// if (rValue == dragon::DragonRuntime::RETURN_VAL_CLOSE_DEBUGGER)
 	//     return 0;
 	// if (rValue != 0) return rValue;

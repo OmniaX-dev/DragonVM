@@ -13,27 +13,27 @@ namespace dragon
 			private: struct tMemoryRegion
 			{
 				IMemoryDevice* device { nullptr };
-				uint16_t startAddress { 0x0000 };
-				uint16_t endAddress { 0x0000 };
+				u16 startAddress { 0x0000 };
+				u16 endAddress { 0x0000 };
 				bool remap { false };
 				String name { "" };
 			};
 
 			public:
 				MemoryMapper(void);
-				int8_t read8(uint16_t addr) override;
-				int16_t read16(uint16_t addr) override;
-				int8_t write8(uint16_t addr, int8_t value) override;
-				int16_t write16(uint16_t addr, int16_t value) override;
+				i8 read8(u16 addr) override;
+				i16 read16(u16 addr) override;
+				i8 write8(u16 addr, i8 value) override;
+				i16 write16(u16 addr, i16 value) override;
 
-				void mapDevice(IMemoryDevice& device, uint16_t startAddr, uint16_t endAddr, bool remap = false, String name = "");
+				void mapDevice(IMemoryDevice& device, u16 startAddr, u16 endAddr, bool remap = false, String name = "");
 
-				String getMemoryRegionName(uint16_t address);
+				String getMemoryRegionName(u16 address);
 
 				ostd::ByteStream* getByteStream(void) override;
 
 			private:
-				tMemoryRegion* findRegion(uint16_t address);
+				tMemoryRegion* findRegion(u16 address);
 
 			private:
 				std::vector<tMemoryRegion> m_regions;

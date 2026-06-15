@@ -9,10 +9,10 @@ namespace dragon
 		class IMemoryDevice : public ostd::BaseObject
 		{
 			public:
-				virtual int8_t read8(uint16_t addr) = 0;
-				virtual int16_t read16(uint16_t addr) = 0;
-				virtual int8_t write8(uint16_t addr, int8_t value) = 0;
-				virtual int16_t write16(uint16_t addr, int16_t value) = 0;
+				virtual i8 read8(u16 addr) = 0;
+				virtual i16 read16(u16 addr) = 0;
+				virtual i8 write8(u16 addr, i8 value) = 0;
+				virtual i16 write16(u16 addr, i16 value) = 0;
 				virtual inline ostd::ByteStream* getByteStream(void) = 0;
 		};
 	}

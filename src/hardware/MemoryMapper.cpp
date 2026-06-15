@@ -11,44 +11,44 @@ namespace dragon
 		{
 		}
 
-		int8_t MemoryMapper::read8(uint16_t addr)
+		i8 MemoryMapper::read8(u16 addr)
 		{
 			auto region = findRegion(addr);
 			if (region == nullptr) return 0x0000; //TODO: Error
-			uint16_t finalAddr = (region->remap ? addr - region->startAddress : addr);
+			u16 finalAddr = (region->remap ? addr - region->startAddress : addr);
 			return region->device->read8(finalAddr);
 		}
 
-		int16_t MemoryMapper::read16(uint16_t addr)
+		i16 MemoryMapper::read16(u16 addr)
 		{
 			auto region = findRegion(addr);
 			if (region == nullptr) return 0x0000; //TODO: Error
-			uint16_t finalAddr = (region->remap ? addr - region->startAddress : addr);
+			u16 finalAddr = (region->remap ? addr - region->startAddress : addr);
 			return region->device->read16(finalAddr);
 		}
 
-		int8_t MemoryMapper::write8(uint16_t addr, int8_t value)
+		i8 MemoryMapper::write8(u16 addr, i8 value)
 		{
 			auto region = findRegion(addr);
 			if (region == nullptr) return 0x0000; //TODO: Error
-			uint16_t finalAddr = (region->remap ? addr - region->startAddress : addr);
+			u16 finalAddr = (region->remap ? addr - region->startAddress : addr);
 			return region->device->write8(finalAddr, value);
 		}
 
-		int16_t MemoryMapper::write16(uint16_t addr, int16_t value)
+		i16 MemoryMapper::write16(u16 addr, i16 value)
 		{
 			auto region = findRegion(addr);
 			if (region == nullptr) return 0x0000; //TODO: Error
-			uint16_t finalAddr = (region->remap ? addr - region->startAddress : addr);
+			u16 finalAddr = (region->remap ? addr - region->startAddress : addr);
 			return region->device->write16(finalAddr, value);
 		}
 
-		void MemoryMapper::mapDevice(IMemoryDevice& device, uint16_t startAddr, uint16_t endAddr, bool remap, String name)
+		void MemoryMapper::mapDevice(IMemoryDevice& device, u16 startAddr, u16 endAddr, bool remap, String name)
 		{
 			m_regions.push_back({ &device, startAddr, endAddr, remap, name });
 		}
 
-		String MemoryMapper::getMemoryRegionName(uint16_t address)
+		String MemoryMapper::getMemoryRegionName(u16 address)
 		{
 			tMemoryRegion* region = findRegion(address);
 			if (region == nullptr) return "Invalid";
@@ -60,7 +60,7 @@ namespace dragon
 			return nullptr;
 		}
 
-		MemoryMapper::tMemoryRegion* MemoryMapper::findRegion(uint16_t address)
+		MemoryMapper::tMemoryRegion* MemoryMapper::findRegion(u16 address)
 		{
 			for (auto& region : m_regions)
 			{

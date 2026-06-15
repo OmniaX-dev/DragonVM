@@ -14,25 +14,25 @@ namespace dragon
 				inline VirtualHardDrive(const String& dataFilePath) { init(dataFilePath); }
 				void init(const String& dataFilePath);
 
-				bool read(uint32_t addr, uint16_t size, ostd::ByteStream& outData);
-				bool write(uint32_t addr, int8_t value);
-				void bufferedWrite(int8_t value);
-				bool writeBuffer(uint32_t addr);
+				bool read(u32 addr, u16 size, ostd::ByteStream& outData);
+				bool write(u32 addr, i8 value);
+				void bufferedWrite(i8 value);
+				bool writeBuffer(u32 addr);
 
 				void unmount(void);
 
 				inline bool isInitialized(void) const { return m_initialized; }
-				inline uint64_t getSize(void) const { return m_fileSize; };
+				inline u64 getSize(void) const { return m_fileSize; };
 				inline bool isSame(VirtualHardDrive& vhdd) { return m_diskID == vhdd.m_diskID; }
 
 			private:
 				std::fstream m_dataFile;
 				bool m_initialized { false };
-				uint64_t m_fileSize { 0 };
+				u64 m_fileSize { 0 };
 				ostd::ByteStream m_writeBuffer;
-				uint32_t m_diskID { 0 };
+				u32 m_diskID { 0 };
 
-				inline static uint32_t s_nextDiskID = 0;
+				inline static u32 s_nextDiskID = 0;
 		};
 	}
 }

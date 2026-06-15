@@ -13,32 +13,32 @@ namespace dragon
 			m_memory.enableAutoResize(false);
 		}
 
-		int8_t VirtualRAM::read8(uint16_t addr)
+		i8 VirtualRAM::read8(u16 addr)
 		{
-			int8_t outVal = 0;
-			uint16_t offset = DragonRuntime::cpu.getCurrentOffset();
+			i8 outVal = 0;
+			u16 offset = DragonRuntime::cpu.getCurrentOffset();
 			if (!m_memory.r_Byte(addr + offset, outVal)) return 0x00; //TODO: Error
 			return outVal;
 		}
 
-		int16_t VirtualRAM::read16(uint16_t addr)
+		i16 VirtualRAM::read16(u16 addr)
 		{
-			int16_t outVal = 0;
-			uint16_t offset = DragonRuntime::cpu.getCurrentOffset();
+			i16 outVal = 0;
+			u16 offset = DragonRuntime::cpu.getCurrentOffset();
 			if (!m_memory.r_Word(addr + offset, outVal)) return 0x00; //TODO: Error
 			return outVal;
 		}
 
-		int8_t VirtualRAM::write8(uint16_t addr, int8_t value)
+		i8 VirtualRAM::write8(u16 addr, i8 value)
 		{
-			uint16_t offset = DragonRuntime::cpu.getCurrentOffset();
+			u16 offset = DragonRuntime::cpu.getCurrentOffset();
 			if (!m_memory.w_Byte(addr + offset, value)) return 0; //TODO: Error
 			return value;
 		}
 
-		int16_t VirtualRAM::write16(uint16_t addr, int16_t value)
+		i16 VirtualRAM::write16(u16 addr, i16 value)
 		{
-			uint16_t offset = DragonRuntime::cpu.getCurrentOffset();
+			u16 offset = DragonRuntime::cpu.getCurrentOffset();
 			if (!m_memory.w_Word(addr + offset, value)) return 0; //TODO: Error
 			return value;
 		}

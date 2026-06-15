@@ -28,13 +28,13 @@ namespace dragon
 
 
 	//Debugger::Utils
-	DisassemblyList Debugger::Utils::findCodeRegion(const DisassemblyList& code, uint16_t address, uint16_t codeRegionMargin)
+	DisassemblyList Debugger::Utils::findCodeRegion(const DisassemblyList& code, u16 address, u16 codeRegionMargin)
 	{
 		if (code.size() <= (codeRegionMargin * 2) + 1) return code;
 		std::vector<dragon::code::Assembler::tDisassemblyLine> codeRegion;
-		uint16_t start = 0;
-		uint16_t end = (codeRegionMargin * 2);
-		for (int32_t i = 0; i < code.size(); i++)
+		u16 start = 0;
+		u16 end = (codeRegionMargin * 2);
+		for (i32 i = 0; i < code.size(); i++)
 		{
 			if (code[i].addr != address) continue;
 			if (i + 1 <= codeRegionMargin) break;
@@ -48,12 +48,12 @@ namespace dragon
 			end = i + codeRegionMargin;
 			break;
 		}
-		for (int16_t i = start; i <= end; i++)
+		for (i16 i = start; i <= end; i++)
 			codeRegion.push_back(code[i]);
 		return codeRegion;
 	}
 
-	String Debugger::Utils::findSymbol(const DisassemblyList& list, uint16_t address, uint16_t* outSize)
+	String Debugger::Utils::findSymbol(const DisassemblyList& list, u16 address, u16* outSize)
 	{
 		for (auto& line : list)
 		{
@@ -67,7 +67,7 @@ namespace dragon
 		return "";
 	}
 
-	uint16_t Debugger::Utils::findSymbol(const DisassemblyList& list, const String& symbol, uint16_t* outSize)
+	u16 Debugger::Utils::findSymbol(const DisassemblyList& list, const String& symbol, u16* outSize)
 	{
 		for (auto& line : list)
 		{
@@ -88,11 +88,11 @@ namespace dragon
 
 	void Debugger::Utils::clearConsoleLine(void)
 	{
-		for (int32_t i = 0; i < ostd::BasicConsole::getConsoleWidth(); i++)
+		for (i32 i = 0; i < ostd::BasicConsole::getConsoleWidth(); i++)
 			out.p("\b");
-		for (int32_t i = 0; i < ostd::BasicConsole::getConsoleWidth(); i++)
+		for (i32 i = 0; i < ostd::BasicConsole::getConsoleWidth(); i++)
 			out.p(" ");
-		for (int32_t i = 0; i < ostd::BasicConsole::getConsoleWidth(); i++)
+		for (i32 i = 0; i < ostd::BasicConsole::getConsoleWidth(); i++)
 			out.p("\b");
 	}
 
@@ -115,7 +115,7 @@ namespace dragon
 
 	ostd::ConsoleOutputHandler& Debugger::Utils::printFullLine(char c, const ostd::ConsoleColors::tConsoleColor& foreground)
 	{
-		int32_t cw = ostd::BasicConsole::getConsoleWidth();
+		i32 cw = ostd::BasicConsole::getConsoleWidth();
 		String str = String::duplicateChar(c, cw);
 		out.fg(foreground).p(str).reset().nl();
 		return out;
@@ -123,17 +123,17 @@ namespace dragon
 
 	ostd::ConsoleOutputHandler& Debugger::Utils::printFullLine(char c, const ostd::ConsoleColors::tConsoleColor& foreground, const ostd::ConsoleColors::tConsoleColor& background)
 	{
-		int32_t cw = ostd::BasicConsole::getConsoleWidth();
+		i32 cw = ostd::BasicConsole::getConsoleWidth();
 		String str = String::duplicateChar(c, cw);
 		out.bg(background).fg(foreground).p(str).reset().nl();
 		return out;
 	}
 
-	void Debugger::Utils::removeBreakPoint(uint16_t addr)
+	void Debugger::Utils::removeBreakPoint(u16 addr)
 	{
 		if (debugger.manualBreakPoints.size() == 0)
 			return;
-		int32_t i = 0;
+		i32 i = 0;
 		for ( ; i < debugger.manualBreakPoints.size(); i++)
 		{
 			if (debugger.manualBreakPoints[i] == addr)
@@ -144,14 +144,14 @@ namespace dragon
 		debugger.manualBreakPoints.erase(debugger.manualBreakPoints.begin() + i);
 	}
 
-	bool Debugger::Utils::isBreakPoint(uint16_t addr)
+	bool Debugger::Utils::isBreakPoint(u16 addr)
 	{
 		for (const auto& b : debugger.manualBreakPoints)
 			if (b == addr) return true;
 		return false;
 	}
 
-	void Debugger::Utils::addBreakPoint(uint16_t addr)
+	void Debugger::Utils::addBreakPoint(u16 addr)
 	{
 		debugger.manualBreakPoints.push_back(addr);
 	}
@@ -172,7 +172,7 @@ namespace dragon
 		String instEdit = rgxrstr.getRawString();
 		for (auto& label : labelList)
 		{
-			int32_t index = -1;
+			i32 index = -1;
 			String labelEdit = label.code;
 			labelEdit.trim();
 			while ((index = instEdit.indexOf(labelEdit, index + 1)) != -1)
@@ -230,9 +230,9 @@ namespace dragon
 	void Debugger::Display::printStep(void)
 	{
 		out.clear();
-		int32_t codeRegionSpan = 15;
+		i32 codeRegionSpan = 15;
 		auto codeRegion = Utils::findCodeRegion(debugger.code, debugger.currentAddress, codeRegionSpan);
-		for (int32_t i = 0; i < codeRegion.size(); i++)
+		for (i32 i = 0; i < codeRegion.size(); i++)
 		{
 			auto& _da = codeRegion[i];
 			bool currentLine = _da.addr == debugger.currentAddress;
@@ -326,7 +326,7 @@ namespace dragon
 
 
 		str.replaceAll("*", "");
-		int32_t item_len = 36;
+		i32 item_len = 36;
 		const dragon::DragonRuntime::tMachineDebugInfo& minfo = dragon::DragonRuntime::getMachineInfoDiff();
 		String tmp = " ", tmpStyle = "";
 
@@ -354,7 +354,7 @@ namespace dragon
 			tmp = " ", tmpStyle = "";
 			String prevCode = " (";
 			prevCode.add(minfo.previousInstructionOpCode).add(") ");
-			for (int32_t i = 0; i < minfo.previousInstructionFootprintSize; i++)
+			for (i32 i = 0; i < minfo.previousInstructionFootprintSize; i++)
 				prevCode.add(String::getHexStr(minfo.previousInstructionFootprint[i], false, 1)).add(" ");
 			tmp.add(prevCode);
 			tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
@@ -365,7 +365,7 @@ namespace dragon
 			// tmp = " ";
 			// String currCode = " (";
 			// currCode.add(minfo.currentInstructionOpCode).add(") ");
-			// for (int32_t i = 0; i < minfo.currentInstructionFootprintSize; i++)
+			// for (i32 i = 0; i < minfo.currentInstructionFootprintSize; i++)
 			//     currCode.add(String::getHexStr(minfo.currentInstructionFootprint[i], false, 1)).add(" ");
 			// tmp.add(currCode);
 			// tmp.addPadding(item_len, ' ', String::ePaddingBehavior::AllowOddExtraLeft);
@@ -898,14 +898,14 @@ namespace dragon
 	{
 		out.clear();
 		out.fg(ostd::ConsoleColors::Yellow).p("Tracked Data: ").reset().nl();
-		const int32_t symbol_len = 24;
-		const int32_t size_len = 8;
-		const int32_t addr_len = 10;
-		const int32_t map_len = 8;
-		const int32_t prev_len = 35;
+		const i32 symbol_len = 24;
+		const i32 size_len = 8;
+		const i32 addr_len = 10;
+		const i32 map_len = 8;
+		const i32 prev_len = 35;
 		const dragon::DragonRuntime::tMachineDebugInfo& minfo = dragon::DragonRuntime::getMachineInfoDiff();
 		if (minfo.trackedAddresses.size() == 0) return;
-		int32_t cw = ostd::BasicConsole::getConsoleWidth();
+		i32 cw = ostd::BasicConsole::getConsoleWidth();
 		String header = "|Symbol";
 		header.addRightPadding(symbol_len);
 		header.add("|Bytes");
@@ -934,9 +934,9 @@ namespace dragon
 		h_sep.put(symbol_len + size_len + addr_len + map_len + prev_len, '|');
 		h_sep.put(cw - 1, '|');
 		out.fg(ostd::ConsoleColors::Blue).p(h_sep).reset().nl();
-		for (int32_t i = 0; i < minfo.trackedAddresses.size(); i++)
+		for (i32 i = 0; i < minfo.trackedAddresses.size(); i++)
 		{
-			uint16_t data_size = 1;
+			u16 data_size = 1;
 			auto addr = minfo.trackedAddresses[i];
 			String symbol = Utils::findSymbol(debugger.data, addr, &data_size);
 			if (symbol == "")
@@ -970,7 +970,7 @@ namespace dragon
 				out.fg(ostd::ConsoleColors::Blue).p("|").fg(ostd::ConsoleColors::BrightGray).p(tmp).reset();
 
 			tmp = "";
-			if (addr >= (uint16_t)DragonRuntime::cpu.readRegister(data::Registers::SP))
+			if (addr >= (u16)DragonRuntime::cpu.readRegister(data::Registers::SP))
 				tmp.add("STACK");
 			else
 				tmp.add(DragonRuntime::memMap.getMemoryRegionName(addr));
@@ -979,7 +979,7 @@ namespace dragon
 
 			tmp = "";
 			tmp.add(String::getHexStr(minfo.previousInstructionTrackedValues[i], false, 1));
-			for (int32_t j = 1; j < data_size; j++)
+			for (i32 j = 1; j < data_size; j++)
 				tmp.add(".").add(String::getHexStr(minfo.previousInstructionTrackedValues[i + j], false, 1));
 			tmp.fixedLength(prev_len - 1);
 			if (no_symbol)
@@ -989,12 +989,12 @@ namespace dragon
 
 			tmp = "";
 			tmp.add(String::getHexStr(minfo.currentInstructionTrackedValues[i], false, 1));
-			uint32_t tmp_i = i;
-			for (int32_t j = 1; j < data_size; j++, i++)
+			u32 tmp_i = i;
+			for (i32 j = 1; j < data_size; j++, i++)
 				tmp.add(".").add(String::getHexStr(minfo.currentInstructionTrackedValues[i + 1], false, 1));
 			tmp.fixedLength(prev_len - 1);
 			bool data_different = false;
-			for (int32_t j = 0; j < data_size; j++)
+			for (i32 j = 0; j < data_size; j++)
 			{
 				if (minfo.currentInstructionTrackedValues[tmp_i + j] != minfo.previousInstructionTrackedValues[tmp_i + j])
 				{
@@ -1027,11 +1027,11 @@ namespace dragon
 		Utils::isEscapeKeyPressed(true);
 	}
 
-	void Debugger::Display::printStack(uint16_t nrows)
+	void Debugger::Display::printStack(u16 nrows)
 	{
 		if (nrows == 0) nrows = 8;
-		uint16_t ncols = 16;
-		uint16_t startAddr = (0xFFFF - (ncols * nrows) + 1);
+		u16 ncols = 16;
+		u16 startAddr = (0xFFFF - (ncols * nrows) + 1);
 		out.clear();
 
 		out.nl();
@@ -1051,7 +1051,7 @@ namespace dragon
 		out.nl();
 
 		out.fg(ostd::ConsoleColors::Yellow).p("Stack view: ").reset().nl();
-		uint16_t stack_ptr = DragonRuntime::cpu.readRegister(data::Registers::SP);
+		u16 stack_ptr = DragonRuntime::cpu.readRegister(data::Registers::SP);
 		ostd::Memory::printByteStream(*DragonRuntime::ram.getByteStream(), startAddr, ncols, nrows, out, stack_ptr, 2, "Stack");
 
 		out.nl().nl().fg(ostd::ConsoleColors::Yellow).p("Pres <Escape> to go back...").nl().reset();
@@ -1067,15 +1067,15 @@ namespace dragon
 		const dragon::DragonRuntime::tMachineDebugInfo& minfo = dragon::DragonRuntime::getMachineInfoDiff();
 
 		auto& callStack = minfo.callStack;
-		int32_t level = -1;
+		i32 level = -1;
 		String ch_ang_u = "";
 		//TODO: Find a fix for the UTF characters
 		ch_ang_u.add("┌");
-		// ch_ang_u.addChar((unsigned char)218);
+		// ch_ang_u.addChar((uchar)218);
 		String ch_ang_l = "|";
 		String ch_ang_d = "";
 		ch_ang_d.add("└");
-		// ch_ang_d.addChar((unsigned char)192);
+		// ch_ang_d.addChar((uchar)192);
 		for (auto& call : callStack)
 		{
 			String call_info = call.info.new_trim().toLower();
@@ -1115,7 +1115,7 @@ namespace dragon
 			}
 
 			String line_str = "";
-			for (int32_t i = 0; i < level; i++)
+			for (i32 i = 0; i < level; i++)
 				line_str.add("|   ");
 			line_str.add(call_str);
 
@@ -1149,7 +1149,7 @@ namespace dragon
 	void Debugger::Display::printHelp(void)
 	{
 		out.clear();
-		int32_t commandLength = 34;
+		i32 commandLength = 34;
 		Utils::printFullLine('#', ostd::ConsoleColors::Black, ostd::ConsoleColors::Red);
 
 		out.nl().fg(ostd::ConsoleColors::Yellow).p("List of available commands:").reset().nl();
@@ -1206,7 +1206,7 @@ namespace dragon
 		}
 		else if (debugger.command.startsWith("stack") || debugger.command.startsWith("s"))
 		{
-			uint16_t default_stack_rows = 8;
+			u16 default_stack_rows = 8;
 			String params = debugger.command.new_trim();
 			if (params == "stack" || params == "s")
 				printStack(default_stack_rows);
@@ -1214,7 +1214,7 @@ namespace dragon
 			{
 				params.substr(params.indexOf(" ") + 1).trim();
 				if (!params.isNumeric()) return "";
-				default_stack_rows = (uint16_t)params.toInt();
+				default_stack_rows = (u16)params.toInt();
 				if (default_stack_rows > 0xFFFF / 16) default_stack_rows = 8;
 				printStack(default_stack_rows);
 			}
@@ -1255,7 +1255,7 @@ namespace dragon
 		debugger.args.step_exec = true;
 	}
 
-	int32_t Debugger::loadArguments(int argc, char** argv)
+	i32 Debugger::loadArguments(int argc, char** argv)
 	{
 		if (argc < 2)
 		{
@@ -1271,7 +1271,7 @@ namespace dragon
 				print_application_help();
 				return DragonRuntime::RETURN_VAL_CLOSE_DEBUGGER;
 			}
-			for (int32_t i = 2; i < argc; i++)
+			for (i32 i = 2; i < argc; i++)
 			{
 				String edit(argv[i]);
 				if (edit == "--verbose-load")
@@ -1296,7 +1296,7 @@ namespace dragon
 					edit = argv[i];
 					if (!edit.isNumeric())
 						return DragonRuntime::RETURN_VAL_PARAMETER_NOT_NUMERIC;
-					debugger.args.force_load_mem_offset = (uint16_t)edit.toInt();
+					debugger.args.force_load_mem_offset = (u16)edit.toInt();
 					debugger.args.force_load = true;
 				}
 				else if (edit == "--help")
@@ -1309,7 +1309,7 @@ namespace dragon
 		return DragonRuntime::RETURN_VAL_EXIT_SUCCESS;
 	}
 
-	int32_t Debugger::initRuntime(void)
+	i32 Debugger::initRuntime(void)
 	{
 
 		dragon::DragonRuntime::tRuntimeInitInfo initInfo;
@@ -1319,7 +1319,7 @@ namespace dragon
 		initInfo.hideVirtualDisplay = debugger.args.hide_virtual_display;
 		initInfo.trackCallStack = debugger.args.track_call_stack;
 		initInfo.debugModeEnabled = true;
-		int32_t init_state = dragon::DragonRuntime::initMachine(initInfo);
+		i32 init_state = dragon::DragonRuntime::initMachine(initInfo);
 		closeEventListener.init();
 		if (init_state != 0) return init_state; //TODO: Error
 
@@ -1352,7 +1352,7 @@ namespace dragon
 		// return cmd;
 	}
 
-	int32_t Debugger::topLevelPrompt(void)
+	i32 Debugger::topLevelPrompt(void)
 	{
 		if (!data().args.auto_start_debug)
 		{
@@ -1413,9 +1413,9 @@ namespace dragon
 		return DragonRuntime::RETURN_VAL_EXIT_SUCCESS;
 	}
 
-	int32_t Debugger::executeRuntime(void)
+	i32 Debugger::executeRuntime(void)
 	{
-		int32_t rValue = 0;
+		i32 rValue = 0;
 		bool userQuit = false;
 		output().clear().fg(ostd::ConsoleColors::Green).p("Program running...").nl();
 		if (!data().args.step_exec)
@@ -1436,7 +1436,7 @@ namespace dragon
 		return rValue;
 	}
 
-	int32_t Debugger::step_execution(bool& outUserQuit, bool exec_first_step)
+	i32 Debugger::step_execution(bool& outUserQuit, bool exec_first_step)
 	{
 		if (exec_first_step && !DragonRuntime::cpu.isHalted())
 			DragonRuntime::runStep(data().trackedAddresses);
@@ -1467,12 +1467,12 @@ namespace dragon
 			else if (data().command.startsWith("p ") || data().command.startsWith("print "))
 			{
 				data().command.substr(data().command.indexOf(" ") + 1).trim();
-				const uint8_t TYPE_STRING = 0;
-				const uint8_t TYPE_BYTE = 1;
-				const uint8_t TYPE_WORD = 2;
-				const uint8_t TYPE_DWORD = 4;
-				const uint8_t TYPE_QWORD = 8;
-				uint8_t type = TYPE_WORD;
+				const u8 TYPE_STRING = 0;
+				const u8 TYPE_BYTE = 1;
+				const u8 TYPE_WORD = 2;
+				const u8 TYPE_DWORD = 4;
+				const u8 TYPE_QWORD = 8;
+				u8 type = TYPE_WORD;
 				if (data().command.contains(" "))
 				{
 					String size_str = data().command.new_substr(0, data().command.indexOf(" ")).trim();
@@ -1487,8 +1487,8 @@ namespace dragon
 				{
 					if (type == TYPE_STRING)
 						type = TYPE_WORD;
-					uint16_t addr = data().command.toInt();
-					uint16_t end_addr = addr;
+					u16 addr = data().command.toInt();
+					u16 end_addr = addr;
 					String tmp = "";
 					tmp.add("*(").add(String::getHexStr(addr, true, 2));
 					if (type != TYPE_BYTE)
@@ -1507,9 +1507,9 @@ namespace dragon
 					output().pStyled(rgx);
 					output().fg(ostd::ConsoleColors::White).p(" = ");
 					output().fg(ostd::ConsoleColors::Gray).p("[");
-					for (uint16_t a = addr; a <= end_addr; a++)
+					for (u16 a = addr; a <= end_addr; a++)
 					{
-						uint8_t value = DragonRuntime::memMap.read8(a);
+						u8 value = DragonRuntime::memMap.read8(a);
 						output().fg(ostd::ConsoleColors::BrightRed).p(String::getHexStr(value, true, 1));
 						if (a < end_addr)
 							output().p(" ");
@@ -1519,8 +1519,8 @@ namespace dragon
 				}
 				else if (data().command.startsWith("$"))
 				{
-					uint16_t size = 0;
-					uint16_t addr = Utils::findSymbol(debugger.data, data().command, &size);
+					u16 size = 0;
+					u16 addr = Utils::findSymbol(debugger.data, data().command, &size);
 					if (addr == 0)
 						addr = Utils::findSymbol(debugger.labels, data().command, &size);
 					if (addr == 0)
@@ -1530,7 +1530,7 @@ namespace dragon
 						String tmp = "";
 						tmp.add("*(").add(String::getHexStr(addr, true, 2));
 						if (size > 1)
-							tmp.add("-").add(String::getHexStr((uint16_t)(addr + size - 1), true, 2));
+							tmp.add("-").add(String::getHexStr((u16)(addr + size - 1), true, 2));
 						tmp.add(")");
 						ostd::RegexRichString rgx(tmp);
 						rgx.fg("\\(|\\)|-", "darkgray");
@@ -1541,9 +1541,9 @@ namespace dragon
 						output().fg(ostd::ConsoleColors::Gray).p("[");
 						if (type == TYPE_STRING)
 							output().fg(ostd::ConsoleColors::BrightRed).p("\"");
-						for (uint16_t a = addr; a < addr + size; a++)
+						for (u16 a = addr; a < addr + size; a++)
 						{
-							uint8_t value = DragonRuntime::memMap.read8(a);
+							u8 value = DragonRuntime::memMap.read8(a);
 							if (type == TYPE_STRING)
 							{
 								output().fg(ostd::ConsoleColors::BrightRed).pChar((char)value);
@@ -1569,11 +1569,11 @@ namespace dragon
 			else if (data().command.startsWith("b ") || data().command.startsWith("break "))
 			{//0x2C1D
 				data().command.substr(data().command.indexOf(" ") + 1).trim();
-				uint16_t addr = 0;
+				u16 addr = 0;
 				bool valid = false;
 				if (data().command.isNumeric())
 				{
-					addr = (uint16_t)data().command.toInt();
+					addr = (u16)data().command.toInt();
 					valid = true;
 				}
 				else if (data().command.startsWith("$"))
@@ -1610,10 +1610,10 @@ namespace dragon
 		return DragonRuntime::RETURN_VAL_EXIT_SUCCESS;
 	}
 
-	int32_t Debugger::normal_runtime(bool& outUserQuit)
+	i32 Debugger::normal_runtime(bool& outUserQuit)
 	{
 		bool result = DragonRuntime::runStep(data().trackedAddresses);
-		if (Utils::isBreakPoint((uint16_t)DragonRuntime::cpu.readRegister(data::Registers::IP)))
+		if (Utils::isBreakPoint((u16)DragonRuntime::cpu.readRegister(data::Registers::IP)))
 		{
 			data().args.step_exec = true;
 			return step_execution(outUserQuit, false);
@@ -1634,15 +1634,15 @@ namespace dragon
 			data().command = addr;
 			if (data().command.isNumeric())
 			{
-				data().trackedAddresses.push_back((uint16_t)data().command.toInt());
+				data().trackedAddresses.push_back((u16)data().command.toInt());
 			}
 			else if (data().command.startsWith("$"))
 			{
-				uint16_t nbytes = 1;
-				uint16_t addr = Utils::findSymbol(data().data, data().command, &nbytes);
+				u16 nbytes = 1;
+				u16 addr = Utils::findSymbol(data().data, data().command, &nbytes);
 				if (addr > 0)
 				{
-					for (int32_t i = 0; i < nbytes; i++)
+					for (i32 i = 0; i < nbytes; i++)
 						data().trackedAddresses.push_back(addr + i);
 				}
 				else
@@ -1650,14 +1650,14 @@ namespace dragon
 					addr = Utils::findSymbol(data().labels, data().command, &nbytes);
 					if (addr > 0)
 					{
-						for (int32_t i = 0; i < nbytes; i++)
+						for (i32 i = 0; i < nbytes; i++)
 							data().trackedAddresses.push_back(addr + i);
 					}
 				}
 			}
 			else if (data().command.contains("[") && data().command.endsWith("]"))
 			{
-				uint16_t nbytes = 1;
+				u16 nbytes = 1;
 				String str_nbytes = data().command.new_substr(data().command.indexOf("[") + 1).trim();
 				str_nbytes.substr(0, str_nbytes.len() - 1);
 				data().command.substr(0, data().command.indexOf("[")).trim();
@@ -1666,8 +1666,8 @@ namespace dragon
 				if (nbytes < 1) nbytes = 1;
 				if (data().command.isNumeric())
 				{
-					uint16_t addr = data().command.toInt();
-					for (int32_t i = 0; i < nbytes; i++)
+					u16 addr = data().command.toInt();
+					for (i32 i = 0; i < nbytes; i++)
 						data().trackedAddresses.push_back(addr + i);
 				}
 			}
@@ -1677,7 +1677,7 @@ namespace dragon
 
 	void Debugger::print_top_level_prompt_help(void)
 	{
-		int32_t commandLength = 40;
+		i32 commandLength = 40;
 		Utils::printFullLine('#', ostd::ConsoleColors::Black, ostd::ConsoleColors::Red);
 
 		out.nl().fg(ostd::ConsoleColors::Yellow).p("List of available commands:").reset().nl();
@@ -1709,7 +1709,7 @@ namespace dragon
 
 	void Debugger::print_application_help(void)
 	{
-		int32_t commandLength = 46;
+		i32 commandLength = 46;
 
 		out.nl().fg(ostd::ConsoleColors::Yellow).p("List of available parameters:").reset().nl();
 		String tmpCommand = "--verbose-load";

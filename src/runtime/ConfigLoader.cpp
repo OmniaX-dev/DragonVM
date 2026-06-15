@@ -23,7 +23,7 @@ namespace dragon
 				lineEdit = tokens.next();
 				tokens = lineEdit.tokenize(",");
 				if (tokens.count() == 0) continue; //TODO: Warning
-				int32_t disk_nr = 0;
+				i32 disk_nr = 0;
 				while (tokens.hasNext())
 				{
 					lineEdit = tokens.next();
@@ -35,7 +35,7 @@ namespace dragon
 				lineEdit = tokens.next();
 				tokens = lineEdit.tokenize(",");
 				if (tokens.count() == 0) continue; //TODO: Warning
-				int32_t ext_nr = 0;
+				i32 ext_nr = 0;
 				while (tokens.hasNext())
 				{
 					if (ext_nr >= 16) break; //TODO: Warning

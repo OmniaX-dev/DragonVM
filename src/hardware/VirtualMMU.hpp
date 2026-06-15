@@ -16,8 +16,8 @@ namespace dragon
 				ostd::serial::SerialIO m_data;
 
 			public:
-				inline static constexpr uint16_t MMUSize = 6144;
-				inline static constexpr uint16_t PageSize = 512;
+				inline static constexpr u16 MMUSize = 6144;
+				inline static constexpr u16 PageSize = 512;
 		};
 	}
 }

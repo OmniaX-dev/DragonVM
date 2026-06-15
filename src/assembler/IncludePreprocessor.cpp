@@ -62,7 +62,7 @@ namespace dragon
 			do
 			{
 				included = false;
-				uint32_t i = 0;
+				u32 i = 0;
 				for ( ; i < lines.size(); i++)
 				{
 					String line = lines[i];

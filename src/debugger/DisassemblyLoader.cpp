@@ -25,13 +25,13 @@ namespace dragon
 
 	void DisassemblyTable::load_data(ostd::ByteStream& stream)
 	{
-		constexpr int32_t MODE_CODE = 0, MODE_DATA = 1, MODE_LABELS = 2;
-		int32_t mode = MODE_CODE;
+		constexpr i32 MODE_CODE = 0, MODE_DATA = 1, MODE_LABELS = 2;
+		i32 mode = MODE_CODE;
 		ostd::serial::SerialIO serializer(stream, ostd::serial::SerialIO::tEndianness::BigEndian);
 		ostd::StreamIndex addr = 0;
-		int32_t line_addr = 0;
-		int16_t data_size = 1;
-		int8_t line_code_char = 0;
+		i32 line_addr = 0;
+		i16 data_size = 1;
+		i8 line_code_char = 0;
 		String header_string = "";
 		serializer.r_NullTerminatedString(0, header_string);
 		if (header_string != "{ DRAGON_DEBUG_DISASSEMBLY }") return;
@@ -74,7 +74,7 @@ namespace dragon
 					String part2 = codeEdit.new_substr(codeEdit.indexOf(" ") + 1);
 					part1.trim();
 					part2.trim();
-					int32_t opCodeLen = 10;
+					i32 opCodeLen = 10;
 					if (part1.len() < opCodeLen)
 					{
 						codeEdit = part1 + String::duplicateChar(' ', opCodeLen - part1.len()) + part2;

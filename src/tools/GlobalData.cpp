@@ -5,7 +5,7 @@ namespace dragon
 {
 	namespace data
 	{
-		String OpCodes::getOpCodeString(uint8_t opCode)
+		String OpCodes::getOpCodeString(u8 opCode)
 		{
 			CPUExtension* ext = DragonRuntime::cpu.getCurrentCPUExtension();
 			if (ext != nullptr)
@@ -105,7 +105,7 @@ namespace dragon
 			}
 		}
 
-		uint8_t OpCodes::getInstructionSIze(uint8_t opCode)
+		u8 OpCodes::getInstructionSIze(u8 opCode)
 		{
 			CPUExtension* ext = DragonRuntime::cpu.getCurrentCPUExtension();
 			if (ext != nullptr)

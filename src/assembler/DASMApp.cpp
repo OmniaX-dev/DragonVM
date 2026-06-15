@@ -7,7 +7,7 @@ namespace dragon
 {
 	namespace code
 	{
-		int32_t Assembler::Application::loadArguments(int argc, char** argv)
+		i32 Assembler::Application::loadArguments(int argc, char** argv)
 		{
 			if (argc < 2)
 			{
@@ -27,7 +27,7 @@ namespace dragon
 				bool disable_extmov = false;
 				bool disable_extalu = false;
 				args.verbose_level = -1;
-				for (int32_t i = 2; i < argc; i++)
+				for (i32 i = 2; i < argc; i++)
 				{
 					String edit(argv[i]);
 					if (edit == "-o")
@@ -106,7 +106,7 @@ namespace dragon
 
 		void Assembler::Application::print_application_help(void)
 		{
-			int32_t commandLength = 46;
+			i32 commandLength = 46;
 
 			out.nl().fg(ostd::ConsoleColors::Yellow).p("List of available parameters:").reset().nl();
 			String tmpCommand = "--save-disassembly <destination-directory>";

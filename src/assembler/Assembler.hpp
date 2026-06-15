@@ -37,27 +37,27 @@ namespace dragon
 			};
 			public: struct tDisassemblyLine
 			{
-				uint32_t addr = 0;
+				u32 addr = 0;
 				String code = "";
-				uint16_t size = 1;
+				u16 size = 1;
 				inline bool operator<(const tDisassemblyLine& second) const { return addr < second.addr; }
 				inline bool operator>(const tDisassemblyLine& second) const { return addr > second.addr; }
 			};
 			public: struct tSymbol
 			{
 				std::vector<ostd::UByte> bytes;
-				uint16_t address { 0 };
+				u16 address { 0 };
 			};
 			public: struct tLabel
 			{
-				std::vector<uint16_t> references;
-				uint16_t address { 0 };
+				std::vector<u16> references;
+				u16 address { 0 };
 			};
 			public: struct tStructMember
 			{
 				String name;
-				std::vector<uint8_t> data;
-				int32_t position;
+				std::vector<u8> data;
+				i32 position;
 				inline bool operator<(const tStructMember& second) const { return position < second.position; }
 				inline bool operator>(const tStructMember& second) const { return position > second.position; }
 			};
@@ -65,7 +65,7 @@ namespace dragon
 			{
 				String name;
 				std::vector<tStructMember> members;
-				int32_t size;
+				i32 size;
 			};
 			public: struct tExportSpec
 			{
@@ -91,7 +91,7 @@ namespace dragon
 					String source_file_path { "" };
 					String dest_file_path { "" };
 					bool save_disassembly { false };
-					int32_t verbose_level { 0xFF };
+					i32 verbose_level { 0xFF };
 					bool debug_mode { false };
 					bool save_exports { true };
 					String disassembly_file_path { "" };
@@ -101,24 +101,24 @@ namespace dragon
 				};
 
 				public:
-					static int32_t loadArguments(int argc, char** argv);
+					static i32 loadArguments(int argc, char** argv);
 					static void print_application_help(void);
 
 				public:
 					inline static tCommandLineArgs args;
-					inline static const int32_t RETURN_VAL_EXIT_SUCCESS = 0;
-					inline static const int32_t RETURN_VAL_CLOSE_PROGRAM = 512;
-					inline static const int32_t RETURN_VAL_TOO_FEW_ARGUMENTS = 1;
-					inline static const int32_t RETURN_VAL_MISSING_PARAM = 2;
-					inline static const int32_t RETURN_VAL_INVALID_PARAM = 3;
+					inline static const i32 RETURN_VAL_EXIT_SUCCESS = 0;
+					inline static const i32 RETURN_VAL_CLOSE_PROGRAM = 512;
+					inline static const i32 RETURN_VAL_TOO_FEW_ARGUMENTS = 1;
+					inline static const i32 RETURN_VAL_MISSING_PARAM = 2;
+					inline static const i32 RETURN_VAL_INVALID_PARAM = 3;
 			};
 
 			public:
 				static ostd::ByteStream assembleFromFile(String fileName);
 				static ostd::ByteStream assembleToFile(String sourceFileName, String binaryFileName);
-				static ostd::ByteStream assembleToVirtualDisk(String fileName, hw::VirtualHardDrive& vhdd, uint32_t address);
+				static ostd::ByteStream assembleToVirtualDisk(String fileName, hw::VirtualHardDrive& vhdd, u32 address);
 				static bool saveDisassemblyToFile(String fileName);
-				static void printProgramInfo(int32_t verbose_level = 1);
+				static void printProgramInfo(i32 verbose_level = 1);
 
 			private:
 				static void insertHeader(void);
@@ -148,8 +148,8 @@ namespace dragon
 
 				static String replaceSymbols(String line);
 				static void replaceLabelRefs(void);
-				static eOperandType parseOperand(String op, int16_t& outOp);
-				static uint8_t parseRegister(String op);
+				static eOperandType parseOperand(String op, i16& outOp);
+				static u8 parseRegister(String op);
 
 			private:
 				inline static String m_rawSource { "" };
@@ -162,12 +162,12 @@ namespace dragon
 				inline static std::unordered_map<String, tSymbol> m_symbolTable;
 				inline static std::unordered_map<String, tLabel> m_labelTable;
 
-				inline static uint16_t m_fixedSize { 0 };
-				inline static uint8_t m_fixedFillValue { 0x00 };
-				inline static uint16_t m_loadAddress { 0x0000 };
-				inline static uint16_t m_currentDataAddr { 0x0000 };
-				inline static uint16_t m_dataSize { 0x0000 };
-				inline static uint16_t m_programSize { 0x0000 };
+				inline static u16 m_fixedSize { 0 };
+				inline static u8 m_fixedFillValue { 0x00 };
+				inline static u16 m_loadAddress { 0x0000 };
+				inline static u16 m_currentDataAddr { 0x0000 };
+				inline static u16 m_dataSize { 0x0000 };
+				inline static u16 m_programSize { 0x0000 };
 				inline static String m_entry_lbl { "" };
 				inline static String m_headerStr { "" };
 

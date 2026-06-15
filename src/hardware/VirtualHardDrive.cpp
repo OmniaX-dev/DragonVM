@@ -17,13 +17,13 @@ namespace dragon
 			}
 			m_fileSize = m_dataFile.tellg();
 			m_dataFile.seekg( 0, std::ios::end );
-			m_fileSize = (int64_t)m_dataFile.tellg() - m_fileSize;
+			m_fileSize = (i64)m_dataFile.tellg() - m_fileSize;
 			m_dataFile.seekg( 0, std::ios::beg );
 			m_diskID = s_nextDiskID++;
 			m_initialized = true;
 		}
 		
-		bool VirtualHardDrive::read(uint32_t addr, uint16_t size, ostd::ByteStream& outData)
+		bool VirtualHardDrive::read(u32 addr, u16 size, ostd::ByteStream& outData)
 		{
 			if (!m_initialized)
 			{
@@ -35,10 +35,10 @@ namespace dragon
 				data::ErrorHandler::pushError(data::ErrorCodes::HardDrive_ReadOverflow, "Read Overflow on HardDrive.");
 				return false;
 			}
-			uint8_t cell = 0;
+			u8 cell = 0;
 			outData.clear();
 			m_dataFile.seekg(addr);
-			for (int32_t i = 0; i < size; i++)
+			for (i32 i = 0; i < size; i++)
 			{
 				m_dataFile.read((char*)&cell, sizeof(cell));
 				outData.push_back(cell);
@@ -46,7 +46,7 @@ namespace dragon
 			return true;
 		}
 
-		bool VirtualHardDrive::write(uint32_t addr, int8_t value)
+		bool VirtualHardDrive::write(u32 addr, i8 value)
 		{
 			if (!m_initialized)
 			{
@@ -63,7 +63,7 @@ namespace dragon
 			return true;
 		}
 
-		void VirtualHardDrive::bufferedWrite(int8_t value)
+		void VirtualHardDrive::bufferedWrite(i8 value)
 		{
 			if (!m_initialized)
 			{
@@ -73,7 +73,7 @@ namespace dragon
 			m_writeBuffer.push_back(value);
 		}
 
-		bool VirtualHardDrive::writeBuffer(uint32_t addr)
+		bool VirtualHardDrive::writeBuffer(u32 addr)
 		{
 			if (!m_initialized)
 			{

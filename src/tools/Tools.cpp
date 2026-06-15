@@ -11,22 +11,22 @@
 
 namespace dragon
 {
-	bool Tools::createVirtualHardDrive(uint32_t sizeInBytes, const String& dataFilePath)
+	bool Tools::createVirtualHardDrive(u32 sizeInBytes, const String& dataFilePath)
 	{
 		std::ofstream rf(dataFilePath.cpp_str(), std::ios::out | std::ios::binary);
 		if(!rf) return false;
 		ostd::ByteStream stream;
-		for (int32_t i = 0; i < sizeInBytes; i++)
+		for (i32 i = 0; i < sizeInBytes; i++)
 			stream.push_back(0x00);
 		rf.write((char*)(&stream[0]), stream.size());
 		rf.close();
 		return true;
 	}
 
-	int32_t Tools::execute(int argc, char** argv)
+	i32 Tools::execute(int argc, char** argv)
 	{
 		String tool = "";
-		int32_t rValue = get_tool(argc, argv, tool);
+		i32 rValue = get_tool(argc, argv, tool);
 		if (rValue != ErrorNoError)
 			return rValue;
 
@@ -74,7 +74,7 @@ namespace dragon
 		return ErrorNoError;
 	}
 
-	int32_t Tools::tool_new_virtual_disk(int argc, char** argv)
+	i32 Tools::tool_new_virtual_disk(int argc, char** argv)
 	{
 		if (argc < 4)
 		{
@@ -101,7 +101,7 @@ namespace dragon
 		return ErrorNoError;
 	}
 
-	int32_t Tools::tool_load_binary(int argc, char** argv)
+	i32 Tools::tool_load_binary(int argc, char** argv)
 	{
 		if (argc < 5)
 		{
@@ -129,8 +129,8 @@ namespace dragon
 			out.fg(ostd::ConsoleColors::Red).p("Error: Unable to load data file.").reset().nl();
 			return ErrorLoadProgUnableToLoadDataFile;
 		}
-		int16_t index = 0;
-		uint32_t addr = (uint32_t)str_addr.toInt();
+		i16 index = 0;
+		u32 addr = (u32)str_addr.toInt();
 		for (auto& b : code)
 		{
 			vHDD.write(addr + index, b);
@@ -145,7 +145,7 @@ namespace dragon
 		return ErrorNoError;
 	}
 
-	int32_t Tools::tool_read_dpt(int argc, char** argv)
+	i32 Tools::tool_read_dpt(int argc, char** argv)
 	{
 		if (argc < 3)
 		{
@@ -173,54 +173,54 @@ namespace dragon
 		}
 		// ostd::Utils::printByteStream(outData, 0, 16, 32, out);
 		ostd::serial::SerialIO dpt_block(outData);
-		int8_t outData8 = 0;
-		int16_t outData16 = 0;
-		int32_t outData32 = 0;
+		i8 outData8 = 0;
+		i16 outData16 = 0;
+		i32 outData32 = 0;
 		//TODO: Add errors for all read calls
 		dpt_block.r_Word(data::DPTStructure::DPTID, outData16);
-		uint16_t code = (uint16_t)outData16;
+		u16 code = (u16)outData16;
 		if (code != data::DPTStructure::DPT_ID_CODE)
 		{
 			out.fg(ostd::ConsoleColors::Red).p("Error: No DPT partition table on virtual disk.").reset().nl();
 			return ErrorReadDPTNoPartitionTable;
 		}
 		dpt_block.r_Byte(data::DPTStructure::DPTVersionMaj, outData8);
-		uint32_t version_maj = (uint32_t)outData8;
+		u32 version_maj = (u32)outData8;
 		dpt_block.r_Byte(data::DPTStructure::DPTVersionMin, outData8);
-		uint32_t version_min = (uint32_t)outData8;
+		u32 version_min = (u32)outData8;
 		dpt_block.r_Byte(data::DPTStructure::PartitionCount, outData8);
-		uint32_t part_count = (uint32_t)outData8;
+		u32 part_count = (u32)outData8;
 		if (part_count > data::DPTStructure::MaxPartCount)
 		{
 			out.fg(ostd::ConsoleColors::Red).p("Error: Too many partitions. Maximum is ").p(data::DPTStructure::MaxPartCount).p(".").reset().nl();
 			return ErrorReadDPTNoPartitionTable;
 		}
 		struct tPartitionData {
-			uint32_t startAddress { 0 };
-			uint32_t size { 0 };
+			u32 startAddress { 0 };
+			u32 size { 0 };
 			ostd::BitField_16 flags { 0 };
 			String label { "" };
 		};
 		std::vector<tPartitionData> partitionList;
-		for (int32_t i = 0; i < part_count; i++)
+		for (i32 i = 0; i < part_count; i++)
 		{
 			tPartitionData pdata;
-			uint32_t entry_addr = data::DPTStructure::EntriesStart + (data::DPTStructure::EntrySizeBytes * i);
+			u32 entry_addr = data::DPTStructure::EntriesStart + (data::DPTStructure::EntrySizeBytes * i);
 			dpt_block.r_DWord(entry_addr + data::DPTStructure::EntryStartAddress, outData32);
-			pdata.startAddress = (uint32_t)outData32;
+			pdata.startAddress = (u32)outData32;
 			dpt_block.r_DWord(entry_addr + data::DPTStructure::EntryPartitionSize, outData32);
-			pdata.size = (uint32_t)outData32;
+			pdata.size = (u32)outData32;
 			dpt_block.r_Word(entry_addr + data::DPTStructure::EntryFlags, outData16);
-			pdata.flags.value = (uint16_t)outData16;
+			pdata.flags.value = (u16)outData16;
 			dpt_block.r_NullTerminatedString(entry_addr + data::DPTStructure::EntryPartitionLabel, pdata.label);
 			pdata.label.trim();
 			partitionList.push_back(pdata);
 		}
 		out.fg(ostd::ConsoleColors::BrightRed).p("Disk: ").p(vdisk_file).p(" (").p(vHDD.getSize()).p(" bytes)").nl();
-		auto print_part_size = [](uint32_t size, ostd::ConsoleOutputHandler& out, uint16_t line_len) {
-			double dsize = size;
+		auto print_part_size = [](u32 size, ostd::ConsoleOutputHandler& out, u16 line_len) {
+			f64 dsize = size;
 			String units[4] = { " bytes", " Kb", " Mb", " Gb" };
-			int32_t unit_index = 0;
+			i32 unit_index = 0;
 			while (dsize > 1024 && unit_index < 3)
 			{
 				unit_index++;
@@ -228,7 +228,7 @@ namespace dragon
 			}
 			out.p(String("").add(dsize, 2).add(units[unit_index]).new_fixedLength(line_len));
 		};
-		uint16_t len = 20;
+		u16 len = 20;
 		out.nl().fg(ostd::ConsoleColors::BrightGray);
 		out.p(String("=").new_fixedLength(5 * len, '=')).nl();
 		out.fg(ostd::ConsoleColors::Blue);
@@ -240,7 +240,7 @@ namespace dragon
 		out.p(String("FLAGS").new_fixedLength(len));
 		out.nl().fg(ostd::ConsoleColors::BrightGray);
 		out.p(String("=").new_fixedLength(5 * len, '=')).nl();
-		for (int32_t i = 0; i < partitionList.size(); i++)
+		for (i32 i = 0; i < partitionList.size(); i++)
 		{
 			auto& part = partitionList[i];
 			if (part.label == "")
@@ -251,7 +251,7 @@ namespace dragon
 			out.p(String::getHexStr(part.startAddress, true, 4).new_fixedLength(len));
 			out.p(String::getHexStr(part.startAddress + part.size, true, 4).new_fixedLength(len));
 			String flags_str = "";
-			for (uint8_t bit = 0; bit < sizeof(part.flags) * 8; bit++)
+			for (u8 bit = 0; bit < sizeof(part.flags) * 8; bit++)
 			{
 				if (m_dpt_flags_str.count(bit) == 0)
 					continue;
@@ -269,7 +269,7 @@ namespace dragon
 		return ErrorNoError;
 	}
 
-	int32_t Tools::tool_new_dpt(int argc, char** argv)
+	i32 Tools::tool_new_dpt(int argc, char** argv)
 	{
 		if (argc < 5)
 		{
@@ -284,10 +284,10 @@ namespace dragon
 			out.fg(ostd::ConsoleColors::Red).p("Error: Unable to load virtual disk.").reset().nl();
 			return ErrorLoadProgUnableToLoadVDisk;
 		}
-		uint64_t disk_size = vHDD.getSize();
+		u64 disk_size = vHDD.getSize();
 
 		auto& _dpt_flags_str = m_dpt_flags_str;
-		auto get_flag_from_str = [_dpt_flags_str](const String& flag_str) -> int8_t {
+		auto get_flag_from_str = [_dpt_flags_str](const String& flag_str) -> i8 {
 			for (auto& flag : _dpt_flags_str)
 			{
 				if (flag.second == flag_str)
@@ -295,27 +295,27 @@ namespace dragon
 			}
 			return -1;
 		};
-		auto make_bytestream = [](uint16_t size, ostd::Byte value = 0xFF) -> ostd::ByteStream {
+		auto make_bytestream = [](u16 size, ostd::Byte value = 0xFF) -> ostd::ByteStream {
 
 			ostd::ByteStream stream;
-			for (int16_t i = 0; i < size; i++)
+			for (i16 i = 0; i < size; i++)
 				stream.push_back(value);
 			return stream;
 		};
 		struct tPartData {
-			uint32_t size { 0 };
-			uint32_t address { 0 };
-			std::vector<uint8_t> flags;
+			u32 size { 0 };
+			u32 address { 0 };
+			std::vector<u8> flags;
 			String label { "" };
 		};
 
 		std::vector<tPartData> partitions;
 
-		int32_t arg_index = 3;
+		i32 arg_index = 3;
 		bool has_args = true;
 		bool part_started = false;
 		tPartData _part_data;
-		uint32_t part_start_addr = data::DPTStructure::DiskStartAddr;
+		u32 part_start_addr = data::DPTStructure::DiskStartAddr;
 		while (has_args)
 		{
 			String arg = argv[arg_index];
@@ -347,7 +347,7 @@ namespace dragon
 						return ErrorNewDPTNoPartitionFlag;
 					}
 					arg_index++;
-					int8_t flag = get_flag_from_str(argv[arg_index]);
+					i8 flag = get_flag_from_str(argv[arg_index]);
 					if (flag < 0)
 					{
 						out.fg(ostd::ConsoleColors::Red).p("Error: Unknown partition flag.").reset().nl();
@@ -371,7 +371,7 @@ namespace dragon
 						return ErrorNewDPTInvalidPartitionSize;
 					}
 					arg_index++;
-					uint32_t part_size = String(argv[arg_index]).toInt();
+					u32 part_size = String(argv[arg_index]).toInt();
 					if (part_start_addr + part_size > disk_size)
 					{
 						out.fg(ostd::ConsoleColors::Red).p("Error: Not enough space on disk.").reset().nl();
@@ -408,7 +408,7 @@ namespace dragon
 		addr += ostd::tTypeSize::BYTE;
 		dpt_block.w_Byte(addr, (ostd::Byte)(partitions.size()));
 		addr += ostd::tTypeSize::BYTE;
-		uint16_t reserved_size = data::DPTStructure::HeaderReservedSizeBytes;
+		u16 reserved_size = data::DPTStructure::HeaderReservedSizeBytes;
 		dpt_block.w_ByteStream(addr, make_bytestream(reserved_size), false);
 		addr += reserved_size;
 
@@ -437,7 +437,7 @@ namespace dragon
 			addr += data::DPTStructure::EntryLabelSizeBytes;
 		}
 
-		int16_t index = 0;
+		i16 index = 0;
 		for (auto& b : dpt_block.getData())
 		{
 			vHDD.write(data::DPTStructure::DiskAddress + index, b);
@@ -451,7 +451,7 @@ namespace dragon
 		return ErrorNoError;
 	}
 
-	int32_t Tools::tool_print_disassembly(int argc, char** argv)
+	i32 Tools::tool_print_disassembly(int argc, char** argv)
 	{
 		using TableList = std::vector<code::Assembler::tDisassemblyLine>;
 		if (argc < 3)
@@ -561,7 +561,7 @@ namespace dragon
 		out.fg(ostd::ConsoleColors::Magenta).p("Usage: ./dtools <tool_name> [...arguments...]").nl().nl().reset();
 	}
 
-	int32_t Tools::get_tool(int argc, char** argv, String& outTool)
+	i32 Tools::get_tool(int argc, char** argv, String& outTool)
 	{
 		if (argc < 2)
 		{

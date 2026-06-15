@@ -29,18 +29,18 @@ namespace dragon
 			if (!isVisible()) return;
 			auto& config = DragonRuntime::machine_config;
 			auto& mem = DragonRuntime::memMap;
-			uint16_t vga_addr = data::MemoryMapAddresses::VideoCardInterface_Start;
-			uint8_t video_mode = mem.read8(vga_addr + tRegisters::VideoMode);
+			u16 vga_addr = data::MemoryMapAddresses::VideoCardInterface_Start;
+			u8 video_mode = mem.read8(vga_addr + tRegisters::VideoMode);
 			if (video_mode == tVideoModeValues::TextSingleColor)
 			{
-				uint8_t invert_colors = mem.read8(vga_addr + tRegisters::TextSingleInvertColors);
+				u8 invert_colors = mem.read8(vga_addr + tRegisters::TextSingleInvertColors);
 				if (m_refreshScreen)
 				{
 					if (invert_colors == 0)
 						m_renderer.clear(config.singleColor_background);
 					else
 						m_renderer.clear(config.singleColor_foreground);
-					for (int32_t i = 0; i < m_singleTextLines.size(); i++)
+					for (i32 i = 0; i < m_singleTextLines.size(); i++)
 					{
 						auto& line = m_singleTextLines[i];
 						if (invert_colors == 0)
@@ -55,10 +55,10 @@ namespace dragon
 			{
 				if (m_refreshScreen)
 				{
-					uint8_t clear_color = mem.read8(vga_addr + tRegisters::ClearColor);
+					u8 clear_color = mem.read8(vga_addr + tRegisters::ClearColor);
 					ostd::Color clearColor = m_text16_Currentpalette->getColor(clear_color);
 					m_renderer.clear(clearColor);
-					for (int32_t i = 0; i < ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_V * ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H; i++)
+					for (i32 i = 0; i < ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_V * ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H; i++)
 					{
 						auto& cell = m_text16_buffer[i];
 						ostd::Color background = m_text16_Currentpalette->getColor(cell.backgroundColor);
@@ -84,9 +84,9 @@ namespace dragon
 		void VirtualDisplay::onUpdate(void)
 		{
 			auto& mem = DragonRuntime::memMap;
-			uint16_t vga_addr = data::MemoryMapAddresses::VideoCardInterface_Start;
-			uint8_t video_mode = mem.read8(vga_addr + tRegisters::VideoMode);
-			uint8_t signal = mem.read8(vga_addr + tRegisters::Signal);
+			u16 vga_addr = data::MemoryMapAddresses::VideoCardInterface_Start;
+			u8 video_mode = mem.read8(vga_addr + tRegisters::VideoMode);
+			u8 signal = mem.read8(vga_addr + tRegisters::Signal);
 			if (signal == tSignalValues::Continue) return;
 			if (video_mode == tVideoModeValues::TextSingleColor)
 			{
@@ -97,7 +97,7 @@ namespace dragon
 				}
 				else if (signal == tSignalValues::TextSingleColor_DirectPrintString)
 				{
-					uint16_t first_char_addr = mem.read16(vga_addr + tRegisters::TextSingleString);
+					u16 first_char_addr = mem.read16(vga_addr + tRegisters::TextSingleString);
 					char c = ' ';
 					int h = 0;
 					while (c != 0)
@@ -143,19 +143,19 @@ namespace dragon
 					textCell.foregroundColor = mem.read8(vga_addr + tRegisters::MemControllerFGCol);
 					textCell.backgroundColor = mem.read8(vga_addr + tRegisters::MemControllerBGCol);
 					textCell.character = mem.read8(vga_addr + tRegisters::MemControllerChar);
-					int16_t x = mem.read16(vga_addr + tRegisters::MemControllerX);
-					int16_t y = mem.read16(vga_addr + tRegisters::MemControllerY);
+					i16 x = mem.read16(vga_addr + tRegisters::MemControllerX);
+					i16 y = mem.read16(vga_addr + tRegisters::MemControllerY);
 
 					//TODO: Remove this override used for testing purposes
-					// for (int32_t i = 0; i < ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_V * ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H; i++)
+					// for (i32 i = 0; i < ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_V * ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H; i++)
 					// {
 					// 	auto xy = CONVERT_1D_2D(i, ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H);
-					// 	DragonRuntime::vGraphicsInterface.writeVRAM_16Colors(static_cast<uint8_t>(xy.x), static_cast<uint8_t>(xy.y), c++, 0, 15);
+					// 	DragonRuntime::vGraphicsInterface.writeVRAM_16Colors(static_cast<u8>(xy.x), static_cast<u8>(xy.y), c++, 0, 15);
 					// 	if (c > 'Z')
 					// 		c = 'A';
 					// }
 
-					DragonRuntime::vGraphicsInterface.writeVRAM_16Colors(static_cast<uint8_t>(x), static_cast<uint8_t>(y), textCell.character, textCell.backgroundColor, textCell.foregroundColor);
+					DragonRuntime::vGraphicsInterface.writeVRAM_16Colors(static_cast<u8>(x), static_cast<u8>(y), textCell.character, textCell.backgroundColor, textCell.foregroundColor);
 				}
 				else if (signal == tSignalValues::ClearSCreen)
 				{
@@ -189,18 +189,18 @@ namespace dragon
 			mem.write8(vga_addr + tRegisters::Signal, tSignalValues::Continue);
 		}
 
-		void VirtualDisplay::onFixedUpdate(double frameTime_s)
+		void VirtualDisplay::onFixedUpdate(f64 frameTime_s)
 		{
 			auto& config = DragonRuntime::machine_config;
 			auto& mem = DragonRuntime::memMap;
-			uint16_t vga_addr = data::MemoryMapAddresses::VideoCardInterface_Start;
-			uint8_t video_mode = mem.read8(vga_addr + tRegisters::VideoMode);
-			uint8_t signal = mem.read8(vga_addr + tRegisters::Signal);
+			u16 vga_addr = data::MemoryMapAddresses::VideoCardInterface_Start;
+			u8 video_mode = mem.read8(vga_addr + tRegisters::VideoMode);
+			u8 signal = mem.read8(vga_addr + tRegisters::Signal);
 			if (video_mode == tVideoModeValues::Text16Colors)
 			{
 				m_refreshScreen = true;
 				dragon::hw::interface::Graphics::tText16_Cell outTextCell;
-				for (int32_t i = 0; i < ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_V * ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H; i++)
+				for (i32 i = 0; i < ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_V * ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H; i++)
 				{
 					auto xy = CONVERT_1D_2D(i, ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H);
 					DragonRuntime::vGraphicsInterface.readVRAM_16Colors(xy.x, xy.y, outTextCell);
@@ -221,8 +221,8 @@ namespace dragon
 		{
 			auto& config = DragonRuntime::machine_config;
 			auto& mem = DragonRuntime::memMap;
-			uint16_t vga_addr = data::MemoryMapAddresses::VideoCardInterface_Start;
-			uint8_t invert_colors = mem.read8(vga_addr + tRegisters::TextSingleInvertColors);
+			u16 vga_addr = data::MemoryMapAddresses::VideoCardInterface_Start;
+			u8 invert_colors = mem.read8(vga_addr + tRegisters::TextSingleInvertColors);
 			if (m_singleTextLines.size() == 0)
 			{
 				m_singleTextLines.push_back(String().addChar(c));
@@ -306,7 +306,7 @@ namespace dragon
 
 		void VirtualDisplay::text16_init_buffer(void)
 		{
-			for (int32_t i = 0; i < ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_V * ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H; i++)
+			for (i32 i = 0; i < ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_V * ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H; i++)
 				m_text16_buffer.push_back({ 0, 0, ' ' });
 		}
 

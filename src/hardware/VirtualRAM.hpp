@@ -11,10 +11,10 @@ namespace dragon
 		{
 			public:
 				VirtualRAM(void);
-				int8_t read8(uint16_t addr) override;
-				int16_t read16(uint16_t addr) override;
-				int8_t write8(uint16_t addr, int8_t value) override;
-				int16_t write16(uint16_t addr, int16_t value) override;
+				i8 read8(u16 addr) override;
+				i16 read16(u16 addr) override;
+				i8 write8(u16 addr, i8 value) override;
+				i16 write16(u16 addr, i16 value) override;
 
 				ostd::ByteStream* getByteStream(void) override;
 

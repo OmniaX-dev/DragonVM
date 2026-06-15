@@ -22,7 +22,7 @@ namespace dragon
 			bool track_call_stack = true;
 			bool auto_track_all_data_symbols = true;
 			String force_load_file = "";
-			uint16_t force_load_mem_offset = 0x00;
+			u16 force_load_mem_offset = 0x00;
 		};
 		public: struct tDebuggerData
 		{
@@ -31,13 +31,13 @@ namespace dragon
 			DisassemblyList code;
 			DisassemblyList labels;
 			DisassemblyList data;
-			std::vector<uint16_t> trackedAddresses;
+			std::vector<u16> trackedAddresses;
 			String command;
-			int32_t labelLineLength { 40 };
-			uint16_t currentAddress { 0 };
+			i32 labelLineLength { 40 };
+			u16 currentAddress { 0 };
 			bool userQuit { false };
 			String disassemblyDirectory { "disassembly" };
-			std::vector<uint16_t> manualBreakPoints;
+			std::vector<u16> manualBreakPoints;
 		};
 		struct tCloseEventListener : public ostd::BaseObject
 		{
@@ -51,17 +51,17 @@ namespace dragon
 		public: class Utils
 		{
 			public:
-				static DisassemblyList findCodeRegion(const DisassemblyList& code, uint16_t address, uint16_t codeRegionMargin);
-				static String findSymbol(const DisassemblyList& labels, uint16_t address, uint16_t* outSize = nullptr);
-				static uint16_t findSymbol(const DisassemblyList& labels, const String& symbol, uint16_t* outSize = nullptr);
+				static DisassemblyList findCodeRegion(const DisassemblyList& code, u16 address, u16 codeRegionMargin);
+				static String findSymbol(const DisassemblyList& labels, u16 address, u16* outSize = nullptr);
+				static u16 findSymbol(const DisassemblyList& labels, const String& symbol, u16* outSize = nullptr);
 				static bool isValidLabelNameChar(char c);
 				static void clearConsoleLine(void);
 				static bool isEscapeKeyPressed(bool blocking = false);
 				static ostd::ConsoleOutputHandler& printFullLine(char c, const ostd::ConsoleColors::tConsoleColor& foreground);
 				static ostd::ConsoleOutputHandler& printFullLine(char c, const ostd::ConsoleColors::tConsoleColor& foreground, const ostd::ConsoleColors::tConsoleColor& background);
-				static void removeBreakPoint(uint16_t addr);
-				static bool isBreakPoint(uint16_t addr);
-				static void addBreakPoint(uint16_t addr);
+				static void removeBreakPoint(u16 addr);
+				static bool isBreakPoint(u16 addr);
+				static void addBreakPoint(u16 addr);
 		};
 		public: class Display
 		{
@@ -72,24 +72,24 @@ namespace dragon
 				static void printStep(void);
 				static void printDiff(void);
 				static void printTrackedAddresses(void);
-				static void printStack(uint16_t nrows);
+				static void printStack(u16 nrows);
 				static void printCallStack(void);
 				static void printHelp(void);
 				static String changeScreen(void);
 		};
 		public:
 			static void processErrors(void);
-			static int32_t loadArguments(int argc, char** argv);
-			static int32_t initRuntime(void);
+			static i32 loadArguments(int argc, char** argv);
+			static i32 initRuntime(void);
 			static String getCommandInput(void);
 			static inline tDebuggerData& data(void) { return debugger; }
 			static inline ostd::ConsoleOutputHandler& output(void) { return out; }
-			static int32_t topLevelPrompt(void);
-			static int32_t executeRuntime(void);
+			static i32 topLevelPrompt(void);
+			static i32 executeRuntime(void);
 
 		private:
-			static int32_t step_execution(bool& outUserQuit, bool exec_first_step = true);
-			static int32_t normal_runtime(bool& outUserQuit);
+			static i32 step_execution(bool& outUserQuit, bool exec_first_step = true);
+			static i32 normal_runtime(bool& outUserQuit);
 			static void exec_watch_command(void);
 			static void print_top_level_prompt_help(void);
 			static void print_application_help(void);

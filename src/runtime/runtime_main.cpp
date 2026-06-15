@@ -5,7 +5,7 @@ int main(int argc, char** argv)
 {
 	//Loading commandline arguments
 	dragon::DragonRuntime::tCommandLineArgs args;
-	int32_t rValue = dragon::DragonRuntime::loadArguments(argc, argv, args);
+	i32 rValue = dragon::DragonRuntime::loadArguments(argc, argv, args);
 	if (rValue == dragon::DragonRuntime::RETURN_VAL_CLOSE_RUNTIME)
 		return 0;
 	if (rValue != 0) return rValue;

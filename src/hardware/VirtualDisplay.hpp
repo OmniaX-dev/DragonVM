@@ -13,45 +13,45 @@ namespace dragon
 		{
 			public: struct tRegisters
 			{
-				inline static constexpr uint8_t VideoMode = 0x00;
-				inline static constexpr uint8_t ClearColor = 0x01;
-				inline static constexpr uint8_t Palette = 0x02;
-				inline static constexpr uint8_t Signal = 0x03;
-				inline static constexpr uint8_t TextSingleCharacter = 0x04;
-				inline static constexpr uint8_t TextSingleInvertColors = 0x05;
-				inline static constexpr uint8_t TextSingleString = 0x06;
+				inline static constexpr u8 VideoMode = 0x00;
+				inline static constexpr u8 ClearColor = 0x01;
+				inline static constexpr u8 Palette = 0x02;
+				inline static constexpr u8 Signal = 0x03;
+				inline static constexpr u8 TextSingleCharacter = 0x04;
+				inline static constexpr u8 TextSingleInvertColors = 0x05;
+				inline static constexpr u8 TextSingleString = 0x06;
 
-				inline static constexpr uint8_t Flags = 0x7E;
+				inline static constexpr u8 Flags = 0x7E;
 
-				inline static constexpr uint8_t MemControllerX = 0x80;
-				inline static constexpr uint8_t MemControllerY = 0x82;
-				inline static constexpr uint8_t MemControllerChar = 0x84;
-				inline static constexpr uint8_t MemControllerBGCol = 0x85;
-				inline static constexpr uint8_t MemControllerFGCol = 0x86;
+				inline static constexpr u8 MemControllerX = 0x80;
+				inline static constexpr u8 MemControllerY = 0x82;
+				inline static constexpr u8 MemControllerChar = 0x84;
+				inline static constexpr u8 MemControllerBGCol = 0x85;
+				inline static constexpr u8 MemControllerFGCol = 0x86;
 			};
 			public: struct tVideoModeValues
 			{
-				inline static constexpr uint8_t TextSingleColor = 0x00;
-				inline static constexpr uint8_t Text16Colors = 0x01;
+				inline static constexpr u8 TextSingleColor = 0x00;
+				inline static constexpr u8 Text16Colors = 0x01;
 			};
 			public: struct tSignalValues
 			{
-				inline static constexpr uint8_t Continue = 0x00;
+				inline static constexpr u8 Continue = 0x00;
 
-				inline static constexpr uint8_t TextSingleColor_DirectPrintChar = 0x02;
-				inline static constexpr uint8_t TextSingleColor_StoreChar = 0x03;
-				inline static constexpr uint8_t TextSingleColor_DirectPrintBuffAndFlush = 0x04;
-				inline static constexpr uint8_t TextSingleColor_FlushBuffer = 0x05;
-				inline static constexpr uint8_t TextSingleColor_DirectPrintBuffNoFlush = 0x06;
-				inline static constexpr uint8_t TextSingleColor_DirectPrintString = 0x07;
+				inline static constexpr u8 TextSingleColor_DirectPrintChar = 0x02;
+				inline static constexpr u8 TextSingleColor_StoreChar = 0x03;
+				inline static constexpr u8 TextSingleColor_DirectPrintBuffAndFlush = 0x04;
+				inline static constexpr u8 TextSingleColor_FlushBuffer = 0x05;
+				inline static constexpr u8 TextSingleColor_DirectPrintBuffNoFlush = 0x06;
+				inline static constexpr u8 TextSingleColor_DirectPrintString = 0x07;
 
-				inline static constexpr uint8_t Text16Color_SwapBuffers = 0x10;
-				inline static constexpr uint8_t Text16Color_WriteMemory = 0x11;
-				inline static constexpr uint8_t Text16Color_Scroll = 0x12;
+				inline static constexpr u8 Text16Color_SwapBuffers = 0x10;
+				inline static constexpr u8 Text16Color_WriteMemory = 0x11;
+				inline static constexpr u8 Text16Color_Scroll = 0x12;
 
-				inline static constexpr uint8_t RefreshScreen = 0xE0;
-				inline static constexpr uint8_t ClearSCreen = 0xE1;
-				inline static constexpr uint8_t RedrawScreen = 0xE2;
+				inline static constexpr u8 RefreshScreen = 0xE0;
+				inline static constexpr u8 ClearSCreen = 0xE1;
+				inline static constexpr u8 RedrawScreen = 0xE2;
 			};
 			public:
 				inline void setFont(const String& fontPath) { m_font.init(fontPath); }
@@ -60,7 +60,7 @@ namespace dragon
 				void onDestroy(void) override;
 				void onRender(void) override;
 				void onUpdate(void) override;
-				void onFixedUpdate(double frameTime_s) override;
+				void onFixedUpdate(f64 frameTime_s) override;
 
 				inline void redrawScreen(void) { m_redrawScreen = true; }
 
@@ -89,7 +89,7 @@ namespace dragon
 				std::vector<hw::interface::Graphics::tText16_Cell> m_text16_buffer;
 				std::vector<data::IBiosVideoPalette*> m_text16_palettes;
 				data::IBiosVideoPalette* m_text16_Currentpalette { nullptr };
-				uint8_t m_currentPaletteID { 0 };
+				u8 m_currentPaletteID { 0 };
 
 				bool m_redrawScreen { true };
 		};

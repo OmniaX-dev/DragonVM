@@ -3,7 +3,7 @@
 
 int main(int argc, char** argv)
 {
-	int32_t rValue = dragon::code::Assembler::Application::loadArguments(argc, argv);
+	i32 rValue = dragon::code::Assembler::Application::loadArguments(argc, argv);
 	if (rValue == dragon::code::Assembler::Application::RETURN_VAL_CLOSE_PROGRAM)
 		return dragon::code::Assembler::Application::RETURN_VAL_EXIT_SUCCESS;
 	if (rValue != dragon::code::Assembler::Application::RETURN_VAL_EXIT_SUCCESS)

@@ -8,7 +8,7 @@ namespace dragon
 	{
 		namespace cpuext
 		{
-			String ExtMov::getOpCodeString(uint8_t opCode)
+			String ExtMov::getOpCodeString(u8 opCode)
 			{
 				switch (opCode)
 				{
@@ -52,7 +52,7 @@ namespace dragon
 				}
 			}
 
-			uint8_t ExtMov::getInstructionSIze(uint8_t opCode)
+			u8 ExtMov::getInstructionSIze(u8 opCode)
 			{
 				switch (opCode)
 				{
@@ -99,359 +99,359 @@ namespace dragon
 			bool ExtMov::execute(VirtualCPU& vcpu)
 			{
 				auto& mem = DragonRuntime::memMap;
-				uint8_t inst = vcpu.fetch8();
+				u8 inst = vcpu.fetch8();
 				switch (inst)
 				{
 					case OpCodes::wimm_in_dreg_immoffw:
 					{
-						uint8_t dest_dreg = vcpu.fetch8();
-						int16_t src_wimm = vcpu.fetch16();
-						uint16_t offset = vcpu.fetch16();
+						u8 dest_dreg = vcpu.fetch8();
+						i16 src_wimm = vcpu.fetch16();
+						u16 offset = vcpu.fetch16();
 
-						uint16_t dest_mem = vcpu.readRegister(dest_dreg);
+						u16 dest_mem = vcpu.readRegister(dest_dreg);
 						mem.write16(dest_mem + offset, src_wimm);
 					}
 					break;
 					case OpCodes::wimm_in_dreg_regoff:
 					{
-						uint8_t dest_dreg = vcpu.fetch8();
-						int16_t src_wimm = vcpu.fetch16();
-						uint16_t offset = vcpu.readRegister(vcpu.fetch8());
+						u8 dest_dreg = vcpu.fetch8();
+						i16 src_wimm = vcpu.fetch16();
+						u16 offset = vcpu.readRegister(vcpu.fetch8());
 
-						uint16_t dest_mem = vcpu.readRegister(dest_dreg);
+						u16 dest_mem = vcpu.readRegister(dest_dreg);
 						mem.write16(dest_mem + offset, src_wimm);
 					}
 					break;
 					case OpCodes::wimm_in_dreg_immoffb:
 					{
-						uint8_t dest_dreg = vcpu.fetch8();
-						int16_t src_wimm = vcpu.fetch16();
-						uint8_t offset = vcpu.fetch8();
+						u8 dest_dreg = vcpu.fetch8();
+						i16 src_wimm = vcpu.fetch16();
+						u8 offset = vcpu.fetch8();
 
-						uint16_t dest_mem = vcpu.readRegister(dest_dreg);
+						u16 dest_mem = vcpu.readRegister(dest_dreg);
 						mem.write16(dest_mem + offset, src_wimm);
 					}
 					break;
 					case OpCodes::bimm_in_dreg_immoffw:
 					{
-						uint8_t dest_dreg = vcpu.fetch8();
-						int8_t src_bimm = vcpu.fetch8();
-						uint16_t offset = vcpu.fetch16();
+						u8 dest_dreg = vcpu.fetch8();
+						i8 src_bimm = vcpu.fetch8();
+						u16 offset = vcpu.fetch16();
 
-						uint16_t dest_mem = vcpu.readRegister(dest_dreg);
+						u16 dest_mem = vcpu.readRegister(dest_dreg);
 						mem.write8(dest_mem + offset, src_bimm);
 					}
 					break;
 					case OpCodes::bimm_in_dreg_regoff:
 					{
-						uint8_t dest_dreg = vcpu.fetch8();
-						int8_t src_bimm = vcpu.fetch8();
-						uint16_t offset = vcpu.readRegister(vcpu.fetch8());
+						u8 dest_dreg = vcpu.fetch8();
+						i8 src_bimm = vcpu.fetch8();
+						u16 offset = vcpu.readRegister(vcpu.fetch8());
 
-						uint16_t dest_mem = vcpu.readRegister(dest_dreg);
+						u16 dest_mem = vcpu.readRegister(dest_dreg);
 						mem.write8(dest_mem + offset, src_bimm);
 					}
 					break;
 					case OpCodes::bimm_in_dreg_immoffb:
 					{
-						uint8_t dest_dreg = vcpu.fetch8();
-						int8_t src_bimm = vcpu.fetch8();
-						uint8_t offset = vcpu.fetch8();
+						u8 dest_dreg = vcpu.fetch8();
+						i8 src_bimm = vcpu.fetch8();
+						u8 offset = vcpu.fetch8();
 
-						uint16_t dest_mem = vcpu.readRegister(dest_dreg);
+						u16 dest_mem = vcpu.readRegister(dest_dreg);
 						mem.write8(dest_mem + offset, src_bimm);
 					}
 					break;
 					case OpCodes::wdreg_in_dreg_immoffw:
 					{
-						uint8_t dest_dreg = vcpu.fetch8();
-						int16_t src_mem = vcpu.readRegister(vcpu.fetch8());
-						uint16_t offset = vcpu.fetch16();
+						u8 dest_dreg = vcpu.fetch8();
+						i16 src_mem = vcpu.readRegister(vcpu.fetch8());
+						u16 offset = vcpu.fetch16();
 						
-						uint16_t dest_mem = vcpu.readRegister(dest_dreg);
+						u16 dest_mem = vcpu.readRegister(dest_dreg);
 						mem.write16(dest_mem + offset, mem.read16(src_mem));
 					}
 					break;
 					case OpCodes::wdreg_in_dreg_regoff:
 					{
-						uint8_t dest_dreg = vcpu.fetch8();
-						int16_t src_mem = vcpu.readRegister(vcpu.fetch8());
-						uint16_t offset = vcpu.readRegister(vcpu.fetch8());
+						u8 dest_dreg = vcpu.fetch8();
+						i16 src_mem = vcpu.readRegister(vcpu.fetch8());
+						u16 offset = vcpu.readRegister(vcpu.fetch8());
 
-						uint16_t dest_mem = vcpu.readRegister(dest_dreg);
+						u16 dest_mem = vcpu.readRegister(dest_dreg);
 						mem.write16(dest_mem + offset, mem.read16(src_mem));
 					}
 					break;
 					case OpCodes::wdreg_in_dreg_immoffb:
 					{
-						uint8_t dest_dreg = vcpu.fetch8();
-						int16_t src_mem = vcpu.readRegister(vcpu.fetch8());
-						uint8_t offset = vcpu.fetch8();
+						u8 dest_dreg = vcpu.fetch8();
+						i16 src_mem = vcpu.readRegister(vcpu.fetch8());
+						u8 offset = vcpu.fetch8();
 
-						uint16_t dest_mem = vcpu.readRegister(dest_dreg);
+						u16 dest_mem = vcpu.readRegister(dest_dreg);
 						mem.write16(dest_mem + offset, mem.read16(src_mem));
 					}
 					break;
 					case OpCodes::bdreg_in_dreg_immoffw:
 					{
-						uint8_t dest_dreg = vcpu.fetch8();
-						int16_t src_mem = vcpu.readRegister(vcpu.fetch8());
-						uint16_t offset = vcpu.fetch16();
+						u8 dest_dreg = vcpu.fetch8();
+						i16 src_mem = vcpu.readRegister(vcpu.fetch8());
+						u16 offset = vcpu.fetch16();
 
-						uint16_t dest_mem = vcpu.readRegister(dest_dreg);
+						u16 dest_mem = vcpu.readRegister(dest_dreg);
 						mem.write8(dest_mem + offset, mem.read8(src_mem));
 					}
 					break;
 					case OpCodes::bdreg_in_dreg_regoff:
 					{
-						uint8_t dest_dreg = vcpu.fetch8();
-						int16_t src_mem = vcpu.readRegister(vcpu.fetch8());
-						uint16_t offset = vcpu.readRegister(vcpu.fetch8());
+						u8 dest_dreg = vcpu.fetch8();
+						i16 src_mem = vcpu.readRegister(vcpu.fetch8());
+						u16 offset = vcpu.readRegister(vcpu.fetch8());
 
-						uint16_t dest_mem = vcpu.readRegister(dest_dreg);
+						u16 dest_mem = vcpu.readRegister(dest_dreg);
 						mem.write8(dest_mem + offset, mem.read8(src_mem));
 					}
 					break;
 					case OpCodes::bdreg_in_dreg_immoffb:
 					{
-						uint8_t dest_dreg = vcpu.fetch8();
-						int16_t src_mem = vcpu.readRegister(vcpu.fetch8());
-						uint8_t offset = vcpu.fetch8();
+						u8 dest_dreg = vcpu.fetch8();
+						i16 src_mem = vcpu.readRegister(vcpu.fetch8());
+						u8 offset = vcpu.fetch8();
 
-						uint16_t dest_mem = vcpu.readRegister(dest_dreg);
+						u16 dest_mem = vcpu.readRegister(dest_dreg);
 						mem.write8(dest_mem + offset, mem.read8(src_mem));
 					}
 					break;
 					case OpCodes::wimm_in_mem_immoffw:
 					{
-						uint16_t dest_mem = vcpu.fetch16();
-						int16_t src_wimm = vcpu.fetch16();
-						uint16_t offset = vcpu.fetch16();
+						u16 dest_mem = vcpu.fetch16();
+						i16 src_wimm = vcpu.fetch16();
+						u16 offset = vcpu.fetch16();
 
 						mem.write16(dest_mem + offset, src_wimm);
 					}
 					break;
 					case OpCodes::wimm_in_mem_regoff:
 					{
-						uint16_t dest_mem = vcpu.fetch16();
-						int16_t src_wimm = vcpu.fetch16();
-						uint16_t offset = vcpu.readRegister(vcpu.fetch8());
+						u16 dest_mem = vcpu.fetch16();
+						i16 src_wimm = vcpu.fetch16();
+						u16 offset = vcpu.readRegister(vcpu.fetch8());
 
 						mem.write16(dest_mem + offset, src_wimm);
 					}
 					break;
 					case OpCodes::wimm_in_mem_immoffb:
 					{
-						uint16_t dest_mem = vcpu.fetch16();
-						int16_t src_wimm = vcpu.fetch16();
-						uint8_t offset = vcpu.fetch8();
+						u16 dest_mem = vcpu.fetch16();
+						i16 src_wimm = vcpu.fetch16();
+						u8 offset = vcpu.fetch8();
 
 						mem.write16(dest_mem + offset, src_wimm);
 					}
 					break;
 					case OpCodes::bimm_in_mem_immoffw:
 					{
-						uint16_t dest_mem = vcpu.fetch16();
-						int8_t src_bimm = vcpu.fetch8();
-						uint16_t offset = vcpu.fetch16();
+						u16 dest_mem = vcpu.fetch16();
+						i8 src_bimm = vcpu.fetch8();
+						u16 offset = vcpu.fetch16();
 
 						mem.write8(dest_mem + offset, src_bimm);
 					}
 					break;
 					case OpCodes::bimm_in_mem_regoff:
 					{
-						uint16_t dest_mem = vcpu.fetch16();
-						int8_t src_bimm = vcpu.fetch8();
-						uint16_t offset = vcpu.readRegister(vcpu.fetch8());
+						u16 dest_mem = vcpu.fetch16();
+						i8 src_bimm = vcpu.fetch8();
+						u16 offset = vcpu.readRegister(vcpu.fetch8());
 
 						mem.write8(dest_mem + offset, src_bimm);
 					}
 					break;
 					case OpCodes::bimm_in_mem_immoffb:
 					{
-						uint16_t dest_mem = vcpu.fetch16();
-						int8_t src_bimm = vcpu.fetch8();
-						uint8_t offset = vcpu.fetch8();
+						u16 dest_mem = vcpu.fetch16();
+						i8 src_bimm = vcpu.fetch8();
+						u8 offset = vcpu.fetch8();
 
 						mem.write8(dest_mem + offset, src_bimm);
 					}
 					break;
 					case OpCodes::wdreg_immoffw_in_dreg:
 					{
-						uint8_t dest_dreg = vcpu.fetch8();
-						uint8_t src_dreg = vcpu.fetch8();
-						uint16_t offset = vcpu.fetch16();
+						u8 dest_dreg = vcpu.fetch8();
+						u8 src_dreg = vcpu.fetch8();
+						u16 offset = vcpu.fetch16();
 
-						uint16_t dest_mem = vcpu.readRegister(dest_dreg);
-						uint16_t src_mem = vcpu.readRegister(src_dreg);
+						u16 dest_mem = vcpu.readRegister(dest_dreg);
+						u16 src_mem = vcpu.readRegister(src_dreg);
 						mem.write16(dest_mem, mem.read16(src_mem + offset));
 					}
 					break;
 					case OpCodes::wdreg_regoff_in_dreg:
 					{
-						uint8_t dest_dreg = vcpu.fetch8();
-						uint8_t src_dreg = vcpu.fetch8();
-						uint16_t offset = vcpu.readRegister(vcpu.fetch8());
+						u8 dest_dreg = vcpu.fetch8();
+						u8 src_dreg = vcpu.fetch8();
+						u16 offset = vcpu.readRegister(vcpu.fetch8());
 
-						uint16_t dest_mem = vcpu.readRegister(dest_dreg);
-						uint16_t src_mem = vcpu.readRegister(src_dreg);
+						u16 dest_mem = vcpu.readRegister(dest_dreg);
+						u16 src_mem = vcpu.readRegister(src_dreg);
 						mem.write16(dest_mem, mem.read16(src_mem + offset));
 					}
 					break;
 					case OpCodes::wdreg_immoffb_in_dreg:
 					{
-						uint8_t dest_dreg = vcpu.fetch8();
-						uint8_t src_dreg = vcpu.fetch8();
-						uint8_t offset = vcpu.fetch8();
+						u8 dest_dreg = vcpu.fetch8();
+						u8 src_dreg = vcpu.fetch8();
+						u8 offset = vcpu.fetch8();
 
-						uint16_t dest_mem = vcpu.readRegister(dest_dreg);
-						uint16_t src_mem = vcpu.readRegister(src_dreg);
+						u16 dest_mem = vcpu.readRegister(dest_dreg);
+						u16 src_mem = vcpu.readRegister(src_dreg);
 						mem.write16(dest_mem, mem.read16(src_mem + offset));
 					}
 					break;
 					case OpCodes::bdreg_immoffw_in_dreg:
 					{
-						uint8_t dest_dreg = vcpu.fetch8();
-						uint8_t src_dreg = vcpu.fetch8();
-						uint16_t offset = vcpu.fetch16();
+						u8 dest_dreg = vcpu.fetch8();
+						u8 src_dreg = vcpu.fetch8();
+						u16 offset = vcpu.fetch16();
 
-						uint16_t dest_mem = vcpu.readRegister(dest_dreg);
-						uint16_t src_mem = vcpu.readRegister(src_dreg);
+						u16 dest_mem = vcpu.readRegister(dest_dreg);
+						u16 src_mem = vcpu.readRegister(src_dreg);
 						mem.write8(dest_mem, mem.read8(src_mem + offset));
 					}
 					break;
 					case OpCodes::bdreg_regoff_in_dreg:
 					{
-						uint8_t dest_dreg = vcpu.fetch8();
-						uint8_t src_dreg = vcpu.fetch8();
-						uint16_t offset = vcpu.readRegister(vcpu.fetch8());
+						u8 dest_dreg = vcpu.fetch8();
+						u8 src_dreg = vcpu.fetch8();
+						u16 offset = vcpu.readRegister(vcpu.fetch8());
 
-						uint16_t dest_mem = vcpu.readRegister(dest_dreg);
-						uint16_t src_mem = vcpu.readRegister(src_dreg);
+						u16 dest_mem = vcpu.readRegister(dest_dreg);
+						u16 src_mem = vcpu.readRegister(src_dreg);
 						mem.write8(dest_mem, mem.read8(src_mem + offset));
 					}
 					break;
 					case OpCodes::bdreg_immoffb_in_dreg:
 					{
-						uint8_t dest_dreg = vcpu.fetch8();
-						uint8_t src_dreg = vcpu.fetch8();
-						uint8_t offset = vcpu.fetch8();
+						u8 dest_dreg = vcpu.fetch8();
+						u8 src_dreg = vcpu.fetch8();
+						u8 offset = vcpu.fetch8();
 
-						uint16_t dest_mem = vcpu.readRegister(dest_dreg);
-						uint16_t src_mem = vcpu.readRegister(src_dreg);
+						u16 dest_mem = vcpu.readRegister(dest_dreg);
+						u16 src_mem = vcpu.readRegister(src_dreg);
 						mem.write8(dest_mem, mem.read8(src_mem + offset));
 					}
 					break;
 					case OpCodes::wmem_immoffw_in_reg:
 					{
-						uint8_t dest_reg = vcpu.fetch8();
-						uint16_t src_mem = vcpu.fetch16();
-						uint16_t offset = vcpu.fetch16();
+						u8 dest_reg = vcpu.fetch8();
+						u16 src_mem = vcpu.fetch16();
+						u16 offset = vcpu.fetch16();
 
 						vcpu.writeRegister16(dest_reg, mem.read16(src_mem + offset));
 					}
 					break;
 					case OpCodes::wmem_regoff_in_reg:
 					{
-						uint8_t dest_reg = vcpu.fetch8();
-						uint16_t src_mem = vcpu.fetch16();
-						uint16_t offset = vcpu.readRegister(vcpu.fetch8());
+						u8 dest_reg = vcpu.fetch8();
+						u16 src_mem = vcpu.fetch16();
+						u16 offset = vcpu.readRegister(vcpu.fetch8());
 
 						vcpu.writeRegister16(dest_reg, mem.read16(src_mem + offset));
 					}
 					break;
 					case OpCodes::wmem_immoffb_in_reg:
 					{
-						uint8_t dest_reg = vcpu.fetch8();
-						uint16_t src_mem = vcpu.fetch16();
-						uint8_t offset = vcpu.fetch8();
+						u8 dest_reg = vcpu.fetch8();
+						u16 src_mem = vcpu.fetch16();
+						u8 offset = vcpu.fetch8();
 						vcpu.writeRegister16(dest_reg, mem.read16(src_mem + offset));
 					}
 					break;
 					case OpCodes::bmem_immoffw_in_reg:
 					{
-						uint8_t dest_reg = vcpu.fetch8();
-						uint16_t src_mem = vcpu.fetch16();
-						uint16_t offset = vcpu.fetch16();
+						u8 dest_reg = vcpu.fetch8();
+						u16 src_mem = vcpu.fetch16();
+						u16 offset = vcpu.fetch16();
 
 						vcpu.writeRegister8(dest_reg, mem.read8(src_mem + offset));
 					}
 					break;
 					case OpCodes::bmem_regoff_in_reg:
 					{
-						uint8_t dest_reg = vcpu.fetch8();
-						uint16_t src_mem = vcpu.fetch16();
-						uint16_t offset = vcpu.readRegister(vcpu.fetch8());
+						u8 dest_reg = vcpu.fetch8();
+						u16 src_mem = vcpu.fetch16();
+						u16 offset = vcpu.readRegister(vcpu.fetch8());
 
 						vcpu.writeRegister8(dest_reg, mem.read8(src_mem + offset));
 					}
 					break;
 					case OpCodes::bmem_immoffb_in_reg:
 					{
-						uint8_t dest_reg = vcpu.fetch8();
-						uint16_t src_mem = vcpu.fetch16();
-						uint8_t offset = vcpu.fetch8();
+						u8 dest_reg = vcpu.fetch8();
+						u16 src_mem = vcpu.fetch16();
+						u8 offset = vcpu.fetch8();
 
 						vcpu.writeRegister8(dest_reg, mem.read8(src_mem + offset));
 					}
 					break;
 					case OpCodes::wdreg_immoffw_in_reg:
 					{
-						uint8_t dest_reg = vcpu.fetch8();
-						uint8_t src_dreg = vcpu.fetch8();
-						uint16_t offset = vcpu.fetch16();
+						u8 dest_reg = vcpu.fetch8();
+						u8 src_dreg = vcpu.fetch8();
+						u16 offset = vcpu.fetch16();
 
-						uint16_t src_mem = vcpu.readRegister(src_dreg);
+						u16 src_mem = vcpu.readRegister(src_dreg);
 						vcpu.writeRegister16(dest_reg, mem.read16(src_mem + offset));
 					}
 					break;
 					case OpCodes::wdreg_regoff_in_reg:
 					{
-						uint8_t dest_reg = vcpu.fetch8();
-						uint8_t src_dreg = vcpu.fetch8();
-						uint16_t offset = vcpu.readRegister(vcpu.fetch8());
+						u8 dest_reg = vcpu.fetch8();
+						u8 src_dreg = vcpu.fetch8();
+						u16 offset = vcpu.readRegister(vcpu.fetch8());
 
-						uint16_t src_mem = vcpu.readRegister(src_dreg);
+						u16 src_mem = vcpu.readRegister(src_dreg);
 						vcpu.writeRegister16(dest_reg, mem.read16(src_mem + offset));
 					}
 					break;
 					case OpCodes::wdreg_immoffb_in_reg:
 					{
-						uint8_t dest_reg = vcpu.fetch8();
-						uint8_t src_dreg = vcpu.fetch8();
-						uint8_t offset = vcpu.fetch8();
+						u8 dest_reg = vcpu.fetch8();
+						u8 src_dreg = vcpu.fetch8();
+						u8 offset = vcpu.fetch8();
 
-						uint16_t src_mem = vcpu.readRegister(src_dreg);
+						u16 src_mem = vcpu.readRegister(src_dreg);
 						vcpu.writeRegister16(dest_reg, mem.read16(src_mem + offset));
 					}
 					break;
 					case OpCodes::bdreg_immoffw_in_reg:
 					{
-						uint8_t dest_reg = vcpu.fetch8();
-						uint8_t src_dreg = vcpu.fetch8();
-						uint16_t offset = vcpu.fetch16();
+						u8 dest_reg = vcpu.fetch8();
+						u8 src_dreg = vcpu.fetch8();
+						u16 offset = vcpu.fetch16();
 
-						uint16_t src_mem = vcpu.readRegister(src_dreg);
+						u16 src_mem = vcpu.readRegister(src_dreg);
 						vcpu.writeRegister8(dest_reg, mem.read8(src_mem + offset));
 					}
 					break;
 					case OpCodes::bdreg_regoff_in_reg:
 					{
-						uint8_t dest_reg = vcpu.fetch8();
-						uint8_t src_dreg = vcpu.fetch8();
-						uint16_t offset = vcpu.readRegister(vcpu.fetch8());
+						u8 dest_reg = vcpu.fetch8();
+						u8 src_dreg = vcpu.fetch8();
+						u16 offset = vcpu.readRegister(vcpu.fetch8());
 
-						uint16_t src_mem = vcpu.readRegister(src_dreg);
+						u16 src_mem = vcpu.readRegister(src_dreg);
 						vcpu.writeRegister8(dest_reg, mem.read8(src_mem + offset));
 					}
 					break;
 					case OpCodes::bdreg_immoffb_in_reg:
 					{
-						uint8_t dest_reg = vcpu.fetch8();
-						uint8_t src_dreg = vcpu.fetch8();
-						uint8_t offset = vcpu.fetch8();
+						u8 dest_reg = vcpu.fetch8();
+						u8 src_dreg = vcpu.fetch8();
+						u8 offset = vcpu.fetch8();
 
-						uint16_t src_mem = vcpu.readRegister(src_dreg);
+						u16 src_mem = vcpu.readRegister(src_dreg);
 						vcpu.writeRegister8(dest_reg, mem.read8(src_mem + offset));
 					}
 					break;
@@ -467,7 +467,7 @@ namespace dragon
 
 
 
-			String ExtAlu::getOpCodeString(uint8_t opCode)
+			String ExtAlu::getOpCodeString(u8 opCode)
 			{
 				switch (opCode)
 				{
@@ -491,7 +491,7 @@ namespace dragon
 				}
 			}
 
-			uint8_t ExtAlu::getInstructionSIze(uint8_t opCode)
+			u8 ExtAlu::getInstructionSIze(u8 opCode)
 			{
 				switch (opCode)
 				{
@@ -518,224 +518,224 @@ namespace dragon
 			bool ExtAlu::execute(VirtualCPU& vcpu)
 			{
 				auto& mem = DragonRuntime::memMap;
-				uint8_t inst = vcpu.fetch8();
+				u8 inst = vcpu.fetch8();
 				switch (inst)
 				{
 					case OpCodes::addipu_reg_in_reg:
 					{
-						uint8_t dest_reg = vcpu.fetch8();
-						uint8_t src_reg = vcpu.fetch8();
-						uint16_t dest_val = vcpu.readRegister(dest_reg);
-						uint16_t src_val = vcpu.readRegister(src_reg);
-						uint16_t res = dest_val + src_val;
-						vcpu.writeRegister16(dest_reg, (int16_t)res);
+						u8 dest_reg = vcpu.fetch8();
+						u8 src_reg = vcpu.fetch8();
+						u16 dest_val = vcpu.readRegister(dest_reg);
+						u16 src_val = vcpu.readRegister(src_reg);
+						u16 res = dest_val + src_val;
+						vcpu.writeRegister16(dest_reg, (i16)res);
 					}
 					break;
 					case OpCodes::addipu_imm_in_reg:
 					{
-						uint8_t dest_reg = vcpu.fetch8();
-						uint16_t src_val = vcpu.fetch16();
-						uint16_t dest_val = vcpu.readRegister(dest_reg);
-						uint16_t res = dest_val + src_val;
-						vcpu.writeRegister16(dest_reg, (int16_t)res);
+						u8 dest_reg = vcpu.fetch8();
+						u16 src_val = vcpu.fetch16();
+						u16 dest_val = vcpu.readRegister(dest_reg);
+						u16 res = dest_val + src_val;
+						vcpu.writeRegister16(dest_reg, (i16)res);
 					}
 					break;
 					case OpCodes::subipu_reg_in_reg:
 					{
-						uint8_t dest_reg = vcpu.fetch8();
-						uint8_t src_reg = vcpu.fetch8();
-						uint16_t dest_val = vcpu.readRegister(dest_reg);
-						uint16_t src_val = vcpu.readRegister(src_reg);
-						uint16_t res = dest_val - src_val;
-						vcpu.writeRegister16(dest_reg, (int16_t)res);
+						u8 dest_reg = vcpu.fetch8();
+						u8 src_reg = vcpu.fetch8();
+						u16 dest_val = vcpu.readRegister(dest_reg);
+						u16 src_val = vcpu.readRegister(src_reg);
+						u16 res = dest_val - src_val;
+						vcpu.writeRegister16(dest_reg, (i16)res);
 					}
 					break;
 					case OpCodes::subipu_imm_in_reg:
 					{
-						uint8_t dest_reg = vcpu.fetch8();
-						uint16_t src_val = vcpu.fetch16();
-						uint16_t dest_val = vcpu.readRegister(dest_reg);
-						uint16_t res = dest_val - src_val;
-						vcpu.writeRegister16(dest_reg, (int16_t)res);
+						u8 dest_reg = vcpu.fetch8();
+						u16 src_val = vcpu.fetch16();
+						u16 dest_val = vcpu.readRegister(dest_reg);
+						u16 res = dest_val - src_val;
+						vcpu.writeRegister16(dest_reg, (i16)res);
 					}
 					break;
 					case OpCodes::mulipu_reg_in_reg:
 					{
-						uint8_t dest_reg = vcpu.fetch8();
-						uint8_t src_reg = vcpu.fetch8();
-						uint16_t dest_val = vcpu.readRegister(dest_reg);
-						uint16_t src_val = vcpu.readRegister(src_reg);
-						uint16_t res = dest_val * src_val;
-						vcpu.writeRegister16(dest_reg, (int16_t)res);
+						u8 dest_reg = vcpu.fetch8();
+						u8 src_reg = vcpu.fetch8();
+						u16 dest_val = vcpu.readRegister(dest_reg);
+						u16 src_val = vcpu.readRegister(src_reg);
+						u16 res = dest_val * src_val;
+						vcpu.writeRegister16(dest_reg, (i16)res);
 					}
 					break;
 					case OpCodes::mulipu_imm_in_reg:
 					{
-						uint8_t dest_reg = vcpu.fetch8();
-						uint16_t src_val = vcpu.fetch16();
-						uint16_t dest_val = vcpu.readRegister(dest_reg);
-						uint16_t res = dest_val * src_val;
-						vcpu.writeRegister16(dest_reg, (int16_t)res);
+						u8 dest_reg = vcpu.fetch8();
+						u16 src_val = vcpu.fetch16();
+						u16 dest_val = vcpu.readRegister(dest_reg);
+						u16 res = dest_val * src_val;
+						vcpu.writeRegister16(dest_reg, (i16)res);
 					}
 					break;
 					case OpCodes::divipu_reg_in_reg:
 					{
-						uint8_t dest_reg = vcpu.fetch8();
-						uint8_t src_reg = vcpu.fetch8();
-						uint16_t dest_val = vcpu.readRegister(dest_reg);
-						uint16_t src_val = vcpu.readRegister(src_reg);
-						uint16_t res = dest_val / src_val;
-						uint16_t rv = dest_val % src_val;
-						vcpu.writeRegister16(dest_reg, (int16_t)res);
-						vcpu.writeRegister16(data::Registers::RV, (int16_t)rv);
+						u8 dest_reg = vcpu.fetch8();
+						u8 src_reg = vcpu.fetch8();
+						u16 dest_val = vcpu.readRegister(dest_reg);
+						u16 src_val = vcpu.readRegister(src_reg);
+						u16 res = dest_val / src_val;
+						u16 rv = dest_val % src_val;
+						vcpu.writeRegister16(dest_reg, (i16)res);
+						vcpu.writeRegister16(data::Registers::RV, (i16)rv);
 					}
 					break;
 					case OpCodes::divipu_imm_in_reg:
 					{
-						uint8_t dest_reg = vcpu.fetch8();
-						uint16_t src_val = vcpu.fetch16();
-						uint16_t dest_val = vcpu.readRegister(dest_reg);
-						uint16_t res = dest_val / src_val;
-						uint16_t rv = dest_val % src_val;
-						vcpu.writeRegister16(dest_reg, (int16_t)res);
-						vcpu.writeRegister16(data::Registers::RV, (int16_t)rv);
+						u8 dest_reg = vcpu.fetch8();
+						u16 src_val = vcpu.fetch16();
+						u16 dest_val = vcpu.readRegister(dest_reg);
+						u16 res = dest_val / src_val;
+						u16 rv = dest_val % src_val;
+						vcpu.writeRegister16(dest_reg, (i16)res);
+						vcpu.writeRegister16(data::Registers::RV, (i16)rv);
 					}
 					break;
 					case OpCodes::addip_reg_in_reg:
 					{
-						uint8_t dest_reg = vcpu.fetch8();
-						uint8_t src_reg = vcpu.fetch8();
-						int16_t dest_val = vcpu.readRegister(dest_reg);
-						int16_t src_val = vcpu.readRegister(src_reg);
-						int16_t res = dest_val + src_val;
+						u8 dest_reg = vcpu.fetch8();
+						u8 src_reg = vcpu.fetch8();
+						i16 dest_val = vcpu.readRegister(dest_reg);
+						i16 src_val = vcpu.readRegister(src_reg);
+						i16 res = dest_val + src_val;
 						vcpu.writeRegister16(dest_reg, res);
 					}
 					break;
 					case OpCodes::addip_imm_in_reg:
 					{
-						uint8_t dest_reg = vcpu.fetch8();
-						uint16_t src_val = vcpu.fetch16();
-						int16_t dest_val = vcpu.readRegister(dest_reg);
-						int16_t res = dest_val + src_val;
+						u8 dest_reg = vcpu.fetch8();
+						u16 src_val = vcpu.fetch16();
+						i16 dest_val = vcpu.readRegister(dest_reg);
+						i16 res = dest_val + src_val;
 						vcpu.writeRegister16(dest_reg, res);
 					}
 					break;
 					case OpCodes::subip_reg_in_reg:
 					{
-						uint8_t dest_reg = vcpu.fetch8();
-						uint8_t src_reg = vcpu.fetch8();
-						int16_t dest_val = vcpu.readRegister(dest_reg);
-						int16_t src_val = vcpu.readRegister(src_reg);
-						int16_t res = dest_val - src_val;
+						u8 dest_reg = vcpu.fetch8();
+						u8 src_reg = vcpu.fetch8();
+						i16 dest_val = vcpu.readRegister(dest_reg);
+						i16 src_val = vcpu.readRegister(src_reg);
+						i16 res = dest_val - src_val;
 						vcpu.writeRegister16(dest_reg, res);
 					}
 					break;
 					case OpCodes::subip_imm_in_reg:
 					{
-						uint8_t dest_reg = vcpu.fetch8();
-						uint16_t src_val = vcpu.fetch16();
-						int16_t dest_val = vcpu.readRegister(dest_reg);
-						int16_t res = dest_val - src_val;
+						u8 dest_reg = vcpu.fetch8();
+						u16 src_val = vcpu.fetch16();
+						i16 dest_val = vcpu.readRegister(dest_reg);
+						i16 res = dest_val - src_val;
 						vcpu.writeRegister16(dest_reg, res);
 					}
 					break;
 					case OpCodes::mulip_reg_in_reg:
 					{
-						uint8_t dest_reg = vcpu.fetch8();
-						uint8_t src_reg = vcpu.fetch8();
-						int16_t dest_val = vcpu.readRegister(dest_reg);
-						int16_t src_val = vcpu.readRegister(src_reg);
-						int16_t res = dest_val * src_val;
+						u8 dest_reg = vcpu.fetch8();
+						u8 src_reg = vcpu.fetch8();
+						i16 dest_val = vcpu.readRegister(dest_reg);
+						i16 src_val = vcpu.readRegister(src_reg);
+						i16 res = dest_val * src_val;
 						vcpu.writeRegister16(dest_reg, res);
 					}
 					break;
 					case OpCodes::mulip_imm_in_reg:
 					{
-						uint8_t dest_reg = vcpu.fetch8();
-						uint16_t src_val = vcpu.fetch16();
-						int16_t dest_val = vcpu.readRegister(dest_reg);
-						int16_t res = dest_val * src_val;
+						u8 dest_reg = vcpu.fetch8();
+						u16 src_val = vcpu.fetch16();
+						i16 dest_val = vcpu.readRegister(dest_reg);
+						i16 res = dest_val * src_val;
 						vcpu.writeRegister16(dest_reg, res);
 					}
 					break;
 					case OpCodes::divip_reg_in_reg:
 					{
-						uint8_t dest_reg = vcpu.fetch8();
-						uint8_t src_reg = vcpu.fetch8();
-						int16_t dest_val = vcpu.readRegister(dest_reg);
-						int16_t src_val = vcpu.readRegister(src_reg);
-						int16_t res = dest_val / src_val;
-						int16_t rv = dest_val % src_val;
+						u8 dest_reg = vcpu.fetch8();
+						u8 src_reg = vcpu.fetch8();
+						i16 dest_val = vcpu.readRegister(dest_reg);
+						i16 src_val = vcpu.readRegister(src_reg);
+						i16 res = dest_val / src_val;
+						i16 rv = dest_val % src_val;
 						vcpu.writeRegister16(dest_reg, res);
 						vcpu.writeRegister16(data::Registers::RV, rv);
 					}
 					break;
 					case OpCodes::divip_imm_in_reg:
 					{
-						uint8_t dest_reg = vcpu.fetch8();
-						uint16_t src_val = vcpu.fetch16();
-						int16_t dest_val = vcpu.readRegister(dest_reg);
-						int16_t res = dest_val / src_val;
-						int16_t rv = dest_val % src_val;
+						u8 dest_reg = vcpu.fetch8();
+						u16 src_val = vcpu.fetch16();
+						i16 dest_val = vcpu.readRegister(dest_reg);
+						i16 res = dest_val / src_val;
+						i16 rv = dest_val % src_val;
 						vcpu.writeRegister16(dest_reg, res);
 						vcpu.writeRegister16(data::Registers::RV, rv);
 					}
 					break;
 					case OpCodes::andip_reg_in_reg:
 					{
-						uint8_t dest_reg = vcpu.fetch8();
-						uint8_t src_reg = vcpu.fetch8();
-						int16_t src_val = vcpu.readRegister(src_reg);
-						int16_t dest_val = vcpu.readRegister(dest_reg);
+						u8 dest_reg = vcpu.fetch8();
+						u8 src_reg = vcpu.fetch8();
+						i16 src_val = vcpu.readRegister(src_reg);
+						i16 dest_val = vcpu.readRegister(dest_reg);
 						vcpu.writeRegister16(dest_reg, src_val & dest_val);
 					}
 					break;
 					case OpCodes::andip_imm_in_reg:
 					{
-						uint8_t dest_reg = vcpu.fetch8();
-						uint16_t src_val = vcpu.fetch16();
-						int16_t value = vcpu.readRegister(dest_reg);
+						u8 dest_reg = vcpu.fetch8();
+						u16 src_val = vcpu.fetch16();
+						i16 value = vcpu.readRegister(dest_reg);
 						vcpu.writeRegister16(dest_reg, value & src_val);
 					}
 					break;
 					case OpCodes::orip_reg_in_reg:
 					{
-						uint8_t dest_reg = vcpu.fetch8();
-						uint8_t src_reg = vcpu.fetch8();
-						int16_t src_val = vcpu.readRegister(src_reg);
-						int16_t dest_val = vcpu.readRegister(dest_reg);
+						u8 dest_reg = vcpu.fetch8();
+						u8 src_reg = vcpu.fetch8();
+						i16 src_val = vcpu.readRegister(src_reg);
+						i16 dest_val = vcpu.readRegister(dest_reg);
 						vcpu.writeRegister16(dest_reg, src_val | dest_val);
 					}
 					break;
 					case OpCodes::orip_imm_in_reg:
 					{
-						uint8_t dest_reg = vcpu.fetch8();
-						uint16_t src_val = vcpu.fetch16();
-						int16_t value = vcpu.readRegister(dest_reg);
+						u8 dest_reg = vcpu.fetch8();
+						u16 src_val = vcpu.fetch16();
+						i16 value = vcpu.readRegister(dest_reg);
 						vcpu.writeRegister16(dest_reg, value | src_val);
 					}
 					break;
 					case OpCodes::xorip_reg_in_reg:
 					{
-						uint8_t dest_reg = vcpu.fetch8();
-						uint8_t src_reg = vcpu.fetch8();
-						int16_t src_val = vcpu.readRegister(src_reg);
-						int16_t dest_val = vcpu.readRegister(dest_reg);
+						u8 dest_reg = vcpu.fetch8();
+						u8 src_reg = vcpu.fetch8();
+						i16 src_val = vcpu.readRegister(src_reg);
+						i16 dest_val = vcpu.readRegister(dest_reg);
 						vcpu.writeRegister16(dest_reg, src_val ^ dest_val);
 					}
 					break;
 					case OpCodes::xorip_imm_in_reg:
 					{
-						uint8_t dest_reg = vcpu.fetch8();
-						uint16_t src_val = vcpu.fetch16();
-						int16_t value = vcpu.readRegister(dest_reg);
+						u8 dest_reg = vcpu.fetch8();
+						u16 src_val = vcpu.fetch16();
+						i16 value = vcpu.readRegister(dest_reg);
 						vcpu.writeRegister16(dest_reg, value ^ src_val);
 					}
 					break;
 					case OpCodes::notip_reg:
 					{
-						uint8_t regAddr = vcpu.fetch8();
-						int16_t value = vcpu.readRegister(regAddr);
+						u8 regAddr = vcpu.fetch8();
+						i16 value = vcpu.readRegister(regAddr);
 						vcpu.writeRegister16(regAddr, ~value);
 					}
 					break;

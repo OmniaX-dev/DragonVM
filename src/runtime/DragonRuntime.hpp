@@ -23,15 +23,15 @@ namespace dragon
 				void handleSignal(ostd::Signal& signal) override;
 
 			public:
-				inline static const int32_t Signal_HardwareInterruptOccurred = ostd::SignalHandler::newCustomSignal(8129);
+				inline static const i32 Signal_HardwareInterruptOccurred = ostd::SignalHandler::newCustomSignal(8129);
 		};
 		public: struct tCallInfo : public ostd::BaseObject
 		{
 			inline tCallInfo(void) {  }
-			inline tCallInfo(const String& _info, uint16_t _addr, uint16_t _inst_addr, bool ints_disabled) : info(_info), addr(_addr), inst_addr(_inst_addr), interrupts_disabled(ints_disabled) {  }
+			inline tCallInfo(const String& _info, u16 _addr, u16 _inst_addr, bool ints_disabled) : info(_info), addr(_addr), inst_addr(_inst_addr), interrupts_disabled(ints_disabled) {  }
 			String info;
-			uint16_t addr;
-			uint16_t inst_addr;
+			u16 addr;
+			u16 inst_addr;
 			bool interrupts_disabled;
 		};
 		public: struct tCommandLineArgs
@@ -40,7 +40,7 @@ namespace dragon
 			bool verbose_load = false;
 			bool force_load = false;
 			String force_load_file = "";
-			uint16_t force_load_mem_offset = 0x00;
+			u16 force_load_mem_offset = 0x00;
 		};
 		public: struct tRuntimeInitInfo
 		{
@@ -55,28 +55,28 @@ namespace dragon
 		{
 			inline tMachineDebugInfo(void) {  }
 
-			uint16_t previousInstructionAddress { 0x0000 };
-			uint16_t currentInstructionAddress { 0x0000 };
-			int8_t previousInstructionFootprintSize { 0x00 };
-			int8_t currentInstructionFootprintSize { 0x00 };
-			uint16_t previousInstructionStackFrameSize { 0x00 };
-			uint16_t currentInstructionStackFrameSize { 0x00 };
-			int32_t previousSubRoutineCounter { 0x00000000 };
-			int32_t currentSubRoutineCounter { 0x00000000 };
+			u16 previousInstructionAddress { 0x0000 };
+			u16 currentInstructionAddress { 0x0000 };
+			i8 previousInstructionFootprintSize { 0x00 };
+			i8 currentInstructionFootprintSize { 0x00 };
+			u16 previousInstructionStackFrameSize { 0x00 };
+			u16 currentInstructionStackFrameSize { 0x00 };
+			i32 previousSubRoutineCounter { 0x00000000 };
+			i32 currentSubRoutineCounter { 0x00000000 };
 
 			String previousInstructionOpCode { "" };
 			String currentInstructionOpCode { "" };
 
-			int8_t previousInstructionFootprint[5] { 0x00, 0x00, 0x00, 0x00, 0x00 };
-			int8_t currentInstructionFootprint[5] { 0x00, 0x00, 0x00, 0x00, 0x00 };
-			int16_t previousInstructionRegisters[20] { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-			int16_t currentInstructionRegisters[20] { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-			int32_t previousInstructionInterruptHandlerCount { 0 };
-			int32_t currentInstructionInterruptHandlerCount { 0 };
+			i8 previousInstructionFootprint[5] { 0x00, 0x00, 0x00, 0x00, 0x00 };
+			i8 currentInstructionFootprint[5] { 0x00, 0x00, 0x00, 0x00, 0x00 };
+			i16 previousInstructionRegisters[20] { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+			i16 currentInstructionRegisters[20] { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+			i32 previousInstructionInterruptHandlerCount { 0 };
+			i32 currentInstructionInterruptHandlerCount { 0 };
 
-			std::vector<uint16_t> trackedAddresses;
-			std::vector<int8_t> previousInstructionTrackedValues;
-			std::vector<int8_t> currentInstructionTrackedValues;
+			std::vector<u16> trackedAddresses;
+			std::vector<i8> previousInstructionTrackedValues;
+			std::vector<i8> currentInstructionTrackedValues;
 
 			bool previousInstructionDebugBreak { false };
 			bool currentInstructionDebugBreak { false };
@@ -94,20 +94,20 @@ namespace dragon
 			static void printRegisters(hw::VirtualCPU& cpu);
 			static void processErrors(void);
 			static std::vector<data::ErrorHandler::tError> getErrorList(void);
-			static int32_t loadArguments(int argc, char** argv, tCommandLineArgs& args);
-			static int32_t initMachine(const tRuntimeInitInfo& info);
+			static i32 loadArguments(int argc, char** argv, tCommandLineArgs& args);
+			static i32 initMachine(const tRuntimeInitInfo& info);
 			static void shutdownMachine(void);
 			static void runMachine(void);
-			static bool runStep(std::vector<uint16_t> trackedAddresses = {  });
-			static void forceLoad(const String& filePath, uint16_t loadAddress);
+			static bool runStep(std::vector<u16> trackedAddresses = {  });
+			static void forceLoad(const String& filePath, u16 loadAddress);
 
 			inline static const tMachineDebugInfo& getMachineInfoDiff(void) { return s_machineInfo; }
 			inline static bool hasError(void) { return data::ErrorHandler::hasError(); }
 			inline static ostd::ConsoleOutputHandler& output(void) { return out; }
-			inline static uint64_t getAvgClockSpeed(void) { return (uint64_t)std::round(1000000.0 / s_avgInstTime);  }
+			inline static u64 getAvgClockSpeed(void) { return (u64)std::round(1000000.0 / s_avgInstTime);  }
 
 		private:
-			static void __get_machine_footprint(tMachineDebugInfo* machineInfo, std::vector<uint16_t> trackedAddresses, bool previous);
+			static void __get_machine_footprint(tMachineDebugInfo* machineInfo, std::vector<u16> trackedAddresses, bool previous);
 			static void __track_call_stack(tMachineDebugInfo* machineInfo);
 			static void __print_application_help(void);
 
@@ -127,14 +127,14 @@ namespace dragon
 			inline static hw::interface::Graphics vGraphicsInterface;
 			inline static hw::interface::SerialPort vSerialInterface;
 
-			inline static std::unordered_map<int32_t, hw::VirtualHardDrive> vDisks;
+			inline static std::unordered_map<i32, hw::VirtualHardDrive> vDisks;
 
 			inline static hw::VirtualDisplay vDisplay;
 
 			inline static tMachineConfig machine_config;
 
-			inline static uint64_t s_avgInstTime { 0 };
-			inline static double s_stepAcc2 { 0 };
+			inline static u64 s_avgInstTime { 0 };
+			inline static f64 s_stepAcc2 { 0 };
 			inline static bool s_enableScreenRedrawDelay { true };
 
 		private:
@@ -145,14 +145,14 @@ namespace dragon
 
 
 		public:
-			inline static const int32_t RETURN_VAL_CLOSE_DEBUGGER = 128;
-			inline static const int32_t RETURN_VAL_CLOSE_RUNTIME = 256;
-			inline static const int32_t RETURN_VAL_INVALID_MACHINE_CONFIG = 1;
-			inline static const int32_t RETURN_VAL_NO_DISK = 2;
-			inline static const int32_t RETURN_VAL_TOO_FEW_ARGUMENTS = 3;
-			inline static const int32_t RETURN_VAL_MISSING_PARAM = 4;
-			inline static const int32_t RETURN_VAL_PARAMETER_NOT_NUMERIC = 5;
-			inline static const int32_t RETURN_VAL_EXIT_SUCCESS = 0;
+			inline static const i32 RETURN_VAL_CLOSE_DEBUGGER = 128;
+			inline static const i32 RETURN_VAL_CLOSE_RUNTIME = 256;
+			inline static const i32 RETURN_VAL_INVALID_MACHINE_CONFIG = 1;
+			inline static const i32 RETURN_VAL_NO_DISK = 2;
+			inline static const i32 RETURN_VAL_TOO_FEW_ARGUMENTS = 3;
+			inline static const i32 RETURN_VAL_MISSING_PARAM = 4;
+			inline static const i32 RETURN_VAL_PARAMETER_NOT_NUMERIC = 5;
+			inline static const i32 RETURN_VAL_EXIT_SUCCESS = 0;
 
 		friend class SignalListener;
 	};
