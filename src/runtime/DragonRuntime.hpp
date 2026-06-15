@@ -47,6 +47,7 @@ namespace dragon
 			static i32 initMachine(const tRuntimeInitInfo& info);
 			static void shutdownMachine(void);
 			static void runMachine(void);
+			static void runMachine2(void);
 			static bool runStep(void);
 			static void forceLoad(const String& filePath, u16 loadAddress);
 

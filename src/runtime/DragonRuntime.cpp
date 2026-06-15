@@ -300,7 +300,7 @@ namespace dragon
 		machine_config.destroy();
 	}
 
-	void DragonRuntime::runMachine(void)
+	void DragonRuntime::runMachine2(void)
 	{
 		f64 clock_speed_us = 1000000.0 / machine_config.clock_rate_sec;
 		f64 acc = 0;
@@ -315,9 +315,6 @@ namespace dragon
 		while (running || vDiskInterface.isBusy())
 		{
 			clock_timer.startCount(ostd::eTimeUnits::Microseconds);
-			ostd::SignalHandler::handleDelegateSignals();
-			u16 addr = cpu.readRegister(dragon::data::Registers::IP);
-			u16 spAddr = cpu.readRegister(dragon::data::Registers::SP);
 			u8 screenRedrawRate = vCMOS.read8(data::CMOSRegisters::ScreenRedrawRate);
 			running = cpu.execute() && vDisplay.isRunning();
 			vDisplay.mainLoop();
@@ -347,6 +344,18 @@ namespace dragon
 		}
 	}
 
+	void DragonRuntime::runMachine(void)
+	{
+		bool running = true;
+		ostd::StepTimer cycleTimer(machine_config.clock_rate_sec, [&](f64 dt) {
+			running = runStep();
+		});
+		while (running)
+		{
+			cycleTimer.update();
+		}
+	}
+
 	bool DragonRuntime::runStep(void)
 	{
 		bool running = cpu.execute() && vDisplay.isRunning();
@@ -362,7 +371,6 @@ namespace dragon
 			vDisplay.redrawScreen();
 		}
 		s_stepAcc2++;
-		// vDisplay.redrawScreen(); // This is slow...maybe it should be on a 100ms rate, like in normal runtime mode
 		vDiskInterface.cycleStep();
 		return running || vDiskInterface.isBusy();
 	}
