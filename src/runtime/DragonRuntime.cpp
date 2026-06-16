@@ -300,79 +300,29 @@ namespace dragon
 		machine_config.destroy();
 	}
 
-	void DragonRuntime::runMachine2(void)
+	void DragonRuntime::runMachine(void)
 	{
-		f64 clock_speed_us = 1000000.0 / machine_config.clock_rate_sec;
-		f64 acc = 0;
-		f64 acc2 = 0;
-		u64 avg_count = 0;
-		u64 _time = 0;
-		f64 avg_tot = 0;
-		ostd::Counter clock_timer;
 		bool running = true;
-		bool fixed_clock = machine_config.fixed_clock;
-		ostd::Counter _timer;
+		u8 screenRedrawRate = vCMOS.read8(data::CMOSRegisters::ScreenRedrawRate);
+		f64 cycleUPS = (machine_config.fixed_clock ? machine_config.clock_rate_sec : -1.0);
+		ostd::StepTimer cycleTimer(cycleUPS, [&](f64 dt) {
+			vDisplay.mainLoop();
+			running = cpu.execute() && vDisplay.isRunning();
+			vDiskInterface.cycleStep();
+		});
+		ostd::StepTimer screenTimer(screenRedrawRate, [&](f64 dt) {
+			vDisplay.redrawScreen();
+		});
 		while (running || vDiskInterface.isBusy())
 		{
-			clock_timer.startCount(ostd::eTimeUnits::Microseconds);
-			u8 screenRedrawRate = vCMOS.read8(data::CMOSRegisters::ScreenRedrawRate);
-			running = cpu.execute() && vDisplay.isRunning();
-			vDisplay.mainLoop();
-			vDiskInterface.cycleStep();
+			cycleTimer.update();
+			screenTimer.update();
 			if (dragon::data::ErrorHandler::hasError())
 			{
 				processErrors();
 				break;
 			}
-			if (acc == 500)
-			{
-				avg_count++;
-				avg_tot += _time;
-				s_avgInstTime = (u64)std::round(avg_tot / avg_count);
-				acc = 0;
-			}
-			if (acc2 == (1000.0 / screenRedrawRate))
-			{
-				vDisplay.redrawScreen();
-				acc2 = 0;
-			}
-			_time = clock_timer.endCount();
-			acc++;
-			acc2++;
-			if (_time < clock_speed_us && fixed_clock)
-				ostd::Time::sleep(clock_speed_us - _time, ostd::eTimeUnits::Microseconds);
 		}
-	}
-
-	void DragonRuntime::runMachine(void)
-	{
-		bool running = true;
-		ostd::StepTimer cycleTimer(machine_config.clock_rate_sec, [&](f64 dt) {
-			running = runStep();
-		});
-		while (running)
-		{
-			cycleTimer.update();
-		}
-	}
-
-	bool DragonRuntime::runStep(void)
-	{
-		bool running = cpu.execute() && vDisplay.isRunning();
-		u8 screenRedrawRate = vCMOS.read8(data::CMOSRegisters::ScreenRedrawRate);
-		vDisplay.mainLoop();
-		if (s_enableScreenRedrawDelay && s_stepAcc2 == (1000.0 / screenRedrawRate))
-		{
-			vDisplay.redrawScreen();
-			s_stepAcc2 = 0;
-		}
-		else if (!s_enableScreenRedrawDelay)
-		{
-			vDisplay.redrawScreen();
-		}
-		s_stepAcc2++;
-		vDiskInterface.cycleStep();
-		return running || vDiskInterface.isBusy();
 	}
 
 	void DragonRuntime::forceLoad(const String& filePath, u16 loadAddress)

@@ -47,13 +47,10 @@ namespace dragon
 			static i32 initMachine(const tRuntimeInitInfo& info);
 			static void shutdownMachine(void);
 			static void runMachine(void);
-			static void runMachine2(void);
-			static bool runStep(void);
 			static void forceLoad(const String& filePath, u16 loadAddress);
 
 			inline static bool hasError(void) { return data::ErrorHandler::hasError(); }
 			inline static ostd::ConsoleOutputHandler& output(void) { return out; }
-			inline static u64 getAvgClockSpeed(void) { return (u64)std::round(1000000.0 / s_avgInstTime);  }
 
 		private:
 			static void __print_application_help(void);
@@ -79,10 +76,6 @@ namespace dragon
 			inline static hw::VirtualDisplay vDisplay;
 
 			inline static tMachineConfig machine_config;
-
-			inline static u64 s_avgInstTime { 0 };
-			inline static f64 s_stepAcc2 { 0 };
-			inline static bool s_enableScreenRedrawDelay { true };
 
 		private:
 			inline static SignalListener s_signalListener;
