@@ -65,7 +65,7 @@ namespace dragon
 
 		InterruptVector::InterruptVector(void)
 		{
-			u32 dataSize = data::MemoryMapAddresses::IntVector_End - data::MemoryMapAddresses::IntVector_Start;
+			u32 dataSize = data::MemoryMapAddresses::IntVector_End - data::MemoryMapAddresses::IntVector_Start + 1;
 			for (i32 i = 0; i < dataSize; i++)
 				m_data.push_back(0x00);
 		}
@@ -113,7 +113,7 @@ namespace dragon
 
 		void VirtualKeyboard::init(void)
 		{
-			u32 dataSize = data::MemoryMapAddresses::Keyboard_End - data::MemoryMapAddresses::Keyboard_Start;
+			u32 dataSize = data::MemoryMapAddresses::Keyboard_End - data::MemoryMapAddresses::Keyboard_Start + 1;
 			for (i32 i = 0; i < dataSize; i++)
 				m_data.push_back(0x00);
 			enableSignals();
@@ -660,7 +660,7 @@ namespace dragon
 			Graphics::Graphics(void)
 			{
 				m_videoMemory.init(0xFFFF);
-				m_vramStart = data::MemoryMapAddresses::VideoCardInterface_End - data::MemoryMapAddresses::VideoCardInterface_Start;
+				m_vramStart = data::MemoryMapAddresses::VideoCardInterface_End - data::MemoryMapAddresses::VideoCardInterface_Start + 1;
 				m_16Color_frameSize = ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H * ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_V * m_16Color_cellSize;
 				m_16Color_currentFrameAddr = m_vramStart;
 				m_16Color_secondFrameAddr = m_vramStart + m_16Color_frameSize;

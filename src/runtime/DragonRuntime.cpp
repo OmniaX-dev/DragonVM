@@ -292,6 +292,28 @@ namespace dragon
 			out.fg(ostd::ConsoleColors::BrightYellow).p("    Loading CMOS Machine info").nl();
 
 		out.nl().nl();
+
+
+
+
+		ostd::ByteStream test;
+		test.reserve(0xFFFF);
+		for (i32 i = 0; i < 0xFFFF; i++)
+		{
+			std::cout << (int)i << "\n";
+			test.push_back(memMap.read8(cast<AddressType>(i)));
+		}
+		exit(0);
+
+
+
+
+
+
+
+
+
+
 		return RETURN_VAL_EXIT_SUCCESS;
 	}
 

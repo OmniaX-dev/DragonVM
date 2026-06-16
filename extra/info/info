@@ -115,7 +115,6 @@
             0x8A: Background (1 Byte)
 
         (VRAM Memory Cell: Character:1, Foreground:1, Background:1, Reserved:1)
-
     0x16FF
     -------
     0x1700 GENERIC SERIAL INTERFACE (64 Bytes)
