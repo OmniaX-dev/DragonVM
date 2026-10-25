@@ -121,6 +121,7 @@ namespace dragon
 		class IBiosVideoPalette
 		{
 			public:
+				virtual ~IBiosVideoPalette(void) = default;
 				virtual ostd::Color getColor(u8 col) = 0;
 		};
 

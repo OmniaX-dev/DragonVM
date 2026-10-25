@@ -12,3 +12,7 @@ screen_redraw_rate_per_second = 30
 SingleColor_foreground = #009900FF
 SingleColor_background = #111111FF
 16Color_Palette = 0
+
+# Screen look (needs GPU shader support)
+crt_effect = false
+bloom_effect = false

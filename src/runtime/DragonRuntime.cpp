@@ -1,5 +1,4 @@
 #include "DragonRuntime.hpp"
-#include <ogfx/render/PixelRenderer.hpp>
 #include <ostd/io/Memory.hpp>
 #include <ostd/utils/Time.hpp>
 
@@ -100,10 +99,12 @@ namespace dragon
 
 		if (info.verboseLoad)
 			out.fg(ostd::ConsoleColors::Magenta).p("  Initializing virtual display:").nl();
-		i32 w = ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H * ogfx::PixelRenderer::TextRenderer::FONT_CHAR_W; //60 * 16;
-		i32 h = ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_V * ogfx::PixelRenderer::TextRenderer::FONT_CHAR_H; //60 * 9;
+		i32 w = hw::VirtualDisplay::ScreenWidth;
+		i32 h = hw::VirtualDisplay::ScreenHeight;
 		vDisplay.initialize(w, h, "DragonVM");
 		vDisplay.setFont("font.bmp");
+		vDisplay.enableCRTEffect(machine_config.crt_effect);
+		vDisplay.enableBloomEffect(machine_config.bloom_effect);
 		if (info.hideVirtualDisplay)
 			vDisplay.hide();
 		if (info.verboseLoad)
@@ -277,8 +278,8 @@ namespace dragon
 		vCMOS.write16(data::CMOSRegisters::MemorySize, data::MemoryMapAddresses::Memory_End);
 		vCMOS.write16(data::CMOSRegisters::ClockSpeed, machine_config.clock_rate_sec);
 		vCMOS.write8(data::CMOSRegisters::ScreenRedrawRate, machine_config.screen_redraw_rate_per_second);
-		vCMOS.write16(data::CMOSRegisters::ScreenWidth, static_cast<i16>(ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H));
-		vCMOS.write16(data::CMOSRegisters::ScreenHeight, static_cast<i16>(ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_V));
+		vCMOS.write16(data::CMOSRegisters::ScreenWidth, static_cast<i16>(hw::VirtualDisplay::Columns));
+		vCMOS.write16(data::CMOSRegisters::ScreenHeight, static_cast<i16>(hw::VirtualDisplay::Rows));
 		vCMOS.write16(data::CMOSRegisters::StackSize, 0x1000);
 		ostd::BitField_16 disk_list_bitfield;
 		disk_list_bitfield.value = 0;

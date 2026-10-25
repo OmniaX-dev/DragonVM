@@ -1,277 +1,256 @@
 #include "VirtualDisplay.hpp"
-#include <ogfx/render/PixelRenderer.hpp>
 #include "../runtime/DragonRuntime.hpp"
 #include "../tools/GlobalData.hpp"
+#include <cctype>
 
 namespace dragon
 {
 	namespace hw
 	{
+		using ogfx::gui::TextConsoleCanvas;
+
+		VirtualDisplay::~VirtualDisplay(void)
+		{
+			for (auto* palette : m_text16_palettes)
+				delete palette;
+			m_text16_palettes.clear();
+		}
+
 		void VirtualDisplay::onInitialize(void)
 		{
-			m_renderer.initialize(*this);
-			ogfx::PixelRenderer::TextRenderer::initialize();
+			// The runtime drives this window one step per CPU cycle: waiting for events would
+			// stall the CPU.
+			enableBlockingEvents(false);
+			setClearColor({ 0, 0, 0 });
+
+			addWidget(m_screen);
+			m_screen.setAnchorPreset(ogfx::gui::eAnchorPreset::FullRect);
+			m_screen.setLetterboxColor({ 0, 0, 0 });
+
+			auto& config = DragonRuntime::machine_config;
+			m_singlePalette.setColor(SingleForeground, config.singleColor_foreground);
+			m_singlePalette.setColor(SingleBackground, config.singleColor_background);
 
 			text16_load_palettes();
-			m_currentPaletteID = DragonRuntime::machine_config.text16_palette;
+			m_currentPaletteID = config.text16_palette;
 			if (m_currentPaletteID >= m_text16_palettes.size())
 				m_text16_Currentpalette = m_text16_palettes[0];
 			else
 				m_text16_Currentpalette = m_text16_palettes[m_currentPaletteID];
-
-			text16_init_buffer();
+			// VM color i is palette entry i. Entry 0 can't hold a color (it is the console's
+			// default), so the console's default colors are set to VM color 0 in this mode.
+			for (u32 i = 1; i < 256; i++)
+				m_text16Palette.setColor(cast<u8>(i), m_text16_Currentpalette->getColor(cast<u8>(i)));
 		}
 
-		void VirtualDisplay::onDestroy(void) {  }
-
-		void VirtualDisplay::onRender(void)
+		void VirtualDisplay::setFont(const String& fontPath)
 		{
-			if (!isVisible()) return;
-			auto& config = DragonRuntime::machine_config;
-			auto& mem = DragonRuntime::memMap;
-			u16 vga_addr = data::MemoryMapAddresses::VideoCardInterface_Start;
-			u8 video_mode = mem.read8(vga_addr + tRegisters::VideoMode);
-			if (video_mode == tVideoModeValues::TextSingleColor)
-			{
-				u8 invert_colors = mem.read8(vga_addr + tRegisters::TextSingleInvertColors);
-				if (m_refreshScreen)
-				{
-					if (invert_colors == 0)
-						m_renderer.clear(config.singleColor_background);
-					else
-						m_renderer.clear(config.singleColor_foreground);
-					for (i32 i = 0; i < m_singleTextLines.size(); i++)
-					{
-						auto& line = m_singleTextLines[i];
-						if (invert_colors == 0)
-							ogfx::PixelRenderer::TextRenderer::drawString(line, 0, i, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_font.m_fontPixels, config.singleColor_foreground, config.singleColor_background);
-						else
-							ogfx::PixelRenderer::TextRenderer::drawString(line, 0, i, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_font.m_fontPixels, config.singleColor_background, config.singleColor_foreground);
-					}
-					m_refreshScreen = false;
-				}
-			}
-			else if (video_mode == tVideoModeValues::Text16Colors)
-			{
-				if (m_refreshScreen)
-				{
-					u8 clear_color = mem.read8(vga_addr + tRegisters::ClearColor);
-					ostd::Color clearColor = m_text16_Currentpalette->getColor(clear_color);
-					m_renderer.clear(clearColor);
-					for (i32 i = 0; i < ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_V * ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H; i++)
-					{
-						auto& cell = m_text16_buffer[i];
-						ostd::Color background = m_text16_Currentpalette->getColor(cell.backgroundColor);
-						ostd::Color foreground = m_text16_Currentpalette->getColor(cell.foregroundColor);
-						char character = static_cast<char>(cell.character);
-						auto xy = CONVERT_1D_2D(i, ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H);
-						ogfx::PixelRenderer::TextRenderer::drawString(String().addChar(character), xy.x, xy.y, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_font.m_fontPixels, foreground, background);
-					}
-					m_refreshScreen = false;
-				}
-			}
+			if (!m_font.loadFromFile(fontPath))
+				return;
+			m_screen.setFont(m_font);
+			enter_text_mode();
+		}
 
+		void VirtualDisplay::enter_text_mode(void)
+		{
+			if (m_textModeActive || !m_font.isLoaded())
+				return;
+			// Cells are always CharWidth x CharHeight, so the screen is Columns x Rows whatever
+			// the font's own cell size.
+			m_screen.enterTextConsoleMode(m_cells, 0, m_singlePalette, CharWidth, CharHeight);
+			m_textModeActive = m_screen.isTextConsoleMode();
+			m_videoMode = 0xFF; // re-applied on the next frame
+		}
+
+		void VirtualDisplay::apply_video_mode(u8 videoMode)
+		{
+			if (videoMode == m_videoMode || !m_textModeActive)
+				return;
+			m_videoMode = videoMode;
+			auto& config = DragonRuntime::machine_config;
+			if (videoMode == tVideoModeValues::Text16Colors)
+			{
+				const ostd::Color color0 = m_text16_Currentpalette->getColor(0);
+				m_screen.setPalette(m_text16Palette);
+				m_screen.setDefaultColors(color0, color0);
+			}
+			else
+			{
+				m_screen.setPalette(m_singlePalette);
+				m_screen.setDefaultColors(config.singleColor_foreground, config.singleColor_background);
+			}
+			m_redrawScreen = true;
+		}
+
+		void VirtualDisplay::__main_loop(void)
+		{
+			process_signal();
+			// Events, updates and drawing run on gui::Window's own timers (60 fps); checking them
+			// at most every millisecond keeps the per-cycle cost down at high clock rates.
+			const auto now = std::chrono::steady_clock::now();
+			if (now - m_lastWindowStep < std::chrono::milliseconds(1))
+				return;
+			m_lastWindowStep = now;
+			handle_events();
+			m_fixedUpdateTimer.update();
+			m_mainLoopTimer.update();
+		}
+
+		void VirtualDisplay::onUpdate(f64 delta)
+		{
+			auto& mem = DragonRuntime::memMap;
+			const u16 vga_addr = data::MemoryMapAddresses::VideoCardInterface_Start;
+			apply_video_mode(mem.read8(vga_addr + tRegisters::VideoMode));
 			m_redrawScreen = m_redrawScreen && !DragonRuntime::vGraphicsInterface.readFlag(hw::interface::Graphics::tFlags::ScreenRedrawDisabled);
 			if (m_redrawScreen)
-			{
 				__redraw_screen();
-			}
-			m_renderer.displayBuffer();
 		}
 
-		// static char c = 'A';
-
-		void VirtualDisplay::onUpdate(void)
+		void VirtualDisplay::process_signal(void)
 		{
 			auto& mem = DragonRuntime::memMap;
-			u16 vga_addr = data::MemoryMapAddresses::VideoCardInterface_Start;
-			u8 video_mode = mem.read8(vga_addr + tRegisters::VideoMode);
-			u8 signal = mem.read8(vga_addr + tRegisters::Signal);
-			if (signal == tSignalValues::Continue) return;
+			const u16 vga_addr = data::MemoryMapAddresses::VideoCardInterface_Start;
+			const u8 signal = mem.read8(vga_addr + tRegisters::Signal);
+			if (signal == tSignalValues::Continue)
+				return;
+			const u8 video_mode = mem.read8(vga_addr + tRegisters::VideoMode);
 			if (video_mode == tVideoModeValues::TextSingleColor)
 			{
-				if (signal == tSignalValues::TextSingleColor_DirectPrintChar)
+				switch (signal)
 				{
-					char c = (char)mem.read8(vga_addr + tRegisters::TextSingleCharacter);
-					single_text_add_char_to_line(c);
-				}
-				else if (signal == tSignalValues::TextSingleColor_DirectPrintString)
-				{
-					u16 first_char_addr = mem.read16(vga_addr + tRegisters::TextSingleString);
-					char c = ' ';
-					int h = 0;
-					while (c != 0)
+					case tSignalValues::TextSingleColor_DirectPrintChar:
+						single_text_add_char_to_line((char)mem.read8(vga_addr + tRegisters::TextSingleCharacter));
+						break;
+					case tSignalValues::TextSingleColor_DirectPrintString:
 					{
-						char c = (char)mem.read8(first_char_addr);
-						single_text_add_char_to_line(c);
-						first_char_addr++;
-						if (c == 0) break;
+						u16 char_addr = mem.read16(vga_addr + tRegisters::TextSingleString);
+						for (char c = (char)mem.read8(char_addr); c != 0; c = (char)mem.read8(++char_addr))
+							single_text_add_char_to_line(c);
+						break;
 					}
-				}
-				else if (signal == tSignalValues::TextSingleColor_StoreChar)
-				{
-					char c = (char)mem.read8(vga_addr + tRegisters::TextSingleCharacter);
-					single_text_add_char_to_buffer(c);
-				}
-				else if (signal == tSignalValues::TextSingleColor_DirectPrintBuffNoFlush)
-				{
-					single_text_print_buffer_no_flush();
-				}
-				else if (signal == tSignalValues::TextSingleColor_DirectPrintBuffAndFlush)
-				{
-					single_text_print_buffer_and_flush();
-				}
-				else if (signal == tSignalValues::TextSingleColor_FlushBuffer)
-				{
-					single_text_flush_buffer();
-				}
-				else if (signal == tSignalValues::ClearSCreen)
-				{
-					single_text_clear_screen();
-				}
-				else if (signal == tSignalValues::RefreshScreen)
-				{
-					single_text_refresh_screen();
+					case tSignalValues::TextSingleColor_StoreChar:
+						single_text_add_char_to_buffer((char)mem.read8(vga_addr + tRegisters::TextSingleCharacter));
+						break;
+					case tSignalValues::TextSingleColor_DirectPrintBuffNoFlush:
+						single_text_print_buffer_no_flush();
+						break;
+					case tSignalValues::TextSingleColor_DirectPrintBuffAndFlush:
+						single_text_print_buffer_and_flush();
+						break;
+					case tSignalValues::TextSingleColor_FlushBuffer:
+						single_text_flush_buffer();
+						break;
+					case tSignalValues::ClearSCreen:
+						single_text_clear_screen();
+						break;
+					case tSignalValues::RefreshScreen:
+						// The text is turned into cells on every redraw: nothing to do.
+						break;
+					default:
+						break;
 				}
 			}
 			else if (video_mode == tVideoModeValues::Text16Colors)
 			{
-				if (signal == tSignalValues::Text16Color_WriteMemory)
+				auto& graphics = DragonRuntime::vGraphicsInterface;
+				switch (signal)
 				{
-					hw::interface::Graphics::tText16_Cell textCell;
-
-					textCell.foregroundColor = mem.read8(vga_addr + tRegisters::MemControllerFGCol);
-					textCell.backgroundColor = mem.read8(vga_addr + tRegisters::MemControllerBGCol);
-					textCell.character = mem.read8(vga_addr + tRegisters::MemControllerChar);
-					i16 x = mem.read16(vga_addr + tRegisters::MemControllerX);
-					i16 y = mem.read16(vga_addr + tRegisters::MemControllerY);
-
-					//TODO: Remove this override used for testing purposes
-					// for (i32 i = 0; i < ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_V * ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H; i++)
-					// {
-					// 	auto xy = CONVERT_1D_2D(i, ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H);
-					// 	DragonRuntime::vGraphicsInterface.writeVRAM_16Colors(static_cast<u8>(xy.x), static_cast<u8>(xy.y), c++, 0, 15);
-					// 	if (c > 'Z')
-					// 		c = 'A';
-					// }
-
-					DragonRuntime::vGraphicsInterface.writeVRAM_16Colors(static_cast<u8>(x), static_cast<u8>(y), textCell.character, textCell.backgroundColor, textCell.foregroundColor);
-				}
-				else if (signal == tSignalValues::ClearSCreen)
-				{
-					hw::interface::Graphics::tText16_Cell textCell;
-
-					textCell.foregroundColor = mem.read8(vga_addr + tRegisters::MemControllerFGCol);
-					textCell.backgroundColor = mem.read8(vga_addr + tRegisters::MemControllerBGCol);
-					textCell.character = mem.read8(vga_addr + tRegisters::MemControllerChar);
-
-					DragonRuntime::vGraphicsInterface.clearVRAM_16Colors(textCell.character, textCell.backgroundColor, textCell.foregroundColor);
-
-					m_redrawScreen = true;
-					m_refreshScreen = true;
-				}
-				else if (signal == tSignalValues::RedrawScreen)
-				{
-					__redraw_screen();
-				}
-				else if (signal == tSignalValues::Text16Color_SwapBuffers)
-				{
-					DragonRuntime::vGraphicsInterface.swapBuffers_16Colors();
-					__redraw_screen();
-				}
-				else if (signal == tSignalValues::Text16Color_Scroll)
-				{
-					DragonRuntime::vGraphicsInterface.scroll_16Colors();
-					__redraw_screen();
+					case tSignalValues::Text16Color_WriteMemory:
+					{
+						const u8 fg = mem.read8(vga_addr + tRegisters::MemControllerFGCol);
+						const u8 bg = mem.read8(vga_addr + tRegisters::MemControllerBGCol);
+						const u8 character = mem.read8(vga_addr + tRegisters::MemControllerChar);
+						const i16 x = mem.read16(vga_addr + tRegisters::MemControllerX);
+						const i16 y = mem.read16(vga_addr + tRegisters::MemControllerY);
+						graphics.writeVRAM_16Colors(static_cast<u8>(x), static_cast<u8>(y), character, bg, fg);
+						break;
+					}
+					case tSignalValues::ClearSCreen:
+					{
+						const u8 fg = mem.read8(vga_addr + tRegisters::MemControllerFGCol);
+						const u8 bg = mem.read8(vga_addr + tRegisters::MemControllerBGCol);
+						const u8 character = mem.read8(vga_addr + tRegisters::MemControllerChar);
+						graphics.clearVRAM_16Colors(character, bg, fg);
+						m_redrawScreen = true;
+						break;
+					}
+					case tSignalValues::RedrawScreen:
+						__redraw_screen();
+						break;
+					case tSignalValues::Text16Color_SwapBuffers:
+						graphics.swapBuffers_16Colors();
+						__redraw_screen();
+						break;
+					case tSignalValues::Text16Color_Scroll:
+						graphics.scroll_16Colors();
+						__redraw_screen();
+						break;
+					default:
+						break;
 				}
 			}
-			else return;
-			mem.write8(vga_addr + tRegisters::Signal, tSignalValues::Continue);
-		}
-
-		void VirtualDisplay::onFixedUpdate(f64 frameTime_s)
-		{
-			auto& config = DragonRuntime::machine_config;
-			auto& mem = DragonRuntime::memMap;
-			u16 vga_addr = data::MemoryMapAddresses::VideoCardInterface_Start;
-			u8 video_mode = mem.read8(vga_addr + tRegisters::VideoMode);
-			u8 signal = mem.read8(vga_addr + tRegisters::Signal);
-			if (video_mode == tVideoModeValues::Text16Colors)
+			else
 			{
-				m_refreshScreen = true;
-				dragon::hw::interface::Graphics::tText16_Cell outTextCell;
-				for (i32 i = 0; i < ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_V * ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H; i++)
-				{
-					auto xy = CONVERT_1D_2D(i, ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H);
-					DragonRuntime::vGraphicsInterface.readVRAM_16Colors(xy.x, xy.y, outTextCell);
-					m_text16_buffer[i] = outTextCell;
-				}
+				return;
 			}
+			mem.write8(vga_addr + tRegisters::Signal, tSignalValues::Continue);
 		}
 
 		void VirtualDisplay::__redraw_screen(void)
 		{
-			m_renderer.updateBuffer();
+			if (m_textModeActive)
+			{
+				const u8 video_mode = DragonRuntime::memMap.read8(data::MemoryMapAddresses::VideoCardInterface_Start + tRegisters::VideoMode);
+				apply_video_mode(video_mode);
+				if (video_mode == tVideoModeValues::Text16Colors)
+					text16_to_cells();
+				else if (video_mode == tVideoModeValues::TextSingleColor)
+					single_text_to_cells();
+			}
 			DragonRuntime::cpu.handleInterrupt(data::InterruptCodes::Text16ModeScreenRefreshed, true);
 			m_redrawScreen = false;
-			m_refreshScreen = true;
 		}
 
+
+
+		// ===================================================== SINGLE COLOR MODE =====================================================
 		void VirtualDisplay::single_text_add_char_to_line(char c)
 		{
-			auto& config = DragonRuntime::machine_config;
-			auto& mem = DragonRuntime::memMap;
-			u16 vga_addr = data::MemoryMapAddresses::VideoCardInterface_Start;
-			u8 invert_colors = mem.read8(vga_addr + tRegisters::TextSingleInvertColors);
-			if (m_singleTextLines.size() == 0)
+			const u16 vga_addr = data::MemoryMapAddresses::VideoCardInterface_Start;
+			const bool invert = DragonRuntime::memMap.read8(vga_addr + tRegisters::TextSingleInvertColors) != 0;
+			if (m_singleTextLines.empty())
+				m_singleTextLines.emplace_back();
+			if (c == '\n')
 			{
-				m_singleTextLines.push_back(String().addChar(c));
-				if (invert_colors == 0)
-					ogfx::PixelRenderer::TextRenderer::drawString(String().addChar(c), 0, 0, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_font.m_fontPixels, config.singleColor_foreground, config.singleColor_background);
-				else
-					ogfx::PixelRenderer::TextRenderer::drawString(String().addChar(c), 0, 0, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_font.m_fontPixels, config.singleColor_background, config.singleColor_foreground);
+				m_singleTextLines.emplace_back();
+			}
+			else if (std::isprint(cast<u8>(c)))
+			{
+				if (m_singleTextLines.back().size() >= cast<size_t>(Columns))
+					m_singleTextLines.emplace_back();
+				const u8 fg = invert ? SingleBackground : SingleForeground;
+				const u8 bg = invert ? SingleForeground : SingleBackground;
+				m_singleTextLines.back().push_back(TextConsoleCanvas::makeCell(cast<u8>(c), fg, bg));
+			}
+			else
+			{
 				return;
 			}
-			auto& line = m_singleTextLines[m_singleTextLines.size() - 1];
-			if (c == '\n')
-				m_singleTextLines.push_back("");
-			else if (isprint(c))
-			{
-				if (line.len() == ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H)
-				{
-					m_singleTextLines.push_back(String().addChar(c));
-					auto& line = m_singleTextLines[m_singleTextLines.size() - 1];
-					if (invert_colors == 0)
-						ogfx::PixelRenderer::TextRenderer::drawString(String().addChar(c), line.len() - 1, m_singleTextLines.size() - 1, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_font.m_fontPixels, config.singleColor_foreground, config.singleColor_background);
-					else
-						ogfx::PixelRenderer::TextRenderer::drawString(String().addChar(c), line.len() - 1, m_singleTextLines.size() - 1, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_font.m_fontPixels, config.singleColor_background, config.singleColor_foreground);
-				}
-				else
-				{
-					line.addChar(c);
-					if (invert_colors == 0)
-						ogfx::PixelRenderer::TextRenderer::drawString(String().addChar(c), line.len() - 1, m_singleTextLines.size() - 1, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_font.m_fontPixels, config.singleColor_foreground, config.singleColor_background);
-					else
-						ogfx::PixelRenderer::TextRenderer::drawString(String().addChar(c), line.len() - 1, m_singleTextLines.size() - 1, m_renderer.getScreenPixels(), getWindowWidth(), getWindowHeight(), m_font.m_fontPixels, config.singleColor_background, config.singleColor_foreground);
-				}
-			}
-			else return;
-			if (m_singleTextLines.size() == ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_V + 1)
-			{
-				m_refreshScreen = true;
-				m_singleTextLines.erase(m_singleTextLines.begin());
-			}
+			while (m_singleTextLines.size() > cast<size_t>(Rows))
+				m_singleTextLines.pop_front();
 		}
 
 		void VirtualDisplay::single_text_add_char_to_buffer(char c)
 		{
-			if (c == '\n' || m_singleTextBuffer.len() == ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H)
+			if (c == '\n' || m_singleTextBuffer.len() == cast<u32>(Columns))
 			{
 				single_text_print_buffer_and_flush();
 				single_text_add_char_to_line(c);
 			}
 			else
+			{
 				m_singleTextBuffer.addChar(c);
+			}
 		}
 
 		void VirtualDisplay::single_text_flush_buffer(void)
@@ -281,39 +260,58 @@ namespace dragon
 
 		void VirtualDisplay::single_text_print_buffer_and_flush(void)
 		{
-			for (auto& ch : m_singleTextBuffer)
-				single_text_add_char_to_line(ch);
+			single_text_print_buffer_no_flush();
 			single_text_flush_buffer();
 		}
 
 		void VirtualDisplay::single_text_print_buffer_no_flush(void)
 		{
-			for (auto& ch : m_singleTextBuffer)
-				single_text_add_char_to_line(ch);
+			for (const char c : m_singleTextBuffer.cpp_str())
+				single_text_add_char_to_line(c);
 		}
 
 		void VirtualDisplay::single_text_clear_screen(void)
 		{
 			m_singleTextLines.clear();
-			m_refreshScreen = true;
 		}
 
-		void VirtualDisplay::single_text_refresh_screen(void)
+		void VirtualDisplay::single_text_to_cells(void)
 		{
-			m_refreshScreen = true;
+			// The lines go to the first screen of the cell buffer (the canvas shows only that).
+			for (i32 row = 0; row < Rows; row++)
+			{
+				u32* dst = m_cells.data() + cast<size_t>(row) * Columns;
+				const stdvec<u32>* line = cast<size_t>(row) < m_singleTextLines.size() ? &m_singleTextLines[row] : nullptr;
+				const size_t used = line ? std::min(line->size(), cast<size_t>(Columns)) : 0;
+				if (used > 0)
+					std::copy(line->begin(), line->begin() + used, dst);
+				std::fill(dst + used, dst + Columns, 0);
+			}
 		}
+		// ===================================================== SINGLE COLOR MODE =====================================================
 
 
-		void VirtualDisplay::text16_init_buffer(void)
+
+		// ===================================================== TEXT 16 COLORS MODE =====================================================
+		void VirtualDisplay::text16_to_cells(void)
 		{
-			for (i32 i = 0; i < ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_V * ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H; i++)
-				m_text16_buffer.push_back({ 0, 0, ' ' });
+			hw::interface::Graphics::tText16_Cell cell;
+			for (i32 y = 0; y < Rows; y++)
+			{
+				for (i32 x = 0; x < Columns; x++)
+				{
+					if (!DragonRuntime::vGraphicsInterface.readVRAM_16Colors(cast<u8>(x), cast<u8>(y), cell))
+						continue;
+					m_cells[cast<size_t>(y) * Columns + x] = TextConsoleCanvas::makeCell(cell.character, cell.foregroundColor, cell.backgroundColor);
+				}
+			}
 		}
 
 		void VirtualDisplay::text16_load_palettes(void)
 		{
-			m_text16_palettes.push_back(new data::BiosVideoDefaultPalette); //TODO: Delete, Memory Leak
+			if (m_text16_palettes.empty())
+				m_text16_palettes.push_back(new data::BiosVideoDefaultPalette);
 		}
-
+		// ===================================================== TEXT 16 COLORS MODE =====================================================
 	}
 }

@@ -115,6 +115,17 @@ namespace dragon
 				if (!lineEdit.isNumeric()) continue; //TODO: Error
 				config.screen_redraw_rate_per_second = lineEdit.toInt();
 			}
+			else if (lineEdit == "crt_effect" || lineEdit == "bloom_effect")
+			{
+				bool& value = (lineEdit == "crt_effect") ? config.crt_effect : config.bloom_effect;
+				lineEdit = tokens.next();
+				lineEdit.trim().toLower();
+				if (lineEdit == "true")
+					value = true;
+				else if (lineEdit == "false")
+					value = false;
+				else continue; //TODO: Error
+			}
 			else continue; //TODO: Warning
 		}
 		return validate_machine_config(config);

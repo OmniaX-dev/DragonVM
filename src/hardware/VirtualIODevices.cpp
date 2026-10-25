@@ -5,7 +5,6 @@
 #include "VirtualCPU.hpp"
 
 #include "../runtime/DragonRuntime.hpp"
-#include <ogfx/render/PixelRenderer.hpp>
 #include <ostd/io/Memory.hpp>
 
 //TODO: Fix all access functions (reads and writes) ensuring the address is not out of bounds.
@@ -665,7 +664,7 @@ namespace dragon
 			{
 				m_videoMemory.init(0xFFFF);
 				m_vramStart = data::MemoryMapAddresses::VideoCardInterface_End - data::MemoryMapAddresses::VideoCardInterface_Start + 1;
-				m_16Color_frameSize = ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H * ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_V * m_16Color_cellSize;
+				m_16Color_frameSize = VirtualDisplay::Columns * VirtualDisplay::Rows * m_16Color_cellSize;
 				m_16Color_currentFrameAddr = m_vramStart;
 				m_16Color_secondFrameAddr = m_vramStart + m_16Color_frameSize;
 			}
@@ -741,7 +740,7 @@ namespace dragon
 
 			bool Graphics::readVRAM_16Colors(u8 x, u8 y, Graphics::tText16_Cell& outTextCell)
 			{
-				u16 cellOffset = static_cast<u16>(CONVERT_2D_1D(x, y, ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H)) * 4;
+				u16 cellOffset = static_cast<u16>(CONVERT_2D_1D(x, y, VirtualDisplay::Columns)) * 4;
 				cellOffset += m_16Color_currentFrameAddr;
 				i8 outVal = 0;
 				if (!m_videoMemory.r_Byte(cellOffset + tText16_CellStructure::character, outVal))
@@ -758,7 +757,7 @@ namespace dragon
 
 			bool Graphics::writeVRAM_16Colors(u8 x, u8 y, u8 character, u8 background, u8 foreground)
 			{
-				u16 cellOffset = static_cast<u16>(CONVERT_2D_1D(x, y, ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H)) * 4;
+				u16 cellOffset = static_cast<u16>(CONVERT_2D_1D(x, y, VirtualDisplay::Columns)) * 4;
 				if (!readFlag(tFlags::DoubleBufferingEnabled))
 					cellOffset += m_16Color_currentFrameAddr;
 				else
@@ -804,7 +803,7 @@ namespace dragon
 
 			void Graphics::scroll_16Colors(void)
 			{
-				i32 line_len = (ogfx::PixelRenderer::TextRenderer::CONSOLE_CHARS_H * 4);
+				i32 line_len = (VirtualDisplay::Columns * 4);
 				for (i32 i = m_16Color_currentFrameAddr + line_len; i < m_16Color_currentFrameAddr + m_16Color_frameSize; i += 4)
 				{
 					i32 k = i;
