@@ -173,7 +173,9 @@ namespace dragon
 			const auto& state = SDL_GetKeyboardState(nullptr);
 			if (signal.ID == ostd::BuiltinSignals::KeyPressed || signal.ID == ostd::BuiltinSignals::KeyReleased)
 			{
-				ogfx::KeyEventData& ked = (ogfx::KeyEventData&)signal.userData;
+				if (!signal.userData)
+					return;
+				ogfx::KeyEventData& ked = (ogfx::KeyEventData&)*signal.userData;
 				m_modifiersBitFiels = __construct_modifiers_bitfield();
 				__write16(tRegisters::Modifiers, (i16)m_modifiersBitFiels.value);
 				__write16(tRegisters::KeyCode, __sdl_key_code_convert(ked.keyCode));
@@ -184,7 +186,9 @@ namespace dragon
 			}
 			else if (signal.ID == ostd::BuiltinSignals::TextEntered)
 			{
-				ogfx::KeyEventData& ked = (ogfx::KeyEventData&)signal.userData;
+				if (!signal.userData)
+					return;
+				ogfx::KeyEventData& ked = (ogfx::KeyEventData&)*signal.userData;
 				m_modifiersBitFiels = __construct_modifiers_bitfield();
 				__write16(tRegisters::Modifiers, (i16)m_modifiersBitFiels.value);
 				__write16(tRegisters::KeyCode, (i16)ked.text[0]);

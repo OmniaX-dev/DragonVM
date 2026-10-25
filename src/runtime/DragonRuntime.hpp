@@ -15,7 +15,7 @@ namespace dragon
 {
 	class DragonRuntime
 	{
-		public: class SignalListener : public ostd::BaseObject
+		public: class SignalListener : public ostd::Object
 		{
 			public:
 				inline SignalListener(void) {  }
