@@ -3,7 +3,6 @@
 #include <ogfx/gui/Window.hpp>
 #include <ogfx/gui/widgets/TextConsoleCanvas.hpp>
 #include <ogfx/render/PixelFont.hpp>
-#include "../hardware/VirtualIODevices.hpp"
 #include <chrono>
 #include <deque>
 
