@@ -61,6 +61,8 @@ namespace dragon
 		m_debugger.setStateChangedCallback([this](void) { m_viewsDirty = true; });
 		m_debugger.setViewCallback([this](Debugger::eView view, i64 argument) { show_view(view, argument); });
 		m_debugger.setQuitCallback([this](void) { close(); });
+
+		m_rootWidget.reloadTheme(true);
 	}
 
 	ogfx::gui::Label& DebuggerWindow::add_title(Label& label, const String& text, const Rectangle& anchors, const Offsets& offsets)

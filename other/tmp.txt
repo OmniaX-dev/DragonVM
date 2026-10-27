@@ -1,0 +1,14 @@
+Add all tracked to watchlist hexeditor
+Enable HexEditor follow
+Enable Follow IP
+Widget for Register view
+Widget for Tracker
+Add instruction as aliases
+HexEditor for stack
+Show debugger maximized
+refresh theme for memory tab
+show debuger boot output in debugger
+
+Where do program names come from?
+
+Fix Context Menu

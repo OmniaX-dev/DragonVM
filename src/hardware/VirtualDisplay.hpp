@@ -99,7 +99,7 @@ namespace dragon
 				inline bool isAutoRedrawEnabled(void) const { return m_autoRedraw; }
 				// Shows the current state (video mode, text, VRAM) without touching the machine:
 				// no interrupt, no pending redraw consumed (e.g. after the debugger restored a state).
-				void refresh(void);
+				void refresh(void) override;
 
 				// The display's own state (single color text and line buffer, pending redraw), as
 				// StateSize plain bytes (for the debugger). Unused bytes are zeroed.

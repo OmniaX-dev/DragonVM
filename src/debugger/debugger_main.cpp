@@ -25,6 +25,7 @@ int main(int argc, char** argv)
 	if (rValue != 0) return rValue;
 
 	//Running the debugger
+	window.setWindowState(ogfx::gui::Window::eWindowState::Maximized);
 	window.start();
 	window.mainLoop();
 	return dragon::DragonRuntime::RETURN_VAL_EXIT_SUCCESS;
