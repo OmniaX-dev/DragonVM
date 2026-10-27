@@ -1,9 +1,7 @@
 #pragma once
 
-#include <ogfx/gui/Window.hpp>
 #include <ogfx/gui/widgets/TextConsoleCanvas.hpp>
 #include <ogfx/render/PixelFont.hpp>
-#include <chrono>
 #include <deque>
 
 namespace dragon
@@ -11,22 +9,22 @@ namespace dragon
 	namespace data { class IBiosVideoPalette; }
 	namespace hw
 	{
-		// The machine's screen: a window showing a TextConsoleCanvas (Columns x Rows character
-		// cells). The video card protocol (registers + signals in the VGA memory area) is
-		// unchanged:
+		// The machine's screen: a TextConsoleCanvas widget (Columns x Rows character cells), so it
+		// can be placed in any ogfx::gui::Window (the runtime's window, the debugger, ...). The video
+		// card protocol (registers + signals in the VGA memory area) is:
 		//   - TextSingleColor: a teletype. Characters are appended to lines (directly, or through
 		//     a line buffer), lines scroll up when the screen is full, and the "invert" register
 		//     swaps the two colors (of the characters written while it is set).
 		//   - Text16Colors: the BIOS writes cells into VRAM through the Graphics interface;
 		//     the screen shows VRAM, colored with the configured palette.
-		// What is shown only changes when the screen is redrawn (the CMOS redraw rate, or a
+		// What is shown only changes when the screen is redrawn (redrawScreen(), or a
 		// redraw/swap/scroll signal), unless redrawing is disabled by the ScreenRedrawDisabled
 		// flag; every redraw raises the Text16ModeScreenRefreshed interrupt.
 		//
-		// mainLoop() is called by the runtime once per CPU cycle: it handles the video signal
-		// right away (the BIOS doesn't wait for it to be consumed), while events and drawing
-		// run at the window's own frame rate.
-		class VirtualDisplay : public ogfx::gui::Window
+		// processSignal() must be called by the owner once per CPU cycle: it handles the video
+		// signal right away (the BIOS doesn't wait for it to be consumed). Redraws happen in the
+		// widget's update (at the window's frame rate), also while the widget is hidden.
+		class VirtualDisplay : public ogfx::gui::TextConsoleCanvas
 		{
 			public: struct tRegisters
 			{
@@ -82,24 +80,19 @@ namespace dragon
 				inline static constexpr i32 ScreenHeight = Rows * CharHeight;
 
 			public:
-				// Loads the screen font (a 16 x 6 grid of CharWidth x CharHeight glyphs).
+				VirtualDisplay(ogfx::gui::Window& window);
 				~VirtualDisplay(void);
-				void setFont(const String& fontPath);
-				// The CRT / bloom look of the screen (off by default).
-				inline void enableCRTEffect(bool enable = true) { m_screen.enableCRTEffect(enable); }
-				inline void enableBloomEffect(bool enable = true) { m_screen.enableBloomEffect(enable); }
+				// Sets up the palettes from the machine config and loads the screen font (a 16 x 6
+				// grid of CharWidth x CharHeight glyphs). Call once the machine config is loaded.
+				void initialize(const String& fontPath);
 
-				void onInitialize(void) override;
-				void onUpdate(f64 delta) override;
-
+				// Handles the pending video signal, if any (once per CPU cycle).
+				void processSignal(void);
 				inline void redrawScreen(void) { m_redrawScreen = true; }
 
-			protected:
-				// One step per call (see above), instead of gui::Window's blocking loop.
-				void __main_loop(void) override;
+				void onUpdate(void) override;
 
 			private:
-				void process_signal(void);
 				void __redraw_screen(void);
 				void enter_text_mode(void);
 				void apply_video_mode(u8 videoMode);
@@ -121,13 +114,12 @@ namespace dragon
 				inline static constexpr u8 SingleBackground = 2;
 
 				ogfx::PixelFont m_font;
-				ogfx::gui::TextConsoleCanvas m_screen { *this, ScreenWidth, ScreenHeight };
 				stdvec<u32> m_cells;
 				bool m_textModeActive { false };
 				u8 m_videoMode { 0xFF };
 
-				ogfx::gui::PixelCanvas::ColorPalette256 m_singlePalette;
-				ogfx::gui::PixelCanvas::ColorPalette256 m_text16Palette;
+				ColorPalette256 m_singlePalette;
+				ColorPalette256 m_text16Palette;
 
 				// Single color mode: the lines of text, as cells (character + colors).
 				std::deque<stdvec<u32>> m_singleTextLines;
@@ -138,7 +130,6 @@ namespace dragon
 				u8 m_currentPaletteID { 0 };
 
 				bool m_redrawScreen { true };
-				std::chrono::steady_clock::time_point m_lastWindowStep;
 		};
 	}
 }

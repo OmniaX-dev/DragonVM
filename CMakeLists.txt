@@ -32,6 +32,7 @@ list(APPEND RUNTIME_SOURCE_FILES
 	${CMAKE_CURRENT_LIST_DIR}/src/runtime/runtime_main.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/runtime/DragonRuntime.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/runtime/ConfigLoader.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/runtime/RuntimeWindow.cpp
 
 	${CMAKE_CURRENT_LIST_DIR}/src/hardware/VirtualCPU.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/hardware/VirtualRAM.cpp

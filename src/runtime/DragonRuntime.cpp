@@ -97,26 +97,6 @@ namespace dragon
 		machine_config = dragon::MachineConfigLoader::loadConfig(info.configFilePath);
 		if (!machine_config.isValid()) return RETURN_VAL_INVALID_MACHINE_CONFIG; //TODO: Error
 
-		if (info.verboseLoad)
-			out.fg(ostd::ConsoleColors::Magenta).p("  Initializing virtual display:").nl();
-		i32 w = hw::VirtualDisplay::ScreenWidth;
-		i32 h = hw::VirtualDisplay::ScreenHeight;
-		vDisplay.initialize(w, h, "DragonVM");
-		vDisplay.setFont("font.bmp");
-		vDisplay.enableCRTEffect(machine_config.crt_effect);
-		vDisplay.enableBloomEffect(machine_config.bloom_effect);
-		if (info.hideVirtualDisplay)
-			vDisplay.hide();
-		if (info.verboseLoad)
-		{
-			out.fg(ostd::ConsoleColors::BrightYellow);
-			out.p("    Done. (").p(w).p("x").p(h).p(")");
-			if (info.hideVirtualDisplay)
-				out.p(" - HIDDEN").nl();
-			else
-				out.nl();
-		}
-
 		if (machine_config.vdisk_paths.size() == 0) return RETURN_VAL_NO_DISK; //TODO: Error
 		if (info.verboseLoad)
 			out.fg(ostd::ConsoleColors::Magenta).p("  Initializing virtual disks:").nl();
@@ -299,31 +279,6 @@ namespace dragon
 	void DragonRuntime::shutdownMachine(void)
 	{
 		machine_config.destroy();
-	}
-
-	void DragonRuntime::runMachine(void)
-	{
-		bool running = true;
-		u8 screenRedrawRate = vCMOS.read8(data::CMOSRegisters::ScreenRedrawRate);
-		f64 cycleUPS = (machine_config.fixed_clock ? machine_config.clock_rate_sec : -1.0);
-		ostd::StepTimer cycleTimer(cycleUPS, [&](f64 dt) {
-			vDisplay.mainLoop();
-			running = cpu.execute() && vDisplay.isRunning();
-			vDiskInterface.cycleStep();
-		});
-		ostd::StepTimer screenTimer(screenRedrawRate, [&](f64 dt) {
-			vDisplay.redrawScreen();
-		});
-		while (running || vDiskInterface.isBusy())
-		{
-			cycleTimer.update();
-			screenTimer.update();
-			if (dragon::data::ErrorHandler::hasError())
-			{
-				processErrors();
-				break;
-			}
-		}
 	}
 
 	void DragonRuntime::forceLoad(const String& filePath, u16 loadAddress)

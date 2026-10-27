@@ -9,6 +9,12 @@ namespace dragon
 	{
 		using ogfx::gui::TextConsoleCanvas;
 
+		VirtualDisplay::VirtualDisplay(ogfx::gui::Window& window) : TextConsoleCanvas(window, ScreenWidth, ScreenHeight)
+		{
+			setTypeName("dragon::hw::VirtualDisplay");
+			setLetterboxColor({ 0, 0, 0 });
+		}
+
 		VirtualDisplay::~VirtualDisplay(void)
 		{
 			for (auto* palette : m_text16_palettes)
@@ -16,17 +22,8 @@ namespace dragon
 			m_text16_palettes.clear();
 		}
 
-		void VirtualDisplay::onInitialize(void)
+		void VirtualDisplay::initialize(const String& fontPath)
 		{
-			// The runtime drives this window one step per CPU cycle: waiting for events would
-			// stall the CPU.
-			enableBlockingEvents(false);
-			setClearColor({ 0, 0, 0 });
-
-			addWidget(m_screen);
-			m_screen.setAnchorPreset(ogfx::gui::eAnchorPreset::FullRect);
-			m_screen.setLetterboxColor({ 0, 0, 0 });
-
 			auto& config = DragonRuntime::machine_config;
 			m_singlePalette.setColor(SingleForeground, config.singleColor_foreground);
 			m_singlePalette.setColor(SingleBackground, config.singleColor_background);
@@ -41,13 +38,10 @@ namespace dragon
 			// default), so the console's default colors are set to VM color 0 in this mode.
 			for (u32 i = 1; i < 256; i++)
 				m_text16Palette.setColor(cast<u8>(i), m_text16_Currentpalette->getColor(cast<u8>(i)));
-		}
 
-		void VirtualDisplay::setFont(const String& fontPath)
-		{
 			if (!m_font.loadFromFile(fontPath))
 				return;
-			m_screen.setFont(m_font);
+			setFont(m_font);
 			enter_text_mode();
 		}
 
@@ -57,8 +51,8 @@ namespace dragon
 				return;
 			// Cells are always CharWidth x CharHeight, so the screen is Columns x Rows whatever
 			// the font's own cell size.
-			m_screen.enterTextConsoleMode(m_cells, 0, m_singlePalette, CharWidth, CharHeight);
-			m_textModeActive = m_screen.isTextConsoleMode();
+			enterTextConsoleMode(m_cells, 0, m_singlePalette, CharWidth, CharHeight);
+			m_textModeActive = isTextConsoleMode();
 			m_videoMode = 0xFF; // re-applied on the next frame
 		}
 
@@ -71,32 +65,18 @@ namespace dragon
 			if (videoMode == tVideoModeValues::Text16Colors)
 			{
 				const ostd::Color color0 = m_text16_Currentpalette->getColor(0);
-				m_screen.setPalette(m_text16Palette);
-				m_screen.setDefaultColors(color0, color0);
+				setPalette(m_text16Palette);
+				setDefaultColors(color0, color0);
 			}
 			else
 			{
-				m_screen.setPalette(m_singlePalette);
-				m_screen.setDefaultColors(config.singleColor_foreground, config.singleColor_background);
+				setPalette(m_singlePalette);
+				setDefaultColors(config.singleColor_foreground, config.singleColor_background);
 			}
 			m_redrawScreen = true;
 		}
 
-		void VirtualDisplay::__main_loop(void)
-		{
-			process_signal();
-			// Events, updates and drawing run on gui::Window's own timers (60 fps); checking them
-			// at most every millisecond keeps the per-cycle cost down at high clock rates.
-			const auto now = std::chrono::steady_clock::now();
-			if (now - m_lastWindowStep < std::chrono::milliseconds(1))
-				return;
-			m_lastWindowStep = now;
-			handle_events();
-			m_fixedUpdateTimer.update();
-			m_mainLoopTimer.update();
-		}
-
-		void VirtualDisplay::onUpdate(f64 delta)
+		void VirtualDisplay::onUpdate(void)
 		{
 			auto& mem = DragonRuntime::memMap;
 			const u16 vga_addr = data::MemoryMapAddresses::VideoCardInterface_Start;
@@ -104,9 +84,10 @@ namespace dragon
 			m_redrawScreen = m_redrawScreen && !DragonRuntime::vGraphicsInterface.readFlag(hw::interface::Graphics::tFlags::ScreenRedrawDisabled);
 			if (m_redrawScreen)
 				__redraw_screen();
+			TextConsoleCanvas::onUpdate();
 		}
 
-		void VirtualDisplay::process_signal(void)
+		void VirtualDisplay::processSignal(void)
 		{
 			auto& mem = DragonRuntime::memMap;
 			const u16 vga_addr = data::MemoryMapAddresses::VideoCardInterface_Start;

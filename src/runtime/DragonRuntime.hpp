@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ostd/io/IOHandlers.hpp>
+
 #include "../hardware/VirtualCPU.hpp"
 #include "../hardware/MemoryMapper.hpp"
 #include "../hardware/VirtualRAM.hpp"
@@ -37,7 +39,6 @@ namespace dragon
 		{
 			String configFilePath;
 			bool verboseLoad { false };
-			bool hideVirtualDisplay { false };
 			bool debugModeEnabled { false };
 		};
 		public:
@@ -46,7 +47,6 @@ namespace dragon
 			static i32 loadArguments(int argc, char** argv, tCommandLineArgs& args);
 			static i32 initMachine(const tRuntimeInitInfo& info);
 			static void shutdownMachine(void);
-			static void runMachine(void);
 			static void forceLoad(const String& filePath, u16 loadAddress);
 
 			inline static bool hasError(void) { return data::ErrorHandler::hasError(); }
@@ -72,8 +72,6 @@ namespace dragon
 			inline static hw::interface::SerialPort vSerialInterface;
 
 			inline static std::unordered_map<i32, hw::VirtualHardDrive> vDisks;
-
-			inline static hw::VirtualDisplay vDisplay;
 
 			inline static tMachineConfig machine_config;
 
