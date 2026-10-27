@@ -168,6 +168,8 @@ namespace dragon
 
 		void VirtualKeyboard::handleSignal(ostd::Signal& signal)
 		{
+			if (!m_inputEnabled)
+				return;
 			auto& cpu = DragonRuntime::cpu;
 			const auto& state = SDL_GetKeyboardState(nullptr);
 			if (signal.ID == ostd::BuiltinSignals::KeyPressed || signal.ID == ostd::BuiltinSignals::KeyReleased)
@@ -878,6 +880,11 @@ namespace dragon
 					data::ErrorHandler::pushError(data::ErrorCodes::CMOS_InvalidSize, String("Invalid virtual CMOS chhip size: ").add(m_fileSize));
 					return;
 				}
+				// The chip is kept in memory too (written through to the file): reads don't touch
+				// the file, and the debugger can see (and restore) its content.
+				m_data.assign(m_size, 0);
+				m_dataFile.read((char*)m_data.data(), m_size);
+				m_dataFile.clear();
 				m_initialized = true;
 			}
 
@@ -893,10 +900,7 @@ namespace dragon
 					data::ErrorHandler::pushError(data::ErrorCodes::CMOS_InvalidAddress, String("Invalid Byte CMOS location at address: ").add(String::getHexStr(addr, true, 2)));
 					return false;
 				}
-				i8 value = 0;
-				m_dataFile.seekg(addr);
-				m_dataFile.read((char*)&value, sizeof(value));
-				return value;
+				return m_data[addr];
 			}
 
 			i16 CMOS::read16(u16 addr)
@@ -934,9 +938,20 @@ namespace dragon
 					data::ErrorHandler::pushError(data::ErrorCodes::AccessViolation_BiosModeRequired, String("Attempting to write byte to CMOS while not in BIOS mode. Address: ").add(String::getHexStr(addr, true, 2)));
 					return 0;
 				}
+				m_data[addr] = value;
 				m_dataFile.seekp(addr);
 				m_dataFile.write((char*)(&value), sizeof(value));
+				m_dataFile.flush();
 				return value;
+			}
+
+			void CMOS::syncByteStream(void)
+			{
+				if (!m_initialized)
+					return;
+				m_dataFile.seekp(0);
+				m_dataFile.write((char*)m_data.data(), m_data.size());
+				m_dataFile.flush();
 			}
 
 			i16 CMOS::write16(u16 addr, i16 value)

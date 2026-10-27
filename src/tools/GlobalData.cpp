@@ -10,6 +10,11 @@ namespace dragon
 			CPUExtension* ext = DragonRuntime::cpu.getCurrentCPUExtension();
 			if (ext != nullptr)
 				return ext->getOpCodeString(DragonRuntime::cpu.getCurrentCPUExtensionInstruction());
+			return getBaseOpCodeString(opCode);
+		}
+
+		String OpCodes::getBaseOpCodeString(u8 opCode)
+		{
 			switch (opCode)
 			{
 				case data::OpCodes::NoOp: return "NoOp";
@@ -110,6 +115,11 @@ namespace dragon
 			CPUExtension* ext = DragonRuntime::cpu.getCurrentCPUExtension();
 			if (ext != nullptr)
 				return 1 + ext->getInstructionSIze(DragonRuntime::cpu.getCurrentCPUExtensionInstruction());
+			return getBaseInstructionSize(opCode);
+		}
+
+		u8 OpCodes::getBaseInstructionSize(u8 opCode)
+		{
 			switch (opCode)
 			{
 				case data::OpCodes::NoOp: return 1;

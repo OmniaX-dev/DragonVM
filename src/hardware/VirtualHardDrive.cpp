@@ -58,6 +58,23 @@ namespace dragon
 				data::ErrorHandler::pushError(data::ErrorCodes::HardDrive_WriteOverflow, "Write Overflow on HardDrive.");
 				return false;
 			}
+			u8 oldValue = 0;
+			if (s_writeListener)
+			{
+				m_dataFile.seekg(addr);
+				m_dataFile.read((char*)&oldValue, sizeof(oldValue));
+			}
+			m_dataFile.seekp(addr);
+			m_dataFile.write((char*)(&value), sizeof(value));
+			if (s_writeListener)
+				s_writeListener(*this, addr, oldValue, cast<u8>(value));
+			return true;
+		}
+
+		bool VirtualHardDrive::restoreByte(u32 addr, u8 value)
+		{
+			if (!m_initialized || addr >= m_fileSize)
+				return false;
 			m_dataFile.seekp(addr);
 			m_dataFile.write((char*)(&value), sizeof(value));
 			return true;
@@ -90,8 +107,16 @@ namespace dragon
 				data::ErrorHandler::pushError(data::ErrorCodes::HardDrive_BuffWriteOverflow, "Buffered Write Overflow on HardDrive.");
 				return false;
 			}
+			ostd::ByteStream oldData;
+			if (s_writeListener)
+				read(addr, cast<u16>(m_writeBuffer.size()), oldData);
 			m_dataFile.seekp(addr);
 			m_dataFile.write((char*)(&m_writeBuffer[0]), m_writeBuffer.size());
+			if (s_writeListener)
+			{
+				for (size_t i = 0; i < m_writeBuffer.size(); i++)
+					s_writeListener(*this, addr + cast<u32>(i), i < oldData.size() ? cast<u8>(oldData[i]) : 0, cast<u8>(m_writeBuffer[i]));
+			}
 			m_writeBuffer.clear();
 			return true;
 		}

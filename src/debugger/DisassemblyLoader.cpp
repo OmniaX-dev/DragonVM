@@ -14,6 +14,7 @@ namespace dragon
 
 	void DisassemblyTable::init(const String& filePath)
 	{
+		m_filePath = filePath;
 		ostd::ByteStream stream;
 		if (!ostd::Memory::loadByteStreamFromFile(filePath, stream))
 		{
@@ -88,6 +89,9 @@ namespace dragon
 			else if (mode == MODE_LABELS)
 				m_labels.push_back(line);
 		}
+		std::sort(m_code.begin(), m_code.end());
+		std::sort(m_labels.begin(), m_labels.end());
+		std::sort(m_data.begin(), m_data.end());
 		m_initialized = true;
 	}
 

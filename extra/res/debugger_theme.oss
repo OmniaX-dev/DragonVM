@@ -1,0 +1,696 @@
+% ================== debugger_theme.oss ==================
+% The OmniaFramework dark theme (extra/DefaultThemeDark.oss), used by the debugger (ddb).
+
+
+% ==== Variables ====
+const $accentColor = #2FB000FF
+const $textColor = #CCEECCFF
+const $borderColor = #111111FF
+const $darkColor = #223322FF
+const $accentColorLight = #87FF5CFF
+const $accentColorDark = #3B7500FF
+const $backgroundColor = rgba(30, 30, 30, 255)
+const $crimsonAccent = rgba(220,  20,  60, 150)
+const $blueAccent = #0075C7
+% ===================
+
+
+macro set_focus_border(color, width = 1, show = true) {
+	focusBorderColor = $color;
+	showFocusBorder = $show;
+	focusBorderWidth = $width;
+}
+
+macro set_common_values(_borderColor = $borderColor, _fontSize = 18, _showBorder = true) {
+	borderColor = $_borderColor;
+	fontSize = $_fontSize;
+	showBorder = $_showBorder;
+}
+
+
+% ====== Root Widget ======
+(window) {
+	backgroundColor = $backgroundColor
+	(tooltip) {
+		backgroundColor = #FFF7D6FF
+		borderColor = rgb(30, 30, 30)
+		textColor = rgb(30, 30, 30)
+		borderWidth = 1
+		fontSize = 20
+	}
+}
+% =========================
+
+
+% ====== Panel ======
+(panel) {
+	set_common_values()
+	backgroundColor = $backgroundColor
+	titleColor =  $accentColorDark
+	titlebarColor = $borderColor
+	titlebarBorderColor = $borderColor
+	borderRadius = 0
+	borderWidth = 2
+	titlebarBorderWidth = 2
+	showBackground = true
+	titlebarType =  full
+	titlebarHeight = 35
+	titlebarFontSize = 18
+	titlebarTextAlign = text_left
+	scrollSpeed = 1.2
+	scrollSmoothFactor = 0.7
+	padding = rect(15, 15, 15, 15)
+	margin = rect(0, 0, 0, 0)
+}
+% ===================
+
+
+
+% ====== SubWindow ======
+% Floating windows (ogfx::gui::SubWindow). (subwindow:active) is the topmost one.
+% Blurred windows want a translucent backgroundColor and borderRadius = 0 (the
+% blurred area is rectangular).
+(subwindow) {
+	set_common_values($borderColor, 18, true)
+	backgroundColor = $backgroundColor
+	textColor = $textColor
+	borderRadius = 0
+	borderWidth = 1
+	showBackground = true
+	padding = rect(10, 10, 10, 10)
+	margin = rect(0, 0, 0, 0)
+	titlebarHeight = 32.0
+	titlebarColor = $darkColor
+	titlebarBorderColor = $borderColor
+	titlebarBorderWidth = 1
+	titleColor = #889988FF
+	titlebarFontSize = 17
+	titlebarTextAlign = text_left
+	resizeGripSize = 6.0
+	minWidth = 160.0
+	minHeight = 80.0
+	minimizedWidth = 220.0
+	modalOverlayColor = rgba(0, 0, 0, 110)
+	(button) {
+		size = 22.0
+		spacing = 4.0
+		borderRadius = 4.0
+		glyphThickness = 2.0
+		color = rgba(0, 0, 0, 0)
+		hoverColor = rgba(255, 255, 255, 35)
+		pressedColor = rgba(255, 255, 255, 70)
+		activeColor = $accentColorDark
+		glyphColor = #889988FF
+		glyphHoverColor = $accentColorLight
+	}
+	(closeButton) {
+		hoverColor = rgba(200, 30, 40, 255)
+		pressedColor = rgba(150, 20, 30, 255)
+	}
+	(blur) {
+		enabled = false
+		radius = 16.0
+		tint = rgba(255, 255, 255, 255)
+	}
+	(shadow) {
+		enabled = true
+		size = 12
+		color = rgba(0, 0, 0, 110)
+		offsetX = 0.0
+		offsetY = 3.0
+	}
+}
+(subwindow:active) {
+	borderColor = $accentColorDark
+	titleColor = $accentColorLight
+	(button) {
+		glyphColor = $textColor
+	}
+}
+(@messagebox subwindow) {
+	padding = rect(16, 16, 16, 16)
+	(messageBox) {
+		iconSize = 48.0
+		spacing = 16.0
+		lineSpacing = 4.0
+		minWidth = 280.0
+	}
+}
+% Opt-in frosted glass: subWindow.addThemeID("frosted")
+(@frosted subwindow) {
+	backgroundColor = rgba(10, 10, 25, 80)
+	titlebarColor = rgba(10, 10, 25, 120)
+	(blur) {
+		enabled = true
+		radius = 16.0
+	}
+}
+% =======================
+
+
+
+% ====== HexEditor ======
+% ogfx::gui::HexEditor. The size/endian buttons (and the edit window's format
+% buttons) use the "hex_toggle" theme ID; the selected one gets ":active".
+(hexEditor) {
+	set_common_values($borderColor, 16, true)
+	backgroundColor = $backgroundColor
+	textColor = $textColor
+	borderWidth = 1
+	showBackground = true
+	padding = rect(4, 4, 4, 4)
+	set_focus_border($blueAccent)
+	gridFontSize = 16
+	rowSpacing = 4.0
+	groupSpacing = 8.0
+	groupSize = 8
+	scrollbarWidth = 14.0
+	changeFadeTime = 1.0
+	topBarColor = $darkColor
+	gridBackgroundColor = rgba(18, 20, 18, 255)
+	addressColor = rgba(90, 170, 255, 255)
+	headerColor = $accentColor
+	titleColor = rgba(220, 120, 230, 255)
+	hexColor = rgba(225, 230, 225, 255)
+	zeroColor = rgba(105, 110, 105, 255)
+	asciiColor = rgba(240, 220, 90, 255)
+	asciiDotColor = rgba(85, 90, 85, 255)
+	selectionColor = rgba(0, 117, 199, 170)
+	selectionTextColor = rgba(255, 255, 255, 255)
+	hoverColor = rgba(255, 255, 255, 35)
+	hoverBorderColor = $accentColorLight
+	highlightColor = rgba(220, 20, 60, 150)
+	changedColor = rgba(255, 150, 0, 170)
+	watchColor = rgba(0, 220, 180, 255)
+	crosshairColor = rgba(255, 255, 255, 12)
+	rowStripeColor = rgba(255, 255, 255, 6)
+	separatorColor = rgba(60, 70, 60, 255)
+	(statusBar) {
+		backgroundColor = $darkColor
+		textColor = $textColor
+		labelColor = $accentColorDark
+	}
+	(search) {
+		matchColor = rgba(230, 200, 40, 110)
+		currentColor = rgba(255, 230, 60, 200)
+		borderColor = rgba(255, 240, 120, 255)
+	}
+	(scrollbar) {
+		trackColor = rgba(12, 14, 12, 255)
+		thumbColor = rgba(70, 90, 70, 255)
+		markerColor = rgba(220, 20, 60, 255)
+	}
+}
+(hexWatchList) {
+	fontSize = 16
+	showBackground = true
+	backgroundColor = rgba(18, 20, 18, 255)
+	showBorder = true
+	borderColor = $borderColor
+	borderWidth = 1
+}
+(@hex_bar label) {
+	fontSize = 16
+	padding = rect(4, 0, 4, 0)
+}
+(@hex_bar button) {
+	fontSize = 16
+	padding = rect(8, 1, 8, 1)
+}
+(@hex_bar checkbox) {
+	fontSize = 16
+	padding = rect(2, 1, 2, 1)
+}
+(@hex_bar textEdit) {
+	fontSize = 16
+	padding = rect(2, 1, 2, 1)
+}
+(@hex_toggle button) {
+	useBackgroundGradient = false
+	showBackground = true
+	backgroundColor = $backgroundColor
+	padding = rect(8, 1, 8, 1)
+}
+(@hex_toggle button:hover) {
+	borderColor = $accentColorLight
+}
+(@hex_toggle button:active) {
+	backgroundColor = $accentColorDark
+	borderColor = $accentColorLight
+	textColor = #FFFFFFFF
+}
+% =======================
+
+
+
+% ====== TabPanel ======
+(tabPanel) {
+	set_common_values()
+	backgroundColor = $backgroundColor
+	borderRadius = 0
+	borderWidth = 2
+	showBackground = true
+	margin = rect(0, 0, 0, 0)
+	textColor = $textColor
+
+	(tabBar) {
+		height = 35.0
+		backgroundColor = $darkColor
+		borderColor = $borderColor
+		borderWidth = 1
+		sidePadding = 20.0
+	}
+}
+(@panel_tab panel) {
+	padding = rect(0, 0, 0, 0)
+}
+% ======================
+
+
+
+% ====== Scrollbar ======
+(scrollbar) {
+	(thumb) {
+		color = $darkColor
+		borderRadius = 30.0
+		borderColor = $borderColor
+		showBorder = true
+	}
+	(track) {
+		color = #111111FF
+	}
+	width = 18.0
+}
+(scrollbar:hover) {
+	(thumb) {
+		color = $accentColorDark
+	}
+}
+(scrollbar:pressed) {
+	(thumb) {
+		color = #225500FF
+	}
+	(track) {
+		color = #001100FF
+	}
+}
+% =======================
+
+
+
+% ====== CheckBox ======
+(checkbox) {
+	set_common_values($borderColor, 18, false)
+	checkBorderColor = $accentColorDark
+	checkBoxColor = $accentColor
+	textColor = $textColor
+	borderRadius = 0
+	borderWidth = 0
+	checkBorderRadius = 6
+	checkBorderWidth = 2
+	showBackground = false
+	padding = rect(4, 4, 4, 4)
+	margin = rect(0, 0, 0, 0)
+	set_focus_border($blueAccent)
+}
+(checkbox:hover) {
+	checkBorderColor = $accentColorLight
+}
+(checkbox:pressed) {
+	checkBoxColor = $accentColor
+	textColor = $accentColorDark
+	checkBorderColor = $accentColor
+}
+(checkbox:active) {
+	checkBoxColor = $accentColor
+	checkBorderColor = $accentColor
+	textColor = $accentColorDark
+}
+% ======================
+
+
+
+% ====== RadioButton ======
+(radioButton) {
+	set_common_values($borderColor, 18, false)
+	innerCircleColor = $accentColorDark
+	outerCircleColor = $accentColor
+	outerCircleBorderWidth = 2
+	textColor = $textColor
+	showBackground = false
+	padding = rect(4, 4, 4, 4)
+	margin = rect(0, 0, 0, 0)
+	set_focus_border($blueAccent)
+}
+(radioButton:hover) {
+	outerCircleColor = $accentColorLight
+}
+(radioButton:pressed) {
+	outerCircleColor = $accentColor
+	textColor = $accentColorDark
+	innerCircleColor = $accentColor
+}
+(radioButton:active) {
+	innerCircleColor = $accentColor
+	outerCircleColor = $accentColor
+	textColor = $accentColorDark
+}
+% =========================
+
+
+
+% ====== Label ======
+(label) {
+	set_common_values($borderColor, 18, false)
+	textColor = $textColor
+	borderRadius = 0
+	borderWidth = 0
+	showBackground = false
+	padding = rect(15, 15, 15, 15)
+	margin = rect(0, 0, 0, 0)
+}
+% ===================
+
+
+
+% ====== Button ======
+(button) {
+	set_common_values($accentColorDark)
+	textColor = $textColor
+	backgroundGradient = gradientV($accentColor - $accentColorDark)
+	borderRadius = 0
+	borderWidth = 1
+	showBackground = false
+	useBackgroundGradient = true
+	padding = rect(5, 5, 5, 5)
+	margin = rect(0, 0, 0, 0)
+	showIcon = false
+	(icon) {
+	}
+	set_focus_border($blueAccent)
+}
+(button:hover) {
+	borderColor = $accentColorLight
+}
+(button:pressed) {
+	borderColor = $accentColorDark
+	textColor = #BBBBBBFF
+	backgroundGradient = gradientV($accentColorDark - $accentColor)
+}
+% ====================
+
+
+
+% ====== Image ======
+(image) {
+}
+% ===================
+
+
+
+% ====== ProgressBar ======
+(progressbar) {
+	set_common_values($accentColor)
+	borderWidth = 1
+	showDecimal = false
+	showText = true
+	useBackgroundGradient = true
+	backgroundGradient = gradientV($darkColor - $accentColorDark)
+	useProgressGradient = true
+	progressGradient = gradientV($accentColor - $accentColorDark)
+}
+% =========================
+
+
+
+% ====== Slider ======
+(slider) {
+	(handle) {
+		color = $accentColor
+		size = vec2(10, 18)
+	}
+	(track) {
+		color = $accentColorDark
+		progressColor = $accentColor
+		width = 6.0
+	}
+	showStepTicks = true
+	stepTickHeight = 6.0
+	stepTickColor = $accentColor
+	padding = rect(5, 5, 5, 5)
+	set_focus_border($blueAccent)
+}
+% ===================
+
+
+
+% ====== Context Menu ======
+(context) {
+	set_common_values()
+	padding = rect(16, 0, 16, 0)
+	itemSpacing = 6.0
+	backgroundColor = $darkColor
+	selectionColor = $accentColor
+	selectionTextColor = $accentColorLight
+	separatorLineColor = $borderColor
+	textColor = $textColor
+	submenuIndicatorColor = $accentColorDark
+	useSelectionGradient = true
+	selectionGradient = gradientV($accentColor - $accentColorDark)
+	animateOpen = true
+	animationDelay = 120
+}
+% ==========================
+
+
+
+% ====== MenuBar ======
+(menubar) {
+	set_common_values($borderColor, 16, false)
+	height = 24.0
+	itemPadding = rect(0, 0, 15, 0)
+	backgroundColor = $darkColor
+	textColor = $textColor
+	selectionColor = $accentColor
+	selectionTextColor = $accentColorLight
+}
+% =====================
+
+
+
+% ====== ToolBar ======
+(toolbar) {
+	set_common_values()
+	height = 30.0
+	backgroundColor = $darkColor
+	textColor = $textColor
+	selectionColor = $accentColor
+	selectionTextColor = $accentColorLight
+	showBackground = true
+}
+(@tool_button button) {
+	set_common_values(color_black, 18, false)
+	padding = rect(5, 0, 5, 0)
+	margin = rect(5, 0, 0, 0)
+	showBackground = true
+	backgroundColor = $darkColor
+	useBackgroundGradient = false
+	showIcon = true
+	(icon) {
+		tint = $accentColorLight
+	}
+	set_focus_border($blueAccent)
+}
+(@tool_button button:hover) {
+	borderColor = $textColor
+	backgroundColor = $accentColorDark
+	showBorder = true
+	(icon) {
+		tint = $textColor
+	}
+}
+(@tool_button button:pressed) {
+	borderColor = $accentColorDark
+	showBorder = true
+	(icon) {
+		tint = $accentColorLight
+	}
+}
+% =====================
+
+
+
+% ====== ComboBox ======
+(combo) {
+	set_common_values($accentColor)
+	backgroundColor = $darkColor
+	borderWidth = 1
+	showBackground = true
+	triangleIndicatorColor = $accentColor
+	triangleIndicatorPadding = 8.0
+	textColor = $textColor
+}
+(combo:hover) {
+	triangleIndicatorColor = $accentColorLight
+	borderColor = $accentColorLight
+}
+(combo:active) {
+	triangleIndicatorColor = $accentColorLight
+	borderColor = $accentColorLight
+}
+% ======================
+
+
+
+% ====== TreeView ======
+(tree) {
+	set_common_values($borderColor, 16, true)
+	linePadding = rect(5, 5, 0, 0)
+	selectionColor = $accentColor
+	selectionTextColor = color_white
+	iconSpacing = 0.0
+	iconInset = 4
+	showIcons = true
+	textColor = $textColor
+	backgroundColor = $darkColor
+	backgroundColor2 = $darkColor.lighten(0.06)
+	showAlternatingBackground = true
+	separatorLineColor = $borderColor
+	showSeparatorLine = false
+	iconTintColor = $accentColorLight
+	indentWidth = 16.0
+	chevronColor = $accentColorDark
+	chevronInset = 4.0
+	branchLineColor = $textColor
+	showBranchLines = true
+	branchLineThickness = 1.0
+	set_focus_border($blueAccent)
+}
+% ======================
+
+
+
+% ====== DetailList ======
+(detailList) {
+	set_common_values($borderColor, 16, true)
+	backgroundColor = $darkColor
+	backgroundColor2 = $darkColor.lighten(0.06)
+	showAlternatingBackground = true
+	textColor = $textColor
+	cellPadding = rect(6, 4, 6, 4)
+	selectionColor = $accentColor
+	selectionTextColor = color_white
+	separatorLineColor = $borderColor
+	showSeparatorLine = true
+	showColumnSeparators = true
+	set_focus_border($blueAccent)
+	padding = rect(0, 0, 0, 0)
+
+	(header) {
+		height = 28.0
+		backgroundColor = $borderColor
+		textColor = $textColor
+		borderColor = $accentColorDark
+		borderWidth = 1
+		sortArrowColor = $accentColorLight
+		sortArrowSize = 5.0
+		sortArrowPadding = 8.0
+	}
+}
+% ========================
+
+
+
+% ====== LineGraph ======
+(lineGraph) {
+	set_common_values($borderColor, 16, true)
+	backgroundColor = $darkColor
+	plotBackgroundColor = $darkColor.lighten(0.04)
+	gridColor = $borderColor
+	showGrid = true
+	axisLineColor = $textColor
+	axisLabelColor = $textColor
+	axisTitleColor = $accentColorLight
+	pointRadius = 3.0
+	lineThickness = 2
+	showLegend = true
+	padding = rect(15, 15, 15, 15)
+
+	(legend) {
+		backgroundColor = rgba(15, 15, 15, 220)
+		textColor = $textColor
+		hoverTextColor = $accentColorLight
+		borderColor = $borderColor
+	}
+
+	(hover) {
+		crosshairColor = $accentColorDark
+		labelBackgroundColor = rgba(15, 15, 15, 230)
+		labelTextColor = $accentColorLight
+		circleColor = colo_white
+	}
+}
+% ========================
+
+
+
+% ====== TextEdit ======
+(textEdit) {
+	set_common_values()
+	set_focus_border($blueAccent)
+	backgroundColor = $darkColor
+	textColor = $textColor
+	cursorBlink = true
+	cursorWidth = 2
+	cursorColor = $crimsonAccent
+	selectionColor = $blueAccent
+	cursorStyle = "line"
+}
+% ======================
+
+
+
+% ====== ColorPicker ======
+(colorPicker) {
+	set_common_values()
+	set_focus_border($blueAccent)
+	backgroundColor = $darkColor
+	padding = rect(8, 8, 8, 8)
+	stripWidth = 20
+	regionSpacing = 8
+	cursorRadius = 6
+}
+(colorButton) {
+	set_common_values()
+	set_focus_border($blueAccent)
+}
+% =========================
+
+
+
+% ====== PianoRoll ======
+(pianoRoll) {
+	set_common_values()
+	padding = rect(0, 0, 0, 0)
+	margin = rect(0, 0, 0, 0)
+}
+% =======================
+
+
+% ====== RichTextView ======
+% ogfx::gui::RichTextView: monospace styled text (consoles, logs, disassembly).
+(richTextView) {
+	set_common_values($borderColor, 16, true)
+	borderWidth = 1
+	backgroundColor = rgba(18, 20, 18, 255)
+	textColor = $textColor
+	showBackground = true
+	padding = rect(6, 4, 6, 4)
+	set_focus_border($blueAccent)
+	hoverColor = rgba(255, 255, 255, 14)
+	selectionColor = rgba(0, 117, 199, 110)
+	linePadding = 2.0
+	scrollSpeed = 1.2
+	scrollSmoothFactor = 0.7
+}
+% ==========================

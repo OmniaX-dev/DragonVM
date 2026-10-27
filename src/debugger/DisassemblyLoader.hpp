@@ -18,6 +18,10 @@ namespace dragon
 			inline const std::vector<code::Assembler::tDisassemblyLine>& getLabelTable(void) const { return m_labels; }
 
 			inline bool isInitialized(void) const { return m_initialized; }
+			inline const String& getFilePath(void) const { return m_filePath; }
+			// Address range of the code (first / last instruction); 0 / 0 without code.
+			inline u32 getCodeStart(void) const { return m_code.empty() ? 0 : m_code.front().addr; }
+			inline u32 getCodeEnd(void) const { return m_code.empty() ? 0 : m_code.back().addr; }
 
 		private:
 			void load_data(ostd::ByteStream& stream);
@@ -42,6 +46,8 @@ namespace dragon
 			static std::vector<code::Assembler::tDisassemblyLine> getCodeTable(void);
 			static std::vector<code::Assembler::tDisassemblyLine> getDataTable(void);
 			static std::vector<code::Assembler::tDisassemblyLine> getLabelTable(void);
+			// Every loaded table (one per assembled program), in loading order.
+			inline static const std::vector<DisassemblyTable>& getTables(void) { return m_tables; }
 
 		private:
 			inline static std::vector<DisassemblyTable> m_tables;

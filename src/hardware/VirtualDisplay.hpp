@@ -88,12 +88,34 @@ namespace dragon
 
 				// Handles the pending video signal, if any (once per CPU cycle).
 				void processSignal(void);
+				// Requests a redraw (done by the next update()).
 				inline void redrawScreen(void) { m_redrawScreen = true; }
+				// The machine side of the screen: applies the video mode and does the requested
+				// redraw (raising the Text16ModeScreenRefreshed interrupt). Called by the widget's
+				// update while auto redraw is on (the default); otherwise call it yourself, e.g.
+				// once per CPU cycle, so redraws happen at exact points of the program.
+				void update(void);
+				inline void enableAutoRedraw(bool enable = true) { m_autoRedraw = enable; }
+				inline bool isAutoRedrawEnabled(void) const { return m_autoRedraw; }
+				// Shows the current state (video mode, text, VRAM) without touching the machine:
+				// no interrupt, no pending redraw consumed (e.g. after the debugger restored a state).
+				void refresh(void);
+
+				// The display's own state (single color text and line buffer, pending redraw), as
+				// StateSize plain bytes (for the debugger). Unused bytes are zeroed.
+				void saveState(u8* outState) const;
+				void loadState(const u8* state);
 
 				void onUpdate(void) override;
 
+			public:
+				// lines (1) + Rows x (length (1) + Columns cells (4)) + buffer length (1) + Columns
+				// characters + pending redraw (1)
+				inline static constexpr size_t StateSize = 1 + Rows * (1 + Columns * 4) + 1 + Columns + 1;
+
 			private:
 				void __redraw_screen(void);
+				void to_cells(void);
 				void enter_text_mode(void);
 				void apply_video_mode(u8 videoMode);
 
@@ -130,6 +152,7 @@ namespace dragon
 				u8 m_currentPaletteID { 0 };
 
 				bool m_redrawScreen { true };
+				bool m_autoRedraw { true };
 		};
 	}
 }

@@ -2,6 +2,7 @@
 #include "../tools/GlobalData.hpp"
 
 #include <ostd/io/Memory.hpp>
+#include <cstring>
 
 #include "../runtime/DragonRuntime.hpp"
 
@@ -162,15 +163,62 @@ namespace dragon
 			m_subroutineCounter++;
 			m_interruptHandlerCount++;
 			writeRegister16(data::Registers::IP, handlerAddress);
-			// if (m_debugModeEnabled && hardware)
-			// {
-			//     DragonRuntime::tCallInfo interruptData;
-			//     interruptData.info = "HW INT";
-			//     interruptData.addr = intValue;
-			//     interruptData.inst_addr = 0x0000;
-			//     interruptData.interrupts_disabled = !readFlag(data::Flags::InterruptsEnabled);
-			//     ostd::SignalHandler::emitSignal(DragonRuntime::SignalListener::Signal_HardwareInterruptOccurred, ostd::Signal::Priority::RealTime, interruptData);
-			// }
+			if (m_interruptListener)
+				m_interruptListener(intValue, hardware, handlerAddress);
+		}
+
+		data::CPUExtension* VirtualCPU::getExtension(u8 opCode) const
+		{
+			for (i32 i = 0; i < 16; i++)
+			{
+				if (m_extensions[i] != nullptr && m_extensions[i]->m_code == opCode)
+					return m_extensions[i];
+			}
+			return nullptr;
+		}
+
+		void VirtualCPU::saveState(tState& outState) const
+		{
+			std::memset(&outState, 0, sizeof(tState));
+			std::memcpy(outState.registers, m_registers, sizeof(outState.registers));
+			outState.stackFrameSize = m_stackFrameSize;
+			outState.currentAddr = m_currentAddr;
+			outState.currentOffset = m_currentOffset;
+			outState.interruptHandlerCount = m_interruptHandlerCount;
+			outState.subroutineCounter = m_subroutineCounter;
+			outState.currentInst = m_currentInst;
+			outState.currentExtInst = m_currentExtInst;
+			outState.currentExtension = -1;
+			for (i32 i = 0; i < 16; i++)
+			{
+				if (m_currentExtension != nullptr && m_extensions[i] == m_currentExtension)
+					outState.currentExtension = cast<i8>(i);
+			}
+			outState.halt = m_halt;
+			outState.biosMode = m_biosMode;
+			outState.isDebugBreakPoint = m_isDebugBreakPoint;
+			outState.ramDumped = m_ramDumped;
+			outState.isOffsetAddressingEnabled = m_isOffsetAddressingEnabled;
+			outState.debugProfilerStarted = m_debugProfilerStarted;
+		}
+
+		void VirtualCPU::loadState(const tState& state)
+		{
+			std::memcpy(m_registers, state.registers, sizeof(state.registers));
+			m_stackFrameSize = state.stackFrameSize;
+			m_currentAddr = state.currentAddr;
+			m_currentOffset = state.currentOffset;
+			m_interruptHandlerCount = state.interruptHandlerCount;
+			m_subroutineCounter = state.subroutineCounter;
+			m_currentInst = state.currentInst;
+			m_currentExtInst = state.currentExtInst;
+			m_currentExtension = (state.currentExtension >= 0 && state.currentExtension < 16 ? m_extensions[state.currentExtension] : nullptr);
+			m_halt = state.halt;
+			m_biosMode = state.biosMode;
+			m_isDebugBreakPoint = state.isDebugBreakPoint;
+			m_ramDumped = state.ramDumped;
+			m_isOffsetAddressingEnabled = state.isOffsetAddressingEnabled;
+			m_debugProfilerStarted = state.debugProfilerStarted;
 		}
 
 		bool VirtualCPU::loadExtension(void)

@@ -49,6 +49,11 @@ list(APPEND RUNTIME_SOURCE_FILES
 list(APPEND DEBUGGER_SOURCE_FILES
 	${CMAKE_CURRENT_LIST_DIR}/src/debugger/debugger_main.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/debugger/DisassemblyLoader.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/debugger/History.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/debugger/Debugger.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/debugger/DebuggerDisplay.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/debugger/DisassemblyView.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/debugger/DebuggerWindow.cpp
 
 	${CMAKE_CURRENT_LIST_DIR}/src/hardware/VirtualCPU.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/hardware/VirtualRAM.cpp

@@ -2,6 +2,7 @@
 #include "../runtime/DragonRuntime.hpp"
 #include "../tools/GlobalData.hpp"
 #include <cctype>
+#include <cstring>
 
 namespace dragon
 {
@@ -78,13 +79,70 @@ namespace dragon
 
 		void VirtualDisplay::onUpdate(void)
 		{
+			if (m_autoRedraw)
+				update();
+			TextConsoleCanvas::onUpdate();
+		}
+
+		void VirtualDisplay::update(void)
+		{
 			auto& mem = DragonRuntime::memMap;
 			const u16 vga_addr = data::MemoryMapAddresses::VideoCardInterface_Start;
 			apply_video_mode(mem.read8(vga_addr + tRegisters::VideoMode));
 			m_redrawScreen = m_redrawScreen && !DragonRuntime::vGraphicsInterface.readFlag(hw::interface::Graphics::tFlags::ScreenRedrawDisabled);
 			if (m_redrawScreen)
 				__redraw_screen();
-			TextConsoleCanvas::onUpdate();
+		}
+
+		void VirtualDisplay::refresh(void)
+		{
+			const bool redraw = m_redrawScreen;
+			m_videoMode = 0xFF;
+			apply_video_mode(DragonRuntime::memMap.peek8(data::MemoryMapAddresses::VideoCardInterface_Start + tRegisters::VideoMode));
+			to_cells();
+			m_redrawScreen = redraw;
+		}
+
+		void VirtualDisplay::saveState(u8* outState) const
+		{
+			std::memset(outState, 0, StateSize);
+			u8* p = outState;
+			*p++ = cast<u8>(std::min(m_singleTextLines.size(), cast<size_t>(Rows)));
+			for (i32 i = 0; i < Rows; i++, p += 1 + Columns * 4)
+			{
+				if (cast<size_t>(i) >= m_singleTextLines.size())
+					continue;
+				const auto& line = m_singleTextLines[i];
+				const size_t len = std::min(line.size(), cast<size_t>(Columns));
+				p[0] = cast<u8>(len);
+				std::memcpy(p + 1, line.data(), len * 4);
+			}
+			const auto& buffer = m_singleTextBuffer.cpp_str();
+			const size_t bufferLen = std::min(buffer.size(), cast<size_t>(Columns));
+			*p++ = cast<u8>(bufferLen);
+			std::memcpy(p, buffer.data(), bufferLen);
+			p += Columns;
+			*p = m_redrawScreen ? 1 : 0;
+		}
+
+		void VirtualDisplay::loadState(const u8* state)
+		{
+			const u8* p = state;
+			const u8 lineCount = std::min<u8>(*p++, cast<u8>(Rows));
+			m_singleTextLines.clear();
+			for (i32 i = 0; i < Rows; i++, p += 1 + Columns * 4)
+			{
+				if (i >= lineCount)
+					continue;
+				const u8 len = std::min<u8>(p[0], cast<u8>(Columns));
+				stdvec<u32> line(len);
+				std::memcpy(line.data(), p + 1, cast<size_t>(len) * 4);
+				m_singleTextLines.push_back(std::move(line));
+			}
+			const u8 bufferLen = std::min<u8>(*p++, cast<u8>(Columns));
+			m_singleTextBuffer = String(std::string(reinterpret_cast<const char*>(p), bufferLen));
+			p += Columns;
+			m_redrawScreen = (*p != 0);
 		}
 
 		void VirtualDisplay::processSignal(void)
@@ -183,13 +241,20 @@ namespace dragon
 			{
 				const u8 video_mode = DragonRuntime::memMap.read8(data::MemoryMapAddresses::VideoCardInterface_Start + tRegisters::VideoMode);
 				apply_video_mode(video_mode);
-				if (video_mode == tVideoModeValues::Text16Colors)
-					text16_to_cells();
-				else if (video_mode == tVideoModeValues::TextSingleColor)
-					single_text_to_cells();
+				to_cells();
 			}
 			DragonRuntime::cpu.handleInterrupt(data::InterruptCodes::Text16ModeScreenRefreshed, true);
 			m_redrawScreen = false;
+		}
+
+		void VirtualDisplay::to_cells(void)
+		{
+			if (!m_textModeActive)
+				return;
+			if (m_videoMode == tVideoModeValues::Text16Colors)
+				text16_to_cells();
+			else if (m_videoMode == tVideoModeValues::TextSingleColor)
+				single_text_to_cells();
 		}
 
 

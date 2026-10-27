@@ -395,8 +395,13 @@ namespace dragon
 				inline static constexpr u8 Int = 0xFE;
 				inline static constexpr u8 Halt = 0xFF;
 
+				// For the instruction being executed: if it's an extension instruction, these
+				// describe it (whatever opCode is).
 				static String getOpCodeString(u8 opCode);
 				static u8 getInstructionSIze(u8 opCode);
+				// Just the base instruction set (extension opcodes are "ExtNN", size 1).
+				static String getBaseOpCodeString(u8 opCode);
+				static u8 getBaseInstructionSize(u8 opCode);
 		};
 
 		class DefaultValues

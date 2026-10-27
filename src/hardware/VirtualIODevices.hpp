@@ -234,6 +234,9 @@ namespace dragon
 				ostd::ByteStream* getByteStream(void) override;
 
 				void handleSignal(ostd::Signal& signal) override;
+				// When disabled, key events are ignored (e.g. while typing in a debugger's text field).
+				inline void enableInput(bool enable = true) { m_inputEnabled = enable; }
+				inline bool isInputEnabled(void) const { return m_inputEnabled; }
 
 			private:
 				ostd::BitField_16 __construct_modifiers_bitfield(void);
@@ -244,6 +247,7 @@ namespace dragon
 			private:
 				ostd::ByteStream m_data;
 				ostd::BitField_16 m_modifiersBitFiels;
+				bool m_inputEnabled { true };
 		};
 		class VirtualMouse : public IMemoryDevice
 		{
@@ -333,6 +337,8 @@ namespace dragon
 					bool disconnectDisk(data::VDiskID diskID);
 
 					inline bool isBusy(void) const { return m_busy; }
+					// The controller's state beside its registers (for the debugger).
+					inline void setBusy(bool busy) { m_busy = busy; }
 
 				private:
 					ostd::serial::SerialIO m_data { data::MemoryMapAddresses::DiskInterface_End - data::MemoryMapAddresses::DiskInterface_Start };
@@ -364,6 +370,12 @@ namespace dragon
 					inline static constexpr u8 DoubleBufferingEnabled 	=		0;
 					inline static constexpr u8 ScreenRedrawDisabled 	=		1;
 				};
+				// The card's state beside its memory (for the debugger).
+				public: struct tState
+				{
+					u16 currentFrameAddr;
+					u16 secondFrameAddr;
+				};
 				public:
 					Graphics(void);
 					i8 read8(u16 addr) override;
@@ -382,6 +394,9 @@ namespace dragon
 					bool clearVRAM_16Colors(u8 character = 0, u8 background = 0x00, u8 foreground = 0xFF);
 					void swapBuffers_16Colors(void);
 					void scroll_16Colors(void);
+
+					inline void saveState(tState& outState) const { outState = { m_16Color_currentFrameAddr, m_16Color_secondFrameAddr }; }
+					inline void loadState(const tState& state) { m_16Color_currentFrameAddr = state.currentFrameAddr; m_16Color_secondFrameAddr = state.secondFrameAddr; }
 
 				private:
 					ostd::serial::SerialIO m_videoMemory;
@@ -420,6 +435,8 @@ namespace dragon
 					i16 write16(u16 addr, i16 value) override;
 
 					ostd::ByteStream* getByteStream(void) override;
+					// Writes the whole chip back to its file.
+					void syncByteStream(void) override;
 
 				private:
 					ostd::ByteStream m_data;
