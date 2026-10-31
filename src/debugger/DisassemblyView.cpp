@@ -2,6 +2,7 @@
 #include "Debugger.hpp"
 #include "../runtime/DragonRuntime.hpp"
 #include <ogfx/gui/Window.hpp>
+#include <filesystem>
 
 namespace dragon
 {
@@ -31,14 +32,24 @@ namespace dragon
 				continue;
 			Document& doc = m_documents.emplace_back();
 			doc.table = &table;
-			String first = Debugger::Utils::findSymbol(m_debugger.data().labels, cast<u16>(table.getCodeStart()));
-			if (first == "" && !table.getLabelTable().empty())
-				first = table.getLabelTable().front().code;
-			doc.name = String("[").add(String::getHexStr(cast<u16>(table.getCodeStart()), true, 2)).add(" - ")
-							.add(String::getHexStr(cast<u16>(table.getCodeEnd()), true, 2)).add("]  ").add(first.new_trim());
+			// Files saved by an older assembler have no name: the file's own name then.
+			doc.name = table.getName();
+			if (doc.name == "")
+				doc.name = String(std::filesystem::path(table.getFilePath().cpp_str()).filename().string());
+			doc.name.add("  [").add(String::getHexStr(cast<u16>(table.getCodeStart()), true, 2)).add(" - ")
+					.add(String::getHexStr(cast<u16>(table.getCodeEnd()), true, 2)).add("]");
 			out.attach(doc.buffer);
+			// Labels on their own lines (no address: they're not instructions), before the
+			// instruction they point to; the label table is sorted, like the code table.
+			const auto& labels = table.getLabelTable();
+			size_t nextLabel = 0;
 			for (const auto& line : table.getCodeTable())
 			{
+				for (; nextLabel < labels.size() && labels[nextLabel].addr <= line.addr; nextLabel++)
+				{
+					Debugger::Display::printDisassemblyLabel(out, labels[nextLabel].code.new_trim());
+					out.nl();
+				}
 				doc.buffer.setLineUserData(doc.buffer.getCursorLine(), line.addr);
 				Debugger::Display::printDisassemblyLine(out, m_debugger, line);
 				out.nl();
@@ -190,10 +201,14 @@ namespace dragon
 		{
 			u8 size = 1;
 			const String name = Debugger::Utils::decodeInstruction(cast<u16>(addr), &size);
+			const String label = Debugger::Utils::findSymbol(m_debugger.data().labels, cast<u16>(addr));
+			if (label != "")
+			{
+				Debugger::Display::printDisassemblyLabel(out, label.new_trim());
+				out.nl();
+			}
 			live.buffer.setLineUserData(live.buffer.getCursorLine(), addr);
-			String label = Debugger::Utils::findNearestSymbol(m_debugger.data().labels, cast<u16>(addr));
-			label.fixedLength(m_debugger.data().labelLineLength);
-			out.p("  ").fg(ostd::ConsoleColors::Gray).p(label).p("  ");
+			out.p("  ").p(String::duplicateChar(' ', Debugger::Display::LabelIndent));
 			out.fg(ostd::ConsoleColors::BrightGray).p(String::getHexStr(cast<u16>(addr), true, 2)).p("  ");
 			String nameCol = name;
 			nameCol.addRightPadding(24);

@@ -63,12 +63,10 @@ namespace dragon
 
 	void Debugger::Display::printDisassemblyLine(ostd::OutputHandlerBase& out, const Debugger& dbg, const code::Assembler::tDisassemblyLine& _da)
 	{
-		// Two columns of gutter, for the breakpoint / current line markers.
-		out.p("  ");
-		String label = Utils::findSymbol(dbg.data().labels, _da.addr);
+		// Two columns of gutter (the breakpoint / current line markers), then the indentation
+		// under the labels (printed on their own lines, see printDisassemblyLabel()).
+		out.p("  ").p(String::duplicateChar(' ', LabelIndent));
 		bool specialSection = _da.code.startsWith("[") &&_da.code.endsWith("]");
-		label.fixedLength(dbg.data().labelLineLength);
-		out.fg(ostd::ConsoleColors::Gray).p(label.cpp_str()).p("  ");
 		if (specialSection)
 			out.fg(ostd::ConsoleColors::Cyan);
 		else if (_da.code == "debug_break")
@@ -81,6 +79,11 @@ namespace dragon
 		else
 			colorCodeInstructions(out, _da.code, dbg.data().labels);
 		out.reset();
+	}
+
+	void Debugger::Display::printDisassemblyLabel(ostd::OutputHandlerBase& out, const String& label)
+	{
+		out.p("  ").fg(ostd::ConsoleColors::Magenta).p(label.cpp_str()).p(":").reset();
 	}
 
 	void Debugger::Display::printDiff(ostd::OutputHandlerBase& out, const Debugger& dbg)

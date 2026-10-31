@@ -1,0 +1,94 @@
+
+const $accentColorLight = #87FF5CFF
+
+const $texture_atlas = file("res/icons/debugger.png")
+
+const $run_icon_row = 1
+const $run_icon_col = 3
+
+const $pause_icon_row = 1
+const $pause_icon_col = 2
+
+const $step_icon_row = 0
+const $step_icon_col = 2
+
+const $over_icon_row = 0
+const $over_icon_col = 1
+
+const $out_icon_row = 1
+const $out_icon_col = 1
+
+const $back_icon_row = 0
+const $back_icon_col = 0
+
+const $reverse_icon_row = 2
+const $reverse_icon_col = 0
+
+const $rewind_icon_row = 2
+const $rewind_icon_col = 1
+
+const $code_icon_row = 0
+const $code_icon_col = 3
+
+const $detach_icon_row = 1
+const $detach_icon_col = 0
+
+const $disks_icon_row = 2
+const $disks_icon_col = 2
+
+macro set_anim_data(__row_offset, __column_offset) {
+	animation = anim(frameCount: 1, stillFrame: 0, rowOffset: $__row_offset, \
+		 columnOffset: $__column_offset, rows: 3, columns: 4, \
+		 frameWidth: 128, frameHeight: 128, still: true)
+}
+
+(@toolbar_run button.icon) {
+	set_anim_data($run_icon_row, $run_icon_col)
+}
+(@toolbar_pause button.icon) {
+	set_anim_data($pause_icon_row, $pause_icon_col)
+}
+(@toolbar_step button.icon) {
+	set_anim_data($step_icon_row, $step_icon_col)
+}
+(@toolbar_over button.icon) {
+	set_anim_data($over_icon_row, $over_icon_col)
+}
+(@toolbar_out button.icon) {
+	set_anim_data($out_icon_row, $out_icon_col)
+}
+(@toolbar_back button.icon) {
+	set_anim_data($back_icon_row, $back_icon_col)
+}
+(@toolbar_reverse button.icon) {
+	set_anim_data($reverse_icon_row, $reverse_icon_col)
+}
+(@toolbar_rewind button.icon) {
+	set_anim_data($rewind_icon_row, $rewind_icon_col)
+}
+(@toolbar_disks button.icon) {
+	set_anim_data($disks_icon_row, $disks_icon_col)
+}
+(@code_program_btn button.icon) {
+	set_anim_data($code_icon_row, $code_icon_col)
+}
+(@console_detach_btn button.icon) {
+	set_anim_data($detach_icon_row, $detach_icon_col)
+}
+(@screen_detach_btn button.icon) {
+	set_anim_data($detach_icon_row, $detach_icon_col)
+}
+
+(@toolbar_btn button) {
+	showIcon = true
+	iconOnly = true
+	useBackgroundGradient = false
+	(icon) {
+		animated = true
+		path = $texture_atlas
+		tint = color_white
+	}
+}
+(@toolbar_btn button:hover) {
+	icon.tint = $accentColorLight
+}

@@ -1,5 +1,6 @@
 #include <ostd/utils/Defines.hpp>
 #include "Assembler.hpp"
+#include <filesystem>
 
 int main(int argc, char** argv)
 {
@@ -15,6 +16,6 @@ int main(int argc, char** argv)
 	dragon::code::Assembler::assembleToFile(args.source_file_path, args.dest_file_path);
 	dragon::code::Assembler::printProgramInfo(args.verbose_level);
 	if (args.save_disassembly)
-		dragon::code::Assembler::saveDisassemblyToFile(args.disassembly_file_path);
+		dragon::code::Assembler::saveDisassemblyToFile(args.disassembly_file_path, std::filesystem::path(args.dest_file_path.cpp_str()).filename().string());
 	return dragon::code::Assembler::Application::RETURN_VAL_EXIT_SUCCESS;
 }

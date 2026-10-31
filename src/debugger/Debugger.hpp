@@ -156,6 +156,9 @@ namespace dragon
 				static void colorizeInstructionBody(ostd::OutputHandlerBase& out, const String& instBody, const DisassemblyList& labelList);
 				static void colorCodeInstructions(ostd::OutputHandlerBase& out, const String& inst, const DisassemblyList& labelList);
 				static void printDisassemblyLine(ostd::OutputHandlerBase& out, const Debugger& dbg, const code::Assembler::tDisassemblyLine& line);
+				// A label line, between the instructions (which are LabelIndent columns further right).
+				static void printDisassemblyLabel(ostd::OutputHandlerBase& out, const String& label);
+				inline static constexpr i32 LabelIndent { 8 };
 				static void printDiff(ostd::OutputHandlerBase& out, const Debugger& dbg);
 				static void printTrackedAddresses(ostd::OutputHandlerBase& out, const Debugger& dbg, i32 width);
 				static void printStack(ostd::OutputHandlerBase& out, const Debugger& dbg, u16 nrows, i32 width);

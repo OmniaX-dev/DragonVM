@@ -26,6 +26,7 @@ int main(int argc, char** argv)
 
 	//Running the debugger
 	window.setWindowState(ogfx::gui::Window::eWindowState::Maximized);
+	window.setIcon("icon.png");
 	window.start();
 	window.mainLoop();
 	return dragon::DragonRuntime::RETURN_VAL_EXIT_SUCCESS;

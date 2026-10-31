@@ -19,6 +19,8 @@ namespace dragon
 
 			inline bool isInitialized(void) const { return m_initialized; }
 			inline const String& getFilePath(void) const { return m_filePath; }
+			// The name of the program (its binary) ("" for files saved by an older assembler).
+			inline const String& getName(void) const { return m_name; }
 			// Address range of the code (first / last instruction); 0 / 0 without code.
 			inline u32 getCodeStart(void) const { return m_code.empty() ? 0 : m_code.front().addr; }
 			inline u32 getCodeEnd(void) const { return m_code.empty() ? 0 : m_code.back().addr; }
@@ -32,6 +34,7 @@ namespace dragon
 			std::vector<code::Assembler::tDisassemblyLine> m_data;
 			bool m_initialized { false };
 			String m_filePath { "" };
+			String m_name { "" };
 
 		public:
 			static const DisassemblyTable DefaultObject;

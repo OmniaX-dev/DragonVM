@@ -117,7 +117,7 @@ namespace dragon
 				static ostd::ByteStream assembleFromFile(String fileName);
 				static ostd::ByteStream assembleToFile(String sourceFileName, String binaryFileName);
 				static ostd::ByteStream assembleToVirtualDisk(String fileName, hw::VirtualHardDrive& vhdd, u32 address);
-				static bool saveDisassemblyToFile(String fileName);
+				static bool saveDisassemblyToFile(String fileName, String programName = "");
 				static void printProgramInfo(i32 verbose_level = 1);
 
 			private:

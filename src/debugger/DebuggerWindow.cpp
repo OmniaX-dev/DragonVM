@@ -50,6 +50,8 @@ namespace dragon
 	void DebuggerWindow::onInitialize(void)
 	{
 		m_theme.loadFromFile("res/debugger_theme.oss", true, getDefaultStylesheetVariableList());
+		m_theme.loadFromFile("res/debugger_theme_detail.oss", false, getDefaultStylesheetVariableList());
+		// m_theme.debugPrint();
 		setTheme(m_theme);
 		setClearColor({ 22, 24, 22 });
 		build_toolbar();
@@ -82,12 +84,12 @@ namespace dragon
 	void DebuggerWindow::build_layout(void)
 	{
 		// ===== Disassembly =====
-		addWidget(m_programButton);
-		m_programButton.setText("Programs");
-		m_programButton.setCallback(Widget::eCallback::ActionPerformed, [this](const Event&) { show_programs_menu(); });
 		addWidget(m_programLabel);
 		m_programLabel.setFontSize(15);
-		addWidget(m_followCheck);
+		// Centered in its bounds (auto size would add the theme's padding and overflow them).
+		m_programLabel.setSizeMode(eSizeMode::Manual);
+		m_programLabel.addThemeID("disassembly_title");
+		// addWidget(m_followCheck);
 		m_followCheck.setText("Follow IP");
 		m_followCheck.setChecked(true);
 		m_followCheck.setStateChangedCallback([this](CheckBox&, bool checked) {
@@ -100,9 +102,10 @@ namespace dragon
 		m_disassembly.setBreakpointsChangedCallback([this](void) { m_viewsDirty = true; });
 
 		// ===== Console =====
-		add_title(m_consoleTitle, "Console  (help: list of commands, Enter: step)");
-		addWidget(m_consoleDetachButton);
+		// add_title(m_consoleTitle, "Console  (help: list of commands, Enter: step)");
 		m_consoleDetachButton.setText("Detach");
+		m_consoleDetachButton.addThemeID("toolbar_btn");
+		m_consoleDetachButton.addThemeID("console_detach_btn");
 		m_consoleDetachButton.setFontSize(14);
 		m_consoleDetachButton.setTooltipText("Move the console to its own window");
 		m_consoleDetachButton.enableTooltip();
@@ -114,16 +117,18 @@ namespace dragon
 		m_consoleView.enableFollowTail();
 		m_consoleView.getBuffer().setMaxLines(5000);
 		m_console.addWidget(m_commandInput);
-		place(m_commandInput, 0, 1, 1, 1, 0, -36, 0, 0);
+		// The detach button is beside the command line (it goes with the console).
+		m_console.addWidget(m_consoleDetachButton);
 		m_commandInput.setCommandCallback([this](const String& command) { run_command(command); });
 
 		// ===== Tabs =====
 		addWidget(m_tabs);
 
 		// ===== Screen =====
-		add_title(m_displayTitle, "Screen  (click it to type into the machine)");
-		addWidget(m_screenDetachButton);
+		// add_title(m_displayTitle, "Screen  (click it to type into the machine)");
 		m_screenDetachButton.setText("Detach");
+		m_screenDetachButton.addThemeID("toolbar_btn");
+		m_screenDetachButton.addThemeID("screen_detach_btn");
 		m_screenDetachButton.setFontSize(14);
 		m_screenDetachButton.setTooltipText("Move the screen to its own window");
 		m_screenDetachButton.enableTooltip();
@@ -132,27 +137,31 @@ namespace dragon
 		m_display.enableFocus();
 		m_display.enableFocusBorder();
 		m_display.setFocusBorderColor({ 0, 117, 199 });
+		// Over the screen's top right corner: added after it.
+		addWidget(m_screenDetachButton);
 	}
 
 	void DebuggerWindow::apply_layout(void)
 	{
 		const f32 split = Split;
-		place(m_programButton, 0, 0, 0, 0, 6, 4, 112, 34);
-		place(m_programLabel, 0, 0, split, 0, 120, 4, -120, 34);
-		place(m_followCheck, split, 0, split, 0, -112, 6, -6, 32);
+		place(m_programLabel, 0, 0, split, 0, 8, 0, -6, 26);
+		// place(m_followCheck, split, 0, split, 0, -112, 6, -6, 32);
 
 		// Left column: the disassembly takes the console's place when it's detached.
 		m_consoleTitle.setVisible(!m_consoleDetached);
 		m_consoleDetachButton.setVisible(!m_consoleDetached);
 		if (!m_consoleDetached)
 		{
-			place(m_disassembly, 0, 0, split, ConsoleTop, 6, 38, -3, -3);
-			place(m_consoleTitle, 0, ConsoleTop, split, ConsoleTop, 8, 0, -96, 30);
-			place(m_consoleDetachButton, split, ConsoleTop, split, ConsoleTop, -88, 3, -6, 29);
-			place(m_console, 0, ConsoleTop, split, 1, 6, 32, -3, -6);
+			place(m_disassembly, 0, 0, split, ConsoleTop, 6, 28, -3, -3);
+			place(m_console, 0, ConsoleTop, split, 1, 6, 3, -3, -6);
+			place(m_commandInput, 0, 1, 1, 1, 0, -ButtonSize - 4, -ButtonSize - 7, 0);
+			place(m_consoleDetachButton, 1, 1, 1, 1, -ButtonSize - 2, -ButtonSize - 2, -2, -2);
 		}
 		else
-			place(m_disassembly, 0, 0, split, 1, 6, 38, -3, -6);
+		{
+			place(m_disassembly, 0, 0, split, 1, 6, 28, -3, -6);
+			place(m_commandInput, 0, 1, 1, 1, 0, -ButtonSize - 4, 0, 0);
+		}
 
 		// Right column: the tabs take the screen's place when it's detached.
 		m_displayTitle.setVisible(!m_screenDetached);
@@ -160,9 +169,8 @@ namespace dragon
 		if (!m_screenDetached)
 		{
 			place(m_tabs, split, 0, 1, ScreenTop, 3, 3, -6, -3);
-			place(m_displayTitle, split, ScreenTop, 1, ScreenTop, 6, 0, -96, 30);
-			place(m_screenDetachButton, 1, ScreenTop, 1, ScreenTop, -88, 3, -6, 29);
-			place(m_display, split, ScreenTop, 1, 1, 3, 32, -6, -6);
+			place(m_display, split, ScreenTop, 1, 1, 3, 3, -6, -6);
+			place(m_screenDetachButton, 1, ScreenTop, 1, ScreenTop, -ButtonSize - 10, 7, -10, ButtonSize + 7);
 		}
 		else
 			place(m_tabs, split, 0, 1, 1, 3, 3, -6, -6);
@@ -172,13 +180,16 @@ namespace dragon
 	{
 		auto l_setup = [this](SubWindow& window, const Rectangle& bounds, const String& tooltip, std::function<void(void)> attach) {
 			window.setBounds(bounds);
-			window.setButtons(SubWindow::Buttons::Close | SubWindow::Buttons::Maximize | SubWindow::Buttons::AlwaysOnTop);
+			window.setButtons(SubWindow::Buttons::Close | SubWindow::Buttons::Minimize | SubWindow::Buttons::Maximize | SubWindow::Buttons::AlwaysOnTop);
 			window.addTitlebarButton("Attach", [attach](SubWindow&) { attach(); }, tooltip);
 			// Closing it puts the view back too.
 			window.setCloseCallback([attach](SubWindow&) { attach(); return true; });
 		};
 		l_setup(m_screenWindow, { 260, 140, 940, 640 }, "Put the screen back in the debugger window", [this](void) { set_screen_detached(false); });
 		l_setup(m_consoleWindow, { 160, 220, 1000, 560 }, "Put the console back in the debugger window", [this](void) { set_console_detached(false); });
+		// Empty for now.
+		m_diskManagerWindow.setBounds({ 220, 160, 900, 600 });
+		m_diskManagerWindow.setButtons(SubWindow::Buttons::Close | SubWindow::Buttons::Minimize | SubWindow::Buttons::Maximize | SubWindow::Buttons::AlwaysOnTop);
 	}
 
 	void DebuggerWindow::set_screen_detached(bool detached)
@@ -197,6 +208,9 @@ namespace dragon
 		{
 			m_screenWindow.removeWidget(m_display);
 			addWidget(m_display);
+			// Back over it.
+			removeWidget(m_screenDetachButton);
+			addWidget(m_screenDetachButton);
 			// Not close(): its callback is what may have called this.
 			m_screenWindow.setVisible(false);
 		}
@@ -257,7 +271,7 @@ namespace dragon
 		place(m_stackMemory, 0, 0.36f, 1, 1, 0, 3, 0, 0);
 		m_historyView.setFontSize(14);
 
-		m_tabs.setCurrentTab(*m_registersTab);
+		m_tabs.setCurrentTab(*m_memoryTab);
 		m_tabs.setTabChangedCallback([this](TabPanel&, Panel&) { refresh_tab(); });
 	}
 
@@ -265,27 +279,44 @@ namespace dragon
 	{
 		auto& tb = getToolBar();
 		tb.setHeight(36);
-		// Buttons placed one after the other (the bar's own button box squeezes long texts).
+		// Icon buttons placed one after the other (their text is the tooltip).
 		f32 x = 6;
-		auto l_button = [&](const String& text, std::function<void(void)> action) {
-			Button& button = m_toolButtons.emplace_back(*this);
-			tb.addWidget(button);
+		auto l_place = [&](Button& button, const String& text, const String& theme_id) {
 			button.setText(text);
 			button.setFontSize(15);
-			const f32 w = cast<f32>(text.len()) * 8.0f + 22.0f;
-			place(button, 0, 0.5f, 0, 0.5f, x, -14, x + w, 14);
-			button.setCallback(Widget::eCallback::ActionPerformed, [action](const Event&) { action(); });
-			x += w + 5;
+			button.addThemeID("toolbar_btn");
+			button.addThemeID(theme_id);
+			button.setTooltipText(text);
+			button.enableTooltip();
+			place(button, 0, 0.5f, 0, 0.5f, x, -ButtonSize / 2, x + ButtonSize, ButtonSize / 2);
+			x += ButtonSize + ButtonSpacing;
 		};
-		l_button("Run (F5)", [this](void) { m_debugger.resume(); });
-		l_button("Pause (F6)", [this](void) { m_debugger.pause(); });
-		l_button("Step (F10)", [this](void) { m_debugger.stepInto(1); });
-		l_button("Over (F11)", [this](void) { m_debugger.stepOver(); });
-		l_button("Out (Sh+F11)", [this](void) { m_debugger.stepOut(); });
-		x += 14;
-		l_button("Back (F9)", [this](void) { m_debugger.stepBack(1); });
-		l_button("Reverse run (Sh+F5)", [this](void) { m_debugger.reverseContinue(); });
-		l_button("Rewind", [this](void) { m_debugger.seek(m_debugger.history().getFirstPosition()); });
+		auto l_button = [&](const String& text, const String& theme_id, std::function<void(void)> action) {
+			Button& button = m_toolButtons.emplace_back(*this);
+			tb.addWidget(button);
+			l_place(button, text, theme_id);
+			button.setCallback(Widget::eCallback::ActionPerformed, [action](const Event&) { action(); });
+		};
+		auto l_separator = [&](void) {
+			ToolbarSeparator& separator = m_toolSeparators.emplace_back(*this);
+			tb.addWidget(separator);
+			place(separator, 0, 0.5f, 0, 0.5f, x + 2, -ButtonSize / 2 + 4, x + 2 + SeparatorWidth, ButtonSize / 2 - 4);
+			x += SeparatorWidth + 4 + ButtonSpacing;
+		};
+		tb.addWidget(m_programButton);
+		l_place(m_programButton, "Programs (the loaded disassemblies)", "code_program_btn");
+		m_programButton.setCallback(Widget::eCallback::ActionPerformed, [this](const Event&) { show_programs_menu(); });
+		l_separator();
+		l_button("Run (F5)", "toolbar_run", [this](void) { m_debugger.resume(); });
+		l_button("Pause (F6)", "toolbar_pause", [this](void) { m_debugger.pause(); });
+		l_button("Step (F10)", "toolbar_step", [this](void) { m_debugger.stepInto(1); });
+		l_button("Over (F11)", "toolbar_over", [this](void) { m_debugger.stepOver(); });
+		l_button("Out (Sh+F11)", "toolbar_out", [this](void) { m_debugger.stepOut(); });
+		l_button("Back (F9)", "toolbar_back", [this](void) { m_debugger.stepBack(1); });
+		l_button("Reverse run (Sh+F5)", "toolbar_reverse", [this](void) { m_debugger.reverseContinue(); });
+		l_button("Rewind", "toolbar_rewind", [this](void) { m_debugger.seek(m_debugger.history().getFirstPosition()); });
+		l_separator();
+		l_button("Disk Manager", "toolbar_disks", [this](void) { m_diskManagerWindow.open(); });
 		tb.addWidget(m_recordCheck);
 		m_recordCheck.setText("Record history");
 		m_recordCheck.setAnchorPreset(eAnchorPreset::CenterRight, ePresetResizeMode::KeepSize, 160);
@@ -304,19 +335,19 @@ namespace dragon
 		sb.addWidget(m_statusLabel);
 		m_statusLabel.setFontSize(15);
 		m_statusLabel.setAnchorPreset(eAnchorPreset::CenterLeft, ePresetResizeMode::KeepSize, 8);
-		sb.addWidget(m_timeline);
-		place(m_timeline, 0.6f, 0.5f, 1.0f, 0.5f, 0, -9, -12, 9);
-		// A fine step (a position per history entry, more or less): no ticks.
-		m_timeline.enableDrawTicks(false);
-		m_timeline.setTooltipText("History timeline: drag to move through the recorded cycles");
-		m_timeline.enableTooltip();
-		m_timeline.setValueChangedCallback([this](f32, f32 value) {
-			if (m_updatingTimeline || !m_debugger.isHistoryEnabled())
-				return;
-			const History& history = m_debugger.history();
-			const u64 span = history.getLastPosition() - history.getFirstPosition();
-			m_debugger.seek(history.getFirstPosition() + cast<u64>(std::llround(cast<f64>(value) * cast<f64>(span))));
-		});
+		// sb.addWidget(m_timeline);
+		// place(m_timeline, 0.6f, 0.5f, 1.0f, 0.5f, 0, -9, -12, 9);
+		// // A fine step (a position per history entry, more or less): no ticks.
+		// m_timeline.enableDrawTicks(false);
+		// m_timeline.setTooltipText("History timeline: drag to move through the recorded cycles");
+		// m_timeline.enableTooltip();
+		// m_timeline.setValueChangedCallback([this](f32, f32 value) {
+		//     if (m_updatingTimeline || !m_debugger.isHistoryEnabled())
+		//         return;
+		//     const History& history = m_debugger.history();
+		//     const u64 span = history.getLastPosition() - history.getFirstPosition();
+		//     m_debugger.seek(history.getFirstPosition() + cast<u64>(std::llround(cast<f64>(value) * cast<f64>(span))));
+		// });
 		showStatusBar(true);
 	}
 
@@ -466,6 +497,12 @@ namespace dragon
 			const String command = m_pendingCommands.front();
 			m_pendingCommands.pop_front();
 			run_command(command);
+		}
+		// The console follows its output.
+		if (m_consoleView.getBuffer().getVersion() != m_seenConsoleVersion)
+		{
+			m_seenConsoleVersion = m_consoleView.getBuffer().getVersion();
+			m_consoleView.scrollToBottom();
 		}
 		if (m_viewsDirty)
 		{
@@ -708,13 +745,30 @@ namespace dragon
 	void DebuggerWindow::show_programs_menu(void)
 	{
 		ContextMenu::Instance menu;
+		// First: back to following the IP (picking a program stops it).
+		menu.entries.push_back({ m_disassembly.isFollowEnabled() ? String("Following the IP") : String("Follow the IP"), -1 });
 		for (i32 i = 0; i < m_disassembly.getProgramCount(); i++)
-			menu.entries.push_back({ m_disassembly.getProgramName(i), i });
+		{
+			String name = m_disassembly.getProgramName(i);
+			if (i == m_disassembly.getCurrentProgram())
+				name = String("> ").add(name);
+			menu.entries.push_back({ name, i });
+		}
 		menu.onActivate = [this](const ContextMenu::Entry& entry) {
-			m_disassembly.showProgram(entry.id);
-			m_followCheck.setChecked(false);
-			m_programLabel.setText(m_disassembly.getProgramName(entry.id));
+			if (entry.id < 0)
+			{
+				m_followCheck.setChecked(true);
+				m_disassembly.enableFollow(true);
+				m_disassembly.setCurrentAddress(cast<u16>(DragonRuntime::cpu.readRegister(data::Registers::IP)), true);
+			}
+			else
+			{
+				m_disassembly.showProgram(entry.id);
+				m_followCheck.setChecked(false);
+			}
+			m_programLabel.setText(m_disassembly.getProgramName(m_disassembly.getCurrentProgram()));
 		};
-		showContextMenu(menu, getMousePosition());
+		const Rectangle bounds = m_programButton.getGlobalBounds();
+		showContextMenu(menu, { bounds.x, bounds.y + bounds.h });
 	}
 }

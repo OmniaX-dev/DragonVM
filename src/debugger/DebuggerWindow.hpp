@@ -35,6 +35,18 @@ namespace dragon
 			inline WidgetGroup(ogfx::gui::Window& window) : Widget({ 0, 0, 0, 0 }, window) { setTypeName("dragon::WidgetGroup"); setStylesheetCategoryName("dragonWidgetGroup"); disableFocus(); validate(); }
 	};
 
+	// A thin vertical line between groups of tool bar buttons.
+	class ToolbarSeparator : public ogfx::gui::Widget
+	{
+		public:
+			inline ToolbarSeparator(ogfx::gui::Window& window) : Widget({ 0, 0, 0, 0 }, window) { setTypeName("dragon::ToolbarSeparator"); setStylesheetCategoryName("dragonToolbarSeparator"); disableFocus(); disableChildren(); validate(); }
+			inline void onDraw(ogfx::BasicRenderer2D& gfx) override
+			{
+				const Rectangle bounds = getGlobalBounds();
+				gfx.fillRect({ bounds.x + std::floor(bounds.w * 0.5f), bounds.y, 1, bounds.h }, Color(90, 110, 90));
+			}
+	};
+
 	// ============================================================================
 	// DebuggerWindow — the graphical debugger.
 	//
@@ -142,11 +154,13 @@ namespace dragon
 			// Detached views
 			ogfx::gui::SubWindow m_screenWindow { *this, "Screen" };
 			ogfx::gui::SubWindow m_consoleWindow { *this, "Console" };
+			ogfx::gui::SubWindow m_diskManagerWindow { *this, "Disk Manager" };
 			bool m_screenDetached { false };
 			bool m_consoleDetached { false };
 
 			// Bars
 			std::deque<ogfx::gui::Button> m_toolButtons;
+			std::deque<ToolbarSeparator> m_toolSeparators;
 			ogfx::gui::CheckBox m_maxSpeedCheck { *this };
 			ogfx::gui::CheckBox m_recordCheck { *this };
 			ogfx::gui::Label m_stateLabel { *this };
@@ -157,6 +171,7 @@ namespace dragon
 			std::deque<String> m_pendingCommands;
 			bool m_started { false };
 			bool m_viewsDirty { true };
+			u64 m_seenConsoleVersion { 0 };
 			f64 m_refreshTimer { 0.0 };
 
 		public:
@@ -164,5 +179,9 @@ namespace dragon
 			inline static constexpr f32 Split { 0.47f };
 			inline static constexpr f32 ConsoleTop { 0.66f };
 			inline static constexpr f32 ScreenTop { 0.62f };
+			// The icon buttons (tool bar, detach).
+			inline static constexpr f32 ButtonSize { 28.0f };
+			inline static constexpr f32 ButtonSpacing { 3.0f };
+			inline static constexpr f32 SeparatorWidth { 5.0f };
 	};
 }

@@ -6,9 +6,9 @@
 const $accentColor = #2FB000FF
 const $textColor = #CCEECCFF
 const $borderColor = #111111FF
-const $darkColor = #223322FF
+const $darkColor = #111111FF
 const $accentColorLight = #87FF5CFF
-const $accentColorDark = #3B7500FF
+const $accentColorDark = #225500FF
 const $backgroundColor = rgba(30, 30, 30, 255)
 const $crimsonAccent = rgba(220,  20,  60, 150)
 const $blueAccent = #0075C7
@@ -368,6 +368,10 @@ macro set_common_values(_borderColor = $borderColor, _fontSize = 18, _showBorder
 	showBackground = false
 	padding = rect(15, 15, 15, 15)
 	margin = rect(0, 0, 0, 0)
+}
+% The disassembly's title: on a short line above it.
+(@disassembly_title label) {
+	padding = rect(8, 0, 8, 0)
 }
 % ===================
 

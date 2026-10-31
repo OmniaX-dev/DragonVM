@@ -46,6 +46,11 @@ namespace dragon
 			String code_line = "";
 			serializer.r_NullTerminatedString(addr, code_line);
 			addr += (code_line.len() + 1) * ostd::tTypeSize::BYTE;
+			if (code_line.startsWith("{ NAME } "))
+			{
+				m_name = code_line.new_substr(9).new_trim();
+				continue;
+			}
 			if (code_line == "{ DATA }")
 			{
 				mode = MODE_DATA;

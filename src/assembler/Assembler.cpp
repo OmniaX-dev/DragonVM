@@ -83,12 +83,15 @@ namespace dragon
 			return m_code;
 		}
 
-		bool Assembler::saveDisassemblyToFile(String fileName)
+		bool Assembler::saveDisassemblyToFile(String fileName, String programName)
 		{
 			if (m_code.size() == 0 || m_disassembly.size() == 0) return false;
 			String header_string = "{ DRAGON_DEBUG_DISASSEMBLY }";
+			// The program's name, as the first (pseudo) line: the file itself is named after a hash.
+			const String name_line = String("{ NAME } ").add(programName);
 			u64 da_size = 0;
 			da_size += (header_string.len() + 1) * ostd::tTypeSize::BYTE;
+			da_size += ostd::tTypeSize::DWORD + ostd::tTypeSize::WORD + (name_line.len() + 1) * ostd::tTypeSize::BYTE;
 			da_size += m_disassembly.size() * ostd::tTypeSize::DWORD; //Addresses
 			da_size += m_disassembly.size() * ostd::tTypeSize::WORD; //Data Size
 			da_size += m_disassembly.size() * ostd::tTypeSize::BYTE; //Null Termination
@@ -98,6 +101,12 @@ namespace dragon
 			ostd::StreamIndex stream_addr = 0;
 			serializer.w_String(stream_addr, header_string);
 			stream_addr += (header_string.len() + 1) * ostd::tTypeSize::BYTE;
+			serializer.w_DWord(stream_addr, 0);
+			stream_addr += ostd::tTypeSize::DWORD;
+			serializer.w_Word(stream_addr, 0);
+			stream_addr += ostd::tTypeSize::WORD;
+			serializer.w_String(stream_addr, name_line);
+			stream_addr += (name_line.len() + 1) * ostd::tTypeSize::BYTE;
 			for (auto& da : m_disassembly)
 			{
 				serializer.w_DWord(stream_addr, da.addr);
