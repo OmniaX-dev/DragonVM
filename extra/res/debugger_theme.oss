@@ -385,7 +385,7 @@ macro set_common_values(_borderColor = $borderColor, _fontSize = 18, _showBorder
 	borderRadius = 0
 	borderWidth = 1
 	showBackground = false
-	useBackgroundGradient = true
+	% useBackgroundGradient = true
 	padding = rect(5, 5, 5, 5)
 	margin = rect(0, 0, 0, 0)
 	showIcon = false
