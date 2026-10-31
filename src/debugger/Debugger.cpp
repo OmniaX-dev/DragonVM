@@ -94,9 +94,6 @@ namespace dragon
 		{
 			name = data::OpCodes::getBaseOpCodeString(opCode);
 			size = data::OpCodes::getBaseInstructionSize(opCode);
-			// The size table says 1 for these, but they have two operand bytes.
-			if (opCode == data::OpCodes::DEBUG_StartProfile)
-				size = 3;
 		}
 		if (outSize != nullptr)
 			*outSize = std::max<u8>(size, 1);
@@ -253,6 +250,8 @@ namespace dragon
 	i32 Debugger::initRuntime(hw::VirtualDisplay& display)
 	{
 		m_display = &display;
+		// The runtime's messages (loading info, errors) go to the debugger's console.
+		DragonRuntime::setOutputHandler(console());
 		dragon::DragonRuntime::tRuntimeInitInfo initInfo;
 		initInfo.configFilePath = m_data.args.machine_config_path;
 		initInfo.verboseLoad = m_data.args.verbose_load;
@@ -267,6 +266,7 @@ namespace dragon
 		m_data.code = dragon::DisassemblyLoader::getCodeTable();
 		m_data.labels = dragon::DisassemblyLoader::getLabelTable();
 		m_data.data = dragon::DisassemblyLoader::getDataTable();
+		register_debug_breaks();
 
 		if (m_data.args.auto_track_all_data_symbols)
 		{
@@ -402,10 +402,10 @@ namespace dragon
 						break;
 					}
 					const u16 ip = cast<u16>(DragonRuntime::cpu.readRegister(data::Registers::IP));
-					if (isBreakPoint(ip))
+					if (should_break_at(ip))
 					{
 						stop = true;
-						reason = String("Breakpoint at ").add(String::getHexStr(ip, true, 2)).add(" (reverse).");
+						reason = String(getBreakPoint(ip)->debugBreak ? "debug_break at " : "Breakpoint at ").add(String::getHexStr(ip, true, 2)).add(" (reverse).");
 					}
 					for (const auto& item : m_data.tracked)
 					{
@@ -549,16 +549,19 @@ namespace dragon
 			stopped("The CPU is halted.");
 			return true;
 		}
-		if (cpu.isInDebugBreakPoint())
+		if (cpu.isRamDumped())
+			console().fg(ostd::ConsoleColors::Red).p("RAM Dumped to <ram_dump.bin>.").reset().nl();
+		if (cpu.isInDebugBreakPoint() && getBreakPoint(previousIP) == nullptr)
 		{
-			if (cpu.isRamDumped())
-				console().fg(ostd::ConsoleColors::Red).p("RAM Dumped to <ram_dump.bin>.").reset().nl();
-			stopped("Reached Debug Break Point.");
+			// A debug_break the disassembly didn't know about: a breakpoint from now on (the
+			// known ones already stopped before executing, or are disabled).
+			m_data.breakpoints[previousIP] = { true, true };
+			stopped(String("Reached debug_break at ").add(String::getHexStr(previousIP, true, 2)).add(" (now a breakpoint: click it in the margin to disable it)."));
 			return true;
 		}
-		if (isBreakPoint(ip))
+		if (should_break_at(ip))
 		{
-			stopped(String("Breakpoint at ").add(String::getHexStr(ip, true, 2)).add("."));
+			stopped(String(getBreakPoint(ip)->debugBreak ? "debug_break at " : "Breakpoint at ").add(String::getHexStr(ip, true, 2)).add("."));
 			return true;
 		}
 		size_t trackedIndex = 0;
@@ -830,7 +833,7 @@ namespace dragon
 			return;
 		}
 		const u16 ip = cast<u16>(DragonRuntime::cpu.readRegister(data::Registers::IP));
-		if (isBreakPoint(ip))
+		if (should_break_at(ip))
 		{
 			after_navigation();
 			stopped(String("Breakpoint at ").add(String::getHexStr(ip, true, 2)).add(" (reverse)."));
@@ -854,13 +857,101 @@ namespace dragon
 
 	bool Debugger::toggleBreakPoint(u16 address)
 	{
-		if (isBreakPoint(address))
+		auto it = m_data.breakpoints.find(address);
+		if (it == m_data.breakpoints.end())
 		{
-			removeBreakPoint(address);
-			return false;
+			addBreakPoint(address);
+			return true;
 		}
-		addBreakPoint(address);
-		return true;
+		if (it->second.debugBreak)
+		{
+			it->second.enabled = !it->second.enabled;
+			return it->second.enabled;
+		}
+		m_data.breakpoints.erase(it);
+		return false;
+	}
+
+	bool Debugger::isBreakPoint(u16 address) const
+	{
+		auto it = m_data.breakpoints.find(address);
+		return it != m_data.breakpoints.end() && it->second.enabled;
+	}
+
+	const Debugger::tBreakPoint* Debugger::getBreakPoint(u16 address) const
+	{
+		auto it = m_data.breakpoints.find(address);
+		return it != m_data.breakpoints.end() ? &it->second : nullptr;
+	}
+
+	void Debugger::addBreakPoint(u16 address)
+	{
+		m_data.breakpoints[address].enabled = true;
+	}
+
+	void Debugger::removeBreakPoint(u16 address)
+	{
+		auto it = m_data.breakpoints.find(address);
+		if (it == m_data.breakpoints.end())
+			return;
+		if (it->second.debugBreak)
+			it->second.enabled = false;
+		else
+			m_data.breakpoints.erase(it);
+	}
+
+	void Debugger::setBreakPointEnabled(u16 address, bool enabled)
+	{
+		auto it = m_data.breakpoints.find(address);
+		if (it != m_data.breakpoints.end())
+			it->second.enabled = enabled;
+		else if (enabled)
+			addBreakPoint(address);
+	}
+
+	void Debugger::clearBreakPoints(void)
+	{
+		for (auto it = m_data.breakpoints.begin(); it != m_data.breakpoints.end(); )
+		{
+			if (it->second.debugBreak)
+			{
+				it->second.enabled = false;
+				++it;
+			}
+			else
+				it = m_data.breakpoints.erase(it);
+		}
+	}
+
+	bool Debugger::should_break_at(u16 ip) const
+	{
+		const tBreakPoint* bp = getBreakPoint(ip);
+		if (bp == nullptr || !bp->enabled)
+			return false;
+		if (!bp->debugBreak)
+			return true;
+		const u8 opCode = DragonRuntime::memMap.peek8(ip);
+		return opCode == data::OpCodes::DEBUG_Break || opCode == data::OpCodes::DEBUG_DumpRAM;
+	}
+
+	void Debugger::register_debug_breaks(void)
+	{
+		for (const auto& line : m_data.code)
+		{
+			String mnemonic = line.code.new_trim().toLower();
+			if (mnemonic.contains(" "))
+				mnemonic = mnemonic.new_substr(0, mnemonic.indexOf(" "));
+			if (mnemonic == "debug_break" || mnemonic == "debug_dump_ram")
+				m_data.breakpoints[cast<u16>(line.addr)] = { true, true };
+		}
+	}
+
+	void Debugger::tracked_changed(void)
+	{
+		m_data.trackedVersion++;
+		capture_info(m_currentInfo);
+		capture_info(m_previousInfo);
+		notify_state_changed();
 	}
 
 	void Debugger::track(u16 address, u16 size, const String& label, bool breakOnChange)
@@ -873,11 +964,32 @@ namespace dragon
 				item.breakOnChange = item.breakOnChange || breakOnChange;
 				if (label != "")
 					item.label = label;
+				m_data.trackedVersion++;
 				return;
 			}
 		}
 		m_data.tracked.push_back({ address, std::max<u16>(size, 1), (label != "" ? label : String::getHexStr(address, true, 2)), breakOnChange });
 		std::sort(m_data.tracked.begin(), m_data.tracked.end(), [](const tTrackedData& a, const tTrackedData& b) { return a.address < b.address; });
+		m_data.trackedVersion++;
+	}
+
+	void Debugger::untrackAll(void)
+	{
+		m_data.tracked.clear();
+		tracked_changed();
+	}
+
+	bool Debugger::setWatch(u16 address, bool breakOnChange)
+	{
+		for (auto& item : m_data.tracked)
+		{
+			if (item.address != address)
+				continue;
+			item.breakOnChange = breakOnChange;
+			tracked_changed();
+			return true;
+		}
+		return false;
 	}
 
 	bool Debugger::untrack(u16 address)
@@ -887,6 +999,7 @@ namespace dragon
 			if (it->address == address)
 			{
 				m_data.tracked.erase(it);
+				tracked_changed();
 				return true;
 			}
 		}
@@ -1052,8 +1165,8 @@ namespace dragon
 		}
 		else if (name == "bc" || name == "clear")
 		{
-			m_data.breakpoints.clear();
-			out.fg(ostd::ConsoleColors::Yellow).p("All breakpoints removed.").reset().nl();
+			clearBreakPoints();
+			out.fg(ostd::ConsoleColors::Yellow).p("All breakpoints removed (debug_break ones disabled).").reset().nl();
 			notify_state_changed();
 		}
 		else if (name == "t" || name == "track" || name == "tracker")
@@ -1070,7 +1183,7 @@ namespace dragon
 			u16 addr = 0;
 			if (args == "all")
 			{
-				m_data.tracked.clear();
+				untrackAll();
 				out.fg(ostd::ConsoleColors::Yellow).p("Nothing is tracked anymore.").reset().nl();
 			}
 			else if (Utils::parseAddress(*this, args, addr) && untrack(addr))
@@ -1293,7 +1406,11 @@ namespace dragon
 		}
 		if (valid)
 		{
-			if (toggleBreakPoint(addr))
+			const bool enabled = toggleBreakPoint(addr);
+			const tBreakPoint* bp = getBreakPoint(addr);
+			if (bp != nullptr && bp->debugBreak)
+				out.fg(ostd::ConsoleColors::Yellow).p(enabled ? "debug_break enabled at address: " : "debug_break disabled at address: ").p(String::getHexStr(addr, true, 2)).reset().nl();
+			else if (enabled)
 				out.fg(ostd::ConsoleColors::Yellow).p("Breakpoint set at address: ").p(String::getHexStr(addr, true, 2)).reset().nl();
 			else
 				out.fg(ostd::ConsoleColors::Yellow).p("Breakpoint removed at address: ").p(String::getHexStr(addr, true, 2)).reset().nl();
@@ -1333,8 +1450,6 @@ namespace dragon
 			count++;
 		}
 		out.p(breakOnChange ? "Watching " : "Tracking ").p(count).p(count == 1 ? " item" : " items").p(" (").p(cast<i32>(m_data.tracked.size())).p(" tracked).").nl();
-		capture_info(m_currentInfo);
-		capture_info(m_previousInfo);
-		notify_state_changed();
+		tracked_changed();
 	}
 }

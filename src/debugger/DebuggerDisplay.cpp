@@ -349,44 +349,58 @@ namespace dragon
 		out.fg(ostd::ConsoleColors::Blue).p(border).reset().nl();
 	}
 
-	void Debugger::Display::printStack(ostd::OutputHandlerBase& out, const Debugger& dbg, u16 nrows, i32 width)
+	stdvec<Debugger::tStackFrame> Debugger::Utils::getStackFrames(void)
 	{
-		if (nrows == 0) nrows = 8;
-		u16 ncols = 16;
-		u16 startAddr = (0xFFFF - (ncols * nrows) + 1);
-		auto& mem = DragonRuntime::memMap;
-
-		out.fg(ostd::ConsoleColors::Yellow).p("Stack frames (innermost first): ").reset().nl();
-		Utils::printFullLine(out, '=', ostd::ConsoleColors::BrightBlue, width);
 		// The frames are found by following the saved frame pointers (see VirtualCPU::pushStackFrame()):
 		// above FP are the saved stack frame size, FP, IP, ACC, PP, R10..R1 and the arguments count.
+		auto& mem = DragonRuntime::memMap;
+		stdvec<tStackFrame> frames;
 		u16 fp = cast<u16>(DragonRuntime::cpu.readRegister(data::Registers::FP));
-		i32 depth = 0;
-		while (fp != 0 && fp < 0xFFFE - 32 && depth < 64)
+		while (fp != 0 && fp < 0xFFFE - 32 && frames.size() < 64)
 		{
+			tStackFrame frame;
+			frame.fp = fp;
+			frame.frameSize = mem.peek16(cast<u16>(fp + 2));
+			frame.savedFP = mem.peek16(cast<u16>(fp + 4));
+			frame.savedIP = mem.peek16(cast<u16>(fp + 6));
+			frame.argCount = mem.peek16(cast<u16>(fp + 32));
+			frames.push_back(frame);
+			if (frame.savedFP <= fp)
+				break;
+			fp = frame.savedFP;
+		}
+		return frames;
+	}
+
+	void Debugger::Display::printStackFrames(ostd::OutputHandlerBase& out, const Debugger& dbg, i32 width)
+	{
+		auto& mem = DragonRuntime::memMap;
+		out.fg(ostd::ConsoleColors::Yellow).p("Stack frames (innermost first): ").reset().nl();
+		Utils::printFullLine(out, '=', ostd::ConsoleColors::BrightBlue, width);
+		const auto frames = Utils::getStackFrames();
+		i32 depth = 0;
+		for (const auto& f : frames)
+		{
+			const u16 fp = f.fp;
 			auto l_word = [&](u16 offset) { return mem.peek16(cast<u16>(fp + offset)); };
-			const u16 frameSize = l_word(2);
-			const u16 savedFP = l_word(4);
-			const u16 savedIP = l_word(6);
-			const u16 argCount = l_word(32);
-			const u16 argStartAddr = (argCount == 0 ? 0 : cast<u16>(fp + 32 + argCount * 2));
+			const u16 argStartAddr = (f.argCount == 0 ? 0 : cast<u16>(fp + 32 + f.argCount * 2));
 			String frame = "";
-			frame.add("#").add(depth).add("  args: ").add(String::getHexStr(argStartAddr, true, 2)).add(", argc: ").add(argCount);
-			for (u16 i = 0; i < argCount && i < 8; i++)
-				frame.add(i == 0 ? "  [" : " ").add(String::getHexStr(l_word(cast<u16>(32 + (argCount - i) * 2)), true, 2)).add(i + 1 == std::min<u16>(argCount, 8) ? "]" : "");
+			frame.add("#").add(depth).add("  args: ").add(String::getHexStr(argStartAddr, true, 2)).add(", argc: ").add(f.argCount);
+			for (u16 i = 0; i < f.argCount && i < 8; i++)
+				frame.add(i == 0 ? "  [" : " ").add(String::getHexStr(l_word(cast<u16>(32 + (f.argCount - i) * 2)), true, 2)).add(i + 1 == std::min<u16>(f.argCount, 8) ? "]" : "");
 			frame.add("\n");
 			for (u16 r = 1; r <= 10; r++)
 				frame.add(r == 1 ? "R1: " : String(" R").add(r).add(": ")).add(String::getHexStr(l_word(cast<u16>(32 - r * 2)), true, 2));
 			frame.add("\n");
 			frame.add("PP: ").add(String::getHexStr(l_word(10), true, 2));
 			frame.add(" ACC: ").add(String::getHexStr(l_word(8), true, 2));
-			frame.add(" IP: ").add(String::getHexStr(savedIP, true, 2));
-			String returnSymbol = Utils::findNearestSymbol(dbg.data().labels, savedIP);
+			frame.add(" IP: ").add(String::getHexStr(f.savedIP, true, 2));
+			String returnSymbol = Utils::findNearestSymbol(dbg.data().labels, f.savedIP);
 			if (returnSymbol != "")
 				frame.add(" (").add(returnSymbol).add(")");
-			frame.add(" FP: ").add(String::getHexStr(savedFP, true, 2));
+			frame.add(" FP: ").add(String::getHexStr(f.savedFP, true, 2));
 			frame.add("\n");
-			frame.add("StackFrame: ").add(frameSize).add(", New FP: ").add(String::getHexStr(fp, true, 2));
+			frame.add("StackFrame: ").add(f.frameSize).add(", New FP: ").add(String::getHexStr(fp, true, 2));
 
 			ostd::RegexRichString rgxrstr(frame);
 			rgxrstr.fg("0x[0-9A-Fa-f]+|0b[0-1]+|(?<!\\w)[0-9]+(?!\\w)", "Red"); //Number Constants
@@ -398,18 +412,22 @@ namespace dragon
 			out.pStyled(rgxrstr);
 			out.nl();
 			Utils::printFullLine(out, '=', ostd::ConsoleColors::BrightBlue, width);
-			if (savedFP <= fp)
-				break;
-			fp = savedFP;
 			depth++;
 		}
-		if (depth == 0 && fp >= 0xFFFE - 32)
+		if (frames.empty())
 		{
 			out.fg(ostd::ConsoleColors::BrightGray).p("No stack frames.").reset().nl();
 			Utils::printFullLine(out, '=', ostd::ConsoleColors::BrightBlue, width);
 		}
-		out.nl();
+	}
 
+	void Debugger::Display::printStack(ostd::OutputHandlerBase& out, const Debugger& dbg, u16 nrows, i32 width)
+	{
+		if (nrows == 0) nrows = 8;
+		u16 ncols = 16;
+		u16 startAddr = (0xFFFF - (ncols * nrows) + 1);
+		printStackFrames(out, dbg, width);
+		out.nl();
 		out.fg(ostd::ConsoleColors::Yellow).p("Stack view: ").reset().nl();
 		u16 stack_ptr = DragonRuntime::cpu.readRegister(data::Registers::SP);
 		const auto& image = dbg.getBusImage();
@@ -500,9 +518,15 @@ namespace dragon
 		out.fg(ostd::ConsoleColors::Yellow).p("Breakpoints:").reset().nl();
 		if (dbg.data().breakpoints.empty())
 			out.fg(ostd::ConsoleColors::BrightGray).p("  none (click the left margin of the disassembly, or use 'break <addr|$label>')").reset().nl();
-		for (u16 addr : dbg.data().breakpoints)
+		for (const auto& [addr, bp] : dbg.data().breakpoints)
 		{
-			out.fg(ostd::ConsoleColors::Red).p("  * ").fg(ostd::ConsoleColors::BrightYellow).p(String::getHexStr(addr, true, 2));
+			if (!bp.enabled)
+				out.fg(ostd::ConsoleColors::BrightGray).p("  o ");
+			else
+				out.fg(bp.debugBreak ? ostd::ConsoleColors::Yellow : ostd::ConsoleColors::Red).p("  * ");
+			out.fg(ostd::ConsoleColors::BrightYellow).p(String::getHexStr(addr, true, 2));
+			if (bp.debugBreak)
+				out.fg(ostd::ConsoleColors::BrightGray).p(bp.enabled ? "  (debug_break)" : "  (debug_break, disabled)");
 			String symbol = Utils::findNearestSymbol(dbg.data().labels, addr);
 			if (symbol != "")
 				out.fg(ostd::ConsoleColors::Cyan).p("  ").p(symbol);
@@ -595,9 +619,9 @@ namespace dragon
 		l_cmd("rc / rcontinue", "Runs backwards until a breakpoint / watch. (Shift+F5)");
 		l_cmd("goto <cycle>", "Moves to a cycle of the recorded history.");
 		l_cmd("history [on/off/clear]", "Shows the history, or turns recording on / off.");
-		l_cmd("(b)reak <addr/symbol>", "Toggles a breakpoint.");
+		l_cmd("(b)reak <addr/symbol>", "Toggles a breakpoint (enables / disables a debug_break).");
 		l_cmd("bl / breakpoints", "Lists the breakpoints and watches.");
-		l_cmd("bc / clear", "Removes every breakpoint.");
+		l_cmd("bc / clear", "Removes every breakpoint (disables the debug_break ones).");
 		l_cmd("(p)rint [word] <addr/symbol>", "Prints values from memory. Valid [size] values are: byte/word/dword/qword/string.");
 		l_cmd("(t)rack <address[bytes]/symbol>", "Tracks addresses during execution ('t' alone: the tracker).");
 		l_cmd("(w)atch <address[bytes]/symbol>", "Tracks addresses, and stops when they change.");
@@ -608,6 +632,7 @@ namespace dragon
 		l_cmd("(s)tack [rows=8]", "Shows the stack and a description of every stack-frame.");
 		l_cmd("(ca)ll-stack", "Shows information about all subroutine/interrupt calls.");
 		l_cmd("display", "Shows / hides the Virtual Display.");
+		l_cmd("detach / attach <screen|console>", "Moves the screen or the console to its own window, and back.");
 		l_cmd("speed <hz/max/default>", "Changes the speed the machine runs at.");
 		l_cmd("(q)uit", "Closes the debugger.");
 		l_cmd("(h)elp", "Shows this list.");

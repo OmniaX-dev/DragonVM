@@ -92,7 +92,7 @@ namespace dragon
 				u16 m_stackFrameSize { 0 };
 				bool m_halt { false };
 				u8 m_currentInst { 0x00 };
-				u8 m_currentAddr { 0x00 };
+				u16 m_currentAddr { 0x0000 };
 				bool m_biosMode { true };
 				i32 m_interruptHandlerCount { 0 };
 				bool m_isDebugBreakPoint { false };

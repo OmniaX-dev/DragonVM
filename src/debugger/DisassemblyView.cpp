@@ -77,11 +77,43 @@ namespace dragon
 		return true;
 	}
 
+	void DisassemblyView::showAddress(u16 address)
+	{
+		if (m_documents.empty())
+			return;
+		m_follow = false;
+		i32 index = -1;
+		if (m_currentDocument >= 0 && getBuffer().findLine(address) >= 0)
+			index = m_currentDocument;
+		for (i32 i = 0; i < getProgramCount() && index < 0; i++)
+		{
+			const Document& doc = m_documents[i];
+			if (doc.table != nullptr && address >= doc.table->getCodeStart() && address <= doc.table->getCodeEnd() && doc.buffer.findLine(address) >= 0)
+				index = i;
+		}
+		if (index < 0)
+		{
+			index = getProgramCount() - 1;
+			build_live(address);
+		}
+		if (index != m_currentDocument)
+			select_document(index);
+		m_currentLine = getBuffer().findLine(m_currentAddress);
+		const i32 line = getBuffer().findLine(address);
+		if (line >= 0)
+		{
+			scrollToLine(line, true);
+			selectLines(line, line);
+		}
+	}
+
 	void DisassemblyView::setCurrentAddress(u16 ip, bool scroll)
 	{
 		m_currentAddress = ip;
 		if (m_follow && !m_documents.empty())
 		{
+			// The line shown by showAddress().
+			clearSelection();
 			i32 index = pick_document(ip);
 			if (index < 0)
 			{
@@ -198,7 +230,13 @@ namespace dragon
 		if (button != ogfx::MouseEventData::eButton::Right)
 			return;
 		ogfx::gui::ContextMenu::Instance menu;
-		menu.entries.push_back({ m_debugger.isBreakPoint(addr) ? "Remove breakpoint" : "Add breakpoint", 0 });
+		const Debugger::tBreakPoint* bp = m_debugger.getBreakPoint(addr);
+		String toggleText = "Add breakpoint";
+		if (bp != nullptr && bp->debugBreak)
+			toggleText = bp->enabled ? "Disable this debug_break" : "Enable this debug_break";
+		else if (bp != nullptr)
+			toggleText = "Remove breakpoint";
+		menu.entries.push_back({ toggleText, 0 });
 		menu.entries.push_back({ "Run to here", 1 });
 		menu.entries.push_back({ "Set IP here (jump)", 2 });
 		menu.entries.push_back({ "Show in memory", 3 });
@@ -230,10 +268,20 @@ namespace dragon
 			const f32 x = gutterX + cw;
 			gfx.fillTriangle(Vec2 { x - cw * 0.3f, cy - bounds.h * 0.3f }, Vec2 { x + cw * 0.7f, cy }, Vec2 { x - cw * 0.3f, cy + bounds.h * 0.3f }, Color(255, 215, 80));
 		}
-		if (m_debugger.isBreakPoint(cast<u16>(address)))
+		// Breakpoints: red, debug_break ones orange; disabled ones hollow.
+		const Debugger::tBreakPoint* bp = m_debugger.getBreakPoint(cast<u16>(address));
+		if (bp != nullptr)
 		{
-			gfx.fillRect(bounds, Color(235, 70, 70, 28));
-			gfx.fillCircle(Vec2 { gutterX + cw * 0.6f, cy }, std::min(cw * 0.55f, bounds.h * 0.32f), Color(235, 70, 70));
+			const Color color = bp->debugBreak ? Color(240, 160, 50) : Color(235, 70, 70);
+			const Vec2 center { gutterX + cw * 0.6f, cy };
+			const f32 radius = std::min(cw * 0.55f, bounds.h * 0.32f);
+			if (bp->enabled)
+			{
+				gfx.fillRect(bounds, Color(color.r, color.g, color.b, 28));
+				gfx.fillCircle(center, radius, color);
+			}
+			else
+				gfx.drawCircle(center, radius, color, 2);
 		}
 	}
 }

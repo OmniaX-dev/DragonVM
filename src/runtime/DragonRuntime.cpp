@@ -24,6 +24,7 @@ namespace dragon
 
 	void DragonRuntime::processErrors(void)
 	{
+		auto& out = output();
 		while (dragon::data::ErrorHandler::hasError())
 		{
 			auto err = dragon::data::ErrorHandler::popError();
@@ -46,6 +47,7 @@ namespace dragon
 
 	i32 DragonRuntime::loadArguments(int argc, char** argv, tCommandLineArgs& args)
 	{
+		auto& out = output();
 		if (argc < 2)
 		{
 			out.fg(ostd::ConsoleColors::Red).p("Error: too few arguments.").nl();
@@ -90,6 +92,7 @@ namespace dragon
 
 	i32 DragonRuntime::initMachine(const tRuntimeInitInfo& info)
 	{
+		auto& out = output();
 		s_signalListener.init();
 		vKeyboard.init();
 		if (info.verboseLoad)
@@ -296,6 +299,7 @@ namespace dragon
 
 	void DragonRuntime::__print_application_help(void)
 	{
+		auto& out = output();
 		i32 commandLength = 46;
 
 		out.nl().fg(ostd::ConsoleColors::Yellow).p("List of available parameters:").reset().nl();

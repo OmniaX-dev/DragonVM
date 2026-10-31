@@ -55,6 +55,8 @@ namespace dragon
 		build_toolbar();
 		build_layout();
 		build_tabs();
+		build_subwindows();
+		apply_layout();
 
 		m_consoleOut.attach(m_consoleView);
 		m_debugger.setConsole(m_consoleOut);
@@ -63,92 +65,164 @@ namespace dragon
 		m_debugger.setQuitCallback([this](void) { close(); });
 
 		m_rootWidget.reloadTheme(true);
+		// After the theme pass.
+		m_followCheck.setChecked(true);
+		m_memory.enableFollowHighlight(true);
+		m_stackMemory.enableFollowHighlight(true);
 	}
 
-	ogfx::gui::Label& DebuggerWindow::add_title(Label& label, const String& text, const Rectangle& anchors, const Offsets& offsets)
+	ogfx::gui::Label& DebuggerWindow::add_title(Label& label, const String& text)
 	{
 		addWidget(label);
 		label.setText(text);
 		label.setFontSize(15);
-		place(label, anchors.x, anchors.y, anchors.w, anchors.h, offsets.left, offsets.top, offsets.right, offsets.bottom);
 		return label;
 	}
 
 	void DebuggerWindow::build_layout(void)
 	{
-		// Columns and rows, as fractions of the window.
-		const f32 split = 0.47f;
-		const f32 right = 0.78f;
-		const f32 top = 0.30f;
-		const f32 bottom = 0.66f;
-
 		// ===== Disassembly =====
 		addWidget(m_programButton);
 		m_programButton.setText("Programs");
-		place(m_programButton, 0, 0, 0, 0, 6, 4, 112, 34);
 		m_programButton.setCallback(Widget::eCallback::ActionPerformed, [this](const Event&) { show_programs_menu(); });
 		addWidget(m_programLabel);
 		m_programLabel.setFontSize(15);
-		place(m_programLabel, 0, 0, split, 0, 120, 4, -120, 34);
 		addWidget(m_followCheck);
 		m_followCheck.setText("Follow IP");
 		m_followCheck.setChecked(true);
-		place(m_followCheck, split, 0, split, 0, -112, 6, -6, 32);
 		m_followCheck.setStateChangedCallback([this](CheckBox&, bool checked) {
 			m_disassembly.enableFollow(checked);
 			m_viewsDirty = true;
 		});
 		addWidget(m_disassembly);
-		place(m_disassembly, 0, 0, split, bottom, 6, 38, -3, -3);
 		m_disassembly.setFontSize(15);
-		m_disassembly.setShowInMemoryCallback([this](u16 address) { show_view(Debugger::eView::Memory, address); });
+		m_disassembly.setShowInMemoryCallback([this](u16 address) { show_in_memory(address); });
+		m_disassembly.setBreakpointsChangedCallback([this](void) { m_viewsDirty = true; });
 
 		// ===== Console =====
-		add_title(m_consoleTitle, "Console  (help: list of commands, Enter: step)", { 0, bottom, split, bottom }, { 8, 0, -3, 30 });
-		addWidget(m_consoleView);
-		place(m_consoleView, 0, bottom, split, 1, 6, 32, -3, -42);
+		add_title(m_consoleTitle, "Console  (help: list of commands, Enter: step)");
+		addWidget(m_consoleDetachButton);
+		m_consoleDetachButton.setText("Detach");
+		m_consoleDetachButton.setFontSize(14);
+		m_consoleDetachButton.setTooltipText("Move the console to its own window");
+		m_consoleDetachButton.enableTooltip();
+		m_consoleDetachButton.setCallback(Widget::eCallback::ActionPerformed, [this](const Event&) { set_console_detached(true); });
+		addWidget(m_console);
+		m_console.addWidget(m_consoleView);
+		place(m_consoleView, 0, 0, 1, 1, 0, 0, 0, -40);
 		m_consoleView.setFontSize(14);
 		m_consoleView.enableFollowTail();
 		m_consoleView.getBuffer().setMaxLines(5000);
-		addWidget(m_commandInput);
-		place(m_commandInput, 0, 1, split, 1, 6, -38, -3, -6);
-		m_commandInput.setCommandCallback([this](const String& command) { m_debugger.command(command); });
-
-		// ===== Screen =====
-		add_title(m_displayTitle, "Screen  (click it to type into the machine)", { split, 0, right, 0 }, { 6, 2, -3, 32 });
-		addWidget(m_display);
-		place(m_display, split, 0, right, top, 3, 34, -3, -3);
-		m_display.enableFocus();
-		m_display.enableFocusBorder();
-		m_display.setFocusBorderColor({ 0, 117, 199 });
-
-		// ===== Breakpoints =====
-		add_title(m_breakpointsTitle, "Breakpoints & watches", { right, 0, 1, 0 }, { 6, 2, -6, 32 });
-		addWidget(m_breakpointsView);
-		place(m_breakpointsView, right, 0, 1, top, 3, 34, -6, -3);
-		m_breakpointsView.setFontSize(14);
-		m_breakpointsView.setLineCallback([this](RichTextView& view, i32 line, i32, ogfx::MouseEventData::eButton button, bool doubleClick) {
-			const i64 address = view.getBuffer().getLineUserData(line);
-			if (address < 0)
-				return;
-			if (button == ogfx::MouseEventData::eButton::Right)
-				m_debugger.removeBreakPoint(cast<u16>(address));
-			else if (doubleClick)
-				m_disassembly.scrollToAddress(cast<u16>(address));
-			m_viewsDirty = true;
-		});
-
-		// ===== Registers =====
-		add_title(m_registersTitle, "Registers  (the last cycle, red: changed)", { split, top, 1, top }, { 6, 0, -6, 30 });
-		addWidget(m_registersView);
-		place(m_registersView, split, top, 1, bottom, 3, 32, -6, -3);
-		m_registersView.setFontSize(13);
-		m_registersView.enableHoverHighlight(false);
-		m_registersView.setLinePadding(0);
+		m_console.addWidget(m_commandInput);
+		place(m_commandInput, 0, 1, 1, 1, 0, -36, 0, 0);
+		m_commandInput.setCommandCallback([this](const String& command) { run_command(command); });
 
 		// ===== Tabs =====
 		addWidget(m_tabs);
-		place(m_tabs, split, bottom, 1, 1, 3, 3, -6, -6);
+
+		// ===== Screen =====
+		add_title(m_displayTitle, "Screen  (click it to type into the machine)");
+		addWidget(m_screenDetachButton);
+		m_screenDetachButton.setText("Detach");
+		m_screenDetachButton.setFontSize(14);
+		m_screenDetachButton.setTooltipText("Move the screen to its own window");
+		m_screenDetachButton.enableTooltip();
+		m_screenDetachButton.setCallback(Widget::eCallback::ActionPerformed, [this](const Event&) { set_screen_detached(true); });
+		addWidget(m_display);
+		m_display.enableFocus();
+		m_display.enableFocusBorder();
+		m_display.setFocusBorderColor({ 0, 117, 199 });
+	}
+
+	void DebuggerWindow::apply_layout(void)
+	{
+		const f32 split = Split;
+		place(m_programButton, 0, 0, 0, 0, 6, 4, 112, 34);
+		place(m_programLabel, 0, 0, split, 0, 120, 4, -120, 34);
+		place(m_followCheck, split, 0, split, 0, -112, 6, -6, 32);
+
+		// Left column: the disassembly takes the console's place when it's detached.
+		m_consoleTitle.setVisible(!m_consoleDetached);
+		m_consoleDetachButton.setVisible(!m_consoleDetached);
+		if (!m_consoleDetached)
+		{
+			place(m_disassembly, 0, 0, split, ConsoleTop, 6, 38, -3, -3);
+			place(m_consoleTitle, 0, ConsoleTop, split, ConsoleTop, 8, 0, -96, 30);
+			place(m_consoleDetachButton, split, ConsoleTop, split, ConsoleTop, -88, 3, -6, 29);
+			place(m_console, 0, ConsoleTop, split, 1, 6, 32, -3, -6);
+		}
+		else
+			place(m_disassembly, 0, 0, split, 1, 6, 38, -3, -6);
+
+		// Right column: the tabs take the screen's place when it's detached.
+		m_displayTitle.setVisible(!m_screenDetached);
+		m_screenDetachButton.setVisible(!m_screenDetached);
+		if (!m_screenDetached)
+		{
+			place(m_tabs, split, 0, 1, ScreenTop, 3, 3, -6, -3);
+			place(m_displayTitle, split, ScreenTop, 1, ScreenTop, 6, 0, -96, 30);
+			place(m_screenDetachButton, 1, ScreenTop, 1, ScreenTop, -88, 3, -6, 29);
+			place(m_display, split, ScreenTop, 1, 1, 3, 32, -6, -6);
+		}
+		else
+			place(m_tabs, split, 0, 1, 1, 3, 3, -6, -6);
+	}
+
+	void DebuggerWindow::build_subwindows(void)
+	{
+		auto l_setup = [this](SubWindow& window, const Rectangle& bounds, const String& tooltip, std::function<void(void)> attach) {
+			window.setBounds(bounds);
+			window.setButtons(SubWindow::Buttons::Close | SubWindow::Buttons::Maximize | SubWindow::Buttons::AlwaysOnTop);
+			window.addTitlebarButton("Attach", [attach](SubWindow&) { attach(); }, tooltip);
+			// Closing it puts the view back too.
+			window.setCloseCallback([attach](SubWindow&) { attach(); return true; });
+		};
+		l_setup(m_screenWindow, { 260, 140, 940, 640 }, "Put the screen back in the debugger window", [this](void) { set_screen_detached(false); });
+		l_setup(m_consoleWindow, { 160, 220, 1000, 560 }, "Put the console back in the debugger window", [this](void) { set_console_detached(false); });
+	}
+
+	void DebuggerWindow::set_screen_detached(bool detached)
+	{
+		if (detached == m_screenDetached)
+			return;
+		m_screenDetached = detached;
+		if (detached)
+		{
+			removeWidget(m_display);
+			m_screenWindow.addWidget(m_display);
+			place(m_display, 0, 0, 1, 1, 4, 4, -4, -4);
+			m_screenWindow.open();
+		}
+		else
+		{
+			m_screenWindow.removeWidget(m_display);
+			addWidget(m_display);
+			// Not close(): its callback is what may have called this.
+			m_screenWindow.setVisible(false);
+		}
+		apply_layout();
+	}
+
+	void DebuggerWindow::set_console_detached(bool detached)
+	{
+		if (detached == m_consoleDetached)
+			return;
+		m_consoleDetached = detached;
+		if (detached)
+		{
+			removeWidget(m_console);
+			m_consoleWindow.addWidget(m_console);
+			place(m_console, 0, 0, 1, 1, 4, 4, -4, -4);
+			m_consoleWindow.open();
+		}
+		else
+		{
+			m_consoleWindow.removeWidget(m_console);
+			addWidget(m_console);
+			m_consoleWindow.setVisible(false);
+		}
+		apply_layout();
+		m_consoleView.scrollToBottom();
 	}
 
 	void DebuggerWindow::build_tabs(void)
@@ -159,14 +233,32 @@ namespace dragon
 			content.setAnchorPreset(eAnchorPreset::FullRect, ePresetResizeMode::KeepSize, 2);
 			return tab;
 		};
+		m_registersTab = &l_tab("Registers", m_registers);
+		m_breakpointsTab = &l_tab("Breakpoints", m_breakpoints);
 		m_memoryTab = &l_tab("Memory", m_memory);
-		m_stackTab = &l_tab("Stack", m_stackView);
-		m_callsTab = &l_tab("Call trace", m_callsView);
-		m_trackerTab = &l_tab("Tracker", m_trackerView);
+		m_stackTab = &l_tab("Stack", m_stack);
+		m_callsTab = &l_tab("Call trace", m_callTrace);
+		m_trackerTab = &l_tab("Tracker", m_tracker);
 		m_historyTab = &l_tab("History", m_historyView);
-		for (RichTextView* view : { &m_stackView, &m_callsView, &m_trackerView, &m_historyView })
-			view->setFontSize(14);
-		m_tabs.setCurrentTab(*m_memoryTab);
+
+		m_registers.setShowInMemoryCallback([this](u16 address) { show_in_memory(address); });
+		m_registers.setShowInDisassemblyCallback([this](u16 address) { show_in_disassembly(address); });
+		m_breakpoints.setShowInMemoryCallback([this](u16 address) { show_in_memory(address); });
+		m_breakpoints.setShowInDisassemblyCallback([this](u16 address) { show_in_disassembly(address); });
+		m_callTrace.setShowInDisassemblyCallback([this](u16 address) { show_in_disassembly(address); });
+		m_tracker.setShowInMemoryCallback([this](u16 address) { show_in_memory(address); });
+
+		// Stack: the frames (from the saved frame pointers) over the stack's memory.
+		m_stack.addWidget(m_stackFramesView);
+		place(m_stackFramesView, 0, 0, 1, 0.36f, 0, 0, 0, -3);
+		m_stackFramesView.setFontSize(13);
+		m_stackFramesView.enableHoverHighlight(false);
+		m_stack.addWidget(m_stackMemory);
+		place(m_stackMemory, 0, 0.36f, 1, 1, 0, 3, 0, 0);
+		m_historyView.setFontSize(14);
+
+		m_tabs.setCurrentTab(*m_registersTab);
+		m_tabs.setTabChangedCallback([this](TabPanel&, Panel&) { refresh_tab(); });
 	}
 
 	void DebuggerWindow::build_toolbar(void)
@@ -228,6 +320,92 @@ namespace dragon
 		showStatusBar(true);
 	}
 
+	void DebuggerWindow::build_memory(void)
+	{
+		// Memory: the whole address space, the regions of the memory map highlighted.
+		const auto& image = m_debugger.getBusImage();
+		const std::span<const i8> bus(reinterpret_cast<const i8*>(image.data()), image.size());
+		const u16 ip = cast<u16>(DragonRuntime::cpu.readRegister(data::Registers::IP));
+		const u16 sp = cast<u16>(DragonRuntime::cpu.readRegister(data::Registers::SP));
+		auto l_write = [this](ogfx::gui::StreamIndex index, u64 value, u8 size) {
+			return m_debugger.writeMemory(cast<u16>(index), value, size);
+		};
+		m_memory.setData(bus, ip & 0xFFF0, 16, 0, ip, 1, "Bus");
+		m_memory.setBigEndian(true);
+		m_memory.setUnitSize(2);
+		m_memory.enableFollowHighlight(true);
+		const Color regionColors[] = { { 40, 80, 160, 40 }, { 160, 120, 20, 40 }, { 150, 60, 170, 40 }, { 60, 160, 60, 40 }, { 160, 60, 60, 40 } };
+		i32 colorIndex = 0;
+		for (const auto& region : DragonRuntime::memMap.getRegions())
+		{
+			if (region.name == "RAM")
+				continue;
+			m_memory.addHighlight(region.startAddress, cast<u32>(region.endAddress) - region.startAddress + 1, regionColors[colorIndex++ % 5], region.name);
+		}
+		m_stackHighlight = m_memory.addHighlight(sp, std::max<u32>(1, 0x10000 - sp), Color(40, 160, 100, 50), "stack");
+		m_memory.setWriteCallback(l_write);
+
+		// The instructions' opcodes as aliases (with their operand bytes), colored by kind.
+		auto l_color = [](const String& opName) -> Color {
+			const String name = opName.new_toLower();
+			if (name == "noop")
+				return { 95, 95, 105 };
+			if (name.startsWith("debug") || name.startsWith("bios") || name == "halt")
+				return { 220, 130, 230 };
+			if (name.startsWith("mov"))
+				return { 100, 160, 255 };
+			if (name.startsWith("push") || name.startsWith("pop") || name.startsWith("arg"))
+				return { 90, 210, 220 };
+			if (name.startsWith("call") || name.startsWith("ret") || name == "int")
+				return { 240, 100, 100 };
+			if (name.startsWith("jmp"))
+				return { 240, 170, 60 };
+			return { 130, 220, 120 };
+		};
+		auto l_pattern = [](u8 first, i32 second, u8 size) {
+			String pattern = String::getHexStr(first, false, 1);
+			u8 bytes = 1;
+			if (second >= 0)
+			{
+				pattern.add(" ").add(String::getHexStr(cast<u8>(second), false, 1));
+				bytes++;
+			}
+			for (; bytes < size; bytes++)
+				pattern.add(" ??");
+			return pattern;
+		};
+		for (i32 op = 0; op < 256; op++)
+		{
+			if (op >= data::OpCodes::Ext01 && op <= data::OpCodes::Ext16)
+			{
+				data::CPUExtension* ext = DragonRuntime::cpu.getExtension(cast<u8>(op));
+				if (ext == nullptr)
+					continue;
+				for (i32 inst = 0; inst < 256; inst++)
+				{
+					const u8 size = ext->getInstructionSIze(cast<u8>(inst));
+					const String name = ext->getOpCodeString(cast<u8>(inst));
+					if (size == 0 || name == "" || name.contains("UNKNOWN"))
+						continue;
+					m_memory.addAlias(l_pattern(cast<u8>(op), inst, cast<u8>(size + 1)), name, l_color(name));
+				}
+				continue;
+			}
+			const String name = data::OpCodes::getBaseOpCodeString(cast<u8>(op));
+			const u8 size = data::OpCodes::getBaseInstructionSize(cast<u8>(op));
+			if (size == 0 || name == "UNKNOWN_INST")
+				continue;
+			m_memory.addAlias(l_pattern(cast<u8>(op), -1, size), name, l_color(name));
+		}
+
+		// Stack: the same bus, the frames highlighted by refresh_stack().
+		m_stackMemory.setData(bus, std::min<u16>(sp & 0xFFF0, 0xFF80), 16, 0, sp, 2, "Stack");
+		m_stackMemory.setBigEndian(true);
+		m_stackMemory.setUnitSize(2);
+		m_stackMemory.enableFollowHighlight(true);
+		m_stackMemory.setWriteCallback(l_write);
+	}
+
 	void DebuggerWindow::start(void)
 	{
 		auto& config = DragonRuntime::machine_config;
@@ -237,31 +415,17 @@ namespace dragon
 		m_disassembly.build();
 		m_recordCheck.setChecked(m_debugger.isHistoryEnabled());
 		m_maxSpeedCheck.setChecked(m_debugger.isMaxSpeed());
-
-		// Memory: the whole address space, the regions of the memory map highlighted.
-		const auto& image = m_debugger.getBusImage();
-		const u16 ip = cast<u16>(DragonRuntime::cpu.readRegister(data::Registers::IP));
-		m_memory.setData(std::span<const i8>(reinterpret_cast<const i8*>(image.data()), image.size()), ip & 0xFFF0, 16, 0, ip, 1, "Bus");
-		m_memory.setBigEndian(true);
-		m_memory.setUnitSize(2);
-		const Color regionColors[] = { { 40, 80, 160, 40 }, { 160, 120, 20, 40 }, { 150, 60, 170, 40 }, { 60, 160, 60, 40 }, { 160, 60, 60, 40 } };
-		i32 colorIndex = 0;
-		for (const auto& region : DragonRuntime::memMap.getRegions())
-		{
-			if (region.name == "RAM")
-				continue;
-			m_memory.addHighlight(region.startAddress, cast<u32>(region.endAddress) - region.startAddress + 1, regionColors[colorIndex++ % 5], region.name);
-		}
-		const u16 sp = cast<u16>(DragonRuntime::cpu.readRegister(data::Registers::SP));
-		m_stackHighlight = m_memory.addHighlight(sp, std::max<u32>(1, 0x10000 - sp), Color(40, 160, 100, 50), "stack");
-		m_memory.setWriteCallback([this](ogfx::gui::StreamIndex index, u64 value, u8 size) {
-			return m_debugger.writeMemory(cast<u16>(index), value, size);
-		});
+		build_memory();
 
 		m_consoleOut.fg(ostd::ConsoleColors::Green).p("DragonVM Debugger ").p(VERSION_STR).reset().nl();
 		m_consoleOut.fg(ostd::ConsoleColors::BrightGray).p("Machine: ").p(m_debugger.data().args.machine_config_path).p("  -  ");
 		m_consoleOut.p(cast<i32>(m_debugger.data().code.size())).p(" instructions, ").p(cast<i32>(m_debugger.data().labels.size())).p(" labels, ");
 		m_consoleOut.p(cast<i32>(m_debugger.data().data.size())).p(" data symbols in ").p(cast<i32>(DisassemblyLoader::getTables().size())).p(" programs.").reset().nl();
+		i32 debugBreaks = 0;
+		for (const auto& [address, bp] : m_debugger.data().breakpoints)
+			debugBreaks += (bp.debugBreak ? 1 : 0);
+		if (debugBreaks > 0)
+			m_consoleOut.fg(ostd::ConsoleColors::BrightGray).p(debugBreaks).p(" debug_break instructions are breakpoints (click them in the margin, or in the Breakpoints tab, to disable them).").reset().nl();
 		if (DisassemblyLoader::getTables().empty())
 			m_consoleOut.fg(ostd::ConsoleColors::Yellow).p("No disassembly found in '").p(m_debugger.data().disassemblyDirectory).p("/': assemble with -D to get it.").reset().nl();
 		m_consoleOut.fg(ostd::ConsoleColors::BrightGray).p("Type 'help' for the commands. F5 run, F6 pause, F10 step, F11 step over, F9 step back.").reset().nl();
@@ -301,13 +465,7 @@ namespace dragon
 		{
 			const String command = m_pendingCommands.front();
 			m_pendingCommands.pop_front();
-			m_debugger.command(command);
-		}
-		Panel* shown = nullptr;
-		for (Panel* tab : { m_memoryTab, m_stackTab, m_callsTab, m_trackerTab, m_historyTab })
-		{
-			if (tab != nullptr && tab->getParent() != nullptr)
-				shown = tab;
+			run_command(command);
 		}
 		if (m_viewsDirty)
 		{
@@ -320,11 +478,9 @@ namespace dragon
 			m_refreshTimer = 0;
 			refresh_views(false);
 		}
-		if (shown != m_shownTab)
-		{
-			m_shownTab = shown;
-			refresh_tab();
-		}
+		// The stack view is placed once it's laid out (and when it's resized).
+		if (m_tabs.getCurrentTab() == m_stackTab && std::max(1, m_stackMemory.getVisibleRows()) != m_lastStackRows)
+			refresh_stack();
 		refresh_status();
 	}
 
@@ -354,6 +510,22 @@ namespace dragon
 		}
 	}
 
+	void DebuggerWindow::sync_watches(void)
+	{
+		// The tracked data are the memory view's watches.
+		if (m_seenTrackedVersion == m_debugger.data().trackedVersion)
+			return;
+		m_seenTrackedVersion = m_debugger.data().trackedVersion;
+		static const Color colors[] = { { 0, 220, 180 }, { 90, 170, 255 }, { 240, 200, 60 }, { 120, 230, 120 }, { 230, 130, 230 }, { 255, 150, 80 } };
+		m_memory.clearWatches();
+		i32 index = 0;
+		for (const auto& item : m_debugger.data().tracked)
+		{
+			const Color color = item.breakOnChange ? Color(240, 80, 80) : colors[index++ % 6];
+			m_memory.addWatch(item.address, cast<u8>(std::min<u16>(item.size, 255)), item.breakOnChange ? String("(w) ").add(item.label) : item.label, color);
+		}
+	}
+
 	void DebuggerWindow::refresh_views(bool full)
 	{
 		const bool running = m_debugger.isRunning();
@@ -371,50 +543,71 @@ namespace dragon
 		m_memory.setHighlight(ip, size);
 		const u16 sp = cast<u16>(DragonRuntime::cpu.readRegister(data::Registers::SP));
 		m_memory.updateHighlight(m_stackHighlight, sp, std::max<u32>(1, 0x10000 - sp));
+		sync_watches();
 
 		if (!full)
+		{
+			// The slow views only when shown.
+			if (m_tabs.getCurrentTab() == m_stackTab)
+				refresh_stack();
 			return;
-		RichTextOutputHandler out(m_registersView);
-		out.clear();
-		Debugger::Display::printDiff(out, m_debugger);
-
-		out.attach(m_breakpointsView);
-		out.clear();
-		Debugger::Display::printBreakpoints(out, m_debugger);
-		// Lines of the breakpoints: their address, for the clicks.
-		auto& buffer = m_breakpointsView.getBuffer();
-		i32 line = 1;
-		for (u16 addr : m_debugger.data().breakpoints)
-			buffer.setLineUserData(line++, addr);
+		}
+		m_breakpoints.refreshRows();
 		refresh_tab();
+	}
+
+	void DebuggerWindow::refresh_stack(void)
+	{
+		RichTextOutputHandler out(m_stackFramesView);
+		out.clear();
+		Debugger::Display::printStackFrames(out, m_debugger, std::max(60, m_stackFramesView.getVisibleColumns() - 1));
+		const auto& image = m_debugger.getBusImage();
+		m_stackMemory.updateData(std::span<const i8>(reinterpret_cast<const i8*>(image.data()), image.size()));
+		const u16 sp = cast<u16>(DragonRuntime::cpu.readRegister(data::Registers::SP));
+		m_stackMemory.setHighlight(sp, 2);
+		const i32 rows = std::max(1, m_stackMemory.getVisibleRows());
+		if (sp != m_lastStackSP || rows != m_lastStackRows)
+		{
+			// The top of the stack (the end of memory) at the bottom of the view, as long as SP fits.
+			m_lastStackSP = sp;
+			m_lastStackRows = rows;
+			m_stackMemory.setStart(cast<u64>(std::max<i64>(0, std::min<i64>(sp & 0xFFF0, 0x10000 - cast<i64>(rows) * 16))));
+		}
+
+		// Each frame's saved registers and arguments, named (hover them).
+		for (i32 id : m_stackFrameHighlights)
+			m_stackMemory.removeHighlight(id);
+		m_stackFrameHighlights.clear();
+		i32 depth = 0;
+		for (const auto& frame : Debugger::Utils::getStackFrames())
+		{
+			String returnTo = Debugger::Utils::findNearestSymbol(m_debugger.data().labels, frame.savedIP);
+			if (returnTo == "")
+				returnTo = String::getHexStr(frame.savedIP, true, 2);
+			const Color saved = (depth % 2 == 0 ? Color(60, 120, 220, 55) : Color(220, 150, 60, 55));
+			m_stackFrameHighlights.push_back(m_stackMemory.addHighlight(cast<u16>(frame.fp + 2), 32,
+				saved, String("#").add(depth).add(" saved frame (returns to ").add(returnTo).add(")")));
+			if (frame.argCount > 0 && frame.argCount < 64)
+				m_stackFrameHighlights.push_back(m_stackMemory.addHighlight(cast<u16>(frame.fp + 34), cast<u32>(frame.argCount) * 2,
+					Color(170, 70, 190, 60), String("#").add(depth).add(" arguments (").add(frame.argCount).add(")")));
+			depth++;
+		}
 	}
 
 	void DebuggerWindow::refresh_tab(void)
 	{
-		RichTextOutputHandler out;
-		auto l_width = [](RichTextView& view) { return std::max(80, view.getVisibleColumns() - 1); };
-		if (m_shownTab == m_stackTab)
+		if (!m_started)
+			return;
+		const Panel* tab = m_tabs.getCurrentTab();
+		if (tab == m_stackTab)
+			refresh_stack();
+		else if (tab == m_callsTab)
+			m_callTrace.refreshRows();
+		else if (tab == m_breakpointsTab)
+			m_breakpoints.refreshRows();
+		else if (tab == m_historyTab)
 		{
-			out.attach(m_stackView);
-			out.clear();
-			Debugger::Display::printStack(out, m_debugger, m_stackRows, l_width(m_stackView));
-		}
-		else if (m_shownTab == m_callsTab)
-		{
-			out.attach(m_callsView);
-			out.clear();
-			Debugger::Display::printCallStack(out, m_debugger, l_width(m_callsView));
-			m_callsView.scrollToBottom();
-		}
-		else if (m_shownTab == m_trackerTab)
-		{
-			out.attach(m_trackerView);
-			out.clear();
-			Debugger::Display::printTrackedAddresses(out, m_debugger, l_width(m_trackerView));
-		}
-		else if (m_shownTab == m_historyTab)
-		{
-			out.attach(m_historyView);
+			RichTextOutputHandler out(m_historyView);
 			out.clear();
 			Debugger::Display::printHistory(out, m_debugger, std::max(10, m_historyView.getVisibleRows() - 6));
 		}
@@ -464,6 +657,19 @@ namespace dragon
 		m_updatingTimeline = false;
 	}
 
+	void DebuggerWindow::show_in_memory(u16 address)
+	{
+		m_tabs.setCurrentTab(*m_memoryTab);
+		m_memory.jumpTo(address);
+	}
+
+	void DebuggerWindow::show_in_disassembly(u16 address)
+	{
+		m_followCheck.setChecked(false);
+		m_disassembly.showAddress(address);
+		m_programLabel.setText(m_disassembly.getProgramName(m_disassembly.getCurrentProgram()));
+	}
+
 	void DebuggerWindow::show_view(Debugger::eView view, i64 argument)
 	{
 		switch (view)
@@ -473,20 +679,30 @@ namespace dragon
 				if (argument >= 0)
 					m_memory.jumpTo(cast<u64>(argument));
 				break;
-			case Debugger::eView::Stack:
-				if (argument > 0)
-					m_stackRows = cast<u16>(argument);
-				m_tabs.setCurrentTab(*m_stackTab);
-				break;
+			case Debugger::eView::Stack: m_tabs.setCurrentTab(*m_stackTab); break;
 			case Debugger::eView::CallTrace: m_tabs.setCurrentTab(*m_callsTab); break;
 			case Debugger::eView::Tracker: m_tabs.setCurrentTab(*m_trackerTab); break;
 			case Debugger::eView::History: m_tabs.setCurrentTab(*m_historyTab); break;
-			case Debugger::eView::Breakpoints:
-			case Debugger::eView::Registers:
-			default:
-				break;
+			case Debugger::eView::Breakpoints: m_tabs.setCurrentTab(*m_breakpointsTab); break;
+			case Debugger::eView::Registers: m_tabs.setCurrentTab(*m_registersTab); break;
+			default: break;
 		}
 		m_viewsDirty = true;
+	}
+
+	void DebuggerWindow::run_command(const String& command)
+	{
+		const auto tokens = command.new_trim().toLower().tokenize().getRawData();
+		if (tokens.size() == 2 && (tokens[0] == "detach" || tokens[0] == "attach") && (tokens[1] == "screen" || tokens[1] == "console"))
+		{
+			m_consoleOut.fg(ostd::ConsoleColors::Magenta).p(" (ddb) #/> ").fg(ostd::ConsoleColors::White).p(command.new_trim()).reset().nl();
+			if (tokens[1] == "screen")
+				set_screen_detached(tokens[0] == "detach");
+			else
+				set_console_detached(tokens[0] == "detach");
+			return;
+		}
+		m_debugger.command(command);
 	}
 
 	void DebuggerWindow::show_programs_menu(void)

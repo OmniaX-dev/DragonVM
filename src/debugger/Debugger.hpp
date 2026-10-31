@@ -3,6 +3,7 @@
 #include <ostd/io/IOHandlers.hpp>
 #include <chrono>
 #include <set>
+#include <map>
 #include <unordered_map>
 #include "../assembler/Assembler.hpp"
 #include "../hardware/VirtualCPU.hpp"
@@ -96,6 +97,14 @@ namespace dragon
 			i16 registers[data::Registers::Last] { 0 };
 			stdvec<u8> trackedValues;
 		};
+		// A breakpoint. debug_break instructions (found in the disassembly, or when the CPU
+		// executes one) are breakpoints too: the machine stops before executing them, and
+		// they can be disabled (then the CPU's own debug break is ignored as well).
+		public: struct tBreakPoint
+		{
+			bool enabled { true };
+			bool debugBreak { false };
+		};
 		public: enum class eMode { Paused = 0, Running, StepOver, StepOut, RunTo, ReverseRunning };
 		public: enum class eView { Disassembly = 0, Registers, Memory, Stack, CallTrace, Tracker, Breakpoints, History, Console };
 		public: struct tDebuggerData
@@ -108,11 +117,24 @@ namespace dragon
 			stdvec<tTrackedData> tracked;
 			i32 labelLineLength { 40 };
 			String disassemblyDirectory { "disassembly" };
-			std::set<u16> breakpoints;
+			std::map<u16, tBreakPoint> breakpoints;
+			// Bumped whenever the tracked list changes (the views sync with it).
+			u64 trackedVersion { 0 };
+		};
+		// A stack frame, found by following the saved frame pointers from FP.
+		public: struct tStackFrame
+		{
+			u16 fp { 0 };
+			u16 frameSize { 0 };
+			u16 savedFP { 0 };
+			u16 savedIP { 0 };
+			u16 argCount { 0 };
 		};
 		public: class Utils
 		{
 			public:
+				// Innermost first.
+				static stdvec<tStackFrame> getStackFrames(void);
 				static String findSymbol(const DisassemblyList& labels, u16 address, u16* outSize = nullptr);
 				static u16 findSymbol(const DisassemblyList& labels, const String& symbol, u16* outSize = nullptr);
 				// The label at or before the address ("$label+0x4"); "" if none.
@@ -137,6 +159,7 @@ namespace dragon
 				static void printDiff(ostd::OutputHandlerBase& out, const Debugger& dbg);
 				static void printTrackedAddresses(ostd::OutputHandlerBase& out, const Debugger& dbg, i32 width);
 				static void printStack(ostd::OutputHandlerBase& out, const Debugger& dbg, u16 nrows, i32 width);
+				static void printStackFrames(ostd::OutputHandlerBase& out, const Debugger& dbg, i32 width);
 				static void printCallStack(ostd::OutputHandlerBase& out, const Debugger& dbg, i32 width);
 				static void printBreakpoints(ostd::OutputHandlerBase& out, const Debugger& dbg);
 				static void printHistory(ostd::OutputHandlerBase& out, const Debugger& dbg, i32 rows);
@@ -195,13 +218,24 @@ namespace dragon
 			void commitEdit(void);
 
 			// ============================ BREAKPOINTS / DATA ============================
-			// Returns whether the address has a breakpoint now.
+			// Adds / removes a breakpoint (debug_break ones are enabled / disabled instead).
+			// Returns whether the address has an enabled breakpoint now.
 			bool toggleBreakPoint(u16 address);
-			inline bool isBreakPoint(u16 address) const { return m_data.breakpoints.count(address) > 0; }
-			inline void addBreakPoint(u16 address) { m_data.breakpoints.insert(address); }
-			inline void removeBreakPoint(u16 address) { m_data.breakpoints.erase(address); }
+			// An enabled breakpoint at the address.
+			bool isBreakPoint(u16 address) const;
+			// Any breakpoint (also disabled) at the address; nullptr if none.
+			const tBreakPoint* getBreakPoint(u16 address) const;
+			void addBreakPoint(u16 address);
+			// debug_break breakpoints can't be removed (they're in the code): they're disabled.
+			void removeBreakPoint(u16 address);
+			void setBreakPointEnabled(u16 address, bool enabled);
+			// Removes the breakpoints and disables the debug_break ones.
+			void clearBreakPoints(void);
 			void track(u16 address, u16 size, const String& label, bool breakOnChange = false);
 			bool untrack(u16 address);
+			void untrackAll(void);
+			// Makes a tracked item a watch (or not).
+			bool setWatch(u16 address, bool breakOnChange);
 			// Writes a register (an edit, recorded in the history).
 			bool setRegister(const String& name, i64 value);
 			// Writes memory (an edit, recorded in the history).
@@ -227,6 +261,11 @@ namespace dragon
 
 			bool step_machine(void);
 			bool check_stop_conditions(u16 previousIP);
+			// An enabled breakpoint the machine should stop at (a debug_break breakpoint only
+			// while the instruction is really there: other programs can use the address).
+			bool should_break_at(u16 ip) const;
+			void register_debug_breaks(void);
+			void tracked_changed(void);
 			void stopped(const String& reason);
 			void track_call(u16 ip);
 			void after_navigation(void);

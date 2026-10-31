@@ -22,6 +22,7 @@ namespace dragon
 				case data::OpCodes::BIOSModeImm: return "BIOSModeImm";
 				case data::OpCodes::DEBUG_StartProfile: return "debug_start_profile";
 				case data::OpCodes::DEBUG_StopProfile: return "debug_stop_profile";
+				case data::OpCodes::DEBUG_DumpRAM: return "debug_dump_ram";
 				case data::OpCodes::MovImmReg: return "MovImmReg";
 				case data::OpCodes::MovImmMem: return "MovImmMem";
 				case data::OpCodes::MovRegReg: return "MovRegReg";
@@ -90,6 +91,9 @@ namespace dragon
 				case data::OpCodes::ArgReg: return "ArgReg";
 				case data::OpCodes::RetInt: return "RetInt";
 				case data::OpCodes::Int: return "Int";
+				case data::OpCodes::ZeroFlag: return "ZeroFlag";
+				case data::OpCodes::SetFlag: return "SetFlag";
+				case data::OpCodes::ToggleFlag: return "ToggleFlag";
 				case data::OpCodes::Ext01: return "Ext01";
 				case data::OpCodes::Ext02: return "Ext02";
 				case data::OpCodes::Ext03: return "Ext03";
@@ -125,8 +129,9 @@ namespace dragon
 				case data::OpCodes::NoOp: return 1;
 				case data::OpCodes::DEBUG_Break: return 1;
 				case data::OpCodes::BIOSModeImm: return 2;
-				case data::OpCodes::DEBUG_StartProfile: return 1;
+				case data::OpCodes::DEBUG_StartProfile: return 3;
 				case data::OpCodes::DEBUG_StopProfile: return 1;
+				case data::OpCodes::DEBUG_DumpRAM: return 1;
 				case data::OpCodes::MovImmReg: return 4;
 				case data::OpCodes::MovImmMem: return 5;
 				case data::OpCodes::MovRegReg: return 3;
@@ -195,6 +200,9 @@ namespace dragon
 				case data::OpCodes::ArgReg: return 2;
 				case data::OpCodes::RetInt: return 1;
 				case data::OpCodes::Int: return 2;
+				case data::OpCodes::ZeroFlag: return 2;
+				case data::OpCodes::SetFlag: return 2;
+				case data::OpCodes::ToggleFlag: return 2;
 				case data::OpCodes::Ext01: return 0;
 				case data::OpCodes::Ext02: return 0;
 				case data::OpCodes::Ext03: return 0;

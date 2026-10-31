@@ -4,6 +4,7 @@
 #include <ogfx/gui/Widgets.hpp>
 #include "../hardware/VirtualDisplay.hpp"
 #include "DisassemblyView.hpp"
+#include "DebuggerWidgets.hpp"
 #include "Debugger.hpp"
 
 namespace dragon
@@ -27,18 +28,29 @@ namespace dragon
 			i32 m_historyIndex { -1 };
 	};
 
+	// A plain widget holding others (the console: its log and its command line).
+	class WidgetGroup : public ogfx::gui::Widget
+	{
+		public:
+			inline WidgetGroup(ogfx::gui::Window& window) : Widget({ 0, 0, 0, 0 }, window) { setTypeName("dragon::WidgetGroup"); setStylesheetCategoryName("dragonWidgetGroup"); disableFocus(); validate(); }
+	};
+
 	// ============================================================================
 	// DebuggerWindow — the graphical debugger.
 	//
 	//   +------------------------------+---------------------------------------+
-	//   | program  [v]  [x] follow     | VirtualDisplay        | Breakpoints   |
-	//   | Disassembly                  |                       | & watches     |
-	//   |                              +---------------------------------------+
-	//   |                              | Registers (diff with the last cycle)  |
+	//   | program  [v]  [x] follow     | Registers | Breakpoints | Memory |    |
+	//   | Disassembly                  | Stack | Call trace | Tracker | History|
+	//   |                              |                                       |
+	//   |                              |                                       |
 	//   +------------------------------+---------------------------------------+
-	//   | Console (log + command line) | Memory | Stack | Calls | Tracker | ...|
+	//   | Console (log + command line) | Screen (VirtualDisplay)               |
 	//   +------------------------------+---------------------------------------+
 	//   status: state, cycle, speed, history                 [timeline slider]
+	//
+	// The screen and the console can be detached into SubWindows (their "Detach"
+	// buttons) and attached back ("Attach" in the SubWindow's title bar, or closing
+	// it); the views next to them take their space meanwhile.
 	//
 	// The toolbar (and F5 / F6 / F9 / F10 / F11) drives the Debugger; the views are
 	// refreshed when it stops, and a few times per second while it runs. The
@@ -64,13 +76,25 @@ namespace dragon
 			void build_layout(void);
 			void build_toolbar(void);
 			void build_tabs(void);
-			// full = also the views that are slow to print (the visible tab, the breakpoints).
+			void build_memory(void);
+			void build_subwindows(void);
+			// Places the widgets for the current detach state.
+			void apply_layout(void);
+			void set_screen_detached(bool detached);
+			void set_console_detached(bool detached);
+			// full = also the views that are slow to print (the visible tab).
 			void refresh_views(bool full);
 			void refresh_tab(void);
 			void refresh_status(void);
+			void refresh_stack(void);
+			void sync_watches(void);
 			void show_view(Debugger::eView view, i64 argument);
+			void show_in_memory(u16 address);
+			void show_in_disassembly(u16 address);
 			void show_programs_menu(void);
-			ogfx::gui::Label& add_title(ogfx::gui::Label& label, const String& text, const Rectangle& fractions, const ogfx::gui::Offsets& insets);
+			// The window's own commands (detach / attach), the others go to the debugger.
+			void run_command(const String& command);
+			ogfx::gui::Label& add_title(ogfx::gui::Label& label, const String& text);
 
 		private:
 			Debugger& m_debugger;
@@ -82,31 +106,44 @@ namespace dragon
 			ogfx::gui::CheckBox m_followCheck { *this };
 			DisassemblyView m_disassembly { *this, m_debugger };
 			ogfx::gui::Label m_consoleTitle { *this };
+			ogfx::gui::Button m_consoleDetachButton { *this };
+			WidgetGroup m_console { *this };
 			ogfx::gui::RichTextView m_consoleView { *this };
 			ogfx::gui::RichTextOutputHandler m_consoleOut;
 			CommandInput m_commandInput { *this };
 
 			// Right column
-			ogfx::gui::Label m_displayTitle { *this };
-			hw::VirtualDisplay m_display { *this };
-			ogfx::gui::Label m_breakpointsTitle { *this };
-			ogfx::gui::RichTextView m_breakpointsView { *this };
-			ogfx::gui::Label m_registersTitle { *this };
-			ogfx::gui::RichTextView m_registersView { *this };
 			ogfx::gui::TabPanel m_tabs { *this };
+			RegisterView m_registers { *this, m_debugger };
+			BreakpointView m_breakpoints { *this, m_debugger };
 			ogfx::gui::HexEditor m_memory { *this };
-			ogfx::gui::RichTextView m_stackView { *this };
-			ogfx::gui::RichTextView m_callsView { *this };
-			ogfx::gui::RichTextView m_trackerView { *this };
+			WidgetGroup m_stack { *this };
+			ogfx::gui::RichTextView m_stackFramesView { *this };
+			ogfx::gui::HexEditor m_stackMemory { *this };
+			CallTraceView m_callTrace { *this, m_debugger };
+			TrackerView m_tracker { *this, m_debugger };
 			ogfx::gui::RichTextView m_historyView { *this };
+			ogfx::gui::Panel* m_registersTab { nullptr };
+			ogfx::gui::Panel* m_breakpointsTab { nullptr };
 			ogfx::gui::Panel* m_memoryTab { nullptr };
 			ogfx::gui::Panel* m_stackTab { nullptr };
 			ogfx::gui::Panel* m_callsTab { nullptr };
 			ogfx::gui::Panel* m_trackerTab { nullptr };
 			ogfx::gui::Panel* m_historyTab { nullptr };
-			ogfx::gui::Panel* m_shownTab { nullptr };
+			ogfx::gui::Label m_displayTitle { *this };
+			ogfx::gui::Button m_screenDetachButton { *this };
+			hw::VirtualDisplay m_display { *this };
 			i32 m_stackHighlight { -1 };
-			u16 m_stackRows { 16 };
+			stdvec<i32> m_stackFrameHighlights;
+			i32 m_lastStackSP { -1 };
+			i32 m_lastStackRows { -1 };
+			u64 m_seenTrackedVersion { cast<u64>(-1) };
+
+			// Detached views
+			ogfx::gui::SubWindow m_screenWindow { *this, "Screen" };
+			ogfx::gui::SubWindow m_consoleWindow { *this, "Console" };
+			bool m_screenDetached { false };
+			bool m_consoleDetached { false };
 
 			// Bars
 			std::deque<ogfx::gui::Button> m_toolButtons;
@@ -121,5 +158,11 @@ namespace dragon
 			bool m_started { false };
 			bool m_viewsDirty { true };
 			f64 m_refreshTimer { 0.0 };
+
+		public:
+			// Column / rows, as fractions of the window.
+			inline static constexpr f32 Split { 0.47f };
+			inline static constexpr f32 ConsoleTop { 0.66f };
+			inline static constexpr f32 ScreenTop { 0.62f };
 	};
 }

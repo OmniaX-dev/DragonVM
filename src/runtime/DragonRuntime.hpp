@@ -50,13 +50,18 @@ namespace dragon
 			static void forceLoad(const String& filePath, u16 loadAddress);
 
 			inline static bool hasError(void) { return data::ErrorHandler::hasError(); }
-			inline static ostd::ConsoleOutputHandler& output(void) { return out; }
+			// Where the runtime prints (loading info, errors): the terminal by default; the
+			// debugger sends it to its console.
+			inline static ostd::OutputHandlerBase& output(void) { return *s_output; }
+			inline static void setOutputHandler(ostd::OutputHandlerBase& handler) { s_output = &handler; }
+			inline static void resetOutputHandler(void) { s_output = &out; }
 
 		private:
 			static void __print_application_help(void);
 
 		public:
 			inline static ostd::ConsoleOutputHandler out;
+			inline static ostd::OutputHandlerBase* s_output { &out };
 
 			inline static hw::MemoryMapper memMap;
 			inline static hw::VirtualCPU cpu { memMap };

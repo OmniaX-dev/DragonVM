@@ -44,9 +44,13 @@ namespace dragon
 			inline bool isFollowEnabled(void) const { return m_follow; }
 			// Scrolls to an address of the current program (if it has it).
 			bool scrollToAddress(u16 address);
+			// Shows an address in whichever program has it (decoded from memory if none),
+			// turning the IP following off.
+			void showAddress(u16 address);
 
 			// "Show in memory" from the context menu.
 			inline void setShowInMemoryCallback(AddressCallback callback) { m_onShowInMemory = std::move(callback); }
+			inline void setBreakpointsChangedCallback(std::function<void(void)> callback) { m_onBreakpointsChanged = std::move(callback); }
 
 		private:
 			struct Document
@@ -73,6 +77,7 @@ namespace dragon
 			u16 m_liveStart { 0 };
 			u16 m_liveEnd { 0 };
 			AddressCallback m_onShowInMemory { nullptr };
+			std::function<void(void)> m_onBreakpointsChanged { nullptr };
 
 		public:
 			inline static constexpr i32 GutterColumns { 2 };

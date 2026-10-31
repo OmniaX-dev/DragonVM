@@ -877,8 +877,8 @@ namespace dragon
 					u8 intValue = fetch8();
 					if (!readFlag(data::Flags::InterruptsEnabled))
 						return true;
+					// handleInterrupt() counts the subroutine.
 					handleInterrupt(intValue, false);
-					m_subroutineCounter++;
 				}
 				break;
 				case data::OpCodes::ZeroFlag:
