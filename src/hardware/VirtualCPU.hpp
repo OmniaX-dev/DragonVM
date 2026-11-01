@@ -69,6 +69,8 @@ namespace dragon
 				inline bool isInDebugBreakPoint(void) const { return m_isDebugBreakPoint; }
 				inline bool isRamDumped(void) const { return m_ramDumped; }
 				inline bool isInBIOSMOde(void) const { return m_biosMode; }
+				// The debugger's writes to protected devices (the CMOS chip) need BIOS mode.
+				inline void setBIOSMode(bool biosMode) { m_biosMode = biosMode; }
 				inline bool isInSubRoutine(void) const { return m_subroutineCounter > 0; }
 				inline i32 getSubRoutineCounter(void) const { return m_subroutineCounter; }
 				inline data::CPUExtension* getCurrentCPUExtension(void) const { return m_currentExtension; }

@@ -3,7 +3,7 @@
 #include <ostd/data/Color.hpp>
 #include <ostd/io/IOHandlers.hpp>
 #include <fstream>
-#include "../hardware/VirtualHardDrive.hpp"
+#include "../storage/DPT.hpp"
 #include "GlobalData.hpp"
 #include "../debugger/DisassemblyLoader.hpp"
 #include <ostd/io/Memory.hpp>
@@ -13,14 +13,8 @@ namespace dragon
 {
 	bool Tools::createVirtualHardDrive(u32 sizeInBytes, const String& dataFilePath)
 	{
-		std::ofstream rf(dataFilePath.cpp_str(), std::ios::out | std::ios::binary);
-		if(!rf) return false;
-		ostd::ByteStream stream;
-		for (i32 i = 0; i < sizeInBytes; i++)
-			stream.push_back(0x00);
-		rf.write((char*)(&stream[0]), stream.size());
-		rf.close();
-		return true;
+		String error = "";
+		return storage::createDiskFile(dataFilePath, sizeInBytes, error);
 	}
 
 	i32 Tools::execute(int argc, char** argv)
@@ -117,26 +111,26 @@ namespace dragon
 			out.fg(ostd::ConsoleColors::Red).p("Error: <destination_address> parameter must be integer.").reset().nl();
 			return ErrorLoadProgNonIntAddr;
 		}
-		dragon::hw::VirtualHardDrive vHDD(vdisk_file);
-		if (!vHDD.isInitialized())
+		storage::FileDisk disk(vdisk_file);
+		if (!disk.isOpen())
 		{
 			out.fg(ostd::ConsoleColors::Red).p("Error: Unable to load virtual disk.").reset().nl();
 			return ErrorLoadProgUnableToLoadVDisk;
 		}
-		ostd::ByteStream code;
-		if (!ostd::Memory::loadByteStreamFromFile(data_file, code))
+		stdvec<u8> code;
+		String error = "";
+		if (!storage::readFile(data_file, code, error))
 		{
 			out.fg(ostd::ConsoleColors::Red).p("Error: Unable to load data file.").reset().nl();
 			return ErrorLoadProgUnableToLoadDataFile;
 		}
-		i16 index = 0;
 		u32 addr = (u32)str_addr.toInt();
-		for (auto& b : code)
+		if (!disk.contains(addr, code.size()) || !disk.write(addr, code))
 		{
-			vHDD.write(addr + index, b);
-			index++;
+			out.fg(ostd::ConsoleColors::Red).p("Error: The data doesn't fit on the virtual disk at that address.").reset().nl();
+			return ErrorLoadProgDiskOverflow;
 		}
-		vHDD.unmount();
+		disk.close();
 		out.nl().fg(ostd::ConsoleColors::Green).p("Success. Data written to Virtual Disk:").nl();
 		out.p("  Data Path: ").p(data_file.cpp_str()).nl();
 		out.p("  Disk Path: ").p(vdisk_file.cpp_str()).nl();
@@ -154,69 +148,27 @@ namespace dragon
 			return ErrorReadDPTTooFewArgs;
 		}
 		String vdisk_file = argv[2];
-		dragon::hw::VirtualHardDrive vHDD(vdisk_file);
-		if (!vHDD.isInitialized())
+		storage::FileDisk disk(vdisk_file);
+		if (!disk.isOpen())
 		{
 			out.fg(ostd::ConsoleColors::Red).p("Error: Unable to load virtual disk.").reset().nl();
 			return ErrorReadDPTUnableToLoadVDisk;
 		}
-		if (vHDD.getSize() < 1024)
+		if (disk.getSize() < 1024)
 		{
 			out.fg(ostd::ConsoleColors::Red).p("Error: Disk too small.").reset().nl();
 			return ErrorReadDPTSmallDisk;
 		}
-		ostd::ByteStream outData;
-		if (!vHDD.read(data::DPTStructure::DiskAddress, data::DPTStructure::DPTBlockSizeBytes, outData))
+		const storage::DPTScheme dpt;
+		storage::tPartitionTable table;
+		String error = "";
+		if (!dpt.read(disk, table, error))
 		{
-			out.fg(ostd::ConsoleColors::Red).p("Error: Unable to read from disk.").reset().nl();
-			return ErrorReadDPTUnableToRead;
-		}
-		// ostd::Utils::printByteStream(outData, 0, 16, 32, out);
-		ostd::serial::SerialIO dpt_block(outData);
-		i8 outData8 = 0;
-		i16 outData16 = 0;
-		i32 outData32 = 0;
-		//TODO: Add errors for all read calls
-		dpt_block.r_Word(data::DPTStructure::DPTID, outData16);
-		u16 code = (u16)outData16;
-		if (code != data::DPTStructure::DPT_ID_CODE)
-		{
-			out.fg(ostd::ConsoleColors::Red).p("Error: No DPT partition table on virtual disk.").reset().nl();
+			out.fg(ostd::ConsoleColors::Red).p("Error: ").p(error).reset().nl();
 			return ErrorReadDPTNoPartitionTable;
 		}
-		dpt_block.r_Byte(data::DPTStructure::DPTVersionMaj, outData8);
-		u32 version_maj = (u32)outData8;
-		dpt_block.r_Byte(data::DPTStructure::DPTVersionMin, outData8);
-		u32 version_min = (u32)outData8;
-		dpt_block.r_Byte(data::DPTStructure::PartitionCount, outData8);
-		u32 part_count = (u32)outData8;
-		if (part_count > data::DPTStructure::MaxPartCount)
-		{
-			out.fg(ostd::ConsoleColors::Red).p("Error: Too many partitions. Maximum is ").p(data::DPTStructure::MaxPartCount).p(".").reset().nl();
-			return ErrorReadDPTNoPartitionTable;
-		}
-		struct tPartitionData {
-			u32 startAddress { 0 };
-			u32 size { 0 };
-			ostd::BitField_16 flags { 0 };
-			String label { "" };
-		};
-		std::vector<tPartitionData> partitionList;
-		for (i32 i = 0; i < part_count; i++)
-		{
-			tPartitionData pdata;
-			u32 entry_addr = data::DPTStructure::EntriesStart + (data::DPTStructure::EntrySizeBytes * i);
-			dpt_block.r_DWord(entry_addr + data::DPTStructure::EntryStartAddress, outData32);
-			pdata.startAddress = (u32)outData32;
-			dpt_block.r_DWord(entry_addr + data::DPTStructure::EntryPartitionSize, outData32);
-			pdata.size = (u32)outData32;
-			dpt_block.r_Word(entry_addr + data::DPTStructure::EntryFlags, outData16);
-			pdata.flags.value = (u16)outData16;
-			dpt_block.r_NullTerminatedString(entry_addr + data::DPTStructure::EntryPartitionLabel, pdata.label);
-			pdata.label.trim();
-			partitionList.push_back(pdata);
-		}
-		out.fg(ostd::ConsoleColors::BrightRed).p("Disk: ").p(vdisk_file).p(" (").p(vHDD.getSize()).p(" bytes)").nl();
+		auto& partitionList = table.partitions;
+		out.fg(ostd::ConsoleColors::BrightRed).p("Disk: ").p(vdisk_file).p(" (").p(disk.getSize()).p(" bytes)").nl();
 		auto print_part_size = [](u32 size, ostd::ConsoleOutputHandler& out, u16 line_len) {
 			f64 dsize = size;
 			String units[4] = { " bytes", " Kb", " Mb", " Gb" };
@@ -247,20 +199,10 @@ namespace dragon
 				part.label = "<NO-LABEL>";
 			out.fg(ostd::ConsoleColors::Cyan).p("  ");
 			out.p(part.label.new_fixedLength(len));
-			print_part_size(part.size, out, len);
-			out.p(String::getHexStr(part.startAddress, true, 4).new_fixedLength(len));
-			out.p(String::getHexStr(part.startAddress + part.size, true, 4).new_fixedLength(len));
-			String flags_str = "";
-			for (u8 bit = 0; bit < sizeof(part.flags) * 8; bit++)
-			{
-				if (m_dpt_flags_str.count(bit) == 0)
-					continue;
-				if (ostd::Bits::get(part.flags, bit))
-					flags_str += m_dpt_flags_str[bit] + ",";
-			}
-			if (flags_str.len() > 0)
-				flags_str.substr(0, flags_str.len() - 1);
-
+			print_part_size(cast<u32>(part.size), out, len);
+			out.p(String::getHexStr(part.start, true, 4).new_fixedLength(len));
+			out.p(String::getHexStr(part.end(), true, 4).new_fixedLength(len));
+			const String flags_str = dpt.flagsToString(part.flags);
 			out.fg(ostd::ConsoleColors::Yellow).p(flags_str).fg(ostd::ConsoleColors::Cyan).nl();
 		}
 		out.fg(ostd::ConsoleColors::BrightGray);
@@ -278,29 +220,22 @@ namespace dragon
 			return ErrorLoadProgTooFewArgs;
 		}
 		String vdisk_file = argv[2];
-		dragon::hw::VirtualHardDrive vHDD(vdisk_file);
-		if (!vHDD.isInitialized())
+		storage::FileDisk disk(vdisk_file);
+		if (!disk.isOpen())
 		{
 			out.fg(ostd::ConsoleColors::Red).p("Error: Unable to load virtual disk.").reset().nl();
 			return ErrorLoadProgUnableToLoadVDisk;
 		}
-		u64 disk_size = vHDD.getSize();
+		u64 disk_size = disk.getSize();
 
-		auto& _dpt_flags_str = m_dpt_flags_str;
-		auto get_flag_from_str = [_dpt_flags_str](const String& flag_str) -> i8 {
-			for (auto& flag : _dpt_flags_str)
+		const storage::DPTScheme dpt;
+		auto get_flag_from_str = [&dpt](const String& flag_str) -> i8 {
+			for (auto& flag : dpt.getFlags())
 			{
-				if (flag.second == flag_str)
-					return flag.first;
+				if (flag.name == flag_str)
+					return cast<i8>(flag.bit);
 			}
 			return -1;
-		};
-		auto make_bytestream = [](u16 size, ostd::Byte value = 0xFF) -> ostd::ByteStream {
-
-			ostd::ByteStream stream;
-			for (i16 i = 0; i < size; i++)
-				stream.push_back(value);
-			return stream;
 		};
 		struct tPartData {
 			u32 size { 0 };
@@ -396,54 +331,25 @@ namespace dragon
 			return ErrorNewDPTTooManyPartitions;
 		}
 
-		//HEADER
-		ostd::StreamIndex addr = 0;
-		ostd::serial::SerialIO dpt_block(data::DPTStructure::DPTBlockSizeBytes);
-		dpt_block.enableAutoResize(false);
-		dpt_block.w_Word(addr, data::DPTStructure::DPT_ID_CODE);
-		addr += ostd::tTypeSize::WORD;
-		dpt_block.w_Byte(addr, data::DPTStructure::CurrentDPTVersionMaj);
-		addr += ostd::tTypeSize::BYTE;
-		dpt_block.w_Byte(addr, data::DPTStructure::CurrentDPTVersionMin);
-		addr += ostd::tTypeSize::BYTE;
-		dpt_block.w_Byte(addr, (ostd::Byte)(partitions.size()));
-		addr += ostd::tTypeSize::BYTE;
-		u16 reserved_size = data::DPTStructure::HeaderReservedSizeBytes;
-		dpt_block.w_ByteStream(addr, make_bytestream(reserved_size), false);
-		addr += reserved_size;
-
-		//PARTITIONS
+		storage::tPartitionTable table;
+		table.scheme = dpt.getName();
 		for (auto& part : partitions)
 		{
-			dpt_block.w_DWord(addr, part.address);
-			addr += ostd::tTypeSize::DWORD;
-			dpt_block.w_DWord(addr, part.size);
-			addr += ostd::tTypeSize::DWORD;
-
-			ostd::BitField_16 flags;
-			flags.value = 0;
+			storage::tPartition entry;
+			entry.start = part.address;
+			entry.size = part.size;
 			for (auto& bit : part.flags)
-				ostd::Bits::set(flags, bit);
-			dpt_block.w_Word(addr, flags.value);
-			addr += ostd::tTypeSize::WORD;
-
-			reserved_size = data::DPTStructure::EntryReservedSizeBytes;
-			dpt_block.w_ByteStream(addr, make_bytestream(reserved_size), false);
-			addr += reserved_size;
-
-			if (part.label.len() >= data::DPTStructure::EntryLabelSizeBytes)
-				part.label.fixedLength(data::DPTStructure::EntryLabelSizeBytes - 1, ' ', "");
-			dpt_block.w_String(addr, part.label, false, true);
-			addr += data::DPTStructure::EntryLabelSizeBytes;
+				entry.setFlag(bit, true);
+			entry.label = part.label;
+			table.partitions.push_back(entry);
 		}
-
-		i16 index = 0;
-		for (auto& b : dpt_block.getData())
+		String error = "";
+		if (!dpt.write(disk, table, error))
 		{
-			vHDD.write(data::DPTStructure::DiskAddress + index, b);
-			index++;
+			out.fg(ostd::ConsoleColors::Red).p("Error: ").p(error).reset().nl();
+			return ErrorNewDPTDiskOverflow;
 		}
-		vHDD.unmount();
+		disk.close();
 		out.nl().fg(ostd::ConsoleColors::Green).p("Success. DPT Block created on Virtual Disk:").nl();
 		out.p("  Disk Path: ").p(vdisk_file.cpp_str()).nl();
 		out.p("  DPT Block Address: ").p(String::getHexStr(data::DPTStructure::DiskAddress, true, 4).cpp_str()).nl();

@@ -55,6 +55,8 @@ list(APPEND DEBUGGER_SOURCE_FILES
 	${CMAKE_CURRENT_LIST_DIR}/src/debugger/DisassemblyView.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/debugger/DebuggerWidgets.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/debugger/DebuggerWindow.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/debugger/DiskManager.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/debugger/CMOSManager.cpp
 
 	${CMAKE_CURRENT_LIST_DIR}/src/hardware/VirtualCPU.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/hardware/VirtualRAM.cpp
@@ -75,6 +77,11 @@ list(APPEND DEBUGGER_SOURCE_FILES
 	${CMAKE_CURRENT_LIST_DIR}/src/tools/GlobalData.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/tools/LegacyOstdSerial.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/tools/Tools.cpp
+
+	${CMAKE_CURRENT_LIST_DIR}/src/storage/Disk.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/storage/PartitionTable.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/storage/DPT.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/storage/FileSystem.cpp
 )
 list(APPEND ASSEMBLER_SOURCE_FILES
 	${CMAKE_CURRENT_LIST_DIR}/src/assembler/assembler_main.cpp
@@ -96,6 +103,11 @@ list(APPEND TOOLS_SOURCE_FILES
 	${CMAKE_CURRENT_LIST_DIR}/src/hardware/VirtualHardDrive.cpp
 
 	${CMAKE_CURRENT_LIST_DIR}/src/debugger/DisassemblyLoader.cpp
+
+	${CMAKE_CURRENT_LIST_DIR}/src/storage/Disk.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/storage/PartitionTable.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/storage/DPT.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/storage/FileSystem.cpp
 )
 #-----------------------------------------------------------------------------------------
 

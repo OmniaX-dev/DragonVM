@@ -198,12 +198,8 @@ namespace dragon
 		l_setup(m_screenWindow, { 260, 140, 940, 640 }, "Put the screen back in the debugger window", [this](void) { set_screen_detached(false); });
 		m_screenWindow.addTitlebarButton("FX", [this](SubWindow&) { toggle_screen_effects(); }, "CRT and bloom effects: on / off");
 		l_setup(m_consoleWindow, { 160, 220, 1000, 560 }, "Put the console back in the debugger window", [this](void) { set_console_detached(false); });
-		// Empty for now.
-		m_diskManagerWindow.setBounds({ 220, 160, 900, 600 });
-		m_diskManagerWindow.setButtons(SubWindow::Buttons::Close | SubWindow::Buttons::Minimize | SubWindow::Buttons::Maximize | SubWindow::Buttons::AlwaysOnTop);
-
-		m_cmosManagerWindow.setBounds({ 220, 160, 900, 600 });
-		m_cmosManagerWindow.setButtons(SubWindow::Buttons::Close | SubWindow::Buttons::Minimize | SubWindow::Buttons::Maximize | SubWindow::Buttons::AlwaysOnTop);
+		m_diskManagerWindow.build();
+		m_cmosManagerWindow.build();
 	}
 
 	void DebuggerWindow::set_screen_detached(bool detached)
@@ -350,8 +346,8 @@ namespace dragon
 		l_button("Reverse run", "toolbar_reverse", "Reverse run (Shift+F5): back in the history to a breakpoint or a watch", [this](void) { m_debugger.reverseContinue(); });
 		l_button("Rewind", "toolbar_rewind", "Rewind: to the start of the history (ignores breakpoints)", [this](void) { m_debugger.seek(m_debugger.history().getFirstPosition()); });
 		l_separator();
-		l_button("Disk Manager", "toolbar_disks", "Disk Manager", [this](void) { m_diskManagerWindow.open(); });
-		l_button("CMOS Manager", "toolbar_cmos", "CMOS Manager", [this](void) { m_cmosManagerWindow.open(); });
+		l_button("Disk Manager", "toolbar_disks", "Disk Manager: the machine's disks and image files, their partitions", [this](void) { m_diskManagerWindow.open(); m_diskManagerWindow.syncWithMachine(); });
+		l_button("CMOS Manager", "toolbar_cmos", "CMOS Manager: the CMOS chip's settings (the cmos.dr file or the live chip)", [this](void) { m_cmosManagerWindow.open(); m_cmosManagerWindow.syncWithMachine(); });
 		tb.addWidget(m_recordCheck);
 		m_recordCheck.setText("Record history");
 		m_recordCheck.setTooltipText("Records every instruction (step back, reverse run); uses up to 512 MiB");
@@ -502,6 +498,8 @@ namespace dragon
 		m_consoleOut.fg(ostd::ConsoleColors::BrightGray).p("Type 'help' for the commands. F5 run, F6 pause, F10 step, F11 step over, F9 step back.").reset().nl();
 		for (auto& command : String(m_debugger.data().args.exec_commands).tokenize(";").getRawData())
 			m_pendingCommands.push_back(command);
+		m_diskManagerWindow.start();
+		m_cmosManagerWindow.start();
 		m_started = true;
 		m_viewsDirty = true;
 		if (m_debugger.data().args.auto_start_debug)
@@ -625,6 +623,8 @@ namespace dragon
 		const u16 sp = cast<u16>(DragonRuntime::cpu.readRegister(data::Registers::SP));
 		m_memory.updateHighlight(m_stackHighlight, sp, std::max<u32>(1, 0x10000 - sp));
 		sync_watches();
+		m_diskManagerWindow.syncWithMachine();
+		m_cmosManagerWindow.syncWithMachine();
 
 		if (!full)
 		{

@@ -5,6 +5,8 @@
 #include "../hardware/VirtualDisplay.hpp"
 #include "DisassemblyView.hpp"
 #include "DebuggerWidgets.hpp"
+#include "DiskManager.hpp"
+#include "CMOSManager.hpp"
 #include "Debugger.hpp"
 
 namespace dragon
@@ -163,8 +165,8 @@ namespace dragon
 			// Detached views
 			ogfx::gui::SubWindow m_screenWindow { *this, "Screen" };
 			ogfx::gui::SubWindow m_consoleWindow { *this, "Console" };
-			ogfx::gui::SubWindow m_diskManagerWindow { *this, "Disk Manager" };
-			ogfx::gui::SubWindow m_cmosManagerWindow { *this, "CMOS Manager" };
+			DiskManagerWindow m_diskManagerWindow { *this, m_debugger };
+			CMOSManagerWindow m_cmosManagerWindow { *this, m_debugger };
 			bool m_screenDetached { false };
 			bool m_consoleDetached { false };
 

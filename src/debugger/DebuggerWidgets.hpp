@@ -304,4 +304,26 @@ namespace dragon
 			AddressCallback m_onShowInDisassembly { nullptr };
 			stdvec<Row> m_rows;
 	};
+
+
+
+
+	// ============================================================================
+	// MessageLine — a few lines of colored text (the managers' info and result
+	// lines). Lines are split at '\n'; what doesn't fit is clipped.
+	// ============================================================================
+	class MessageLine : public ogfx::gui::Widget
+	{
+		public:
+			MessageLine(ogfx::gui::Window& window);
+			inline void setMessage(const String& text, const Color& color = DebugListView::TextColor) { m_text = text; m_color = color; }
+			inline const String& getMessage(void) const { return m_text; }
+			inline void setTextSize(i32 size) { m_textSize = size; }
+			void onDraw(ogfx::BasicRenderer2D& gfx) override;
+
+		private:
+			String m_text { "" };
+			Color m_color { DebugListView::TextColor };
+			i32 m_textSize { 14 };
+	};
 }

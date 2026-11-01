@@ -230,6 +230,29 @@ namespace dragon
 				inline static constexpr u8 StackSize             = 0x11;
 
 				inline static constexpr u8 DiskList             = 0x7E;
+
+				// For the tools (the debugger's CMOS Manager). liveData: written by the
+				// runtime at every start (DragonRuntime::initMachine()), so editing it only
+				// lasts until the next start.
+				public: struct tRegisterInfo
+				{
+					u8 address;
+					u8 size;
+					const char* name;
+					bool liveData;
+					const char* description;
+				};
+				inline static constexpr tRegisterInfo List[] = {
+					{ MemoryStart,		2, "MemoryStart",		true,	"First address of the RAM" },
+					{ MemorySize,		2, "MemorySize",		true,	"Last address of the RAM" },
+					{ ClockSpeed,		2, "ClockSpeed",		true,	"Clock rate (Hz)" },
+					{ ScreenRedrawRate,	1, "ScreenRedrawRate",	true,	"Screen redraws per second" },
+					{ ScreenWidth,		2, "ScreenWidth",		true,	"Text columns" },
+					{ ScreenHeight,		2, "ScreenHeight",		true,	"Text rows" },
+					{ BootDisk,			1, "BootDisk",			false,	"Disk the BIOS boots from" },
+					{ StackSize,		2, "StackSize",			true,	"Stack size (bytes)" },
+					{ DiskList,			2, "DiskList",			true,	"Connected disks (bit n: disk n)" }
+				};
 		};
 
 		class DPTStructure

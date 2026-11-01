@@ -25,10 +25,6 @@ namespace dragon
 		private:
 			inline static ostd::ConsoleOutputHandler out;
 
-			inline static std::unordered_map<u8, String> m_dpt_flags_str {
-				{ data::DPTStructure::tFlags::Boot, "boot" }
-			};
-
 		public:
 			inline static constexpr i32 ErrorNoError = 0;
 			inline static constexpr i32 ErrorTopLevelTooFewArgs = 1;
@@ -55,6 +51,7 @@ namespace dragon
 			inline static constexpr i32 ErrorPrintDisassemblyTooFewArgs = 22;
 			inline static constexpr i32 ErrorPrintDisassemblyInvalidFile = 23;
 			inline static constexpr i32 ErrorPrintDisassemblyInvalidArg = 24;
+			inline static constexpr i32 ErrorLoadProgDiskOverflow = 25;
 
 	};
 }

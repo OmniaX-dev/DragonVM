@@ -1337,4 +1337,38 @@ namespace dragon
 		};
 		dragon::show_menu(getWindow(), menu);
 	}
+
+
+
+
+	//MessageLine
+	MessageLine::MessageLine(Window& window) : Widget({ 0, 0, 0, 0 }, window)
+	{
+		setTypeName("dragon::MessageLine");
+		setStylesheetCategoryName("dragonMessageLine");
+		disableFocus();
+		disableChildren();
+		validate();
+	}
+
+	void MessageLine::onDraw(ogfx::BasicRenderer2D& gfx)
+	{
+		const Rectangle bounds = getGlobalBounds();
+		const f32 lineHeight = gfx.getStringDimensions("Ag", m_textSize).y;
+		gfx.pushClippingRect(bounds, true);
+		const ostd::cpp_string& text = m_text.cpp_str();
+		size_t begin = 0;
+		f32 y = bounds.y + 2;
+		while (begin <= text.size())
+		{
+			size_t end = text.find('\n', begin);
+			if (end == ostd::cpp_string::npos)
+				end = text.size();
+			if (end > begin)
+				gfx.drawString(String(text.substr(begin, end - begin)), { bounds.x + 2, y }, m_color, m_textSize);
+			y += lineHeight;
+			begin = end + 1;
+		}
+		gfx.popClippingRect();
+	}
 }

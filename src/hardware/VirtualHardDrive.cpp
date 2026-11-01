@@ -66,8 +66,45 @@ namespace dragon
 			}
 			m_dataFile.seekp(addr);
 			m_dataFile.write((char*)(&value), sizeof(value));
+			m_writeCount++;
 			if (s_writeListener)
 				s_writeListener(*this, addr, oldValue, cast<u8>(value));
+			return true;
+		}
+
+		bool VirtualHardDrive::readBlock(u32 addr, u32 size, u8* outData)
+		{
+			if (!m_initialized || cast<u64>(addr) + size > m_fileSize)
+				return false;
+			m_dataFile.seekg(addr);
+			m_dataFile.read((char*)outData, size);
+			const bool ok = cast<u64>(m_dataFile.gcount()) == size;
+			m_dataFile.clear();
+			return ok;
+		}
+
+		bool VirtualHardDrive::writeBlock(u32 addr, u32 size, const u8* data)
+		{
+			if (!m_initialized || cast<u64>(addr) + size > m_fileSize)
+				return false;
+			stdvec<u8> oldData;
+			if (s_writeListener)
+			{
+				oldData.assign(size, 0);
+				readBlock(addr, size, oldData.data());
+			}
+			m_dataFile.seekp(addr);
+			m_dataFile.write((const char*)data, size);
+			m_dataFile.flush();
+			m_writeCount++;
+			if (s_writeListener)
+			{
+				for (u32 i = 0; i < size; i++)
+				{
+					if (oldData[i] != data[i])
+						s_writeListener(*this, addr + i, oldData[i], data[i]);
+				}
+			}
 			return true;
 		}
 
@@ -77,6 +114,7 @@ namespace dragon
 				return false;
 			m_dataFile.seekp(addr);
 			m_dataFile.write((char*)(&value), sizeof(value));
+			m_writeCount++;
 			return true;
 		}
 
@@ -112,6 +150,7 @@ namespace dragon
 				read(addr, cast<u16>(m_writeBuffer.size()), oldData);
 			m_dataFile.seekp(addr);
 			m_dataFile.write((char*)(&m_writeBuffer[0]), m_writeBuffer.size());
+			m_writeCount++;
 			if (s_writeListener)
 			{
 				for (size_t i = 0; i < m_writeBuffer.size(); i++)

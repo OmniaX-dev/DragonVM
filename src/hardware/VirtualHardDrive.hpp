@@ -23,6 +23,11 @@ namespace dragon
 				void bufferedWrite(i8 value);
 				bool writeBuffer(u32 addr);
 
+				// Bulk access (the Disk Manager): readBlock() is a plain read, writeBlock()
+				// notifies the write listener for every byte, like write().
+				bool readBlock(u32 addr, u32 size, u8* outData);
+				bool writeBlock(u32 addr, u32 size, const u8* data);
+
 				void unmount(void);
 				// Writes a byte without notifying the write listener.
 				bool restoreByte(u32 addr, u8 value);
@@ -32,6 +37,9 @@ namespace dragon
 				inline bool isInitialized(void) const { return m_initialized; }
 				inline u64 getSize(void) const { return m_fileSize; };
 				inline bool isSame(VirtualHardDrive& vhdd) { return m_diskID == vhdd.m_diskID; }
+				// Grows with every write (by the machine, the debugger or restoreByte()):
+				// a copy of the content is stale when it changed.
+				inline u64 getWriteCount(void) const { return m_writeCount; }
 
 			private:
 				std::fstream m_dataFile;
@@ -39,6 +47,7 @@ namespace dragon
 				u64 m_fileSize { 0 };
 				ostd::ByteStream m_writeBuffer;
 				u32 m_diskID { 0 };
+				u64 m_writeCount { 0 };
 
 				inline static u32 s_nextDiskID = 0;
 				inline static WriteListener s_writeListener { nullptr };
