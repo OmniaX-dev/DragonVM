@@ -1,0 +1,21 @@
+id = "dragonvm"
+name = "DragonVM"
+description = "DScript and dasm (Dragon assembly): syntax highlighting, outline, brackets, indentation"
+version = "0.1.0"
+schema_version = 1
+authors = ["OmniaX-Dev"]
+
+# The grammars live in this repository (editors/tree-sitter-*). Zed fetches `repository` at
+# `rev` and compiles `path`/src/parser.c. After changing a grammar: commit it, then run
+# ./update-grammar-rev.sh (it sets `rev` to the last commit that changed each grammar).
+# To publish: point `repository` at a public URL of this repository (./update-grammar-rev.sh <url>).
+
+[grammars.dscript]
+repository = "file:///home/sylar/GitRepos/Dragon/DragonVM"
+rev = "fdc42877ddb766dbe17c00a84e3061be29f90818"
+path = "editors/tree-sitter-dscript"
+
+[grammars.dasm]
+repository = "file:///home/sylar/GitRepos/Dragon/DragonVM"
+rev = "fdc42877ddb766dbe17c00a84e3061be29f90818"
+path = "editors/tree-sitter-dasm"
