@@ -138,9 +138,10 @@ namespace dragon
 		m_display.enableFocusBorder();
 		m_display.setFocusBorderColor({ 0, 117, 199 });
 		m_screenEffectsButton.setText("FX");
+		m_screenEffectsButton.addThemeID("toolbar_btn");
+		m_screenEffectsButton.addThemeID("screen_fx_btn");
 		m_screenEffectsButton.setFontSize(13);
 		m_screenEffectsButton.setSizeMode(eSizeMode::Manual);
-		m_screenEffectsButton.addThemeID("screen_effects_btn");
 		m_screenEffectsButton.enableTooltip();
 		m_screenEffectsButton.setCallback(Widget::eCallback::ActionPerformed, [this](const Event&) { toggle_screen_effects(); });
 		// Over the screen's top right corner: added after it.
@@ -200,6 +201,9 @@ namespace dragon
 		// Empty for now.
 		m_diskManagerWindow.setBounds({ 220, 160, 900, 600 });
 		m_diskManagerWindow.setButtons(SubWindow::Buttons::Close | SubWindow::Buttons::Minimize | SubWindow::Buttons::Maximize | SubWindow::Buttons::AlwaysOnTop);
+
+		m_cmosManagerWindow.setBounds({ 220, 160, 900, 600 });
+		m_cmosManagerWindow.setButtons(SubWindow::Buttons::Close | SubWindow::Buttons::Minimize | SubWindow::Buttons::Maximize | SubWindow::Buttons::AlwaysOnTop);
 	}
 
 	void DebuggerWindow::set_screen_detached(bool detached)
@@ -347,6 +351,7 @@ namespace dragon
 		l_button("Rewind", "toolbar_rewind", "Rewind: to the start of the history (ignores breakpoints)", [this](void) { m_debugger.seek(m_debugger.history().getFirstPosition()); });
 		l_separator();
 		l_button("Disk Manager", "toolbar_disks", "Disk Manager", [this](void) { m_diskManagerWindow.open(); });
+		l_button("CMOS Manager", "toolbar_cmos", "CMOS Manager", [this](void) { m_cmosManagerWindow.open(); });
 		tb.addWidget(m_recordCheck);
 		m_recordCheck.setText("Record history");
 		m_recordCheck.setTooltipText("Records every instruction (step back, reverse run); uses up to 512 MiB");

@@ -36,6 +36,12 @@ const $detach_icon_col = 0
 const $disks_icon_row = 2
 const $disks_icon_col = 2
 
+const $screenfx_icon_row = 2
+const $screenfx_icon_col = 3
+
+const $cmos_icon_row = 3
+const $cmos_icon_col = 0
+
 macro set_anim_data(__row_offset, __column_offset) {
 	animation = anim(frameCount: 1, stillFrame: 0, rowOffset: $__row_offset, \
 		 columnOffset: $__column_offset, rows: 3, columns: 4, \
@@ -69,6 +75,9 @@ macro set_anim_data(__row_offset, __column_offset) {
 (@toolbar_disks button.icon) {
 	set_anim_data($disks_icon_row, $disks_icon_col)
 }
+(@toolbar_cmos button.icon) {
+	set_anim_data($cmos_icon_row, $cmos_icon_col)
+}
 (@code_program_btn button.icon) {
 	set_anim_data($code_icon_row, $code_icon_col)
 }
@@ -77,6 +86,9 @@ macro set_anim_data(__row_offset, __column_offset) {
 }
 (@screen_detach_btn button.icon) {
 	set_anim_data($detach_icon_row, $detach_icon_col)
+}
+(@screen_fx_btn button.icon) {
+	set_anim_data($screenfx_icon_row, $screenfx_icon_col)
 }
 
 (@toolbar_btn button) {

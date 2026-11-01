@@ -164,6 +164,7 @@ namespace dragon
 			ogfx::gui::SubWindow m_screenWindow { *this, "Screen" };
 			ogfx::gui::SubWindow m_consoleWindow { *this, "Console" };
 			ogfx::gui::SubWindow m_diskManagerWindow { *this, "Disk Manager" };
+			ogfx::gui::SubWindow m_cmosManagerWindow { *this, "CMOS Manager" };
 			bool m_screenDetached { false };
 			bool m_consoleDetached { false };
 
