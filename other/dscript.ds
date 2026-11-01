@@ -1,0 +1,65 @@
+#include(some/file.ds)
+
+#define(SOME_DEF = 4)
+
+struct TestStruct { // Data-Only structs
+    var a: i32;
+    var b: i32 = 0;
+	var c: string = "";
+	var d: i32 = SOME_DEF;
+}
+
+#if(SOME_DEF and SOME_DEF == 4)
+	// Something
+#else
+	// Something else
+#endif
+
+sub print(var text: string) -> void {
+    low {
+        mov R9, $text // '$' to access any in-scope variable, when inside a "low" block
+        mov R10, 0x0C
+        int 0x30
+    }
+}
+
+sub test_function(var param1: i32, var param2: i32 = 0) -> i32 {
+    var result: i32 = param1;
+    result = param1 + param2;
+    if (result == 40) {
+        var str: string = "Result is 40";
+        print(str);
+        return 0;
+    }
+    else {
+        var str: string = "Test String";
+        var i: i32 = 0;
+        while (i < 10) {
+            print(str);
+            i = i + 1
+        }
+    }
+    return 1;
+}
+
+sub main(void) -> void {
+    var num: i32;
+    var num2: i32 = 10;
+	var decimal: f32 = 1.0;
+    num = test_function(22, num2);
+
+    var pointer: i32* = null;
+    pointer = &num;
+    *pointer = 30;
+    var num3: i32 = test_function(num2, *pointer);
+
+    var test: TestStruct;
+    test.a = 10;
+}
+
+/*
+	Multi
+	Line
+	Comment
+*/
+
