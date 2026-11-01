@@ -1,11 +1,11 @@
-.load 0x1740
+.load 0x00010000
 .entry _drake_bootsector_entry_point
 .fixed 5120, 0xFF
 
 @include <../sdk/bios_api.dss>
 @include <../sdk/palette.dss>
 
-@define OS_LOAD_ADDR 0x2C00
+@define OS_LOAD_ADDR DPTBootPartStructure.CODE_LOAD_ADDR
 
 
 
@@ -43,9 +43,11 @@ _drake_bootsector_entry_point:
 	## Enable Text16 Video Mode
 	movb [VGA_Registers.VIDEO_MODE], VGA_VideoModes.TEXT_16_COLORS
 
-	## Validate DPT Block
+	## Validate DPT Block (its first 2 bytes are the DPT ID)
 	mov ACC, [$dpt_block]
-	jne $_invalid_dpt_block, 0xF1CA
+	rsh ACC, 16
+	and ACC, 0x0000FFFF
+	jne $_invalid_dpt_block, DPTStructure.ID_CODE
 
 	jmp $_endless_loop
 _invalid_dpt_block: ## TODO: Fix screen drawing on error
@@ -66,7 +68,7 @@ _endless_loop:
 
 	mov R10, $dpt_block.PartCount
 	movb ACC, *R10
-	jge $_no_partitions_found, 1
+	jgr $_no_partitions_found, 1					## No partitions if 1 > PartCount
 
 	mov R10, $dpt_block.PartCount
 	movb R10, *R10
@@ -85,14 +87,11 @@ _endless_loop:
 	movb *R1, DiskMode.READ			## $ddd.Mode
 	inc R1										
 	movb *R1, 0x00					## $ddd.Disk
-	inc R1
-	mov *R1, *R4					## $ddd.Sector
-	addip R1, 2
-	addip R4, 2
+	addip R1, 3						## ($ddd.Reserved)
 	mov *R1, *R4					## $ddd.Address
-	addip R1, 2
-	mov *R1, 1024					## $ddd.DataSize
-	addip R1, 2
+	addip R1, 4
+	mov *R1, DPTBootPartStructure.CODE_SIZE_B	## $ddd.DataSize
+	addip R1, 4
 	mov *R1, OS_LOAD_ADDR			## $ddd.MemoryAddress
 	mov R9, R3						## Move original $ddd address into R9 (for int 0x20)
 	mov R10, 0x12					## int 0x20 parameter for load_from_ddd_blocking
@@ -116,7 +115,7 @@ _main_end:
 
 
 ## =========================================================================================================================
-_test_partitions:  ## _test_partitions(DPTBlock* dpt_entries_block, (1 Byte) dpt_entries_count, (4 Bytes*) part_addr)
+_test_partitions:  ## _test_partitions(DPTBlock* dpt_entries_block, (1 Byte) dpt_entries_count, (4 Bytes*) bootstrap_addr)
 	arg R1		## dpt_entries_block
 	arg R2		## dpt_entries_count
 	arg R4		## part_addr
@@ -127,8 +126,9 @@ _test_partitions_loop:
 	push R3
 	push 3
 	call $_load_bootstrap_block
-	mov ACC, $bootstrap_block
-	mov ACC, *ACC
+	mov ACC, [$bootstrap_block]		## The first 2 bytes are the bootable partition ID
+	rsh ACC, 16
+	and ACC, 0x0000FFFF
 	jeq $_test_partitions_found, DPTBootPartStructure.ID_CODE
 	inc R3
 	mov ACC, R3
@@ -139,19 +139,13 @@ _test_partitions_found:
 	mov R10, R3
 	mulip R10, DPTStructure.ENTRY_SIZE_B
 	addip R10, R1
-	mov *R4, *R10
-	addip R4, 2
-	addip R10, 2
-	mov *R4, *R10
-	mov R9, *R4
-	addip R9, DPTBootPartStructure.HEADER_SIZE_B		## TODO: This doesn't take into account integer overflow, since it is a 32-Bit address
+	mov R9, *R10									## Partition start address
+	addip R9, DPTBootPartStructure.HEADER_SIZE_B		## The code starts after the header
 	mov *R4, R9
 	mov RV, R3
 	ret
 _test_partitions_not_found:
-	mov *R4, 0xFFFF
-	addip R4, 2
-	mov *R4, 0xFFFF
+	mov *R4, 0xFFFFFFFF
 	mov RV, 0xFF
 	ret
 ## =========================================================================================================================
@@ -168,17 +162,14 @@ _load_bootstrap_block:  ## _load_bootstrap_block(DiskDriverData* ddd, (32 Byte*)
 	movb *R1, DiskMode.READ			## $ddd.Mode
 	inc R1										
 	movb *R1, 0x00					## $ddd.Disk
-	inc R1
+	addip R1, 3						## ($ddd.Reserved)
 	mov R10, $dpt_block.Entries
 	mulip R7, DPTStructure.ENTRY_SIZE_B
 	addip R10, R7
-	mov *R1, *R10					## $ddd.Sector
-	addip R1, 2
-	addip R10, 2
-	mov *R1, *R10					## $ddd.Address
-	addip R1, 2
+	mov *R1, *R10					## $ddd.Address (the partition's start address)
+	addip R1, 4
 	mov *R1, DPTBootPartStructure.HEADER_SIZE_B		## $ddd.DataSize
-	addip R1, 2
+	addip R1, 4
 	mov *R1, R2						## $ddd.MemoryAddress
 	mov R9, R3						## Move original $ddd address into R9 (for int 0x20)
 	mov R10, 0x12					## int 0x20 parameter for load_from_ddd_blocking
@@ -197,13 +188,11 @@ _load_dpt_block:  ## _load_dpt_block(DiskDriverData* ddd, DPTBlock* dpt_block)
 	movb *R1, DiskMode.READ			## $ddd.Mode
 	inc R1										
 	movb *R1, 0x00					## $ddd.Disk
-	inc R1
-	mov *R1, 0x0000					## $ddd.Sector
-	addip R1, 2
-	mov *R1, 0x0200					## $ddd.Address
-	addip R1, 2
+	addip R1, 3						## ($ddd.Reserved)
+	mov *R1, DPTStructure.DISK_ADDR	## $ddd.Address
+	addip R1, 4
 	mov *R1, 512					## $ddd.DataSize
-	addip R1, 2
+	addip R1, 4
 	mov *R1, R2						## $ddd.MemoryAddress
 	mov R9, R3						## Move original $ddd address into R9 (for int 0x20)
 	mov R10, 0x12					## int 0x20 parameter for load_from_ddd_blocking

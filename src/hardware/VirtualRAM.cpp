@@ -9,43 +9,70 @@ namespace dragon
 	{
 		VirtualRAM::VirtualRAM(void)
 		{
-			m_memory.init(0xFFFF);
-			m_memory.enableAutoResize(false);
 		}
 
-		i8 VirtualRAM::read8(u16 addr)
+		void VirtualRAM::init(u32 size)
 		{
-			i8 outVal = 0;
-			u16 offset = DragonRuntime::cpu.getCurrentOffset();
-			if (!m_memory.r_Byte(addr + offset, outVal)) return 0x00; //TODO: Error
-			return outVal;
+			m_memory.assign(size, 0);
+			m_dirty.resize(size);
 		}
 
-		i16 VirtualRAM::read16(u16 addr)
+		u32 VirtualRAM::final_address(u32 addr) const
 		{
-			i16 outVal = 0;
-			u16 offset = DragonRuntime::cpu.getCurrentOffset();
-			if (!m_memory.r_Word(addr + offset, outVal)) return 0x00; //TODO: Error
-			return outVal;
+			return addr + DragonRuntime::cpu.getCurrentOffset();
 		}
 
-		i8 VirtualRAM::write8(u16 addr, i8 value)
+		i8 VirtualRAM::read8(u32 addr)
 		{
-			u16 offset = DragonRuntime::cpu.getCurrentOffset();
-			if (!m_memory.w_Byte(addr + offset, value)) return 0; //TODO: Error
+			const u32 a = final_address(addr);
+			if (a >= m_memory.size())
+			{
+				data::ErrorHandler::pushError(data::ErrorCodes::RAM_InvalidAddress, String("Invalid RAM read at address: ").add(String::getHexStr(a, true, 4)));
+				return 0x00;
+			}
+			return m_memory[a];
+		}
+
+		i32 VirtualRAM::read32(u32 addr)
+		{
+			const u32 a = final_address(addr);
+			i32 value = 0;
+			if (!bytes::read32(m_memory, a, value))
+			{
+				data::ErrorHandler::pushError(data::ErrorCodes::RAM_InvalidAddress, String("Invalid RAM read at address: ").add(String::getHexStr(a, true, 4)));
+				return 0x00;
+			}
 			return value;
 		}
 
-		i16 VirtualRAM::write16(u16 addr, i16 value)
+		i8 VirtualRAM::write8(u32 addr, i8 value)
 		{
-			u16 offset = DragonRuntime::cpu.getCurrentOffset();
-			if (!m_memory.w_Word(addr + offset, value)) return 0; //TODO: Error
+			const u32 a = final_address(addr);
+			if (a >= m_memory.size())
+			{
+				data::ErrorHandler::pushError(data::ErrorCodes::RAM_InvalidAddress, String("Invalid RAM write at address: ").add(String::getHexStr(a, true, 4)));
+				return 0x00;
+			}
+			m_memory[a] = value;
+			m_dirty.mark(a);
+			return value;
+		}
+
+		i32 VirtualRAM::write32(u32 addr, i32 value)
+		{
+			const u32 a = final_address(addr);
+			if (!bytes::write32(m_memory, a, value))
+			{
+				data::ErrorHandler::pushError(data::ErrorCodes::RAM_InvalidAddress, String("Invalid RAM write at address: ").add(String::getHexStr(a, true, 4)));
+				return 0x00;
+			}
+			m_dirty.markRange(a, 4);
 			return value;
 		}
 
 		ostd::ByteStream* VirtualRAM::getByteStream(void)
 		{
-			return &m_memory.getData();
+			return &m_memory;
 		}
 	}
 }

@@ -33,7 +33,7 @@ namespace dragon
 			bool verbose_load = false;
 			bool force_load = false;
 			String force_load_file = "";
-			u16 force_load_mem_offset = 0x00;
+			u32 force_load_mem_offset = 0x00;
 		};
 		public: struct tRuntimeInitInfo
 		{
@@ -47,7 +47,7 @@ namespace dragon
 			static i32 loadArguments(int argc, char** argv, tCommandLineArgs& args);
 			static i32 initMachine(const tRuntimeInitInfo& info);
 			static void shutdownMachine(void);
-			static void forceLoad(const String& filePath, u16 loadAddress);
+			static void forceLoad(const String& filePath, u32 loadAddress);
 
 			inline static bool hasError(void) { return data::ErrorHandler::hasError(); }
 			// Where the runtime prints (loading info, errors): the terminal by default; the

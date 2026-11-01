@@ -1,4 +1,4 @@
-.load 0x1380
+.load 0x00004680
 .entry _drake_loader_entry_point
 .fixed 512, 0x00
 
@@ -10,10 +10,9 @@
 
 .code
 _drake_loader_entry_point:
-	mov [$ddd.Mode], DiskMode.READ
-	mov [$ddd.Disk], 0x00
-	mov [$ddd.Sector], 0x0000
-	mov [$ddd.Address], 0x0400
+	movb [$ddd.Mode], DiskMode.READ
+	movb [$ddd.Disk], 0x00
+	mov [$ddd.Address], 0x00000400
 	mov [$ddd.DataSize], 5120
 	mov [$ddd.MemoryAddress], MemoryAddresses.RAM
 

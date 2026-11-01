@@ -405,7 +405,7 @@ namespace dragon
 		out.bg(ostd::ConsoleColors::White).fg(ostd::ConsoleColors::Black).p("DATA:").reset().nl();
 		for (const auto& line : dataTable)
 		{
-			out.fg(ostd::ConsoleColors::BrightGray).p(String::getHexStr(line.addr, true, 2)).p("\t\t");
+			out.fg(ostd::ConsoleColors::BrightGray).p(String::getHexStr(line.addr, true, 4)).p("\t\t");
 			out.fg(ostd::ConsoleColors::Green).p(line.code).p("\t\t");
 			out.fg(ostd::ConsoleColors::Blue).p(line.size).p(" bytes\t\t");
 			out.reset().nl();
@@ -414,7 +414,7 @@ namespace dragon
 		out.bg(ostd::ConsoleColors::White).fg(ostd::ConsoleColors::Black).p("LABELS:").reset().nl();
 		for (const auto& line : labelTable)
 		{
-			out.fg(ostd::ConsoleColors::BrightGray).p(String::getHexStr(line.addr, true, 2)).p("\t\t");
+			out.fg(ostd::ConsoleColors::BrightGray).p(String::getHexStr(line.addr, true, 4)).p("\t\t");
 			out.fg(ostd::ConsoleColors::Green).p(line.code).p("\t\t");
 			out.reset().nl();
 		}
@@ -422,7 +422,7 @@ namespace dragon
 		out.bg(ostd::ConsoleColors::White).fg(ostd::ConsoleColors::Black).p("CODE:").reset().nl();
 		for (const auto& line : codeTable)
 		{
-			out.fg(ostd::ConsoleColors::BrightGray).p(String::getHexStr(line.addr, true, 2)).p("\t\t");
+			out.fg(ostd::ConsoleColors::BrightGray).p(String::getHexStr(line.addr, true, 4)).p("\t\t");
 			out.fg(ostd::ConsoleColors::Green).p(line.code).p("\t\t");
 			out.reset().nl();
 		}

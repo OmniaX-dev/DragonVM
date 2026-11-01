@@ -11,7 +11,7 @@ namespace dragon
 		std::map<i32, String> vdisk_paths;
 		std::map<i32, data::CPUExtension*> cpuext_list;
 		i32 clock_rate_sec { 500 };
-		u8 memory_extension_pages { 0 };
+		u32 ram_size_kb { data::DefaultValues::DefaultRAMSizeKB };
 		bool fixed_clock { true };
 		String bios_path;
 		String cmos_path;

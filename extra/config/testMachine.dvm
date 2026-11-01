@@ -5,7 +5,7 @@ CMOS = dragon/cmos.dr
 cpuext = extmov, extalu
 fixed_clock = true
 clock_rate_sec = 2000
-memory_extension_pages = 16
+ram_size_kb = 4096
 
 screen_redraw_rate_per_second = 30
 

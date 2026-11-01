@@ -1,6 +1,6 @@
-.load 0x0000           															## BIOS is mapped to address 0x0000 in memory
+.load 0x00000000       															## BIOS is mapped to address 0x00000000 in memory
 .entry _bios_entry_point
-.fixed 4096, 0xFF      ## BIOS Needs to be 4096 Bytes exactly
+.fixed 16384, 0xFF     ## BIOS Needs to be 16384 Bytes exactly
 
 @include <data.dss>
 @include <utils.dss>
@@ -11,10 +11,10 @@
 .code
 _bios_entry_point:
 	movb [VGA_Registers.VIDEO_MODE], VGA_VideoModes.TEXT_SINGLE_COLOR			## Enable Text_Single_Color graphics mode
-	mov FL, 0b0000000000000001													## Zero the FL Register and enable interrupts
-	mov reg(S_REG_OFFSET), 0x0000												## Zero the offset register
-	movb [{MemoryAddresses.INT_VEC + (0x20 * 3)}], 0xFF 						## Setting up int 0x20 handler
-	mov [{MemoryAddresses.INT_VEC + (0x20 * 3) + 1}], $_int_20_handler			## --
+	mov FL, 0b00000000000000000000000000000001									## Zero the FL Register and enable interrupts
+	mov reg(S_REG_OFFSET), 0x00000000											## Zero the offset register
+	movb [{MemoryAddresses.INT_VEC + (0x20 * IntVector.ENTRY_SIZE)}], 0xFF 		## Setting up int 0x20 handler
+	mov [{MemoryAddresses.INT_VEC + (0x20 * IntVector.ENTRY_SIZE) + 1}], $_int_20_handler	## --
 	
 	mov R10, 0x00																## Setting up int 0x30 handler by using int 0x20 functionality
 	mov R9, $_int_30_handler													##  -Passing the handler's address

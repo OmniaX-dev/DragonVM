@@ -1,5 +1,6 @@
 #include "History.hpp"
 #include "../hardware/VirtualHardDrive.hpp"
+#include "../hardware/IMemoryDevice.hpp"
 #include <cstring>
 
 namespace dragon
@@ -34,7 +35,7 @@ namespace dragon
 			return value;
 		}
 
-		void History::addSegment(const String& name, u8* data, u32 size, std::function<void(void)> capture, std::function<void(void)> apply)
+		void History::addSegment(const String& name, u8* data, u32 size, std::function<void(void)> capture, std::function<void(void)> apply, hw::DirtyPageMap* dirtyPages)
 		{
 			Segment segment;
 			segment.name = name;
@@ -43,6 +44,7 @@ namespace dragon
 			segment.offset = cast<u32>(m_shadow.size());
 			segment.capture = std::move(capture);
 			segment.apply = std::move(apply);
+			segment.dirtyPages = dirtyPages;
 			m_segments.push_back(std::move(segment));
 			m_shadow.resize(m_shadow.size() + size, 0);
 		}
@@ -51,7 +53,11 @@ namespace dragon
 		{
 			capture_all();
 			for (const auto& segment : m_segments)
+			{
 				std::memcpy(m_shadow.data() + segment.offset, segment.data, segment.size);
+				if (segment.dirtyPages != nullptr)
+					segment.dirtyPages->clear();
+			}
 			m_entries.clear();
 			m_keyframes.clear();
 			m_pendingFileWrites.clear();
@@ -246,14 +252,30 @@ namespace dragon
 
 		void History::diff_segment(const Segment& segment, stdvec<u8>& outRuns, u32& lastEnd)
 		{
+			u32 next = 0;
+			if (segment.dirtyPages == nullptr)
+			{
+				diff_range(segment, 0, segment.size, outRuns, lastEnd, next);
+				return;
+			}
+			segment.dirtyPages->forEachRun([&](u64 first, u64 count) {
+				const u32 from = cast<u32>(std::min<u64>(first, segment.size));
+				const u32 to = cast<u32>(std::min<u64>(first + count, segment.size));
+				diff_range(segment, std::max(from, next), to, outRuns, lastEnd, next);
+			});
+			segment.dirtyPages->clear();
+		}
+
+		void History::diff_range(const Segment& segment, u32 from, u32 to, stdvec<u8>& outRuns, u32& lastEnd, u32& next)
+		{
 			const u8* live = segment.data;
 			u8* shadow = m_shadow.data() + segment.offset;
 			const u32 size = segment.size;
-			u32 i = 0;
-			while (i < size)
+			u32 i = from;
+			while (i < to)
 			{
 				// Most of the state doesn't change: skip it a block at a time.
-				if (size - i >= 64 && std::memcmp(live + i, shadow + i, 64) == 0)
+				if (to - i >= 64 && std::memcmp(live + i, shadow + i, 64) == 0)
 				{
 					i += 64;
 					continue;
@@ -280,6 +302,7 @@ namespace dragon
 				lastEnd = offset + length;
 				i = end;
 			}
+			next = std::max(next, i);
 		}
 
 		void History::apply_entry(const CycleDiff& entry, bool undo)

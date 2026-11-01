@@ -25,14 +25,14 @@ namespace dragon
 	// ============================================================================
 	class DisassemblyView : public ogfx::gui::RichTextView
 	{
-		public: using AddressCallback = std::function<void(u16 address)>;
+		public: using AddressCallback = std::function<void(u32 address)>;
 		public:
 			DisassemblyView(ogfx::gui::Window& window, Debugger& debugger);
 			// Prints the programs (once the debugger loaded the disassembly).
 			void build(void);
 			// Shows the instruction at `ip` (picking the program, if following).
-			void setCurrentAddress(u16 ip, bool scroll = true);
-			inline u16 getCurrentAddress(void) const { return m_currentAddress; }
+			void setCurrentAddress(u32 ip, bool scroll = true);
+			inline u32 getCurrentAddress(void) const { return m_currentAddress; }
 
 			// Programs: the loaded tables, plus the live document (the last one).
 			inline i32 getProgramCount(void) const { return cast<i32>(m_documents.size()); }
@@ -43,10 +43,10 @@ namespace dragon
 			inline void enableFollow(bool follow = true) { m_follow = follow; }
 			inline bool isFollowEnabled(void) const { return m_follow; }
 			// Scrolls to an address of the current program (if it has it).
-			bool scrollToAddress(u16 address);
+			bool scrollToAddress(u32 address);
 			// Shows an address in whichever program has it (decoded from memory if none),
 			// turning the IP following off.
-			void showAddress(u16 address);
+			void showAddress(u32 address);
 
 			// "Show in memory" from the context menu.
 			inline void setShowInMemoryCallback(AddressCallback callback) { m_onShowInMemory = std::move(callback); }
@@ -59,9 +59,9 @@ namespace dragon
 				const DisassemblyTable* table { nullptr };
 				String name { "" };
 			};
-			i32 pick_document(u16 ip) const;
-			i32 match_score(const DisassemblyTable& table, u16 ip) const;
-			void build_live(u16 ip);
+			i32 pick_document(u32 ip) const;
+			i32 match_score(const DisassemblyTable& table, u32 ip) const;
+			void build_live(u32 ip);
 			void select_document(i32 index);
 			void on_line_clicked(i32 line, i32 column, ogfx::MouseEventData::eButton button, bool doubleClick);
 			void decorate(ogfx::BasicRenderer2D& gfx, i32 line, const Rectangle& bounds);
@@ -70,12 +70,12 @@ namespace dragon
 			Debugger& m_debugger;
 			std::deque<Document> m_documents;
 			i32 m_currentDocument { -1 };
-			u16 m_currentAddress { 0 };
+			u32 m_currentAddress { 0 };
 			i32 m_currentLine { -1 };
 			bool m_follow { true };
 			// Where the live document starts (it's rebuilt when the IP leaves it).
-			u16 m_liveStart { 0 };
-			u16 m_liveEnd { 0 };
+			u32 m_liveStart { 0 };
+			u32 m_liveEnd { 0 };
 			AddressCallback m_onShowInMemory { nullptr };
 			std::function<void(void)> m_onBreakpointsChanged { nullptr };
 

@@ -28,7 +28,7 @@ namespace dragon
 			String title { "" };
 			f32 chars { 10 };
 		};
-		public: using AddressCallback = std::function<void(u16 address)>;
+		public: using AddressCallback = std::function<void(u32 address)>;
 
 		public:
 			DebugListView(ogfx::gui::Window& window);
@@ -120,7 +120,7 @@ namespace dragon
 	// ============================================================================
 	class RegisterView : public ogfx::gui::Widget
 	{
-		public: using AddressCallback = std::function<void(u16 address)>;
+		public: using AddressCallback = std::function<void(u32 address)>;
 
 		public:
 			RegisterView(ogfx::gui::Window& window, Debugger& debugger);
@@ -155,7 +155,7 @@ namespace dragon
 			void begin_edit(i32 index);
 			void end_edit(bool apply);
 			void show_menu(i32 index);
-			u16 value_of(i32 index) const;
+			u32 value_of(i32 index) const;
 
 		private:
 			Debugger& m_debugger;
@@ -177,7 +177,7 @@ namespace dragon
 
 		public:
 			inline static constexpr i32 RegisterCount { 20 };
-			inline static constexpr f32 CardChars { 15 };
+			inline static constexpr f32 CardChars { 17 };
 			inline static constexpr f32 CardLines { 2.4f };
 	};
 
@@ -292,9 +292,9 @@ namespace dragon
 
 		private: struct Row
 		{
-			u16 address { 0 };
+			u32 address { 0 };
 			bool watch { false };
-			u16 size { 1 };
+			u32 size { 1 };
 			String label { "" };
 		};
 

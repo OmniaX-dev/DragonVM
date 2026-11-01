@@ -19,7 +19,7 @@ namespace dragon
 	static const Color DimColor { 130, 140, 130 };
 	static const Color LiveColor { 110, 200, 230 };
 
-	inline static constexpr u16 CMOSSize { data::MemoryMapAddresses::CMOS_End - data::MemoryMapAddresses::CMOS_Start + 1 };
+	inline static constexpr u32 CMOSSize { data::MemoryMapAddresses::CMOS_End - data::MemoryMapAddresses::CMOS_Start + 1 };
 
 
 
@@ -53,7 +53,7 @@ namespace dragon
 			changed = changed || m_file->isChanged(reg.address + i);
 		switch (column)
 		{
-			case 0: text(gfx, String::getHexStr(data::MemoryMapAddresses::CMOS_Start + reg.address, true, 2), bounds.x, bounds.y, Color(235, 215, 90)); break;
+			case 0: text(gfx, String::getHexStr(data::MemoryMapAddresses::CMOS_Start + reg.address, true, 4), bounds.x, bounds.y, Color(235, 215, 90)); break;
 			case 1: text(gfx, reg.name, bounds.x, bounds.y, TextColor); break;
 			case 2: text(gfx, String("").add(reg.size), bounds.x, bounds.y, DimTextColor); break;
 			case 3:
@@ -140,7 +140,7 @@ namespace dragon
 			stdvec<u8> bytes(size, 0);
 			for (u8 i = 0; i < size; i++)
 				bytes[i] = cast<u8>(value >> (8 * (size - 1 - i)));
-			return write_live(cast<u16>(index), bytes);
+			return write_live(cast<u32>(index), bytes);
 		});
 		addWidget(m_registers);
 		place(m_registers, 0, 0, 1, 1, 8, 338, -8, -42);
@@ -252,7 +252,7 @@ namespace dragon
 		m_reloadButton.enable(!m_live && m_file != nullptr);
 		if (m_live)
 		{
-			m_infoLine.setMessage(String("Live chip at ").add(String::getHexStr(data::MemoryMapAddresses::CMOS_Start, true, 2)).add(" - ").add(String::getHexStr(data::MemoryMapAddresses::CMOS_End, true, 2)).add(": writes go through the memory map, in BIOS mode"), LiveColor);
+			m_infoLine.setMessage(String("Live chip at ").add(String::getHexStr(data::MemoryMapAddresses::CMOS_Start, true, 4)).add(" - ").add(String::getHexStr(data::MemoryMapAddresses::CMOS_End, true, 4)).add(": writes go through the memory map, in BIOS mode"), LiveColor);
 			return;
 		}
 		if (m_file == nullptr)
@@ -314,7 +314,7 @@ namespace dragon
 		select_register(m_selected);
 	}
 
-	bool CMOSManagerWindow::write_bytes(u16 offset, std::span<const u8> bytes)
+	bool CMOSManagerWindow::write_bytes(u32 offset, std::span<const u8> bytes)
 	{
 		if (m_live)
 			return write_live(offset, bytes);
@@ -324,7 +324,7 @@ namespace dragon
 		return true;
 	}
 
-	bool CMOSManagerWindow::write_live(u16 offset, std::span<const u8> bytes)
+	bool CMOSManagerWindow::write_live(u32 offset, std::span<const u8> bytes)
 	{
 		auto& cpu = DragonRuntime::cpu;
 		const bool biosMode = cpu.isInBIOSMOde();
@@ -339,7 +339,7 @@ namespace dragon
 			}
 			// The chip only takes writes in BIOS mode.
 			cpu.setBIOSMode(true);
-			DragonRuntime::memMap.write8(cast<u16>(address), cast<i8>(bytes[i]));
+			DragonRuntime::memMap.write8(cast<u32>(address), cast<i8>(bytes[i]));
 		}
 		cpu.setBIOSMode(biosMode);
 		while (data::ErrorHandler::hasError())

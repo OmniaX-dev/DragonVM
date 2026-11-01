@@ -21,10 +21,10 @@ namespace dragon
 			// are equal byte for byte.
 			public: struct tState
 			{
-				i16 registers[data::Registers::Last];
-				u16 stackFrameSize;
-				u16 currentAddr;
-				u16 currentOffset;
+				i32 registers[data::Registers::Last];
+				u32 stackFrameSize;
+				u32 currentAddr;
+				u32 currentOffset;
 				i32 interruptHandlerCount;
 				i32 subroutineCounter;
 				u8 currentInst;
@@ -39,19 +39,22 @@ namespace dragon
 			};
 			// Called whenever an interrupt handler is entered (hardware = raised by a device,
 			// otherwise by the int instruction).
-			public: using InterruptListener = std::function<void(u8 intValue, bool hardware, u16 handlerAddress)>;
+			public: using InterruptListener = std::function<void(u8 intValue, bool hardware, u32 handlerAddress)>;
 			public:
 				VirtualCPU(IMemoryDevice& memory);
-				i16 readRegister(u8 reg);
-				i16 writeRegister16(u8 reg, i16 value);
+				// Sets SP and FP to the top of the stack (the last word of the RAM).
+				void setStackTop(u32 stackTop);
+				inline u32 getStackTop(void) const { return m_stackTop; }
+				i32 readRegister(u8 reg);
+				i32 writeRegister32(u8 reg, i32 value);
+				// Zero-extends the byte into the whole register.
 				i8 writeRegister8(u8 reg, i8 value);
-				//TODO: Implement readRegister8 and readRegister16 functions
 
 				i8 fetch8(void);
-				i16 fetch16(void);
+				i32 fetch32(void);
 
-				void pushToStack(i16 value);
-				i16 popFromStack(void);
+				void pushToStack(i32 value);
+				i32 popFromStack(void);
 
 				void pushStackFrame(void);
 				void popStackFrame(void);
@@ -76,8 +79,8 @@ namespace dragon
 				inline data::CPUExtension* getCurrentCPUExtension(void) const { return m_currentExtension; }
 				inline u8 getCurrentCPUExtensionInstruction(void) const { return m_currentExtInst; }
 				inline bool isOffsetAddressingModeEnabled(void) const { return m_isOffsetAddressingEnabled; }
-				inline u16 getCurrentOffset(void) const { return m_currentOffset; }
-				inline u16 getStackFrameSize(void) const { return m_stackFrameSize; }
+				inline u32 getCurrentOffset(void) const { return m_currentOffset; }
+				inline u32 getStackFrameSize(void) const { return m_stackFrameSize; }
 				inline i32 getInterruptHandlerCount(void) const { return m_interruptHandlerCount; }
 				inline bool isDebugModeEnabled(void) const { return m_debugModeEnabled; }
 				// The extension with the given opcode (Ext01..Ext16), or nullptr.
@@ -87,14 +90,18 @@ namespace dragon
 				void loadState(const tState& state);
 				inline void setInterruptListener(InterruptListener listener) { m_interruptListener = std::move(listener); }
 
+				// false (and halts, with an error) if divisor is 0.
+				bool check_divisor(i32 divisor);
+
 			private:
-				i16 m_registers[20];
-				ostd::BitField_16 m_tempFlags;
+				i32 m_registers[data::Registers::Last];
+				ostd::BitField_32 m_tempFlags;
+				u32 m_stackTop { 0 };
 				IMemoryDevice& m_memory;
-				u16 m_stackFrameSize { 0 };
+				u32 m_stackFrameSize { 0 };
 				bool m_halt { false };
 				u8 m_currentInst { 0x00 };
-				u16 m_currentAddr { 0x0000 };
+				u32 m_currentAddr { 0x0000 };
 				bool m_biosMode { true };
 				i32 m_interruptHandlerCount { 0 };
 				bool m_isDebugBreakPoint { false };
@@ -104,7 +111,7 @@ namespace dragon
 				bool m_debugProfilerStarted { false };
 
 				bool m_isOffsetAddressingEnabled { false };
-				u16 m_currentOffset { 0x0000 };
+				u32 m_currentOffset { 0x0000 };
 
 				data::CPUExtension* m_extensions[16];
 				data::CPUExtension* m_currentExtension { nullptr };

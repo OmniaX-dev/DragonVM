@@ -77,7 +77,7 @@ namespace dragon
 					edit = argv[i];
 					if (!edit.isNumeric())
 						return RETURN_VAL_PARAMETER_NOT_NUMERIC;
-					args.force_load_mem_offset = (u16)edit.toInt();
+					args.force_load_mem_offset = cast<u32>(edit.toInt());
 					args.force_load = true;
 				}
 				else if (edit == "--help")
@@ -119,14 +119,21 @@ namespace dragon
 			out.fg(ostd::ConsoleColors::Magenta).p("  Loading vCMOS file: ").fg(ostd::ConsoleColors::BrightYellow).p(machine_config.cmos_path.cpp_str()).nl();
 		vCMOS.init(machine_config.cmos_path);
 
+		const u32 ram_size = machine_config.ram_size_kb * 1024;
+		const u32 ram_end = data::MemoryMapAddresses::Memory_Start + ram_size - 1;
+		if (info.verboseLoad)
+			out.fg(ostd::ConsoleColors::Magenta).p("  Initializing RAM: ").fg(ostd::ConsoleColors::BrightYellow).p(machine_config.ram_size_kb).p(" KiB").nl();
+		ram.init(ram_size);
+		memMap.clear();
+
 		if (info.verboseLoad)
 		{
 			out.fg(ostd::ConsoleColors::Magenta).p("  Initializing Memory Mapper:").nl();
 			out.fg(ostd::ConsoleColors::Magenta).p("    vBIOS: ");
 			out.fg(ostd::ConsoleColors::BrightYellow);
-			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::BIOS_Start, true, 2).cpp_str());
+			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::BIOS_Start, true, 4).cpp_str());
 			out.p(" to ");
-			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::BIOS_End, true, 2).cpp_str());
+			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::BIOS_End, true, 4).cpp_str());
 			out.p(" (remap=false)").nl();
 		}
 		memMap.mapDevice(vBIOS, dragon::data::MemoryMapAddresses::BIOS_Start, dragon::data::MemoryMapAddresses::BIOS_End, false, "BIOS");
@@ -134,9 +141,9 @@ namespace dragon
 		{
 			out.fg(ostd::ConsoleColors::Magenta).p("    vCMOS: ");
 			out.fg(ostd::ConsoleColors::BrightYellow);
-			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::CMOS_Start, true, 2).cpp_str());
+			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::CMOS_Start, true, 4).cpp_str());
 			out.p(" to ");
-			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::CMOS_End, true, 2).cpp_str());
+			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::CMOS_End, true, 4).cpp_str());
 			out.p(" (remap=true)").nl();
 		}
 		memMap.mapDevice(vCMOS, dragon::data::MemoryMapAddresses::CMOS_Start, dragon::data::MemoryMapAddresses::CMOS_End, true, "CMOS");
@@ -144,9 +151,9 @@ namespace dragon
 		{
 			out.fg(ostd::ConsoleColors::Magenta).p("    intVec: ");
 			out.fg(ostd::ConsoleColors::BrightYellow);
-			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::IntVector_Start, true, 2).cpp_str());
+			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::IntVector_Start, true, 4).cpp_str());
 			out.p(" to ");
-			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::IntVector_End, true, 2).cpp_str());
+			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::IntVector_End, true, 4).cpp_str());
 			out.p(" (remap=true)").nl();
 		}
 		memMap.mapDevice(intVec, dragon::data::MemoryMapAddresses::IntVector_Start, dragon::data::MemoryMapAddresses::IntVector_End, true, "intVec");
@@ -154,9 +161,9 @@ namespace dragon
 		{
 			out.fg(ostd::ConsoleColors::Magenta).p("    vKeyboard: ");
 			out.fg(ostd::ConsoleColors::BrightYellow);
-			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::Keyboard_Start, true, 2).cpp_str());
+			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::Keyboard_Start, true, 4).cpp_str());
 			out.p(" to ");
-			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::Keyboard_End, true, 2).cpp_str());
+			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::Keyboard_End, true, 4).cpp_str());
 			out.p(" (remap=false)").nl();
 		}
 		memMap.mapDevice(vKeyboard, dragon::data::MemoryMapAddresses::Keyboard_Start, dragon::data::MemoryMapAddresses::Keyboard_End, true, "Keyb.");
@@ -164,9 +171,9 @@ namespace dragon
 		{
 			out.fg(ostd::ConsoleColors::Magenta).p("    vMouse: ");
 			out.fg(ostd::ConsoleColors::BrightYellow);
-			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::Mouse_Start, true, 2).cpp_str());
+			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::Mouse_Start, true, 4).cpp_str());
 			out.p(" to ");
-			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::Mouse_End, true, 2).cpp_str());
+			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::Mouse_End, true, 4).cpp_str());
 			out.p(" (remap=false)").nl();
 		}
 		memMap.mapDevice(vMouse, dragon::data::MemoryMapAddresses::Mouse_Start, dragon::data::MemoryMapAddresses::Mouse_End, false, "Mouse");
@@ -174,9 +181,9 @@ namespace dragon
 		{
 			out.fg(ostd::ConsoleColors::Magenta).p("    vMBR: ");
 			out.fg(ostd::ConsoleColors::BrightYellow);
-			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::MBR_Start, true, 2).cpp_str());
+			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::MBR_Start, true, 4).cpp_str());
 			out.p(" to ");
-			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::MBR_End, true, 2).cpp_str());
+			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::MBR_End, true, 4).cpp_str());
 			out.p(" (remap=true)").nl();
 		}
 		memMap.mapDevice(vMBR, dragon::data::MemoryMapAddresses::MBR_Start, dragon::data::MemoryMapAddresses::MBR_End, true, "MBR");
@@ -184,9 +191,9 @@ namespace dragon
 		{
 			out.fg(ostd::ConsoleColors::Magenta).p("    vDiskInterface: ");
 			out.fg(ostd::ConsoleColors::BrightYellow);
-			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::DiskInterface_Start, true, 2).cpp_str());
+			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::DiskInterface_Start, true, 4).cpp_str());
 			out.p(" to ");
-			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::DiskInterface_End, true, 2).cpp_str());
+			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::DiskInterface_End, true, 4).cpp_str());
 			out.p(" (remap=true)").nl();
 		}
 		memMap.mapDevice(vDiskInterface, dragon::data::MemoryMapAddresses::DiskInterface_Start, dragon::data::MemoryMapAddresses::DiskInterface_End, true, "Disk");
@@ -194,9 +201,9 @@ namespace dragon
 		{
 			out.fg(ostd::ConsoleColors::Magenta).p("    vGraphicsInterface: ");
 			out.fg(ostd::ConsoleColors::BrightYellow);
-			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::VideoCardInterface_Start, true, 2).cpp_str());
+			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::VideoCardInterface_Start, true, 4).cpp_str());
 			out.p(" to ");
-			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::VideoCardInterface_End, true, 2).cpp_str());
+			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::VideoCardInterface_End, true, 4).cpp_str());
 			out.p(" (remap=true)").nl();
 		}
 		memMap.mapDevice(vGraphicsInterface, dragon::data::MemoryMapAddresses::VideoCardInterface_Start, dragon::data::MemoryMapAddresses::VideoCardInterface_End, true, "VGA");
@@ -204,9 +211,9 @@ namespace dragon
 		{
 			out.fg(ostd::ConsoleColors::Magenta).p("    vSerialInterface: ");
 			out.fg(ostd::ConsoleColors::BrightYellow);
-			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::SerialInterface_Start, true, 2).cpp_str());
+			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::SerialInterface_Start, true, 4).cpp_str());
 			out.p(" to ");
-			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::SerialInterface_End, true, 2).cpp_str());
+			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::SerialInterface_End, true, 4).cpp_str());
 			out.p(" (remap=true)").nl();
 		}
 		memMap.mapDevice(vSerialInterface, dragon::data::MemoryMapAddresses::SerialInterface_Start, dragon::data::MemoryMapAddresses::SerialInterface_End, true, "serial");
@@ -214,20 +221,26 @@ namespace dragon
 		{
 			out.fg(ostd::ConsoleColors::Magenta).p("    RAM: ");
 			out.fg(ostd::ConsoleColors::BrightYellow);
-			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::Memory_Start, true, 2).cpp_str());
+			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::Memory_Start, true, 4).cpp_str());
 			out.p(" to ");
-			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::Memory_End, true, 2).cpp_str());
-			out.p(" (remap=false)").nl();
+			out.p(String::getHexStr(ram_end, true, 4).cpp_str());
+			out.p(" (remap=true)").nl();
 		}
-		memMap.mapDevice(ram, dragon::data::MemoryMapAddresses::Memory_Start, dragon::data::MemoryMapAddresses::Memory_End, false, "RAM");
+		memMap.mapDevice(ram, dragon::data::MemoryMapAddresses::Memory_Start, ram_end, true, "RAM");
 
 		if (info.verboseLoad)
 			out.fg(ostd::ConsoleColors::Magenta).p("  Initializing vCPU reset sequence:").nl();
 
-		u16 reset_ip_addr = 0x0000;
+		u32 reset_ip_addr = 0x00000000;
 		if (info.verboseLoad)
-			out.fg(ostd::ConsoleColors::BrightYellow).p("    Reset IP register: ").p(String::getHexStr(reset_ip_addr, true, 2).cpp_str()).nl();
-		cpu.writeRegister16(dragon::data::Registers::IP, reset_ip_addr);
+			out.fg(ostd::ConsoleColors::BrightYellow).p("    Reset IP register: ").p(String::getHexStr(reset_ip_addr, true, 4).cpp_str()).nl();
+		cpu.writeRegister32(dragon::data::Registers::IP, cast<i32>(reset_ip_addr));
+
+		// The stack grows down from the last word of the RAM.
+		const u32 stack_top = ram_end + 1 - data::WordSize;
+		if (info.verboseLoad)
+			out.fg(ostd::ConsoleColors::BrightYellow).p("    Stack top: ").p(String::getHexStr(stack_top, true, 4).cpp_str()).nl();
+		cpu.setStackTop(stack_top);
 
 		if (info.verboseLoad)
 			out.fg(ostd::ConsoleColors::BrightYellow).p("    Debug mode enabled: ").p(STR_BOOL(info.debugModeEnabled)).nl();
@@ -257,21 +270,21 @@ namespace dragon
 			out.fg(ostd::ConsoleColors::BrightYellow).p("    Screen redraw rate: ").p((i32)machine_config.screen_redraw_rate_per_second).p(" Hz").nl();
 		}
 
-		vCMOS.write16(data::CMOSRegisters::MemoryStart, data::MemoryMapAddresses::Memory_Start);
-		vCMOS.write16(data::CMOSRegisters::MemorySize, data::MemoryMapAddresses::Memory_End);
-		vCMOS.write16(data::CMOSRegisters::ClockSpeed, machine_config.clock_rate_sec);
+		vCMOS.write32(data::CMOSRegisters::MemoryStart, cast<i32>(data::MemoryMapAddresses::Memory_Start));
+		vCMOS.write32(data::CMOSRegisters::MemorySize, cast<i32>(ram_end));
+		vCMOS.write32(data::CMOSRegisters::ClockSpeed, machine_config.clock_rate_sec);
 		vCMOS.write8(data::CMOSRegisters::ScreenRedrawRate, machine_config.screen_redraw_rate_per_second);
-		vCMOS.write16(data::CMOSRegisters::ScreenWidth, static_cast<i16>(hw::VirtualDisplay::Columns));
-		vCMOS.write16(data::CMOSRegisters::ScreenHeight, static_cast<i16>(hw::VirtualDisplay::Rows));
-		vCMOS.write16(data::CMOSRegisters::StackSize, 0x1000);
-		ostd::BitField_16 disk_list_bitfield;
+		vCMOS.write32(data::CMOSRegisters::ScreenWidth, static_cast<i32>(hw::VirtualDisplay::Columns));
+		vCMOS.write32(data::CMOSRegisters::ScreenHeight, static_cast<i32>(hw::VirtualDisplay::Rows));
+		vCMOS.write32(data::CMOSRegisters::StackSize, cast<i32>(std::min<u32>(data::DefaultValues::DefaultStackSize, ram_size / 2)));
+		ostd::BitField_32 disk_list_bitfield;
 		disk_list_bitfield.value = 0;
-		for (i32 i = 0; i < 16; i++)
+		for (i32 i = 0; i < 32; i++)
 		{
 			if (vDisks.count(i) > 0)
 				ostd::Bits::set(disk_list_bitfield, i);
 		}
-		vCMOS.write16(data::CMOSRegisters::DiskList, disk_list_bitfield.value);
+		vCMOS.write32(data::CMOSRegisters::DiskList, cast<i32>(disk_list_bitfield.value));
 		if (info.verboseLoad)
 			out.fg(ostd::ConsoleColors::BrightYellow).p("    Loading CMOS Machine info").nl();
 
@@ -284,15 +297,16 @@ namespace dragon
 		machine_config.destroy();
 	}
 
-	void DragonRuntime::forceLoad(const String& filePath, u16 loadAddress)
+	void DragonRuntime::forceLoad(const String& filePath, u32 loadAddress)
 	{
+		// loadAddress is an offset in the RAM.
 		ostd::ByteStream code;
 		ostd::Memory::loadByteStreamFromFile(filePath, code);
 
-		i16 index = 0;
+		u32 index = 0;
 		for (auto& b : code)
 		{
-			ram.write8(dragon::data::MemoryMapAddresses::Memory_Start + loadAddress + index, b);
+			ram.write8(loadAddress + index, b);
 			index++;
 		}
 	}

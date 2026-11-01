@@ -36,8 +36,8 @@ namespace dragon
 			doc.name = table.getName();
 			if (doc.name == "")
 				doc.name = String(std::filesystem::path(table.getFilePath().cpp_str()).filename().string());
-			doc.name.add("  [").add(String::getHexStr(cast<u16>(table.getCodeStart()), true, 2)).add(" - ")
-					.add(String::getHexStr(cast<u16>(table.getCodeEnd()), true, 2)).add("]");
+			doc.name.add("  [").add(String::getHexStr(cast<u32>(table.getCodeStart()), true, 4)).add(" - ")
+					.add(String::getHexStr(cast<u32>(table.getCodeEnd()), true, 4)).add("]");
 			out.attach(doc.buffer);
 			// Labels on their own lines (no address: they're not instructions), before the
 			// instruction they point to; the label table is sorted, like the code table.
@@ -79,7 +79,7 @@ namespace dragon
 			scrollToTop();
 	}
 
-	bool DisassemblyView::scrollToAddress(u16 address)
+	bool DisassemblyView::scrollToAddress(u32 address)
 	{
 		const i32 line = getBuffer().findLine(address);
 		if (line < 0)
@@ -88,7 +88,7 @@ namespace dragon
 		return true;
 	}
 
-	void DisassemblyView::showAddress(u16 address)
+	void DisassemblyView::showAddress(u32 address)
 	{
 		if (m_documents.empty())
 			return;
@@ -118,7 +118,7 @@ namespace dragon
 		}
 	}
 
-	void DisassemblyView::setCurrentAddress(u16 ip, bool scroll)
+	void DisassemblyView::setCurrentAddress(u32 ip, bool scroll)
 	{
 		m_currentAddress = ip;
 		if (m_follow && !m_documents.empty())
@@ -147,7 +147,7 @@ namespace dragon
 		}
 	}
 
-	i32 DisassemblyView::pick_document(u16 ip) const
+	i32 DisassemblyView::pick_document(u32 ip) const
 	{
 		i32 best = -1;
 		i32 bestScore = -1;
@@ -166,12 +166,12 @@ namespace dragon
 		return best;
 	}
 
-	i32 DisassemblyView::match_score(const DisassemblyTable& table, u16 ip) const
+	i32 DisassemblyView::match_score(const DisassemblyTable& table, u32 ip) const
 	{
 		// The program must have an instruction exactly at the IP; then the instructions around
 		// it are compared with memory (the decoded size must be the size in the table).
 		const auto& code = table.getCodeTable();
-		auto it = std::lower_bound(code.begin(), code.end(), ip, [](const code::Assembler::tDisassemblyLine& line, u16 addr) { return line.addr < addr; });
+		auto it = std::lower_bound(code.begin(), code.end(), ip, [](const code::Assembler::tDisassemblyLine& line, u32 addr) { return line.addr < addr; });
 		if (it == code.end() || it->addr != ip)
 			return -1;
 		const i64 index = it - code.begin();
@@ -182,14 +182,14 @@ namespace dragon
 			if (line.code.startsWith("["))
 				continue;
 			u8 size = 0;
-			Debugger::Utils::decodeInstruction(cast<u16>(line.addr), &size);
+			Debugger::Utils::decodeInstruction(cast<u32>(line.addr), &size);
 			if (size == line.size)
 				score++;
 		}
 		return score;
 	}
 
-	void DisassemblyView::build_live(u16 ip)
+	void DisassemblyView::build_live(u32 ip)
 	{
 		Document& live = m_documents.back();
 		live.buffer.clear();
@@ -197,11 +197,11 @@ namespace dragon
 		out.fg(ostd::ConsoleColors::BrightGray).p("  ; Not part of a loaded program: decoded from memory (no operands).").reset().nl();
 		u32 addr = ip;
 		m_liveStart = ip;
-		for (i32 i = 0; i < LiveInstructions && addr <= 0xFFFF; i++)
+		for (i32 i = 0; i < LiveInstructions && addr <= data::AddressMask; i++)
 		{
 			u8 size = 1;
-			const String name = Debugger::Utils::decodeInstruction(cast<u16>(addr), &size);
-			const String label = Debugger::Utils::findSymbol(m_debugger.data().labels, cast<u16>(addr));
+			const String name = Debugger::Utils::decodeInstruction(cast<u32>(addr), &size);
+			const String label = Debugger::Utils::findSymbol(m_debugger.data().labels, cast<u32>(addr));
 			if (label != "")
 			{
 				Debugger::Display::printDisassemblyLabel(out, label.new_trim());
@@ -209,14 +209,14 @@ namespace dragon
 			}
 			live.buffer.setLineUserData(live.buffer.getCursorLine(), addr);
 			out.p("  ").p(String::duplicateChar(' ', Debugger::Display::LabelIndent));
-			out.fg(ostd::ConsoleColors::BrightGray).p(String::getHexStr(cast<u16>(addr), true, 2)).p("  ");
+			out.fg(ostd::ConsoleColors::BrightGray).p(String::getHexStr(cast<u32>(addr), true, 4)).p("  ");
 			String nameCol = name;
 			nameCol.addRightPadding(24);
 			out.fg(ostd::ConsoleColors::Blue).p(nameCol);
 			for (u8 b = 0; b < size; b++)
-				out.fg(ostd::ConsoleColors::BrightYellow).p(String::getHexStr(DragonRuntime::memMap.peek8(cast<u16>(addr + b)), false, 1)).p(" ");
+				out.fg(ostd::ConsoleColors::BrightYellow).p(String::getHexStr(DragonRuntime::memMap.peek8(cast<u32>(addr + b)), false, 1)).p(" ");
 			out.reset().nl();
-			m_liveEnd = cast<u16>(addr);
+			m_liveEnd = cast<u32>(addr);
 			addr += size;
 		}
 	}
@@ -233,7 +233,7 @@ namespace dragon
 		const i64 address = getBuffer().getLineUserData(line);
 		if (address < 0)
 			return;
-		const u16 addr = cast<u16>(address);
+		const u32 addr = cast<u32>(address);
 		if (button == ogfx::MouseEventData::eButton::Left)
 		{
 			if (column >= 0 && column < GutterColumns)
@@ -284,7 +284,7 @@ namespace dragon
 			gfx.fillTriangle(Vec2 { x - cw * 0.3f, cy - bounds.h * 0.3f }, Vec2 { x + cw * 0.7f, cy }, Vec2 { x - cw * 0.3f, cy + bounds.h * 0.3f }, Color(255, 215, 80));
 		}
 		// Breakpoints: red, debug_break ones orange; disabled ones hollow.
-		const Debugger::tBreakPoint* bp = m_debugger.getBreakPoint(cast<u16>(address));
+		const Debugger::tBreakPoint* bp = m_debugger.getBreakPoint(cast<u32>(address));
 		if (bp != nullptr)
 		{
 			const Color color = bp->debugBreak ? Color(240, 160, 50) : Color(235, 70, 70);

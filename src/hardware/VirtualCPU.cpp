@@ -12,83 +12,91 @@ namespace dragon
 	{
 		VirtualCPU::VirtualCPU(IMemoryDevice& memory) : m_memory(memory)
 		{
-			writeRegister16(data::Registers::SP, (u16)(0xFFFF - 1));
-			writeRegister16(data::Registers::FP, (u16)(0xFFFF - 1));
-
+			for (i32 i = 0; i < data::Registers::Last; i++)
+				m_registers[i] = 0;
 			for (i32 i = 0; i < 16; i++)
 				m_extensions[i] = nullptr;
 		}
 
-		i16 VirtualCPU::readRegister(u8 reg)
+		void VirtualCPU::setStackTop(u32 stackTop)
 		{
-			if (reg >= data::Registers::Last) return 0x0000; //TODO: Error
+			m_stackTop = stackTop;
+			writeRegister32(data::Registers::SP, cast<i32>(stackTop));
+			writeRegister32(data::Registers::FP, cast<i32>(stackTop));
+		}
+
+		i32 VirtualCPU::readRegister(u8 reg)
+		{
+			if (reg >= data::Registers::Last) return 0x00000000; //TODO: Error
 			return m_registers[reg];
 		}
 
-		i16 VirtualCPU::writeRegister16(u8 reg, i16 value)
+		i32 VirtualCPU::writeRegister32(u8 reg, i32 value)
 		{
-			if (reg >= data::Registers::Last) return 0x0000; //TODO: Error
+			if (reg >= data::Registers::Last) return 0x00000000; //TODO: Error
 			m_registers[reg] = value;
 			return value;
 		}
 
 		i8 VirtualCPU::writeRegister8(u8 reg, i8 value)
 		{
-			if (reg >= data::Registers::Last) return 0x0000; //TODO: Error
-			m_registers[reg] = value & 0x00FF;
+			if (reg >= data::Registers::Last) return 0x00; //TODO: Error
+			m_registers[reg] = cast<i32>(cast<u8>(value));
 			return value;
 		}
 
 		i8 VirtualCPU::fetch8(void)
 		{
-			u16 nextInstAddr = readRegister(data::Registers::IP);
+			u32 nextInstAddr = cast<u32>(readRegister(data::Registers::IP));
 			m_currentAddr = nextInstAddr;
 			i8 inst = m_memory.read8(nextInstAddr);
-			writeRegister16(data::Registers::IP, nextInstAddr + 1);
+			writeRegister32(data::Registers::IP, cast<i32>(nextInstAddr + 1));
 			return inst;
 		}
 
-		i16 VirtualCPU::fetch16(void)
+		i32 VirtualCPU::fetch32(void)
 		{
-			u16 nextInstAddr = readRegister(data::Registers::IP);
+			u32 nextInstAddr = cast<u32>(readRegister(data::Registers::IP));
 			m_currentAddr = nextInstAddr;
-			i16 inst = m_memory.read16(nextInstAddr);
-			writeRegister16(data::Registers::IP, nextInstAddr + 2);
+			i32 inst = m_memory.read32(nextInstAddr);
+			writeRegister32(data::Registers::IP, cast<i32>(nextInstAddr + data::WordSize));
 			return inst;
 		}
 
-		void VirtualCPU::pushToStack(i16 value)
+		void VirtualCPU::pushToStack(i32 value)
 		{
-			u16 stackAddr = readRegister(data::Registers::SP);
-			u16 stack_size = DragonRuntime::vCMOS.read16(data::CMOSRegisters::StackSize);
-			if (stackAddr <= 0xFFFF - stack_size)
+			u32 stackAddr = cast<u32>(readRegister(data::Registers::SP));
+			u32 stack_size = cast<u32>(DragonRuntime::vCMOS.read32(data::CMOSRegisters::StackSize));
+			// The stack grows down from the stack top: SP is the next free word.
+			if (stackAddr > m_stackTop || m_stackTop - stackAddr >= stack_size)
 			{
-				data::ErrorHandler::pushError(data::ErrorCodes::CPU_StackOverflow, "Stack Overflow: ");
+				data::ErrorHandler::pushError(data::ErrorCodes::CPU_StackOverflow, String("Stack Overflow: SP = ").add(String::getHexStr(stackAddr, true, 4)));
 				m_halt = true;
 				return;
 			}
-			m_memory.write16(stackAddr, value);
-			writeRegister16(data::Registers::SP, stackAddr - 2);
-			m_stackFrameSize += 2;
+			m_memory.write32(stackAddr, value);
+			writeRegister32(data::Registers::SP, cast<i32>(stackAddr - data::WordSize));
+			m_stackFrameSize += data::WordSize;
 		}
 
-		i16 VirtualCPU::popFromStack(void)
+		i32 VirtualCPU::popFromStack(void)
 		{
-			u16 nextSP = readRegister(data::Registers::SP) + 2;
-			writeRegister16(data::Registers::SP, nextSP);
-			i16 value = m_memory.read16(nextSP);
-			m_stackFrameSize -= 2;
+			u32 nextSP = cast<u32>(readRegister(data::Registers::SP)) + data::WordSize;
+			writeRegister32(data::Registers::SP, cast<i32>(nextSP));
+			i32 value = m_memory.read32(nextSP);
+			m_stackFrameSize -= data::WordSize;
 			return value;
 		}
 
 		void VirtualCPU::pushStackFrame(void)
 		{
-			u16 argStartAddr = readRegister(data::Registers::SP) + 2;
-			u16 argCount = m_memory.read16(argStartAddr);
+			// The argument count was pushed last (right above SP); the arguments are above it.
+			u32 argStartAddr = cast<u32>(readRegister(data::Registers::SP)) + data::WordSize;
+			u32 argCount = cast<u32>(m_memory.read32(argStartAddr));
 			if (argCount == 0)
 				argStartAddr = 0;
 			else
-				argStartAddr += (argCount * 2);
+				argStartAddr += (argCount * data::WordSize);
 
 			pushToStack(readRegister(data::Registers::R1));
 			pushToStack(readRegister(data::Registers::R2));
@@ -104,67 +112,75 @@ namespace dragon
 			pushToStack(readRegister(data::Registers::ACC));
 			pushToStack(readRegister(data::Registers::IP));
 			pushToStack(readRegister(data::Registers::FP));
-			pushToStack(m_stackFrameSize);
+			pushToStack(cast<i32>(m_stackFrameSize));
 
-			writeRegister16(data::Registers::PP, argStartAddr);
-			writeRegister16(data::Registers::FP, readRegister(data::Registers::SP));
+			writeRegister32(data::Registers::PP, cast<i32>(argStartAddr));
+			writeRegister32(data::Registers::FP, readRegister(data::Registers::SP));
 			m_stackFrameSize = 0;
 		}
 
 		void VirtualCPU::popStackFrame(void)
 		{
-			u16 framePointerAddr = readRegister(data::Registers::FP);
-			writeRegister16(data::Registers::SP, framePointerAddr);
-			m_stackFrameSize = popFromStack();
+			u32 framePointerAddr = cast<u32>(readRegister(data::Registers::FP));
+			writeRegister32(data::Registers::SP, cast<i32>(framePointerAddr));
+			m_stackFrameSize = cast<u32>(popFromStack());
 
-			writeRegister16(data::Registers::FP, popFromStack());
-			writeRegister16(data::Registers::IP, popFromStack());
-			writeRegister16(data::Registers::ACC, popFromStack());
-			writeRegister16(data::Registers::PP, popFromStack());
-			writeRegister16(data::Registers::R10, popFromStack());
-			writeRegister16(data::Registers::R9, popFromStack());
-			writeRegister16(data::Registers::R8, popFromStack());
-			writeRegister16(data::Registers::R7, popFromStack());
-			writeRegister16(data::Registers::R6, popFromStack());
-			writeRegister16(data::Registers::R5, popFromStack());
-			writeRegister16(data::Registers::R4, popFromStack());
-			writeRegister16(data::Registers::R3, popFromStack());
-			writeRegister16(data::Registers::R2, popFromStack());
-			writeRegister16(data::Registers::R1, popFromStack());
+			writeRegister32(data::Registers::FP, popFromStack());
+			writeRegister32(data::Registers::IP, popFromStack());
+			writeRegister32(data::Registers::ACC, popFromStack());
+			writeRegister32(data::Registers::PP, popFromStack());
+			writeRegister32(data::Registers::R10, popFromStack());
+			writeRegister32(data::Registers::R9, popFromStack());
+			writeRegister32(data::Registers::R8, popFromStack());
+			writeRegister32(data::Registers::R7, popFromStack());
+			writeRegister32(data::Registers::R6, popFromStack());
+			writeRegister32(data::Registers::R5, popFromStack());
+			writeRegister32(data::Registers::R4, popFromStack());
+			writeRegister32(data::Registers::R3, popFromStack());
+			writeRegister32(data::Registers::R2, popFromStack());
+			writeRegister32(data::Registers::R1, popFromStack());
 
-			u16 nArgs = popFromStack();
-			for (i32 i = 0; i < nArgs; i++)
+			u32 nArgs = cast<u32>(popFromStack());
+			for (u32 i = 0; i < nArgs; i++)
 				popFromStack();
 		}
 
 		bool VirtualCPU::readFlag(u8 flg)
 		{
-			if (flg >= 16) return false;
-			m_tempFlags.value = readRegister(data::Registers::FL);
+			if (flg >= 32) return false;
+			m_tempFlags.value = cast<u32>(readRegister(data::Registers::FL));
 			return ostd::Bits::get(m_tempFlags, flg);
 		}
 
 		void VirtualCPU::setFlag(u8 flg, bool val)
 		{
-			if (flg >= 16) return;
-			m_tempFlags.value = readRegister(data::Registers::FL);
+			if (flg >= 32) return;
+			m_tempFlags.value = cast<u32>(readRegister(data::Registers::FL));
 			ostd::Bits::val(m_tempFlags, flg, val);
-			writeRegister16(data::Registers::FL, m_tempFlags.value);
+			writeRegister32(data::Registers::FL, cast<i32>(m_tempFlags.value));
 		}
 
 		void VirtualCPU::handleInterrupt(u8 intValue, bool hardware)
 		{
-			u16 entryPointer = data::MemoryMapAddresses::IntVector_Start + (intValue * 3);
-			u8 interruptStatus = m_memory.read8(entryPointer);
+			u32 entryPointer = data::MemoryMapAddresses::IntVector_Start + (intValue * data::MemoryMapAddresses::IntVector_EntrySize);
+			u8 interruptStatus = cast<u8>(m_memory.read8(entryPointer));
 			if (interruptStatus != 0xFF) return;
-			u16 handlerAddress = m_memory.read16(entryPointer + 1);
+			u32 handlerAddress = cast<u32>(m_memory.read32(entryPointer + 1));
 			pushToStack(0);
 			pushStackFrame();
 			m_subroutineCounter++;
 			m_interruptHandlerCount++;
-			writeRegister16(data::Registers::IP, handlerAddress);
+			writeRegister32(data::Registers::IP, cast<i32>(handlerAddress));
 			if (m_interruptListener)
 				m_interruptListener(intValue, hardware, handlerAddress);
+		}
+
+		bool VirtualCPU::check_divisor(i32 divisor)
+		{
+			if (divisor != 0) return true;
+			data::ErrorHandler::pushError(data::ErrorCodes::CPU_DivisionByZero, String("Division by zero at address: ").add(String::getHexStr(m_currentAddr, true, 4)));
+			m_halt = true;
+			return false;
 		}
 
 		data::CPUExtension* VirtualCPU::getExtension(u8 opCode) const
@@ -250,7 +266,7 @@ namespace dragon
 			if (m_isOffsetAddressingEnabled)
 				m_currentOffset = readRegister(data::Registers::OFFSET);
 			else
-				m_currentOffset = 0x0000;
+				m_currentOffset = 0x00000000;
 			u8 inst = fetch8();
 			m_currentInst = inst;
 			if (loadExtension())
@@ -302,9 +318,9 @@ namespace dragon
 				break;
 				case data::OpCodes::BIOSModeImm:
 				{
-					u16 tmpAddr = m_currentAddr;
+					u32 tmpAddr = m_currentAddr;
 					i8 value = fetch8();
-					if (tmpAddr >= data::MemoryMapAddresses::BIOS_End)
+					if (tmpAddr > data::MemoryMapAddresses::BIOS_End)
 						m_biosMode = false;
 					else
 						m_biosMode = value != 0;
@@ -313,107 +329,107 @@ namespace dragon
 				case data::OpCodes::MovImmReg:
 				{
 					u8 regAddr = fetch8();
-					i16 literal = fetch16();
-					writeRegister16(regAddr, literal);
+					i32 literal = fetch32();
+					writeRegister32(regAddr, literal);
 				}
 				break;
 				case data::OpCodes::MovImmMem:
 				{
-					u16 addr = fetch16();
-					i16 literal = fetch16();
-					m_memory.write16(addr, literal);
+					u32 addr = fetch32();
+					i32 literal = fetch32();
+					m_memory.write32(addr, literal);
 				}
 				break;
 				case data::OpCodes::MovRegReg:
 				{
 					u8 destRegAddr = fetch8();
 					u8 srcRegAddr = fetch8();
-					i16 value = readRegister(srcRegAddr);
-					writeRegister16(destRegAddr, value);
+					i32 value = readRegister(srcRegAddr);
+					writeRegister32(destRegAddr, value);
 				}
 				break;
 				case data::OpCodes::MovRegMem:
 				{
-					u16 addr = fetch16();
+					u32 addr = fetch32();
 					u8 srcRegAddr = fetch8();
-					i16 value = readRegister(srcRegAddr);
-					m_memory.write16(addr, value);
+					i32 value = readRegister(srcRegAddr);
+					m_memory.write32(addr, value);
 				}
 				break;
 				case data::OpCodes::MovMemReg:
 				{
 					u8 destRegAddr = fetch8();
-					u16 addr = fetch16();
-					i16 value = m_memory.read16(addr);
-					writeRegister16(destRegAddr, value);
+					u32 addr = fetch32();
+					i32 value = m_memory.read32(addr);
+					writeRegister32(destRegAddr, value);
 				}
 				break;
 				case data::OpCodes::MovDerefRegReg:
 				{
 					u8 destRegAddr = fetch8();
 					u8 srcRegAddr = fetch8();
-					u16 addr = readRegister(srcRegAddr);
-					i16 value = m_memory.read16(addr);
-					writeRegister16(destRegAddr, value);
+					u32 addr = readRegister(srcRegAddr);
+					i32 value = m_memory.read32(addr);
+					writeRegister32(destRegAddr, value);
 				}
 				break;
 				case data::OpCodes::MovDerefRegMem:
 				{
-					u16 destAddr = fetch16();
+					u32 destAddr = fetch32();
 					u8 srcRegAddr = fetch8();
-					u16 addr = readRegister(srcRegAddr);
-					i16 value = m_memory.read16(addr);
-					m_memory.write16(destAddr, value);
+					u32 addr = readRegister(srcRegAddr);
+					i32 value = m_memory.read32(addr);
+					m_memory.write32(destAddr, value);
 				}
 				break;
 				case data::OpCodes::MovRegDerefReg:
 				{
 					u8 destRegAddr = fetch8();
 					u8 srcRegAddr = fetch8();
-					i16 value = readRegister(srcRegAddr);
-					u16 addr = readRegister(destRegAddr);
-					m_memory.write16(addr, value);
+					i32 value = readRegister(srcRegAddr);
+					u32 addr = readRegister(destRegAddr);
+					m_memory.write32(addr, value);
 				}
 				break;
 				case data::OpCodes::MovMemDerefReg:
 				{
 					u8 destRegAddr = fetch8();
-					u16 srcAddr = fetch16();
-					i16 value = m_memory.read16(srcAddr);
-					u16 addr = readRegister(destRegAddr);
-					m_memory.write16(addr, value);
+					u32 srcAddr = fetch32();
+					i32 value = m_memory.read32(srcAddr);
+					u32 addr = readRegister(destRegAddr);
+					m_memory.write32(addr, value);
 				}
 				break;
 				case data::OpCodes::MovImmDerefReg:
 				{
 					u8 destRegAddr = fetch8();
-					i16 value = fetch16();
-					u16 addr = readRegister(destRegAddr);
-					m_memory.write16(addr, value);
+					i32 value = fetch32();
+					u32 addr = readRegister(destRegAddr);
+					m_memory.write32(addr, value);
 				}
 				break;
 				case data::OpCodes::MovDerefRegDerefReg:
 				{
 					u8 destRegAddr = fetch8();
 					u8 srcRegAddr = fetch8();
-					u16 srcAddr = readRegister(srcRegAddr);
-					u16 destAddr = readRegister(destRegAddr);
-					i16 value = m_memory.read16(srcAddr);
-					m_memory.write16(destAddr, value);
+					u32 srcAddr = readRegister(srcRegAddr);
+					u32 destAddr = readRegister(destRegAddr);
+					i32 value = m_memory.read32(srcAddr);
+					m_memory.write32(destAddr, value);
 				}
 				break;
 				case data::OpCodes::MovByteImmMem:
 				{
-					u16 addr = fetch16();
+					u32 addr = fetch32();
 					i8 literal = fetch8();
 					m_memory.write8(addr, literal);
 				}
 				break;
 				case data::OpCodes::MovByteDerefRegMem:
 				{
-					u16 destAddr = fetch16();
+					u32 destAddr = fetch32();
 					u8 srcRegAddr = fetch8();
-					u16 addr = readRegister(srcRegAddr);
+					u32 addr = readRegister(srcRegAddr);
 					i8 value = m_memory.read8(addr);
 					m_memory.write8(destAddr, value);
 				}
@@ -422,17 +438,17 @@ namespace dragon
 				{
 					u8 destRegAddr = fetch8();
 					u8 srcRegAddr = fetch8();
-					i16 value = readRegister(srcRegAddr);
-					u16 addr = readRegister(destRegAddr);
+					i32 value = readRegister(srcRegAddr);
+					u32 addr = readRegister(destRegAddr);
 					m_memory.write8(addr, (i8)value);
 				}
 				break;
 				case data::OpCodes::MovByteMemDerefReg:
 				{
 					u8 destRegAddr = fetch8();
-					u16 srcAddr = fetch16();
+					u32 srcAddr = fetch32();
 					i8 value = m_memory.read8(srcAddr);
-					u16 addr = readRegister(destRegAddr);
+					u32 addr = readRegister(destRegAddr);
 					m_memory.write8(addr, value);
 				}
 				break;
@@ -440,7 +456,7 @@ namespace dragon
 				{
 					u8 destRegAddr = fetch8();
 					i8 value = fetch8();
-					u16 addr = readRegister(destRegAddr);
+					u32 addr = readRegister(destRegAddr);
 					m_memory.write8(addr, value);
 				}
 				break;
@@ -448,8 +464,8 @@ namespace dragon
 				{
 					u8 destRegAddr = fetch8();
 					u8 srcRegAddr = fetch8();
-					u16 srcAddr = readRegister(srcRegAddr);
-					u16 destAddr = readRegister(destRegAddr);
+					u32 srcAddr = readRegister(srcRegAddr);
+					u32 destAddr = readRegister(destRegAddr);
 					i8 value = m_memory.read8(srcAddr);
 					m_memory.write8(destAddr, value);
 				}
@@ -457,7 +473,7 @@ namespace dragon
 				case data::OpCodes::MovByteMemReg:
 				{
 					u8 destRegAddr = fetch8();
-					u16 srcAddr = fetch16();
+					u32 srcAddr = fetch32();
 					i8 value = m_memory.read8(srcAddr);
 					writeRegister8(destRegAddr, value);
 				}
@@ -473,209 +489,211 @@ namespace dragon
 				{
 					u8 destRegAddr = fetch8();
 					u8 srcRegAddr = fetch8();
-					u16 srcAddr = readRegister(srcRegAddr);
+					u32 srcAddr = readRegister(srcRegAddr);
 					i8 value = m_memory.read8(srcAddr);
 					writeRegister8(destRegAddr, value);
 				}
 				break;
 				case data::OpCodes::MovByteRegMem:
 				{
-					u16 addr = fetch16();
+					u32 addr = fetch32();
 					u8 regAddr = fetch8();
-					i16 value = readRegister(regAddr);
+					i32 value = readRegister(regAddr);
 					m_memory.write8(addr, (i8)(value & 0x00FF));
 				}
 				break;
 				case data::OpCodes::AddImmReg:
 				{
 					u8 regAddr = fetch8();
-					i16 literal = fetch16();
-					i16 regValue = readRegister(regAddr);
-					writeRegister16(data::Registers::ACC, regValue + literal);
+					i32 literal = fetch32();
+					i32 regValue = readRegister(regAddr);
+					writeRegister32(data::Registers::ACC, cast<i32>(cast<u32>(regValue) + cast<u32>(literal)));
 				}
 				break;
 				case data::OpCodes::AddRegReg:
 				{
 					u8 regAddr1 = fetch8();
 					u8 regAddr2 = fetch8();
-					i16 regValue1 = readRegister(regAddr1);
-					i16 regValue2 = readRegister(regAddr2);
-					writeRegister16(data::Registers::ACC, regValue1 + regValue2);
+					i32 regValue1 = readRegister(regAddr1);
+					i32 regValue2 = readRegister(regAddr2);
+					writeRegister32(data::Registers::ACC, cast<i32>(cast<u32>(regValue1) + cast<u32>(regValue2)));
 				}
 				break;
 				case data::OpCodes::SubImmReg:
 				{
 					u8 regAddr = fetch8();
-					i16 literal = fetch16();
-					i16 regValue = readRegister(regAddr);
-					writeRegister16(data::Registers::ACC, regValue - literal);
+					i32 literal = fetch32();
+					i32 regValue = readRegister(regAddr);
+					writeRegister32(data::Registers::ACC, cast<i32>(cast<u32>(regValue) - cast<u32>(literal)));
 				}
 				break;
 				case data::OpCodes::SubRegReg:
 				{
 					u8 regAddr1 = fetch8();
 					u8 regAddr2 = fetch8();
-					i16 regValue1 = readRegister(regAddr1);
-					i16 regValue2 = readRegister(regAddr2);
-					writeRegister16(data::Registers::ACC, regValue1 - regValue2);
+					i32 regValue1 = readRegister(regAddr1);
+					i32 regValue2 = readRegister(regAddr2);
+					writeRegister32(data::Registers::ACC, cast<i32>(cast<u32>(regValue1) - cast<u32>(regValue2)));
 				}
 				break;
 				case data::OpCodes::MulImmReg:
 				{
 					u8 regAddr = fetch8();
-					i16 literal = fetch16();
-					i16 regValue = readRegister(regAddr);
-					writeRegister16(data::Registers::ACC, regValue * literal);
+					i32 literal = fetch32();
+					i32 regValue = readRegister(regAddr);
+					writeRegister32(data::Registers::ACC, cast<i32>(cast<u32>(regValue) * cast<u32>(literal)));
 				}
 				break;
 				case data::OpCodes::MulRegReg:
 				{
 					u8 regAddr1 = fetch8();
 					u8 regAddr2 = fetch8();
-					i16 regValue1 = readRegister(regAddr1);
-					i16 regValue2 = readRegister(regAddr2);
-					writeRegister16(data::Registers::ACC, regValue1 * regValue2);
+					i32 regValue1 = readRegister(regAddr1);
+					i32 regValue2 = readRegister(regAddr2);
+					writeRegister32(data::Registers::ACC, cast<i32>(cast<u32>(regValue1) * cast<u32>(regValue2)));
 				}
 				break;
 				case data::OpCodes::DivImmReg: //TODO: Division by zero is unhandled
 				{
 					u8 regAddr = fetch8();
-					i16 literal = fetch16();
-					i16 regValue = readRegister(regAddr);
-					i16 quotient = regValue / literal;
-					i16 reminder = regValue % literal;
-					writeRegister16(data::Registers::ACC, quotient);
-					writeRegister16(data::Registers::RV, reminder);
+					i32 literal = fetch32();
+					i32 regValue = readRegister(regAddr);
+					if (!check_divisor(literal)) return false;
+					i32 quotient = cast<i32>(cast<i64>(regValue) / literal);
+					i32 reminder = cast<i32>(cast<i64>(regValue) % literal);
+					writeRegister32(data::Registers::ACC, quotient);
+					writeRegister32(data::Registers::RV, reminder);
 				}
 				break;
 				case data::OpCodes::DivRegReg: //TODO: Division by zero is unhandled
 				{
 					u8 regAddr1 = fetch8();
 					u8 regAddr2 = fetch8();
-					i16 regValue1 = readRegister(regAddr1);
-					i16 regValue2 = readRegister(regAddr2);
-					i16 quotient = regValue1 / regValue2;
-					i16 reminder = regValue1 % regValue2;
-					writeRegister16(data::Registers::ACC, quotient);
-					writeRegister16(data::Registers::RV, reminder);
+					i32 regValue1 = readRegister(regAddr1);
+					i32 regValue2 = readRegister(regAddr2);
+					if (!check_divisor(regValue2)) return false;
+					i32 quotient = cast<i32>(cast<i64>(regValue1) / regValue2);
+					i32 reminder = cast<i32>(cast<i64>(regValue1) % regValue2);
+					writeRegister32(data::Registers::ACC, quotient);
+					writeRegister32(data::Registers::RV, reminder);
 				}
 				break;
 				case data::OpCodes::IncReg:
 				{
 					u8 regAddr = fetch8();
-					i16 regValue = readRegister(regAddr);
-					writeRegister16(regAddr, regValue + 1);
+					i32 regValue = readRegister(regAddr);
+					writeRegister32(regAddr, cast<i32>(cast<u32>(regValue) + 1));
 				}
 				break;
 				case data::OpCodes::DecReg:
 				{
 					u8 regAddr = fetch8();
-					i16 regValue = readRegister(regAddr);
-					writeRegister16(regAddr, regValue - 1);
+					i32 regValue = readRegister(regAddr);
+					writeRegister32(regAddr, cast<i32>(cast<u32>(regValue) - 1));
 				}
 				break;
 				case data::OpCodes::RShiftRegImm:
 				{
-					i16 literal = fetch16();
+					i32 literal = fetch32();
 					u8 regAddr = fetch8();
-					i16 regValue = readRegister(regAddr);
-					regValue = regValue >> literal;
-					writeRegister16(regAddr, regValue);
+					i32 regValue = readRegister(regAddr);
+					regValue = regValue >> (literal & 0x1F);
+					writeRegister32(regAddr, regValue);
 				}
 				break;
 				case data::OpCodes::RShiftRegReg:
 				{
 					u8 shiftRegAddr = fetch8();
 					u8 regAddr = fetch8();
-					i16 shiftValue = readRegister(shiftRegAddr);
-					i16 regValue = readRegister(regAddr);
-					regValue = regValue >> shiftValue;
-					writeRegister16(regAddr, regValue);
+					i32 shiftValue = readRegister(shiftRegAddr);
+					i32 regValue = readRegister(regAddr);
+					regValue = regValue >> (shiftValue & 0x1F);
+					writeRegister32(regAddr, regValue);
 				}
 				break;
 				case data::OpCodes::LShiftRegImm:
 				{
-					i16 literal = fetch16();
+					i32 literal = fetch32();
 					u8 regAddr = fetch8();
-					i16 regValue = readRegister(regAddr);
-					regValue = regValue << literal;
-					writeRegister16(regAddr, regValue);
+					i32 regValue = readRegister(regAddr);
+					regValue = cast<i32>(cast<u32>(regValue) << (literal & 0x1F));
+					writeRegister32(regAddr, regValue);
 				}
 				break;
 				case data::OpCodes::LShiftRegReg:
 				{
 					u8 shiftRegAddr = fetch8();
 					u8 regAddr = fetch8();
-					i16 shiftValue = readRegister(shiftRegAddr);
-					i16 regValue = readRegister(regAddr);
-					regValue = regValue << shiftValue;
-					writeRegister16(regAddr, regValue);
+					i32 shiftValue = readRegister(shiftRegAddr);
+					i32 regValue = readRegister(regAddr);
+					regValue = cast<i32>(cast<u32>(regValue) << (shiftValue & 0x1F));
+					writeRegister32(regAddr, regValue);
 				}
 				break;
 				case data::OpCodes::AndRegImm:
 				{
-					i16 literal = fetch16();
+					i32 literal = fetch32();
 					u8 regAddr = fetch8();
-					i16 value = readRegister(regAddr);
-					writeRegister16(data::Registers::ACC, value & literal);
+					i32 value = readRegister(regAddr);
+					writeRegister32(data::Registers::ACC, value & literal);
 				}
 				break;
 				case data::OpCodes::AndRegReg:
 				{
 					u8 andRegAddr = fetch8();
 					u8 regAddr = fetch8();
-					i16 value = readRegister(regAddr);
-					i16 andValue = readRegister(andRegAddr);
-					writeRegister16(data::Registers::ACC, value & andValue);
+					i32 value = readRegister(regAddr);
+					i32 andValue = readRegister(andRegAddr);
+					writeRegister32(data::Registers::ACC, value & andValue);
 				}
 				break;
 				case data::OpCodes::OrRegImm:
 				{
-					i16 literal = fetch16();
+					i32 literal = fetch32();
 					u8 regAddr = fetch8();
-					i16 value = readRegister(regAddr);
-					writeRegister16(data::Registers::ACC, value | literal);
+					i32 value = readRegister(regAddr);
+					writeRegister32(data::Registers::ACC, value | literal);
 				}
 				break;
 				case data::OpCodes::OrRegReg:
 				{
 					u8 andRegAddr = fetch8();
 					u8 regAddr = fetch8();
-					i16 value = readRegister(regAddr);
-					i16 andValue = readRegister(andRegAddr);
-					writeRegister16(data::Registers::ACC, value | andValue);
+					i32 value = readRegister(regAddr);
+					i32 andValue = readRegister(andRegAddr);
+					writeRegister32(data::Registers::ACC, value | andValue);
 				}
 				break;
 				case data::OpCodes::XorRegImm:
 				{
-					i16 literal = fetch16();
+					i32 literal = fetch32();
 					u8 regAddr = fetch8();
-					i16 value = readRegister(regAddr);
-					writeRegister16(data::Registers::ACC, value ^ literal);
+					i32 value = readRegister(regAddr);
+					writeRegister32(data::Registers::ACC, value ^ literal);
 				}
 				break;
 				case data::OpCodes::XorRegReg:
 				{
 					u8 andRegAddr = fetch8();
 					u8 regAddr = fetch8();
-					i16 value = readRegister(regAddr);
-					i16 andValue = readRegister(andRegAddr);
-					writeRegister16(data::Registers::ACC, value ^ andValue);
+					i32 value = readRegister(regAddr);
+					i32 andValue = readRegister(andRegAddr);
+					writeRegister32(data::Registers::ACC, value ^ andValue);
 				}
 				break;
 				case data::OpCodes::NotReg:
 				{
 					u8 regAddr = fetch8();
-					i16 value = readRegister(regAddr);
-					writeRegister16(data::Registers::ACC, ~value);
+					i32 value = readRegister(regAddr);
+					writeRegister32(data::Registers::ACC, ~value);
 				}
 				break;
 				case data::OpCodes::NegReg:
 				{
 					u8 regAddr = fetch8();
-					i16 value = readRegister(regAddr);
-					value *= -1;
-					writeRegister16(regAddr, value);
+					i32 value = readRegister(regAddr);
+					value = cast<i32>(0u - cast<u32>(value));
+					writeRegister32(regAddr, value);
 				}
 				break;
 				case data::OpCodes::NegByteReg:
@@ -688,122 +706,122 @@ namespace dragon
 				break;
 				case data::OpCodes::JmpNotEqImm:
 				{
-					u16 addr = fetch16();
-					i16 value = fetch16();
-					i16 accValue = readRegister(data::Registers::ACC);
+					u32 addr = fetch32();
+					i32 value = fetch32();
+					i32 accValue = readRegister(data::Registers::ACC);
 					if (value != accValue)
-						writeRegister16(data::Registers::IP, addr);
+						writeRegister32(data::Registers::IP, addr);
 				}
 				break;
 				case data::OpCodes::JmpNotEqReg:
 				{
-					u16 addr = fetch16();
+					u32 addr = fetch32();
 					u8 regAddr = fetch8();
-					i16 value = readRegister(regAddr);
-					i16 accValue = readRegister(data::Registers::ACC);
+					i32 value = readRegister(regAddr);
+					i32 accValue = readRegister(data::Registers::ACC);
 					if (value != accValue)
-						writeRegister16(data::Registers::IP, addr);
+						writeRegister32(data::Registers::IP, addr);
 				}
 				break;
 				case data::OpCodes::JmpEqImm:
 				{
-					u16 addr = fetch16();
-					i16 value = fetch16();
-					i16 accValue = readRegister(data::Registers::ACC);
+					u32 addr = fetch32();
+					i32 value = fetch32();
+					i32 accValue = readRegister(data::Registers::ACC);
 					if (value == accValue)
-						writeRegister16(data::Registers::IP, addr);
+						writeRegister32(data::Registers::IP, addr);
 				}
 				break;
 				case data::OpCodes::JmpEqReg:
 				{
-					u16 addr = fetch16();
+					u32 addr = fetch32();
 					u8 regAddr = fetch8();
-					i16 value = readRegister(regAddr);
-					i16 accValue = readRegister(data::Registers::ACC);
+					i32 value = readRegister(regAddr);
+					i32 accValue = readRegister(data::Registers::ACC);
 					if (value == accValue)
-						writeRegister16(data::Registers::IP, addr);
+						writeRegister32(data::Registers::IP, addr);
 				}
 				break;
 				case data::OpCodes::JmpGrImm:
 				{
-					u16 addr = fetch16();
-					i16 value = fetch16();
-					i16 accValue = readRegister(data::Registers::ACC);
+					u32 addr = fetch32();
+					i32 value = fetch32();
+					i32 accValue = readRegister(data::Registers::ACC);
 					if (value > accValue)
-						writeRegister16(data::Registers::IP, addr);
+						writeRegister32(data::Registers::IP, addr);
 				}
 				break;
 				case data::OpCodes::JmpGrReg:
 				{
-					u16 addr = fetch16();
+					u32 addr = fetch32();
 					u8 regAddr = fetch8();
-					i16 value = readRegister(regAddr);
-					i16 accValue = readRegister(data::Registers::ACC);
+					i32 value = readRegister(regAddr);
+					i32 accValue = readRegister(data::Registers::ACC);
 					if (value > accValue)
-						writeRegister16(data::Registers::IP, addr);
+						writeRegister32(data::Registers::IP, addr);
 				}
 				break;
 				case data::OpCodes::JmpLessImm:
 				{
-					u16 addr = fetch16();
-					i16 value = fetch16();
-					i16 accValue = readRegister(data::Registers::ACC);
+					u32 addr = fetch32();
+					i32 value = fetch32();
+					i32 accValue = readRegister(data::Registers::ACC);
 					if (value < accValue)
-						writeRegister16(data::Registers::IP, addr);
+						writeRegister32(data::Registers::IP, addr);
 				}
 				break;
 				case data::OpCodes::JmpLessReg:
 				{
-					u16 addr = fetch16();
+					u32 addr = fetch32();
 					u8 regAddr = fetch8();
-					i16 value = readRegister(regAddr);
-					i16 accValue = readRegister(data::Registers::ACC);
+					i32 value = readRegister(regAddr);
+					i32 accValue = readRegister(data::Registers::ACC);
 					if (value < accValue)
-						writeRegister16(data::Registers::IP, addr);
+						writeRegister32(data::Registers::IP, addr);
 				}
 				break;
 				case data::OpCodes::JmpGeImm:
 				{
-					u16 addr = fetch16();
-					i16 value = fetch16();
-					i16 accValue = readRegister(data::Registers::ACC);
+					u32 addr = fetch32();
+					i32 value = fetch32();
+					i32 accValue = readRegister(data::Registers::ACC);
 					if (value >= accValue)
-						writeRegister16(data::Registers::IP, addr);
+						writeRegister32(data::Registers::IP, addr);
 				}
 				break;
 				case data::OpCodes::JmpGeReg:
 				{
-					u16 addr = fetch16();
+					u32 addr = fetch32();
 					u8 regAddr = fetch8();
-					i16 value = readRegister(regAddr);
-					i16 accValue = readRegister(data::Registers::ACC);
+					i32 value = readRegister(regAddr);
+					i32 accValue = readRegister(data::Registers::ACC);
 					if (value >= accValue)
-						writeRegister16(data::Registers::IP, addr);
+						writeRegister32(data::Registers::IP, addr);
 				}
 				break;
 				case data::OpCodes::JmpLeImm:
 				{
-					u16 addr = fetch16();
-					i16 value = fetch16();
-					i16 accValue = readRegister(data::Registers::ACC);
+					u32 addr = fetch32();
+					i32 value = fetch32();
+					i32 accValue = readRegister(data::Registers::ACC);
 					if (value <= accValue)
-						writeRegister16(data::Registers::IP, addr);
+						writeRegister32(data::Registers::IP, addr);
 				}
 				break;
 				case data::OpCodes::JmpLeReg:
 				{
-					u16 addr = fetch16();
+					u32 addr = fetch32();
 					u8 regAddr = fetch8();
-					i16 value = readRegister(regAddr);
-					i16 accValue = readRegister(data::Registers::ACC);
+					i32 value = readRegister(regAddr);
+					i32 accValue = readRegister(data::Registers::ACC);
 					if (value <= accValue)
-						writeRegister16(data::Registers::IP, addr);
+						writeRegister32(data::Registers::IP, addr);
 				}
 				break;
 				case data::OpCodes::Jmp:
 				{
-					u16 addr = fetch16();
-					writeRegister16(data::Registers::IP, addr);
+					u32 addr = fetch32();
+					writeRegister32(data::Registers::IP, addr);
 				}
 				break;
 				case data::OpCodes::Halt:
@@ -814,38 +832,38 @@ namespace dragon
 				break;
 				case data::OpCodes::PushImm:
 				{
-					i16 value = fetch16();
+					i32 value = fetch32();
 					pushToStack(value);
 				}
 				break;
 				case data::OpCodes::PushReg:
 				{
 					u8 regAddr = fetch8();
-					i16 value = readRegister(regAddr);
+					i32 value = readRegister(regAddr);
 					pushToStack(value);
 				}
 				break;
 				case data::OpCodes::PopReg:
 				{
 					u8 regAddr = fetch8();
-					i16 value = popFromStack();
-					writeRegister16(regAddr, value);
+					i32 value = popFromStack();
+					writeRegister32(regAddr, value);
 				}
 				break;
 				case data::OpCodes::CallImm:
 				{
-					u16 subroutineAddr = fetch16();
+					u32 subroutineAddr = fetch32();
 					pushStackFrame();
-					writeRegister16(data::Registers::IP, subroutineAddr);
+					writeRegister32(data::Registers::IP, subroutineAddr);
 					m_subroutineCounter++;
 				}
 				break;
 				case data::OpCodes::CallReg:
 				{
 					u8 regAddr = fetch8();
-					u16 subroutineAddr = readRegister(regAddr);
+					u32 subroutineAddr = readRegister(regAddr);
 					pushStackFrame();
-					writeRegister16(data::Registers::IP, subroutineAddr);
+					writeRegister32(data::Registers::IP, subroutineAddr);
 					m_subroutineCounter++;
 				}
 				break;
@@ -859,10 +877,10 @@ namespace dragon
 				{
 					u8 regAddr = fetch8();
 					if (!isInSubRoutine()) break;
-					i16 pp_val = readRegister(data::Registers::PP);
-					i16 arg_data = m_memory.read16(pp_val);
-					writeRegister16(data::Registers::PP, pp_val - 2);
-					writeRegister16(regAddr, arg_data);
+					u32 pp_val = cast<u32>(readRegister(data::Registers::PP));
+					i32 arg_data = m_memory.read32(pp_val);
+					writeRegister32(data::Registers::PP, cast<i32>(pp_val - data::WordSize));
+					writeRegister32(regAddr, arg_data);
 				}
 				break;
 				case data::OpCodes::RetInt:

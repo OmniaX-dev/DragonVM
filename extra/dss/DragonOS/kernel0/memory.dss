@@ -4,9 +4,11 @@
 @define _REG_S1 0x07
 @define _REG_S2 0x08
 
-@define _USABLE_MEM_START 0x353F
-@define _USABLE_MEM_SIZE 0xBAC0
-@define _MEM_TABLE_ADDR 0x30FF
+## The RAM starts at 0x00010000 (CMOS_Settings.MEM_START) and its last address is in
+## CMOS_Settings.MEM_SIZE; the stack grows down from the end of the RAM
+## (CMOS_Settings.STACK_SIZE bytes).
+@define _USABLE_MEM_START 0x00020000
+@define _MEM_TABLE_ADDR 0x00014000
 
 .code
 

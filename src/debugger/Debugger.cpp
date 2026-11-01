@@ -7,7 +7,7 @@
 namespace dragon
 {
 	//Debugger::Utils
-	String Debugger::Utils::findSymbol(const DisassemblyList& list, u16 address, u16* outSize)
+	String Debugger::Utils::findSymbol(const DisassemblyList& list, u32 address, u32* outSize)
 	{
 		for (auto& line : list)
 		{
@@ -21,7 +21,7 @@ namespace dragon
 		return "";
 	}
 
-	u16 Debugger::Utils::findSymbol(const DisassemblyList& list, const String& symbol, u16* outSize)
+	u32 Debugger::Utils::findSymbol(const DisassemblyList& list, const String& symbol, u32* outSize)
 	{
 		for (auto& line : list)
 		{
@@ -35,7 +35,7 @@ namespace dragon
 		return 0x0000;
 	}
 
-	String Debugger::Utils::findNearestSymbol(const DisassemblyList& list, u16 address)
+	String Debugger::Utils::findNearestSymbol(const DisassemblyList& list, u32 address)
 	{
 		// The lists are sorted by address.
 		const code::Assembler::tDisassemblyLine* best = nullptr;
@@ -49,7 +49,7 @@ namespace dragon
 			return "";
 		String symbol = best->code.new_trim();
 		if (best->addr != address)
-			symbol.add("+").add(String::getHexStr(cast<u16>(address - best->addr), true, 1));
+			symbol.add("+").add(String::getHexStr(cast<u32>(address - best->addr), true, 1));
 		return symbol;
 	}
 
@@ -72,7 +72,7 @@ namespace dragon
 		return out;
 	}
 
-	String Debugger::Utils::decodeInstruction(u16 address, u8* outSize)
+	String Debugger::Utils::decodeInstruction(u32 address, u8* outSize)
 	{
 		auto& mem = DragonRuntime::memMap;
 		const u8 opCode = mem.peek8(address);
@@ -81,7 +81,7 @@ namespace dragon
 		if (opCode >= data::OpCodes::Ext01 && opCode <= data::OpCodes::Ext16)
 		{
 			data::CPUExtension* ext = DragonRuntime::cpu.getExtension(opCode);
-			const u8 extInst = mem.peek8(cast<u16>(address + 1));
+			const u8 extInst = mem.peek8(cast<u32>(address + 1));
 			if (ext != nullptr)
 			{
 				name = ext->getOpCodeString(extInst);
@@ -149,26 +149,26 @@ namespace dragon
 		return true;
 	}
 
-	bool Debugger::Utils::parseAddress(const Debugger& dbg, const String& text, u16& outAddress, u16* outSize)
+	bool Debugger::Utils::parseAddress(const Debugger& dbg, const String& text, u32& outAddress, u32* outSize)
 	{
 		String edit = text.new_trim();
 		if (edit.startsWith("$"))
 		{
-			u16 size = 1;
-			u16 addr = findSymbol(dbg.data().data, edit, &size);
+			u32 size = 1;
+			u32 addr = findSymbol(dbg.data().data, edit, &size);
 			if (addr == 0)
 				addr = findSymbol(dbg.data().labels, edit, &size);
 			if (addr == 0)
 				return false;
 			outAddress = addr;
 			if (outSize != nullptr)
-				*outSize = std::max<u16>(size, 1);
+				*outSize = std::max<u32>(size, 1);
 			return true;
 		}
 		i64 value = 0;
-		if (!parseValue(edit, value) || value < 0 || value > 0xFFFF)
+		if (!parseValue(edit, value) || value < 0 || value > data::AddressMask)
 			return false;
-		outAddress = cast<u16>(value);
+		outAddress = cast<u32>(value);
 		if (outSize != nullptr)
 			*outSize = 1;
 		return true;
@@ -235,7 +235,7 @@ namespace dragon
 				edit = argv[i];
 				if (!edit.isNumeric())
 					return DragonRuntime::RETURN_VAL_PARAMETER_NOT_NUMERIC;
-				m_data.args.force_load_mem_offset = (u16)edit.toInt();
+				m_data.args.force_load_mem_offset = (u32)edit.toInt();
 				m_data.args.force_load = true;
 			}
 			else if (edit == "--help")
@@ -273,7 +273,7 @@ namespace dragon
 			for (auto& sym : m_data.data)
 			{
 				if (sym.size > 0)
-					track(cast<u16>(sym.addr), sym.size, sym.code);
+					track(cast<u32>(sym.addr), sym.size, sym.code);
 			}
 		}
 
@@ -285,7 +285,7 @@ namespace dragon
 		m_cyclesPerRedraw = std::max<u64>(1, cast<u64>(config.clock_rate_sec) / std::max<u64>(1, config.screen_redraw_rate_per_second));
 		display.enableAutoRedraw(false);
 
-		DragonRuntime::cpu.setInterruptListener([this](u8 intValue, bool hardware, u16 handlerAddress) {
+		DragonRuntime::cpu.setInterruptListener([this](u8 intValue, bool hardware, u32 handlerAddress) {
 			if (!m_data.args.track_call_stack)
 				return;
 			tCallInfo call;
@@ -325,7 +325,13 @@ namespace dragon
 			ostd::ByteStream* stream = device.getByteStream();
 			if (stream == nullptr || stream->empty())
 				return;
-			m_history.addSegment(name, reinterpret_cast<u8*>(stream->data()), cast<u32>(stream->size()), nullptr, [&device](void) { device.syncByteStream(); });
+			// Devices tracking their written pages (the RAM) are diffed page by page; they have
+			// no state derived from their memory, so nothing to sync after a restore.
+			hw::DirtyPageMap* dirty = device.getDirtyPages();
+			std::function<void(void)> apply = nullptr;
+			if (dirty == nullptr)
+				apply = [&device](void) { device.syncByteStream(); };
+			m_history.addSegment(name, reinterpret_cast<u8*>(stream->data()), cast<u32>(stream->size()), nullptr, apply, dirty);
 			m_deviceSegments[&device] = name;
 		};
 		add_device("RAM", DragonRuntime::ram);
@@ -401,20 +407,20 @@ namespace dragon
 						reason = "Reached the start of the recorded history.";
 						break;
 					}
-					const u16 ip = cast<u16>(DragonRuntime::cpu.readRegister(data::Registers::IP));
+					const u32 ip = cast<u32>(DragonRuntime::cpu.readRegister(data::Registers::IP));
 					if (should_break_at(ip))
 					{
 						stop = true;
-						reason = String(getBreakPoint(ip)->debugBreak ? "debug_break at " : "Breakpoint at ").add(String::getHexStr(ip, true, 2)).add(" (reverse).");
+						reason = String(getBreakPoint(ip)->debugBreak ? "debug_break at " : "Breakpoint at ").add(String::getHexStr(ip, true, 4)).add(" (reverse).");
 					}
 					for (const auto& item : m_data.tracked)
 					{
 						if (!item.breakOnChange || stop)
 							continue;
 						// Going back over an entry that changes the value: that's where it changed.
-						for (u16 j = 0; j < item.size && !stop; j++)
+						for (u32 j = 0; j < item.size && !stop; j++)
 						{
-							const i64 offset = bus_state_offset(cast<u16>(item.address + j));
+							const i64 offset = bus_state_offset(cast<u32>(item.address + j));
 							if (offset >= 0 && m_history.entryChanges(m_history.getPosition() + 1, cast<u32>(offset)))
 							{
 								stop = true;
@@ -446,7 +452,7 @@ namespace dragon
 		{
 			if ((executed & 0x3F) == 0 && Clock::now() - sliceStart >= sliceBudget)
 				break;
-			const u16 ip = cast<u16>(DragonRuntime::cpu.readRegister(data::Registers::IP));
+			const u32 ip = cast<u32>(DragonRuntime::cpu.readRegister(data::Registers::IP));
 			if (m_historyEnabled && !m_history.isAtEnd())
 			{
 				m_history.stepForward();
@@ -475,7 +481,7 @@ namespace dragon
 	bool Debugger::step_machine(void)
 	{
 		auto& cpu = DragonRuntime::cpu;
-		const u16 ip = cast<u16>(cpu.readRegister(data::Registers::IP));
+		const u32 ip = cast<u32>(cpu.readRegister(data::Registers::IP));
 		if (!m_historyEnabled)
 			capture_info(m_previousInfo);
 		m_currentInfo.instructionAddress = ip;
@@ -493,7 +499,7 @@ namespace dragon
 		return true;
 	}
 
-	void Debugger::track_call(u16 ip)
+	void Debugger::track_call(u32 ip)
 	{
 		auto& cpu = DragonRuntime::cpu;
 		auto& mem = DragonRuntime::memMap;
@@ -506,13 +512,13 @@ namespace dragon
 		if (inst == data::OpCodes::CallImm)
 		{
 			call.info = "CALL IMM";
-			call.addr = mem.peek16(cast<u16>(ip + 1));
+			call.addr = mem.peek32(cast<u32>(ip + 1));
 			call.depth = ++m_callDepth;
 		}
 		else if (inst == data::OpCodes::CallReg)
 		{
 			call.info = "CALL REG";
-			call.addr = cast<u16>(cpu.readRegister(mem.peek8(cast<u16>(ip + 1))));
+			call.addr = cast<u32>(cpu.readRegister(mem.peek8(cast<u32>(ip + 1))));
 			call.depth = ++m_callDepth;
 		}
 		else if (inst == data::OpCodes::Ret)
@@ -534,10 +540,10 @@ namespace dragon
 			m_callTrace.pop_front();
 	}
 
-	bool Debugger::check_stop_conditions(u16 previousIP)
+	bool Debugger::check_stop_conditions(u32 previousIP)
 	{
 		auto& cpu = DragonRuntime::cpu;
-		const u16 ip = cast<u16>(cpu.readRegister(data::Registers::IP));
+		const u32 ip = cast<u32>(cpu.readRegister(data::Registers::IP));
 		if (DragonRuntime::hasError())
 		{
 			process_errors();
@@ -556,12 +562,12 @@ namespace dragon
 			// A debug_break the disassembly didn't know about: a breakpoint from now on (the
 			// known ones already stopped before executing, or are disabled).
 			m_data.breakpoints[previousIP] = { true, true };
-			stopped(String("Reached debug_break at ").add(String::getHexStr(previousIP, true, 2)).add(" (now a breakpoint: click it in the margin to disable it)."));
+			stopped(String("Reached debug_break at ").add(String::getHexStr(previousIP, true, 4)).add(" (now a breakpoint: click it in the margin to disable it)."));
 			return true;
 		}
 		if (should_break_at(ip))
 		{
-			stopped(String(getBreakPoint(ip)->debugBreak ? "debug_break at " : "Breakpoint at ").add(String::getHexStr(ip, true, 2)).add("."));
+			stopped(String(getBreakPoint(ip)->debugBreak ? "debug_break at " : "Breakpoint at ").add(String::getHexStr(ip, true, 4)).add("."));
 			return true;
 		}
 		size_t trackedIndex = 0;
@@ -575,9 +581,9 @@ namespace dragon
 			// entry says whether they changed; otherwise the values are compared with the ones
 			// captured before the cycle.
 			bool changed = false;
-			for (u16 j = 0; j < item.size && !changed; j++)
+			for (u32 j = 0; j < item.size && !changed; j++)
 			{
-				const u16 addr = cast<u16>(item.address + j);
+				const u32 addr = cast<u32>(item.address + j);
 				if (m_historyEnabled)
 				{
 					const i64 offset = bus_state_offset(addr);
@@ -588,7 +594,7 @@ namespace dragon
 			}
 			if (changed)
 			{
-				stopped(String("Watched data changed: ").add(item.label).add(" (").add(String::getHexStr(item.address, true, 2)).add(")."));
+				stopped(String("Watched data changed: ").add(item.label).add(" (").add(String::getHexStr(item.address, true, 4)).add(")."));
 				return true;
 			}
 		}
@@ -671,12 +677,12 @@ namespace dragon
 		auto& cpu = DragonRuntime::cpu;
 		auto& mem = DragonRuntime::memMap;
 		info.cycle = m_cycle;
-		info.instructionAddress = cast<u16>(cpu.readRegister(data::Registers::IP));
+		info.instructionAddress = cast<u32>(cpu.readRegister(data::Registers::IP));
 		u8 size = 1;
 		info.opCode = Utils::decodeInstruction(info.instructionAddress, &size);
-		info.footprintSize = std::min<u8>(size, 8);
+		info.footprintSize = std::min<u8>(size, 16);
 		for (u8 i = 0; i < info.footprintSize; i++)
-			info.footprint[i] = mem.peek8(cast<u16>(info.instructionAddress + i));
+			info.footprint[i] = mem.peek8(cast<u32>(info.instructionAddress + i));
 		info.stackFrameSize = cpu.getStackFrameSize();
 		info.debugBreak = cpu.isInDebugBreakPoint();
 		info.interruptHandlerCount = cpu.getInterruptHandlerCount();
@@ -689,8 +695,8 @@ namespace dragon
 		info.trackedValues.clear();
 		for (const auto& item : m_data.tracked)
 		{
-			for (u16 j = 0; j < item.size; j++)
-				info.trackedValues.push_back(mem.peek8(cast<u16>(item.address + j)));
+			for (u32 j = 0; j < item.size; j++)
+				info.trackedValues.push_back(mem.peek8(cast<u32>(item.address + j)));
 		}
 	}
 
@@ -705,8 +711,10 @@ namespace dragon
 
 	void Debugger::refreshBusImage(void)
 	{
-		m_busImage.resize(0x10000);
-		DragonRuntime::memMap.readBusImage(m_busImage.data());
+		// The used address space (up to the end of the RAM).
+		const u32 size = DragonRuntime::memMap.getMappedEnd();
+		m_busImage.resize(size);
+		DragonRuntime::memMap.readBusImage(m_busImage.data(), size);
 	}
 
 	void Debugger::resume(void)
@@ -753,7 +761,7 @@ namespace dragon
 	{
 		if (m_mode != eMode::Paused)
 			return;
-		const u16 ip = cast<u16>(DragonRuntime::cpu.readRegister(data::Registers::IP));
+		const u32 ip = cast<u32>(DragonRuntime::cpu.readRegister(data::Registers::IP));
 		const u8 inst = DragonRuntime::memMap.peek8(ip);
 		if (inst != data::OpCodes::CallImm && inst != data::OpCodes::CallReg && inst != data::OpCodes::Int)
 		{
@@ -784,7 +792,7 @@ namespace dragon
 		update();
 	}
 
-	void Debugger::runTo(u16 address)
+	void Debugger::runTo(u32 address)
 	{
 		if (m_mode != eMode::Paused)
 			return;
@@ -832,11 +840,11 @@ namespace dragon
 			console().fg(ostd::ConsoleColors::Yellow).p("Reached the start of the recorded history.").reset().nl();
 			return;
 		}
-		const u16 ip = cast<u16>(DragonRuntime::cpu.readRegister(data::Registers::IP));
+		const u32 ip = cast<u32>(DragonRuntime::cpu.readRegister(data::Registers::IP));
 		if (should_break_at(ip))
 		{
 			after_navigation();
-			stopped(String("Breakpoint at ").add(String::getHexStr(ip, true, 2)).add(" (reverse)."));
+			stopped(String("Breakpoint at ").add(String::getHexStr(ip, true, 4)).add(" (reverse)."));
 			return;
 		}
 		m_mode = eMode::ReverseRunning;
@@ -855,7 +863,7 @@ namespace dragon
 		stopped("");
 	}
 
-	bool Debugger::toggleBreakPoint(u16 address)
+	bool Debugger::toggleBreakPoint(u32 address)
 	{
 		auto it = m_data.breakpoints.find(address);
 		if (it == m_data.breakpoints.end())
@@ -872,24 +880,24 @@ namespace dragon
 		return false;
 	}
 
-	bool Debugger::isBreakPoint(u16 address) const
+	bool Debugger::isBreakPoint(u32 address) const
 	{
 		auto it = m_data.breakpoints.find(address);
 		return it != m_data.breakpoints.end() && it->second.enabled;
 	}
 
-	const Debugger::tBreakPoint* Debugger::getBreakPoint(u16 address) const
+	const Debugger::tBreakPoint* Debugger::getBreakPoint(u32 address) const
 	{
 		auto it = m_data.breakpoints.find(address);
 		return it != m_data.breakpoints.end() ? &it->second : nullptr;
 	}
 
-	void Debugger::addBreakPoint(u16 address)
+	void Debugger::addBreakPoint(u32 address)
 	{
 		m_data.breakpoints[address].enabled = true;
 	}
 
-	void Debugger::removeBreakPoint(u16 address)
+	void Debugger::removeBreakPoint(u32 address)
 	{
 		auto it = m_data.breakpoints.find(address);
 		if (it == m_data.breakpoints.end())
@@ -900,7 +908,7 @@ namespace dragon
 			m_data.breakpoints.erase(it);
 	}
 
-	void Debugger::setBreakPointEnabled(u16 address, bool enabled)
+	void Debugger::setBreakPointEnabled(u32 address, bool enabled)
 	{
 		auto it = m_data.breakpoints.find(address);
 		if (it != m_data.breakpoints.end())
@@ -923,7 +931,7 @@ namespace dragon
 		}
 	}
 
-	bool Debugger::should_break_at(u16 ip) const
+	bool Debugger::should_break_at(u32 ip) const
 	{
 		const tBreakPoint* bp = getBreakPoint(ip);
 		if (bp == nullptr || !bp->enabled)
@@ -942,7 +950,7 @@ namespace dragon
 			if (mnemonic.contains(" "))
 				mnemonic = mnemonic.new_substr(0, mnemonic.indexOf(" "));
 			if (mnemonic == "debug_break" || mnemonic == "debug_dump_ram")
-				m_data.breakpoints[cast<u16>(line.addr)] = { true, true };
+				m_data.breakpoints[cast<u32>(line.addr)] = { true, true };
 		}
 	}
 
@@ -954,13 +962,13 @@ namespace dragon
 		notify_state_changed();
 	}
 
-	void Debugger::track(u16 address, u16 size, const String& label, bool breakOnChange)
+	void Debugger::track(u32 address, u32 size, const String& label, bool breakOnChange)
 	{
 		for (auto& item : m_data.tracked)
 		{
 			if (item.address == address)
 			{
-				item.size = std::max<u16>(size, 1);
+				item.size = std::max<u32>(size, 1);
 				item.breakOnChange = item.breakOnChange || breakOnChange;
 				if (label != "")
 					item.label = label;
@@ -968,7 +976,7 @@ namespace dragon
 				return;
 			}
 		}
-		m_data.tracked.push_back({ address, std::max<u16>(size, 1), (label != "" ? label : String::getHexStr(address, true, 2)), breakOnChange });
+		m_data.tracked.push_back({ address, std::max<u32>(size, 1), (label != "" ? label : String::getHexStr(address, true, 4)), breakOnChange });
 		std::sort(m_data.tracked.begin(), m_data.tracked.end(), [](const tTrackedData& a, const tTrackedData& b) { return a.address < b.address; });
 		m_data.trackedVersion++;
 	}
@@ -979,7 +987,7 @@ namespace dragon
 		tracked_changed();
 	}
 
-	bool Debugger::setWatch(u16 address, bool breakOnChange)
+	bool Debugger::setWatch(u32 address, bool breakOnChange)
 	{
 		for (auto& item : m_data.tracked)
 		{
@@ -992,7 +1000,7 @@ namespace dragon
 		return false;
 	}
 
-	bool Debugger::untrack(u16 address)
+	bool Debugger::untrack(u32 address)
 	{
 		for (auto it = m_data.tracked.begin(); it != m_data.tracked.end(); ++it)
 		{
@@ -1023,7 +1031,7 @@ namespace dragon
 		{
 			if (reg == entry.first)
 			{
-				DragonRuntime::cpu.writeRegister16(entry.second, cast<i16>(value & 0xFFFF));
+				DragonRuntime::cpu.writeRegister32(entry.second, cast<i32>(value & 0xFFFFFFFF));
 				commitEdit();
 				return true;
 			}
@@ -1031,12 +1039,12 @@ namespace dragon
 		return false;
 	}
 
-	bool Debugger::writeMemory(u16 address, u64 value, u8 size)
+	bool Debugger::writeMemory(u32 address, u64 value, u8 size)
 	{
 		// Big endian, like the machine.
 		bool ok = true;
 		for (u8 i = 0; i < size; i++)
-			ok = DragonRuntime::memMap.poke8(cast<u16>(address + i), cast<u8>((value >> (8 * (size - 1 - i))) & 0xFF)) && ok;
+			ok = DragonRuntime::memMap.poke8(cast<u32>(address + i), cast<u8>((value >> (8 * (size - 1 - i))) & 0xFF)) && ok;
 		commitEdit();
 		return ok;
 	}
@@ -1051,7 +1059,7 @@ namespace dragon
 		}
 	}
 
-	i64 Debugger::bus_state_offset(u16 address) const
+	i64 Debugger::bus_state_offset(u32 address) const
 	{
 		for (const auto& region : DragonRuntime::memMap.getRegions())
 		{
@@ -1126,7 +1134,7 @@ namespace dragon
 			reverseContinue();
 		else if (name == "until" || name == "runto")
 		{
-			u16 addr = 0;
+			u32 addr = 0;
 			if (Utils::parseAddress(*this, args, addr))
 				runTo(addr);
 			else
@@ -1180,14 +1188,14 @@ namespace dragon
 			exec_track_command(args, true);
 		else if (name == "untrack")
 		{
-			u16 addr = 0;
+			u32 addr = 0;
 			if (args == "all")
 			{
 				untrackAll();
 				out.fg(ostd::ConsoleColors::Yellow).p("Nothing is tracked anymore.").reset().nl();
 			}
 			else if (Utils::parseAddress(*this, args, addr) && untrack(addr))
-				out.fg(ostd::ConsoleColors::Yellow).p("Not tracking ").p(String::getHexStr(addr, true, 2)).p(" anymore.").reset().nl();
+				out.fg(ostd::ConsoleColors::Yellow).p("Not tracking ").p(String::getHexStr(addr, true, 4)).p(" anymore.").reset().nl();
 			else
 				out.fg(ostd::ConsoleColors::Red).p("Not tracked: ").p(args).reset().nl();
 			capture_info(m_currentInfo);
@@ -1207,7 +1215,7 @@ namespace dragon
 			show_view(eView::CallTrace);
 		else if (name == "x" || name == "mem")
 		{
-			u16 addr = 0;
+			u32 addr = 0;
 			if (Utils::parseAddress(*this, args, addr))
 				show_view(eView::Memory, addr);
 			else
@@ -1222,7 +1230,7 @@ namespace dragon
 			else if (!setRegister(tokens[0], value))
 				out.fg(ostd::ConsoleColors::Red).p("Unknown register: ").p(tokens[0]).reset().nl();
 			else
-				out.fg(ostd::ConsoleColors::Yellow).p(tokens[0].new_toUpper()).p(" = ").p(String::getHexStr(cast<u16>(value), true, 2)).reset().nl();
+				out.fg(ostd::ConsoleColors::Yellow).p(tokens[0].new_toUpper()).p(" = ").p(String::getHexStr(cast<u32>(value), true, 4)).reset().nl();
 		}
 		else if (name == "display")
 		{
@@ -1282,7 +1290,8 @@ namespace dragon
 		String command = commandArgs;
 		const u8 TYPE_STRING = 0;
 		const u8 TYPE_BYTE = 1;
-		const u8 TYPE_WORD = 2;
+		const u8 TYPE_HALF = 2;
+		const u8 TYPE_WORD = data::WordSize;	// the machine word (32 bits)
 		const u8 TYPE_DWORD = 4;
 		const u8 TYPE_QWORD = 8;
 		u8 type = TYPE_WORD;
@@ -1291,6 +1300,7 @@ namespace dragon
 			String size_str = command.new_substr(0, command.indexOf(" ")).trim().toLower();
 			command.substr(command.indexOf(" ") + 1).trim();
 			if (size_str == "byte") type = TYPE_BYTE;
+			else if (size_str == "half") type = TYPE_HALF;
 			else if (size_str == "word") type = TYPE_WORD;
 			else if (size_str == "dword") type = TYPE_DWORD;
 			else if (size_str == "qword") type = TYPE_QWORD;
@@ -1301,17 +1311,17 @@ namespace dragon
 		{
 			if (type == TYPE_STRING)
 				type = TYPE_WORD;
-			u16 addr = cast<u16>(numeric);
-			u16 end_addr = addr;
+			u32 addr = cast<u32>(numeric);
+			u32 end_addr = addr;
 			String tmp = "";
-			tmp.add("*(").add(String::getHexStr(addr, true, 2));
+			tmp.add("*(").add(String::getHexStr(addr, true, 4));
 			if (type != TYPE_BYTE)
 			{
 				end_addr = addr + type - 1;
 				if (end_addr < addr)
 					end_addr = addr;
 				else
-					tmp.add("-").add(String::getHexStr(end_addr, true, 2));
+					tmp.add("-").add(String::getHexStr(end_addr, true, 4));
 			}
 			tmp.add(")");
 			ostd::RegexRichString rgx(tmp);
@@ -1323,7 +1333,7 @@ namespace dragon
 			out.fg(ostd::ConsoleColors::Gray).p("[");
 			for (u32 a = addr; a <= end_addr; a++)
 			{
-				u8 value = DragonRuntime::memMap.peek8(cast<u16>(a));
+				u8 value = DragonRuntime::memMap.peek8(cast<u32>(a));
 				out.fg(ostd::ConsoleColors::BrightRed).p(String::getHexStr(value, true, 1));
 				if (a < end_addr)
 					out.p(" ");
@@ -1333,8 +1343,8 @@ namespace dragon
 		}
 		else if (command.startsWith("$"))
 		{
-			u16 size = 0;
-			u16 addr = Utils::findSymbol(m_data.data, command, &size);
+			u32 size = 0;
+			u32 addr = Utils::findSymbol(m_data.data, command, &size);
 			if (addr == 0)
 				addr = Utils::findSymbol(m_data.labels, command, &size);
 			if (addr == 0)
@@ -1344,9 +1354,9 @@ namespace dragon
 				if (size == 0)
 					size = (type == TYPE_STRING ? 1 : type);
 				String tmp = "";
-				tmp.add("*(").add(String::getHexStr(addr, true, 2));
+				tmp.add("*(").add(String::getHexStr(addr, true, 4));
 				if (size > 1)
-					tmp.add("-").add(String::getHexStr((u16)(addr + size - 1), true, 2));
+					tmp.add("-").add(String::getHexStr((u32)(addr + size - 1), true, 4));
 				tmp.add(")");
 				ostd::RegexRichString rgx(tmp);
 				rgx.fg("\\(|\\)|-", "darkgray");
@@ -1359,7 +1369,7 @@ namespace dragon
 					out.fg(ostd::ConsoleColors::BrightRed).p("\"");
 				for (u32 a = addr; a < cast<u32>(addr) + size; a++)
 				{
-					u8 value = DragonRuntime::memMap.peek8(cast<u16>(a));
+					u8 value = DragonRuntime::memMap.peek8(cast<u32>(a));
 					if (type == TYPE_STRING)
 					{
 						out.fg(ostd::ConsoleColors::BrightRed).pChar(std::isprint(value) ? (char)value : '.');
@@ -1384,18 +1394,18 @@ namespace dragon
 	void Debugger::exec_break_command(const String& commandArgs)
 	{
 		auto& out = console();
-		u16 addr = 0;
+		u32 addr = 0;
 		bool valid = false;
 		i64 numeric = 0;
 		if (Utils::parseValue(commandArgs, numeric))
 		{
-			addr = (u16)numeric;
+			addr = (u32)numeric;
 			valid = true;
 		}
 		else if (commandArgs.startsWith("$"))
 		{
 			addr = Utils::findSymbol(m_data.labels, commandArgs);
-			if (addr == 0x0000 || addr == 0xFFFF)
+			if (addr == 0x00000000)
 				out.fg(ostd::ConsoleColors::Red).p("Invalid symbol: ").p(commandArgs).reset().nl();
 			else
 				valid = true;
@@ -1409,11 +1419,11 @@ namespace dragon
 			const bool enabled = toggleBreakPoint(addr);
 			const tBreakPoint* bp = getBreakPoint(addr);
 			if (bp != nullptr && bp->debugBreak)
-				out.fg(ostd::ConsoleColors::Yellow).p(enabled ? "debug_break enabled at address: " : "debug_break disabled at address: ").p(String::getHexStr(addr, true, 2)).reset().nl();
+				out.fg(ostd::ConsoleColors::Yellow).p(enabled ? "debug_break enabled at address: " : "debug_break disabled at address: ").p(String::getHexStr(addr, true, 4)).reset().nl();
 			else if (enabled)
-				out.fg(ostd::ConsoleColors::Yellow).p("Breakpoint set at address: ").p(String::getHexStr(addr, true, 2)).reset().nl();
+				out.fg(ostd::ConsoleColors::Yellow).p("Breakpoint set at address: ").p(String::getHexStr(addr, true, 4)).reset().nl();
 			else
-				out.fg(ostd::ConsoleColors::Yellow).p("Breakpoint removed at address: ").p(String::getHexStr(addr, true, 2)).reset().nl();
+				out.fg(ostd::ConsoleColors::Yellow).p("Breakpoint removed at address: ").p(String::getHexStr(addr, true, 4)).reset().nl();
 			notify_state_changed();
 		}
 	}
@@ -1426,8 +1436,8 @@ namespace dragon
 		for (auto& token : tokens)
 		{
 			String item = token;
-			u16 nbytes = 1;
-			u16 addr = 0;
+			u32 nbytes = 1;
+			u32 addr = 0;
 			// address[bytes]
 			if (item.contains("[") && item.endsWith("]"))
 			{
@@ -1436,7 +1446,7 @@ namespace dragon
 				item.substr(0, item.indexOf("[")).trim();
 				i64 value = 1;
 				if (Utils::parseValue(str_nbytes, value))
-					nbytes = cast<u16>(std::max<i64>(1, value));
+					nbytes = cast<u32>(std::max<i64>(1, value));
 				if (!Utils::parseAddress(*this, item, addr))
 					continue;
 			}

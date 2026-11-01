@@ -55,7 +55,7 @@ namespace dragon
 			bool max_speed = false;
 			u64 history_limit_mb = History::DefaultMemoryLimit / (1024 * 1024);
 			String force_load_file = "";
-			u16 force_load_mem_offset = 0x00;
+			u32 force_load_mem_offset = 0x00;
 			// Console commands run at the start, ';' separated (each one once the machine stopped).
 			String exec_commands = "";
 		};
@@ -63,8 +63,8 @@ namespace dragon
 		// optionally a watchpoint (the machine stops when it changes).
 		public: struct tTrackedData
 		{
-			u16 address { 0 };
-			u16 size { 1 };
+			u32 address { 0 };
+			u32 size { 1 };
 			String label { "" };
 			bool breakOnChange { false };
 		};
@@ -73,8 +73,8 @@ namespace dragon
 		public: struct tCallInfo
 		{
 			String info;
-			u16 addr { 0 };
-			u16 inst_addr { 0 };
+			u32 addr { 0 };
+			u32 inst_addr { 0 };
 			bool interrupts_disabled { false };
 			u64 position { 0 };
 			i32 depth { 0 };
@@ -83,18 +83,18 @@ namespace dragon
 		public: struct tMachineInfo
 		{
 			u64 cycle { 0 };
-			u16 instructionAddress { 0 };
+			u32 instructionAddress { 0 };
 			String opCode { "" };
-			u8 footprint[8] { 0 };
+			u8 footprint[16] { 0 };
 			u8 footprintSize { 0 };
-			u16 stackFrameSize { 0 };
+			u32 stackFrameSize { 0 };
 			bool debugBreak { false };
 			i32 interruptHandlerCount { 0 };
 			bool biosMode { false };
 			i32 subroutineCounter { 0 };
 			bool inSubroutine { false };
 			bool halted { false };
-			i16 registers[data::Registers::Last] { 0 };
+			i32 registers[data::Registers::Last] { 0 };
 			stdvec<u8> trackedValues;
 		};
 		// A breakpoint. debug_break instructions (found in the disassembly, or when the CPU
@@ -117,36 +117,36 @@ namespace dragon
 			stdvec<tTrackedData> tracked;
 			i32 labelLineLength { 40 };
 			String disassemblyDirectory { "disassembly" };
-			std::map<u16, tBreakPoint> breakpoints;
+			std::map<u32, tBreakPoint> breakpoints;
 			// Bumped whenever the tracked list changes (the views sync with it).
 			u64 trackedVersion { 0 };
 		};
 		// A stack frame, found by following the saved frame pointers from FP.
 		public: struct tStackFrame
 		{
-			u16 fp { 0 };
-			u16 frameSize { 0 };
-			u16 savedFP { 0 };
-			u16 savedIP { 0 };
-			u16 argCount { 0 };
+			u32 fp { 0 };
+			u32 frameSize { 0 };
+			u32 savedFP { 0 };
+			u32 savedIP { 0 };
+			u32 argCount { 0 };
 		};
 		public: class Utils
 		{
 			public:
 				// Innermost first.
 				static stdvec<tStackFrame> getStackFrames(void);
-				static String findSymbol(const DisassemblyList& labels, u16 address, u16* outSize = nullptr);
-				static u16 findSymbol(const DisassemblyList& labels, const String& symbol, u16* outSize = nullptr);
+				static String findSymbol(const DisassemblyList& labels, u32 address, u32* outSize = nullptr);
+				static u32 findSymbol(const DisassemblyList& labels, const String& symbol, u32* outSize = nullptr);
 				// The label at or before the address ("$label+0x4"); "" if none.
-				static String findNearestSymbol(const DisassemblyList& labels, u16 address);
+				static String findNearestSymbol(const DisassemblyList& labels, u32 address);
 				static bool isValidLabelNameChar(char c);
 				static ostd::OutputHandlerBase& printFullLine(ostd::OutputHandlerBase& out, char c, const ostd::ConsoleColors::tConsoleColor& foreground, i32 width);
 				static ostd::OutputHandlerBase& printFullLine(ostd::OutputHandlerBase& out, char c, const ostd::ConsoleColors::tConsoleColor& foreground, const ostd::ConsoleColors::tConsoleColor& background, i32 width);
 				// Name and size of the instruction at an address, decoded from memory (extension
 				// instructions included).
-				static String decodeInstruction(u16 address, u8* outSize = nullptr);
+				static String decodeInstruction(u32 address, u8* outSize = nullptr);
 				// "0x1234", "1234", "$symbol" (data or label) -> address. False if invalid.
-				static bool parseAddress(const Debugger& dbg, const String& text, u16& outAddress, u16* outSize = nullptr);
+				static bool parseAddress(const Debugger& dbg, const String& text, u32& outAddress, u32* outSize = nullptr);
 				static bool parseValue(const String& text, i64& outValue);
 		};
 		// The old TUI's screens, printed into any output handler.
@@ -161,7 +161,7 @@ namespace dragon
 				inline static constexpr i32 LabelIndent { 8 };
 				static void printDiff(ostd::OutputHandlerBase& out, const Debugger& dbg);
 				static void printTrackedAddresses(ostd::OutputHandlerBase& out, const Debugger& dbg, i32 width);
-				static void printStack(ostd::OutputHandlerBase& out, const Debugger& dbg, u16 nrows, i32 width);
+				static void printStack(ostd::OutputHandlerBase& out, const Debugger& dbg, u32 nrows, i32 width);
 				static void printStackFrames(ostd::OutputHandlerBase& out, const Debugger& dbg, i32 width);
 				static void printCallStack(ostd::OutputHandlerBase& out, const Debugger& dbg, i32 width);
 				static void printBreakpoints(ostd::OutputHandlerBase& out, const Debugger& dbg);
@@ -196,7 +196,7 @@ namespace dragon
 			void stepInto(u32 count = 1);
 			void stepOver(void);
 			void stepOut(void);
-			void runTo(u16 address);
+			void runTo(u32 address);
 			void stepBack(u32 count = 1);
 			void reverseContinue(void);
 			// Moves to a recorded history position.
@@ -223,26 +223,26 @@ namespace dragon
 			// ============================ BREAKPOINTS / DATA ============================
 			// Adds / removes a breakpoint (debug_break ones are enabled / disabled instead).
 			// Returns whether the address has an enabled breakpoint now.
-			bool toggleBreakPoint(u16 address);
+			bool toggleBreakPoint(u32 address);
 			// An enabled breakpoint at the address.
-			bool isBreakPoint(u16 address) const;
+			bool isBreakPoint(u32 address) const;
 			// Any breakpoint (also disabled) at the address; nullptr if none.
-			const tBreakPoint* getBreakPoint(u16 address) const;
-			void addBreakPoint(u16 address);
+			const tBreakPoint* getBreakPoint(u32 address) const;
+			void addBreakPoint(u32 address);
 			// debug_break breakpoints can't be removed (they're in the code): they're disabled.
-			void removeBreakPoint(u16 address);
-			void setBreakPointEnabled(u16 address, bool enabled);
+			void removeBreakPoint(u32 address);
+			void setBreakPointEnabled(u32 address, bool enabled);
 			// Removes the breakpoints and disables the debug_break ones.
 			void clearBreakPoints(void);
-			void track(u16 address, u16 size, const String& label, bool breakOnChange = false);
-			bool untrack(u16 address);
+			void track(u32 address, u32 size, const String& label, bool breakOnChange = false);
+			bool untrack(u32 address);
 			void untrackAll(void);
 			// Makes a tracked item a watch (or not).
-			bool setWatch(u16 address, bool breakOnChange);
+			bool setWatch(u32 address, bool breakOnChange);
 			// Writes a register (an edit, recorded in the history).
 			bool setRegister(const String& name, i64 value);
 			// Writes memory (an edit, recorded in the history).
-			bool writeMemory(u16 address, u64 value, u8 size);
+			bool writeMemory(u32 address, u64 value, u8 size);
 
 			// ================================ MACHINE INFO ================================
 			inline const tMachineInfo& getPreviousInfo(void) const { return m_previousInfo; }
@@ -263,14 +263,14 @@ namespace dragon
 			using Clock = std::chrono::steady_clock;
 
 			bool step_machine(void);
-			bool check_stop_conditions(u16 previousIP);
+			bool check_stop_conditions(u32 previousIP);
 			// An enabled breakpoint the machine should stop at (a debug_break breakpoint only
 			// while the instruction is really there: other programs can use the address).
-			bool should_break_at(u16 ip) const;
+			bool should_break_at(u32 ip) const;
 			void register_debug_breaks(void);
 			void tracked_changed(void);
 			void stopped(const String& reason);
-			void track_call(u16 ip);
+			void track_call(u32 ip);
 			void after_navigation(void);
 			void capture_info(tMachineInfo& info) const;
 			void setup_history(void);
@@ -279,7 +279,7 @@ namespace dragon
 			void exec_break_command(const String& args);
 			void process_errors(void);
 			// Offset in the history state of the byte the CPU sees at a bus address; -1 if none.
-			i64 bus_state_offset(u16 address) const;
+			i64 bus_state_offset(u32 address) const;
 			void notify_state_changed(void);
 			void show_view(eView view, i64 argument = -1);
 
@@ -297,7 +297,7 @@ namespace dragon
 			u64 m_cycle { 0 };
 			i32 m_callDepth { 0 };
 			i32 m_targetDepth { 0 };
-			u16 m_runToAddress { 0 };
+			u32 m_runToAddress { 0 };
 			u32 m_stepsLeft { 0 };
 
 			f64 m_clockRate { 2000.0 };

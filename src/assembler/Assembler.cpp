@@ -16,6 +16,16 @@ namespace dragon
 {
 	namespace code
 	{
+		void Assembler::pushWord(i32 word)
+		{
+			// Words are 32 bits, big endian.
+			const u32 w = cast<u32>(word);
+			m_code.push_back(cast<i8>((w >> 24) & 0xFF));
+			m_code.push_back(cast<i8>((w >> 16) & 0xFF));
+			m_code.push_back(cast<i8>((w >> 8) & 0xFF));
+			m_code.push_back(cast<i8>(w & 0xFF));
+		}
+
 		ostd::ByteStream Assembler::assembleFromFile(String fileName)
 		{
 			m_rawSource = "";
@@ -29,8 +39,8 @@ namespace dragon
 			m_structDefs.clear();
 			m_fixedSize = 0;
 			m_fixedFillValue = 0x00;
-			m_loadAddress = 0x0000;
-			m_currentDataAddr = 0x0000;
+			m_loadAddress = 0x00000000;
+			m_currentDataAddr = EntryJumpSize;
 			m_dataSize = 0x0000;
 			m_lines = IncludePreprocessor::loadEntryFile(fileName);
 			if (m_lines.size() == 0)
@@ -59,7 +69,7 @@ namespace dragon
 				std::cout << "Warning: Fixed size specified but exceeded: (" << (int)m_code.size() << "/" << (int)m_fixedSize << " bytes)\n";
 			else if (m_fixedSize > 0 && m_code.size() < m_fixedSize)
 			{
-				for (i16 i = m_code.size(); i < m_fixedSize; i++)
+				for (u32 i = cast<u32>(m_code.size()); i < m_fixedSize; i++)
 					m_code.push_back(m_fixedFillValue);
 			}
 			insertHeader();
@@ -131,7 +141,7 @@ namespace dragon
 					out.fg(ostd::ConsoleColors::Yellow).p("Symbols:").nl();
 				for (auto& symbol : m_symbolTable)
 				{
-					out.fg(ostd::ConsoleColors::Red).p(String::getHexStr(symbol.second.address, true, 2));
+					out.fg(ostd::ConsoleColors::Red).p(String::getHexStr(symbol.second.address, true, 4));
 					out.fg(ostd::ConsoleColors::Magenta).p("  ").p(symbol.first);
 					out.fg(ostd::ConsoleColors::Blue).nl().p("  ");
 					for (auto& b : symbol.second.bytes)
@@ -146,7 +156,7 @@ namespace dragon
 				for (auto& label : m_labelTable)
 				{
 					out.fg(ostd::ConsoleColors::Magenta).p(label.first.new_fixedLength(symbol_len));
-					out.fg(ostd::ConsoleColors::Red).p(String::getHexStr(label.second.address, true, 2)).nl();
+					out.fg(ostd::ConsoleColors::Red).p(String::getHexStr(label.second.address, true, 4)).nl();
 				}
 				if (m_labelTable.size() > 0)
 					out.nl();
@@ -169,8 +179,8 @@ namespace dragon
 				out.fg(ostd::ConsoleColors::Cyan).p(String("Program Size:").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p((int)m_programSize).p(" bytes").nl();
 				out.fg(ostd::ConsoleColors::Cyan).p(String("Data Size:   ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p((int)m_dataSize).p(" bytes").nl();
 				out.fg(ostd::ConsoleColors::Cyan).p(String("Fixed Fill:  ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p(String::getHexStr(m_fixedFillValue, true, 1)).nl();
-				out.fg(ostd::ConsoleColors::Cyan).p(String("Load Address:").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p(String::getHexStr(m_loadAddress, true, 2)).nl();
-				out.fg(ostd::ConsoleColors::Cyan).p(String("Entry Point: ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p(String::getHexStr(m_dataSize + m_loadAddress + 3, true, 2)).nl();
+				out.fg(ostd::ConsoleColors::Cyan).p(String("Load Address:").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p(String::getHexStr(m_loadAddress, true, 4)).nl();
+				out.fg(ostd::ConsoleColors::Cyan).p(String("Entry Point: ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p(String::getHexStr(m_dataSize + m_loadAddress + EntryJumpSize, true, 4)).nl();
 			}
 
 			out.nl();
@@ -838,7 +848,7 @@ namespace dragon
 						std::cout << "Invalid .fixed fill value: " << lineEdit << "\n";
 						return;
 					}
-					m_fixedSize = fixedSizeEdit.toInt();
+					m_fixedSize = cast<u32>(fixedSizeEdit.toInt());
 					continue;
 				}
 				else if (lineEdit.startsWith(".entry "))
@@ -881,8 +891,8 @@ namespace dragon
 						std::cout << "Invalid .load value: " << lineEdit << "\n";
 						return;
 					}
-					m_loadAddress = lineEdit.toInt();
-					m_currentDataAddr = m_loadAddress + 3;
+					m_loadAddress = cast<u32>(lineEdit.toInt()) & data::AddressMask;
+					m_currentDataAddr = m_loadAddress + EntryJumpSize;
 					continue;
 				}
 				else if (lineEdit.startsWith("."))
@@ -964,7 +974,7 @@ namespace dragon
 
 				if (array)
 				{
-					u16 array_size = lineEdit.toInt();
+					u32 array_size = cast<u32>(lineEdit.toInt());
 					if (array_size == 0)
 					{
 						std::cout << "Invalid array data entry size (must be greater than 0): " << line << "\n";
@@ -1065,17 +1075,17 @@ namespace dragon
 				u32 spaceCount = lineEdit.count(" ");
 				if (lineEdit.endsWith(":") && commaCount == 0 && spaceCount == 0) //Labels
 				{
-					// _disassembly_line.addr = m_dataSize + m_loadAddress + m_code.size() + 3;
+					// _disassembly_line.addr = m_dataSize + m_loadAddress + m_code.size() + EntryJumpSize;
 					// _disassembly_line.code = lineEdit;
 					// m_disassembly.push_back(_disassembly_line);
 					lineEdit = lineEdit.substr(0, lineEdit.len() - 1);
 					lineEdit.trim();
-					m_labelTable["$" + lineEdit].address = m_dataSize + m_loadAddress + m_code.size() + 3;
+					m_labelTable["$" + lineEdit].address = m_dataSize + m_loadAddress + m_code.size() + EntryJumpSize;
 					continue;
 				}
 				else if (lineEdit.startsWith("%low ")) //Low level code injection
 				{
-					_disassembly_line.addr = m_dataSize + m_loadAddress + m_code.size() + 3;
+					_disassembly_line.addr = m_dataSize + m_loadAddress + m_code.size() + EntryJumpSize;
 					lineEdit.substr(4).trim();
 					auto tok = lineEdit.tokenize();
 					for (auto& token : tok)
@@ -1094,7 +1104,7 @@ namespace dragon
 				}
 				else if (commaCount == 0 && spaceCount <= 0) //0 Operands
 				{
-					_disassembly_line.addr = m_dataSize + m_loadAddress + m_code.size() + 3;
+					_disassembly_line.addr = m_dataSize + m_loadAddress + m_code.size() + EntryJumpSize;
 					String _tmp_edit(lineEdit);
 					if (_tmp_edit.toLower().trim().startsWith("debug_"))
 						parseDebugOperands(lineEdit);
@@ -1106,7 +1116,7 @@ namespace dragon
 				}
 				else if (commaCount == 0) //1 Operands
 				{
-					_disassembly_line.addr = m_dataSize + m_loadAddress + m_code.size() + 3;
+					_disassembly_line.addr = m_dataSize + m_loadAddress + m_code.size() + EntryJumpSize;
 					lineEdit = replaceSymbols(lineEdit);
 					String _tmp_edit(lineEdit);
 					if (_tmp_edit.toLower().trim().startsWith("debug_"))
@@ -1119,7 +1129,7 @@ namespace dragon
 				}
 				else if (commaCount == 1) //2 Operands
 				{
-					_disassembly_line.addr = m_dataSize + m_loadAddress + m_code.size() + 3;
+					_disassembly_line.addr = m_dataSize + m_loadAddress + m_code.size() + EntryJumpSize;
 					lineEdit = replaceSymbols(lineEdit);
 					String _tmp_edit(lineEdit);
 					if (_tmp_edit.toLower().trim().startsWith("debug_"))
@@ -1132,7 +1142,7 @@ namespace dragon
 				}
 				else if (commaCount == 2) // 3 Operands
 				{
-					_disassembly_line.addr = m_dataSize + m_loadAddress + m_code.size() + 3;
+					_disassembly_line.addr = m_dataSize + m_loadAddress + m_code.size() + EntryJumpSize;
 					lineEdit = replaceSymbols(lineEdit);
 					String _tmp_edit(lineEdit);
 					if (_tmp_edit.toLower().trim().startsWith("debug_"))
@@ -1179,8 +1189,8 @@ namespace dragon
 				instEdit.trim().toLower();
 				String opEdit(lineEdit.new_substr(lineEdit.indexOf(" ") + 1));
 				opEdit.trim();
-				i16 word1 = 0x0000;
-				i16 word2 = 0x0000;
+				i32 word1 = 0x00000000;
+				i32 word2 = 0x00000000;
 				auto st = opEdit.tokenize(",");
 				eOperandType opType1 = parseOperand(st.next(), word1);
 				if (opType1 == eOperandType::Immediate)
@@ -1240,7 +1250,7 @@ namespace dragon
 			instEdit.trim().toLower();
 			String opEdit(lineEdit.new_substr(lineEdit.indexOf(" ") + 1));
 			opEdit.trim();
-			i16 word = 0x0000;
+			i32 word = 0x00000000;
 			if (STDVEC_CONTAINS(cpuExtensions, "extalu"))
 			{
 				if (instEdit == "notip")
@@ -1314,8 +1324,7 @@ namespace dragon
 					//     std::cout << String::getHexStr(word, true, 2) << "\n";
 					m_code[m_code.size() - 1] = data::OpCodes::PushImm;
 					// m_code.push_back(data::OpCodes::PushImm);
-					m_code.push_back((u8)((word & 0xFF00) >> 8));
-					m_code.push_back((u8)(word & 0x00FF));
+					pushWord(word);
 				}
 				else if (opType == eOperandType::Register)
 				{
@@ -1350,8 +1359,7 @@ namespace dragon
 				if (opType == eOperandType::Immediate || opType == eOperandType::Label)
 				{
 					m_code[m_code.size() - 1] = data::OpCodes::CallImm;
-					m_code.push_back((u8)((word & 0xFF00) >> 8));
-					m_code.push_back((u8)(word & 0x00FF));
+					pushWord(word);
 				}
 				else if (opType == eOperandType::Register)
 				{
@@ -1414,8 +1422,7 @@ namespace dragon
 					exit(0);
 					return;
 				}
-				m_code.push_back((u8)((word & 0xFF00) >> 8));
-				m_code.push_back((u8)(word & 0x00FF));
+				pushWord(word);
 				return;
 			}
 			else if (instEdit == "int")
@@ -1484,7 +1491,7 @@ namespace dragon
 			instEdit.trim().toLower();
 			String opEdit(lineEdit.new_substr(lineEdit.indexOf(" ") + 1));
 			opEdit.trim();
-			i16 word = 0x0000;
+			i32 word = 0x00000000;
 			auto st = opEdit.tokenize(",");
 			if (STDVEC_CONTAINS(cpuExtensions, "extalu"))
 			{
@@ -1516,8 +1523,7 @@ namespace dragon
 						else if (instEdit == "orip") m_code[m_code.size() - 2] = hw::cpuext::ExtAlu::OpCodes::orip_imm_in_reg;
 						else if (instEdit == "andip") m_code[m_code.size() - 2] = hw::cpuext::ExtAlu::OpCodes::andip_imm_in_reg;
 						else if (instEdit == "xorip") m_code[m_code.size() - 2] = hw::cpuext::ExtAlu::OpCodes::xorip_imm_in_reg;
-						m_code.push_back((u8)((word & 0xFF00) >> 8));
-						m_code.push_back((u8)(word & 0x00FF));
+						pushWord(word);
 					}
 					else if (opType == eOperandType::Register)
 					{
@@ -1554,8 +1560,8 @@ namespace dragon
 			if (instEdit == "mov")
 			{
 				m_code.push_back(0x00);
-				i16 word1 = 0x0000;
-				i16 word2 = 0x0000;
+				i32 word1 = 0x00000000;
+				i32 word2 = 0x00000000;
 				eOperandType opType1 = parseOperand(st.next(), word1);
 				if (opType1 == eOperandType::Register)
 				{
@@ -1566,8 +1572,7 @@ namespace dragon
 						case eOperandType::Immediate:
 						case eOperandType::Label:
 							m_code[m_code.size() - 2] = data::OpCodes::MovImmReg;
-							m_code.push_back((u8)((word2 & 0xFF00) >> 8));
-							m_code.push_back((u8)(word2 & 0x00FF));
+							pushWord(word2);
 						break;
 						case eOperandType::Register:
 							m_code[m_code.size() - 2] = data::OpCodes::MovRegReg;
@@ -1575,8 +1580,7 @@ namespace dragon
 						break;
 						case eOperandType::DerefMemory:
 							m_code[m_code.size() - 2] = data::OpCodes::MovMemReg;
-							m_code.push_back((u8)((word2 & 0xFF00) >> 8));
-							m_code.push_back((u8)(word2 & 0x00FF));
+							pushWord(word2);
 						break;
 						case eOperandType::DerefRegister:
 							m_code[m_code.size() - 2] = data::OpCodes::MovDerefRegReg;
@@ -1591,24 +1595,22 @@ namespace dragon
 				}
 				else if (opType1 == eOperandType::DerefMemory)
 				{
-					m_code.push_back((u8)((word1 & 0xFF00) >> 8));
-					m_code.push_back((u8)(word1 & 0x00FF));
+					pushWord(word1);
 					eOperandType opType2 = parseOperand(st.next(), word2);
 					switch (opType2)
 					{
 						case eOperandType::Register:
-							m_code[m_code.size() - 3] = data::OpCodes::MovRegMem;
+							m_code[m_code.size() - (1 + data::WordSize)] = data::OpCodes::MovRegMem;
 							m_code.push_back((u8)word2);
 						break;
 						case eOperandType::DerefRegister:
-							m_code[m_code.size() - 3] = data::OpCodes::MovDerefRegMem;
+							m_code[m_code.size() - (1 + data::WordSize)] = data::OpCodes::MovDerefRegMem;
 							m_code.push_back((u8)word2);
 						break;
 						case eOperandType::Immediate:
 						case eOperandType::Label:
-							m_code[m_code.size() - 3] = data::OpCodes::MovImmMem;
-							m_code.push_back((u8)((word2 & 0xFF00) >> 8));
-							m_code.push_back((u8)(word2 & 0x00FF));
+							m_code[m_code.size() - (1 + data::WordSize)] = data::OpCodes::MovImmMem;
+							pushWord(word2);
 						break;
 						default:
 							std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
@@ -1628,14 +1630,12 @@ namespace dragon
 						break;
 						case eOperandType::DerefMemory:
 							m_code[m_code.size() - 2] = data::OpCodes::MovMemDerefReg;
-							m_code.push_back((u8)((word2 & 0xFF00) >> 8));
-							m_code.push_back((u8)(word2 & 0x00FF));
+							pushWord(word2);
 						break;
 						case eOperandType::Immediate:
 						case eOperandType::Label:
 							m_code[m_code.size() - 2] = data::OpCodes::MovImmDerefReg;
-							m_code.push_back((u8)((word2 & 0xFF00) >> 8));
-							m_code.push_back((u8)(word2 & 0x00FF));
+							pushWord(word2);
 						break;
 						case eOperandType::DerefRegister:
 							m_code[m_code.size() - 2] = data::OpCodes::MovDerefRegDerefReg;
@@ -1653,26 +1653,25 @@ namespace dragon
 			else if (instEdit == "movb")
 			{
 				m_code.push_back(0x00);
-				i16 word1 = 0x0000;
-				i16 word2 = 0x0000;
+				i32 word1 = 0x00000000;
+				i32 word2 = 0x00000000;
 				eOperandType opType1 = parseOperand(st.next(), word1);
 				if (opType1 == eOperandType::DerefMemory)
 				{
-					m_code.push_back((u8)((word1 & 0xFF00) >> 8));
-					m_code.push_back((u8)(word1 & 0x00FF));
+					pushWord(word1);
 					eOperandType opType2 = parseOperand(st.next(), word2);
 					switch (opType2)
 					{
 						case eOperandType::Immediate:
-							m_code[m_code.size() - 3] = data::OpCodes::MovByteImmMem;
+							m_code[m_code.size() - (1 + data::WordSize)] = data::OpCodes::MovByteImmMem;
 							m_code.push_back((u8)word2);
 						break;
 						case eOperandType::DerefRegister:
-							m_code[m_code.size() - 3] = data::OpCodes::MovByteDerefRegMem;
+							m_code[m_code.size() - (1 + data::WordSize)] = data::OpCodes::MovByteDerefRegMem;
 							m_code.push_back((u8)word2);
 						break;
 						case eOperandType::Register:
-							m_code[m_code.size() - 3] = data::OpCodes::MovByteRegMem;
+							m_code[m_code.size() - (1 + data::WordSize)] = data::OpCodes::MovByteRegMem;
 							m_code.push_back((u8)word2);
 						break;
 						default:
@@ -1693,8 +1692,7 @@ namespace dragon
 						break;
 						case eOperandType::DerefMemory:
 							m_code[m_code.size() - 2] = data::OpCodes::MovByteMemDerefReg;
-							m_code.push_back((u8)((word2 & 0xFF00) >> 8));
-							m_code.push_back((u8)(word2 & 0x00FF));
+							pushWord(word2);
 						break;
 						case eOperandType::Immediate:
 							m_code[m_code.size() - 2] = data::OpCodes::MovByteImmDerefReg;
@@ -1723,8 +1721,7 @@ namespace dragon
 						break;
 						case eOperandType::DerefMemory:
 							m_code[m_code.size() - 2] = data::OpCodes::MovByteMemReg;
-							m_code.push_back((u8)((word2 & 0xFF00) >> 8));
-							m_code.push_back((u8)(word2 & 0x00FF));
+							pushWord(word2);
 						break;
 						case eOperandType::DerefRegister:
 							m_code[m_code.size() - 2] = data::OpCodes::MovByteDerefRegReg;
@@ -1758,8 +1755,7 @@ namespace dragon
 					else if (instEdit == "sub") m_code[m_code.size() - 2] = data::OpCodes::SubImmReg;
 					else if (instEdit == "mul") m_code[m_code.size() - 2] = data::OpCodes::MulImmReg;
 					else if (instEdit == "div") m_code[m_code.size() - 2] = data::OpCodes::DivImmReg;
-					m_code.push_back((u8)((word & 0xFF00) >> 8));
-					m_code.push_back((u8)(word & 0x00FF));
+					pushWord(word);
 				}
 				else if (opType == eOperandType::Register)
 				{
@@ -1795,8 +1791,7 @@ namespace dragon
 					else if (instEdit == "and") m_code.push_back(data::OpCodes::AndRegImm);
 					else if (instEdit == "or") m_code.push_back(data::OpCodes::OrRegImm);
 					else if (instEdit == "xor") m_code.push_back(data::OpCodes::XorRegImm);
-					m_code.push_back((u8)((word & 0xFF00) >> 8));
-					m_code.push_back((u8)(word & 0x00FF));
+					pushWord(word);
 					m_code.push_back((u8)regAddr);
 				}
 				else if (opType == eOperandType::Register)
@@ -1828,29 +1823,27 @@ namespace dragon
 					exit(0);
 					return;
 				}
-				m_code.push_back((u8)((word & 0xFF00) >> 8));
-				m_code.push_back((u8)(word & 0x00FF));
+				pushWord(word);
 				opType = parseOperand(st.next(), word);
 
 				if (opType == eOperandType::Immediate)
 				{
-					if (instEdit == "jeq") m_code[m_code.size() - 3] = data::OpCodes::JmpEqImm;
-					else if (instEdit == "jne") m_code[m_code.size() - 3] = data::OpCodes::JmpNotEqImm;
-					else if (instEdit == "jgr") m_code[m_code.size() - 3] = data::OpCodes::JmpGrImm;
-					else if (instEdit == "jls") m_code[m_code.size() - 3] = data::OpCodes::JmpLessImm;
-					else if (instEdit == "jge") m_code[m_code.size() - 3] = data::OpCodes::JmpGeImm;
-					else if (instEdit == "jle") m_code[m_code.size() - 3] = data::OpCodes::JmpLeImm;
-					m_code.push_back((u8)((word & 0xFF00) >> 8));
-					m_code.push_back((u8)(word & 0x00FF));
+					if (instEdit == "jeq") m_code[m_code.size() - (1 + data::WordSize)] = data::OpCodes::JmpEqImm;
+					else if (instEdit == "jne") m_code[m_code.size() - (1 + data::WordSize)] = data::OpCodes::JmpNotEqImm;
+					else if (instEdit == "jgr") m_code[m_code.size() - (1 + data::WordSize)] = data::OpCodes::JmpGrImm;
+					else if (instEdit == "jls") m_code[m_code.size() - (1 + data::WordSize)] = data::OpCodes::JmpLessImm;
+					else if (instEdit == "jge") m_code[m_code.size() - (1 + data::WordSize)] = data::OpCodes::JmpGeImm;
+					else if (instEdit == "jle") m_code[m_code.size() - (1 + data::WordSize)] = data::OpCodes::JmpLeImm;
+					pushWord(word);
 				}
 				else if (opType == eOperandType::Register)
 				{
-					if (instEdit == "jeq") m_code[m_code.size() - 3] = data::OpCodes::JmpEqReg;
-					else if (instEdit == "jne") m_code[m_code.size() - 3] = data::OpCodes::JmpNotEqReg;
-					else if (instEdit == "jgr") m_code[m_code.size() - 3] = data::OpCodes::JmpGrReg;
-					else if (instEdit == "jls") m_code[m_code.size() - 3] = data::OpCodes::JmpLessReg;
-					else if (instEdit == "jge") m_code[m_code.size() - 3] = data::OpCodes::JmpGeReg;
-					else if (instEdit == "jle") m_code[m_code.size() - 3] = data::OpCodes::JmpLeReg;
+					if (instEdit == "jeq") m_code[m_code.size() - (1 + data::WordSize)] = data::OpCodes::JmpEqReg;
+					else if (instEdit == "jne") m_code[m_code.size() - (1 + data::WordSize)] = data::OpCodes::JmpNotEqReg;
+					else if (instEdit == "jgr") m_code[m_code.size() - (1 + data::WordSize)] = data::OpCodes::JmpGrReg;
+					else if (instEdit == "jls") m_code[m_code.size() - (1 + data::WordSize)] = data::OpCodes::JmpLessReg;
+					else if (instEdit == "jge") m_code[m_code.size() - (1 + data::WordSize)] = data::OpCodes::JmpGeReg;
+					else if (instEdit == "jle") m_code[m_code.size() - (1 + data::WordSize)] = data::OpCodes::JmpLeReg;
 					m_code.push_back((u8)word);
 				}
 				else
@@ -1878,9 +1871,9 @@ namespace dragon
 			if (STDVEC_CONTAINS(cpuExtensions, "extmov"))
 			{
 				u16 code_offset = 1;
-				i16 word1 = 0x0000;
-				i16 word2 = 0x0000;
-				i16 word3 = 0x0000;
+				i32 word1 = 0x00000000;
+				i32 word2 = 0x00000000;
+				i32 word3 = 0x00000000;
 				auto st = opEdit.tokenize(",");
 				if (instEdit == "omov")
 				{
@@ -1910,9 +1903,8 @@ namespace dragon
 						{
 							case eOperandType::Immediate:
 							case eOperandType::Label:
-								m_code.push_back((u8)((word2 & 0xFF00) >> 8));
-								m_code.push_back((u8)(word2 & 0x00FF));
-								code_offset += 2;
+								pushWord(word2);
+								code_offset += data::WordSize;
 							break;
 							case eOperandType::DerefRegister:
 								m_code.push_back((u8)word2);
@@ -1938,9 +1930,8 @@ namespace dragon
 										std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
 										exit(0);
 									}
-									m_code.push_back((u8)((word3 & 0xFF00) >> 8));
-									m_code.push_back((u8)(word3 & 0x00FF));
-									code_offset += 2;
+									pushWord(word3);
+									code_offset += data::WordSize;
 								}
 								else
 								{
@@ -1978,9 +1969,8 @@ namespace dragon
 					}
 					else if (opType1 == eOperandType::DerefMemory)
 					{
-						m_code.push_back((u8)((word1 & 0xFF00) >> 8));
-						m_code.push_back((u8)(word1 & 0x00FF));
-						code_offset += 2;
+						pushWord(word1);
+						code_offset += data::WordSize;
 						eOperandType opType2 = parseOperand(st.next(), word2);
 						String op3 = st.next();
 						bool word_offset = false;
@@ -1994,9 +1984,8 @@ namespace dragon
 						{
 							case eOperandType::Immediate:
 							case eOperandType::Label:
-								m_code.push_back((u8)((word2 & 0xFF00) >> 8));
-								m_code.push_back((u8)(word2 & 0x00FF));
-								code_offset += 2;
+								pushWord(word2);
+								code_offset += data::WordSize;
 							break;
 							default:
 								std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
@@ -2010,9 +1999,8 @@ namespace dragon
 								if (word_offset)
 								{
 									m_code[m_code.size() - code_offset] = hw::cpuext::ExtMov::OpCodes::wimm_in_mem_immoffw;
-									m_code.push_back((u8)((word3 & 0xFF00) >> 8));
-									m_code.push_back((u8)(word3 & 0x00FF));
-									code_offset += 2;
+									pushWord(word3);
+									code_offset += data::WordSize;
 								}
 								else
 								{
@@ -2094,9 +2082,8 @@ namespace dragon
 										std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
 										exit(0);
 									}
-									m_code.push_back((u8)((word3 & 0xFF00) >> 8));
-									m_code.push_back((u8)(word3 & 0x00FF));
-									code_offset += 2;
+									pushWord(word3);
+									code_offset += data::WordSize;
 								}
 								else
 								{
@@ -2134,9 +2121,8 @@ namespace dragon
 					}
 					else if (opType1 == eOperandType::DerefMemory)
 					{
-						m_code.push_back((u8)((word1 & 0xFF00) >> 8));
-						m_code.push_back((u8)(word1 & 0x00FF));
-						code_offset += 2;
+						pushWord(word1);
+						code_offset += data::WordSize;
 						eOperandType opType2 = parseOperand(st.next(), word2);
 						String op3 = st.next();
 						bool word_offset = false;
@@ -2165,9 +2151,8 @@ namespace dragon
 								if (word_offset)
 								{
 									m_code[m_code.size() - code_offset] = hw::cpuext::ExtMov::OpCodes::bimm_in_mem_immoffw;
-									m_code.push_back((u8)((word3 & 0xFF00) >> 8));
-									m_code.push_back((u8)(word3 & 0x00FF));
-									code_offset += 2;
+									pushWord(word3);
+									code_offset += data::WordSize;
 								}
 								else
 								{
@@ -2221,9 +2206,8 @@ namespace dragon
 						switch (opType2)
 						{
 							case eOperandType::DerefMemory:
-								m_code.push_back((u8)((word2 & 0xFF00) >> 8));
-								m_code.push_back((u8)(word2 & 0x00FF));
-								code_offset += 2;
+								pushWord(word2);
+								code_offset += data::WordSize;
 							break;
 							case eOperandType::DerefRegister:
 								m_code.push_back((u8)word2);
@@ -2249,9 +2233,8 @@ namespace dragon
 										std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
 										exit(0);
 									}
-									m_code.push_back((u8)((word3 & 0xFF00) >> 8));
-									m_code.push_back((u8)(word3 & 0x00FF));
-									code_offset += 2;
+									pushWord(word3);
+									code_offset += data::WordSize;
 								}
 								else
 								{
@@ -2318,9 +2301,8 @@ namespace dragon
 								if (word_offset)
 								{
 									m_code[m_code.size() - code_offset] = hw::cpuext::ExtMov::OpCodes::wdreg_immoffw_in_dreg;
-									m_code.push_back((u8)((word3 & 0xFF00) >> 8));
-									m_code.push_back((u8)(word3 & 0x00FF));
-									code_offset += 2;
+									pushWord(word3);
+									code_offset += data::WordSize;
 								}
 								else
 								{
@@ -2374,9 +2356,8 @@ namespace dragon
 						switch (opType2)
 						{
 							case eOperandType::DerefMemory:
-								m_code.push_back((u8)((word2 & 0xFF00) >> 8));
-								m_code.push_back((u8)(word2 & 0x00FF));
-								code_offset += 2;
+								pushWord(word2);
+								code_offset += data::WordSize;
 							break;
 							case eOperandType::DerefRegister:
 								m_code.push_back((u8)word2);
@@ -2402,9 +2383,8 @@ namespace dragon
 										std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
 										exit(0);
 									}
-									m_code.push_back((u8)((word3 & 0xFF00) >> 8));
-									m_code.push_back((u8)(word3 & 0x00FF));
-									code_offset += 2;
+									pushWord(word3);
+									code_offset += data::WordSize;
 								}
 								else
 								{
@@ -2471,9 +2451,8 @@ namespace dragon
 								if (word_offset)
 								{
 									m_code[m_code.size() - code_offset] = hw::cpuext::ExtMov::OpCodes::bdreg_immoffw_in_dreg;
-									m_code.push_back((u8)((word3 & 0xFF00) >> 8));
-									m_code.push_back((u8)(word3 & 0x00FF));
-									code_offset += 2;
+									pushWord(word3);
+									code_offset += data::WordSize;
 								}
 								else
 								{
@@ -2512,7 +2491,7 @@ namespace dragon
 
 		void Assembler::combineDataAndCode(void)
 		{
-			u16 entryAddr = m_dataSize + m_loadAddress + 3;
+			u32 entryAddr = m_dataSize + m_loadAddress + EntryJumpSize;
 			if (m_entry_lbl != "")
 			{
 				if (m_labelTable.count("$" + m_entry_lbl) == 0)
@@ -2527,11 +2506,11 @@ namespace dragon
 			std::vector<tSymbol> symbols;
 			ostd::ByteStream newCode;
 			newCode.push_back(data::OpCodes::Jmp);
-			newCode.push_back((u8)((entryAddr & 0xFF00) >> 8));
-			newCode.push_back((u8)(entryAddr & 0x00FF));
+			for (i32 shift = 24; shift >= 0; shift -= 8)
+				newCode.push_back(cast<i8>((entryAddr >> shift) & 0xFF));
 			if (m_dataSize > 0)
-				m_disassembly.insert(m_disassembly.begin(), { (u16)(m_loadAddress + 3), "[----------DATA_SECTION----------]" });
-			m_disassembly.insert(m_disassembly.begin(), { m_loadAddress, String("jmp ").add(String::getHexStr(entryAddr, true, 2)) });
+				m_disassembly.insert(m_disassembly.begin(), { m_loadAddress + EntryJumpSize, "[----------DATA_SECTION----------]" });
+			m_disassembly.insert(m_disassembly.begin(), { m_loadAddress, String("jmp ").add(String::getHexStr(entryAddr, true, 4)) });
 			for (auto& d : m_symbolTable)
 			{
 				symbols.push_back(d.second);
@@ -2550,7 +2529,7 @@ namespace dragon
 			m_disassembly.push_back({ 0xFFFFFF00, "{ DATA }" });
 			for (auto& d : m_symbolTable)
 			{
-				m_disassembly.push_back({ d.second.address, d.first, (u16)d.second.bytes.size() });
+				m_disassembly.push_back({ d.second.address, d.first, cast<u16>(std::min<size_t>(d.second.bytes.size(), 0xFFFF)) });
 			}
 			m_disassembly.push_back({ 0xFFFFFF01, "{ LABELS }" });
 			for (auto& l : m_labelTable)
@@ -2571,7 +2550,7 @@ namespace dragon
 				// std::cout << "SYMBOL: " << symbol.first << "\n";
 				// std::cout << "LINE: " << lineEdit << "\n";
 				// std::cout << "REGEX: " << regex << "\n";
-				lineEdit.regexReplace(regex, String::getHexStr(symbol.second.address, true, 2), false);
+				lineEdit.regexReplace(regex, String::getHexStr(symbol.second.address, true, 4), false);
 				// std::cout << "NEW_LINE: " << lineEdit << "\n\n";
 			}
 			return lineEdit;
@@ -2583,13 +2562,13 @@ namespace dragon
 			{
 				for (auto& addr : label.second.references)
 				{
-					m_code[addr] = (u8)((label.second.address & 0xFF00) >> 8);
-					m_code[addr + 1] = (u8)(label.second.address & 0x00FF);
+					for (u32 i = 0; i < data::WordSize; i++)
+						m_code[addr + i] = cast<i8>((label.second.address >> (8 * (data::WordSize - 1 - i))) & 0xFF);
 				}
 			}
 		}
 
-		Assembler::eOperandType Assembler::parseOperand(String op, i16& outOp)
+		Assembler::eOperandType Assembler::parseOperand(String op, i32& outOp)
 		{
 			String opEdit(op);
 			bool derefReg = false;
@@ -2602,7 +2581,7 @@ namespace dragon
 			i8 reg = parseRegister(opEdit);
 			if (reg != data::Registers::Last)
 			{
-				outOp = (i16)reg;
+				outOp = (i32)reg;
 				if (derefReg)
 					return eOperandType::DerefRegister;
 				return eOperandType::Register;
@@ -2622,7 +2601,7 @@ namespace dragon
 					std::cout << "Invalid Register: " << opEdit << "\n";
 					return eOperandType::Error;
 				}
-				outOp = (i16)_reg;
+				outOp = (i32)_reg;
 				if (derefReg)
 					return eOperandType::DerefRegister;
 				return eOperandType::Register;
@@ -2634,7 +2613,7 @@ namespace dragon
 			}
 			if (opEdit.isNumeric())
 			{
-				outOp = (i16)opEdit.toInt();
+				outOp = (i32)opEdit.toInt();
 				return eOperandType::Immediate;
 			}
 			if (opEdit.startsWith("$"))
@@ -2644,10 +2623,10 @@ namespace dragon
 					std::cout << "Unknown symbol: " << opEdit << "\n";
 					return eOperandType::Error;
 				}
-				u16 labelAddr = m_labelTable[opEdit].address;
+				u32 labelAddr = m_labelTable[opEdit].address;
 				if (labelAddr == 0x0000)
 					m_labelTable[opEdit].references.push_back(m_code.size());
-				outOp = (i16)labelAddr;
+				outOp = (i32)labelAddr;
 				// std::cout << "LABEL: " << opEdit << "\n";
 				// std::cout << "     : " << String::getHexStr(labelAddr, true, 2) << "\n";
 				// std::cout << "     : " << String::getHexStr(outOp, true, 2) << "\n";
@@ -2657,7 +2636,7 @@ namespace dragon
 			{
 				opEdit = opEdit.substr(1, opEdit.len() - 1);
 				opEdit.trim();
-				outOp = (i16)ostd::MathUtils::solveIntegerExpression(opEdit);
+				outOp = (i32)ostd::MathUtils::solveIntegerExpression(opEdit);
 				return eOperandType::Immediate;
 			}
 			if (opEdit.startsWith("[") && opEdit.endsWith("]"))
@@ -2668,7 +2647,7 @@ namespace dragon
 				{
 					opEdit = opEdit.substr(1, opEdit.len() - 1);
 					opEdit.trim();
-					outOp = (i16)ostd::MathUtils::solveIntegerExpression(opEdit);
+					outOp = (i32)ostd::MathUtils::solveIntegerExpression(opEdit);
 					return eOperandType::DerefMemory;
 				}
 				if (!opEdit.isNumeric())
@@ -2676,7 +2655,7 @@ namespace dragon
 					std::cout << "Invalid numeric value: " << opEdit << "\n";
 					return eOperandType::Error;
 				}
-				outOp = (i16)opEdit.toInt();
+				outOp = (i32)opEdit.toInt();
 				return eOperandType::DerefMemory;
 			}
 			return eOperandType::Error;

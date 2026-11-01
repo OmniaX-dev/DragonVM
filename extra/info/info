@@ -1,31 +1,43 @@
 #==========================================================================================================================================
+# Architecture
+#==========================================================================================================================================
+    32-bit machine: registers, words, immediates and addresses are 32 bits (4 bytes), big endian.
+    The address bus has 28 lines: addresses are masked to 0x0FFFFFFF (256 MiB address space).
+    mov / omov / movo move words (4 bytes); movb / omovb / movbo move bytes (zero-extended in registers).
+    Stack: grows down from the last word of the RAM; push / pop / call / ret move 4-byte words.
+        Stack frame (above FP): StackFrameSize, FP, IP, ACC, PP, R10..R1, ArgCount, args (4 bytes each)
+
+
+
+#==========================================================================================================================================
 # Memory Map
 #==========================================================================================================================================
-    0x0000 BIOS (4096 Bytes) (write to this section is disabled)
-    0x0FFF
+    0x00000000 BIOS (16384 Bytes) (write to this section is disabled)
+    0x00003FFF
     -------
-    0x1000 CMOS (128 Bytes) (write to this section is only allowed in BIOS Mode)
-        MemStart: (2 bytes) 0x0000
-        MemSize: (2 bytes) 0x0002
-        ClockSpeed: (2 bytes) 0x0004
-        DisplayRedrawRate: (1 bytes) 0x0006
-        ScreenWidth: (2 bytes) 0x0007
-        ScreenHeight: (2 bytes) 0x0009
-        BootDisk: 0x0010
+    0x00004000 CMOS (128 Bytes) (write to this section is only allowed in BIOS Mode)
+        MemStart: (4 bytes) 0x00
+        MemSize: (4 bytes) 0x04             (last address of the RAM)
+        ClockSpeed: (4 bytes) 0x08
+        ScreenWidth: (4 bytes) 0x0C
+        ScreenHeight: (4 bytes) 0x10
+        StackSize: (4 bytes) 0x14
+        DisplayRedrawRate: (1 byte) 0x18
+        BootDisk: (1 byte) 0x19
 
-        DiskList: (2 bytes) 0x007E
-    0x107F
+        DiskList: (4 bytes) 0x7C
+    0x0000407F
     -------
-    0x1080 INTERRUPT VECTOR (512 Bytes)
+    0x00004080 INTERRUPT VECTOR (1280 Bytes: 256 entries x 5 bytes)
         Status: 1 Byte
             0xFF: Enabled
             0x00: Disabled
-        Handler Address: 2 Byte
+        Handler Address: 4 Bytes
         ...Repeat...
-    0x127F
+    0x0000457F
     -------
-    0x1280 KEYBOARD MAPPING (224 Bytes) (write to this section is only allowed in BIOS Mode)
-        0x00: Modifiers (2 bytes)
+    0x00004580 KEYBOARD MAPPING (224 Bytes) (write to this section is only allowed in BIOS Mode)
+        0x00: Modifiers (4 bytes)
             0b00000000.00000001: Left Shift
             0b00000000.00000010: Left Ctrl
             0b00000000.00000100: Left Alt
@@ -37,43 +49,40 @@
             0b00000001.00000000: Caps Lock
             0b00000010.00000000: Num Lock
             0b00000100.00000000: Scroll Lock
-        0x02: KeyCode (2 bytes)
-    0x135F
+        0x04: KeyCode (4 bytes)
+    0x0000465F
     -------
-    0x1360 MOUSE MAPPING (32 Bytes)
-    0x137F
+    0x00004660 MOUSE MAPPING (32 Bytes)
+    0x0000467F
     -------
-    0x1380 BOOTLOADER (512 Bytes)
-    0x157F
+    0x00004680 BOOTLOADER (512 Bytes)
+    0x0000487F
     -------
-    0x1580 DISK INTERFACE (128 Bytes)
+    0x00004880 DISK INTERFACE (128 Bytes)
         Read/Write:
-            Signal: 1 Byte
+            0x00 Signal: 1 Byte
                 0x00: Start Operation
                 0x01: Cancel Current Operation
                 0xFF: Ignore
-            Mode: 1 Byte
+            0x01 Mode: 1 Byte
                 0x00: Read
                 0x01: Write
-            Disk: 1 Byte
-            Sector: 2 Bytes
-            Address: 2 Bytes
-            DataSize: 2 Bytes
-            DataAddress: 2 Byte
+            0x02 Disk: 1 Byte
+            0x04 DiskAddress: 4 Bytes
+            0x08 DataSize: 4 Bytes
+            0x0C MemoryAddress: 4 Bytes
         ReadOnly:
-            Status: 1 Byte
+            0x10 Status: 1 Byte
                 0x00: Free
                 0x01: Writing
                 0x02: Reading
-            CurrentDisk: 1 Byte
-            CurrentSector: 2 Bytes
-            CurrentAddress: 2 Bytes
-            RestDataSize: 2 Bytes
-            SourceData: 2 Bytes
-        Free: 107 Byte
-    0x15FF
+            0x11 CurrentDisk: 1 Byte
+            0x14 CurrentDiskAddress: 4 Bytes
+            0x18 RestDataSize: 4 Bytes
+            0x1C CurrentMemoryAddress: 4 Bytes
+    0x000048FF
     -------
-    0x1600 VIDEO CARD INTERFACE (256 Bytes)
+    0x00004900 VIDEO CARD INTERFACE (256 Bytes)
         0x00:  Video Mode (1 Byte)
             0x00: Text Single Color
             0x01: Text 16-color
@@ -102,26 +111,29 @@
             0xE2: Redraw Screen
         0x04: Text Single Color Character (1 Byte)
         0x05: Text Single Color Inverted colors (1 Byte)
-        0x06: (2 bytes) Text Single Color Buffered String Address
+        0x08: (4 bytes) Text Single Color Buffered String Address
         
-        0x7E: Flags (2 Bytes)
+        0x7C: Flags (4 Bytes)
             0b00000000.00000001: Double Buffering Enabled
             0b00000000.00000010: Disable Screen Redraw
         0x80: Memory Controller
-            0x80: XCoordinate (2 Bytes)
-            0x84: YCoordinate (2 Bytes)
+            0x80: XCoordinate (4 Bytes)
+            0x84: YCoordinate (4 Bytes)
             0x88: Character (1 Byte)
-            0x09: Foreground (1 Byte)
-            0x8A: Background (1 Byte)
+            0x89: Background (1 Byte)
+            0x8A: Foreground (1 Byte)
 
         (VRAM Memory Cell: Character:1, Foreground:1, Background:1, Reserved:1)
-    0x16FF
+    0x000049FF
     -------
-    0x1700 GENERIC SERIAL INTERFACE (64 Bytes)
-    0x173F
+    0x00004A00 GENERIC SERIAL INTERFACE (64 Bytes)
+    0x00004A3F
     -------
-    0x1740 RAM (59583 Bytes)
-    0xFFFF
+    0x00004A40 (unmapped)
+    0x0000FFFF
+    -------
+    0x00010000 RAM (machine config: ram_size_kb, default 4096 KiB)
+    0x00010000 + RAM size - 1 (at most 0x0FFFFFFF)
 
 
 
@@ -161,7 +173,7 @@
 
     Machine Specific - Hardware Interrupts:
     =======================================
-    MAX INTERRUPT 0xAA
+    MAX INTERRUPT 0xFF
     0x80: Disk Interface Finished
     0xA0: Keyboard Interface - Key Pressed
     0xA1: Keyboard Interface - Key Released
@@ -257,4 +269,8 @@
         Identifier (2 Bytes) - Must be set to 0xF1C4
         Reserved (30 Bytes)
 
-    Kernel first stage block must start at PART_ADDR + 32 and must be 1024 bytes in size
+    Kernel first stage block must start at PART_ADDR + 32 and must be 1024 bytes in size.
+    Drake loads it at 0x00012000 (DPTBootPartStructure.CODE_LOAD_ADDR).
+
+    Boot sequence: BIOS (0x00000000) -> Drake loader (disk 0x0000, 512 bytes, at 0x00004680)
+        -> Drake bootsector (disk 0x0400, 5120 bytes, at 0x00010000) -> kernel first stage (0x00012000)

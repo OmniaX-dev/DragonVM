@@ -4,22 +4,20 @@
 
 _disk_load_from_ddd_blocking:  ## _disk_load_from_ddd_blocking(DiskDriverData* ddd)
 	arg R1					   ## @Param: ddd
-	movb [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.MODE_SELECTOR}], *R1
+	movb [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.MODE_SELECTOR}], *R1		## Mode
 	inc R1
-	movb [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.DISK_SELECTOR}], *R1
-	inc R1
-	mov  [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.SECTOR_SELECTOR}], *R1
-	addip R1, 2
-	mov  [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.ADDRESS_SELECTOR}], *R1
-	addip R1, 2
-	mov  [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.DATA_SIZE}], *R1
-	addip R1, 2
-	mov  [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.MEMORY_ADDRESS}], *R1
+	movb [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.DISK_SELECTOR}], *R1		## Disk
+	addip R1, 3																		## (Reserved)
+	mov  [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.DISK_ADDRESS}], *R1		## Address
+	addip R1, 4
+	mov  [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.DATA_SIZE}], *R1			## DataSize
+	addip R1, 4
+	mov  [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.MEMORY_ADDRESS}], *R1		## MemoryAddress
 	movb [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.SIGNAL}], DiskSignals.START
 	zflg Flags.InterruptsEnabled													## Disable interrupts
 _disk_load_from_ddd_blocking_wait_loop:
 	## debug_profile_start 0xE0, DBGProfilerTime.MILLIS
-	mov ACC, [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.RO_STATUS}]
+	movb ACC, [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.RO_STATUS}]
 	## debug_profile_stop
 	jne $_disk_load_from_ddd_blocking_wait_loop, DiskStatus.FREE
 	sflg Flags.InterruptsEnabled													## Enable interrupts
@@ -29,22 +27,21 @@ _disk_load_from_ddd_blocking_wait_loop:
 
 
 _load_mbr_data_block:
-	movb [{MemoryAddresses.DISK_INTERFACE + 0x1}], 0x00											## Mode = Read
+	movb [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.MODE_SELECTOR}], DiskMode.READ			## Mode = Read
 	movb R1, [CMOS_Settings.BOOT_DISK]
-	movb [{MemoryAddresses.DISK_INTERFACE + 0x2}], R1											## Disk = Default
-	mov  [{MemoryAddresses.DISK_INTERFACE + 0x3}],0x0000										## Sector = 0x0000
-	mov  [{MemoryAddresses.DISK_INTERFACE + 0x5}],0x0000										## Address = 0x0000 (Start of Disk)
-	mov  [{MemoryAddresses.DISK_INTERFACE + 0x7}], 512											## Size = 512 (Size of MBR is 512 bytes)
-	mov  [{MemoryAddresses.DISK_INTERFACE + 0x9}], MemoryAddresses.MBR 							## MemoryAddress = MBR Address in memory
-	movb [MemoryAddresses.DISK_INTERFACE], 0x00													## Signal = Start
+	movb [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.DISK_SELECTOR}], R1						## Disk = Default
+	mov  [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.DISK_ADDRESS}], 0x00000000				## Address = 0x00000000 (Start of Disk)
+	mov  [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.DATA_SIZE}], 512							## Size = 512 (Size of MBR is 512 bytes)
+	mov  [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.MEMORY_ADDRESS}], MemoryAddresses.MBR	## MemoryAddress = MBR Address in memory
+	movb [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.SIGNAL}], DiskSignals.START				## Signal = Start
 _load_mbr_data_block_wait_loop:
-	mov ACC, [{MemoryAddresses.DISK_INTERFACE + 0xB}]											## Moving <Status> register into ACC
-	jne $_load_mbr_data_block_wait_loop, 0x00													## If <Status> register not Free, loop around and wait
+	movb ACC, [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.RO_STATUS}]						## Moving <Status> register into ACC
+	jne $_load_mbr_data_block_wait_loop, DiskStatus.FREE											## If <Status> register not Free, loop around and wait
 	ret
 
 _calc_interrupt_vector_address:
 	arg R1
-	mul R1, 0x03 																				## Multiply the interrupt code by 3 for memory alignment
+	mul R1, IntVector.ENTRY_SIZE 																## Multiply the interrupt code by the entry size
 	mov R1, ACC													
 	add R1, MemoryAddresses.INT_VEC 															## Add Interrupt Vector base address to Interrupt code
 	mov RV, ACC

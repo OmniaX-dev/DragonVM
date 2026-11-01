@@ -34,15 +34,15 @@ namespace dragon
 				inline static constexpr u8 Signal = 0x03;
 				inline static constexpr u8 TextSingleCharacter = 0x04;
 				inline static constexpr u8 TextSingleInvertColors = 0x05;
-				inline static constexpr u8 TextSingleString = 0x06;
+				inline static constexpr u8 TextSingleString = 0x08;		// 4 bytes (address)
 
-				inline static constexpr u8 Flags = 0x7E;
+				inline static constexpr u8 Flags = 0x7C;					// 4 bytes
 
-				inline static constexpr u8 MemControllerX = 0x80;
-				inline static constexpr u8 MemControllerY = 0x82;
-				inline static constexpr u8 MemControllerChar = 0x84;
-				inline static constexpr u8 MemControllerBGCol = 0x85;
-				inline static constexpr u8 MemControllerFGCol = 0x86;
+				inline static constexpr u8 MemControllerX = 0x80;			// 4 bytes
+				inline static constexpr u8 MemControllerY = 0x84;			// 4 bytes
+				inline static constexpr u8 MemControllerChar = 0x88;
+				inline static constexpr u8 MemControllerBGCol = 0x89;
+				inline static constexpr u8 MemControllerFGCol = 0x8A;
 			};
 			public: struct tVideoModeValues
 			{

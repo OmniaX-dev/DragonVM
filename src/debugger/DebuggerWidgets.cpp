@@ -457,12 +457,12 @@ namespace dragon
 		return -1;
 	}
 
-	u16 RegisterView::value_of(i32 index) const
+	u32 RegisterView::value_of(i32 index) const
 	{
 		// Live while the machine runs; what the debugger captured when it stopped otherwise.
 		if (m_debugger.isRunning())
-			return cast<u16>(DragonRuntime::cpu.readRegister(s_registers[index].reg));
-		return cast<u16>(m_debugger.getCurrentInfo().registers[s_registers[index].reg]);
+			return cast<u32>(DragonRuntime::cpu.readRegister(s_registers[index].reg));
+		return cast<u32>(m_debugger.getCurrentInfo().registers[s_registers[index].reg]);
 	}
 
 	void RegisterView::onDraw(ogfx::BasicRenderer2D& gfx)
@@ -491,7 +491,7 @@ namespace dragon
 		auto l_instruction = [&](const char* title, const Debugger::tMachineInfo& info) {
 			text(gfx, title, x, y, label);
 			f32 ix = x + cw * 10;
-			text(gfx, String::getHexStr(info.instructionAddress, true, 2), ix, y, Color(180, 180, 190));
+			text(gfx, String::getHexStr(info.instructionAddress, true, 4), ix, y, Color(180, 180, 190));
 			ix += cw * 8;
 			String code = Debugger::Utils::findSymbol(m_debugger.data().code, info.instructionAddress).new_trim();
 			if (code == "")
@@ -509,9 +509,9 @@ namespace dragon
 		{
 			text(gfx, "Running... (the values are live; the changes are shown when the machine stops)", x, y, dim);
 			y += lh;
-			const u16 ip = cast<u16>(DragonRuntime::cpu.readRegister(data::Registers::IP));
+			const u32 ip = cast<u32>(DragonRuntime::cpu.readRegister(data::Registers::IP));
 			text(gfx, "IP", x, y, label);
-			text(gfx, String::getHexStr(ip, true, 2), x + cw * 10, y, Color(180, 180, 190));
+			text(gfx, String::getHexStr(ip, true, 4), x + cw * 10, y, Color(180, 180, 190));
 			y += lh * 2;
 		}
 		else
@@ -540,7 +540,7 @@ namespace dragon
 			cx += w + 6;
 		};
 		const bool ie = DragonRuntime::cpu.readFlag(data::Flags::InterruptsEnabled);
-		const u16 prevFL = cast<u16>(prev.registers[data::Registers::FL]);
+		const u32 prevFL = cast<u32>(prev.registers[data::Registers::FL]);
 		l_chip("Interrupts", ie, (prevFL & 1) != 0, Color(120, 230, 120));
 		l_chip("Offset mode", DragonRuntime::cpu.readFlag(data::Flags::OffsetModeEnabled), (prevFL & 2) != 0, Color(120, 200, 240));
 		l_chip("BIOS mode", curr.biosMode, prev.biosMode, Color(240, 180, 90));
@@ -548,7 +548,7 @@ namespace dragon
 		l_chip("Halted", curr.halted, prev.halted, Color(240, 90, 90));
 		l_chip(String("Subroutines ").add(curr.subroutineCounter), curr.inSubroutine, prev.inSubroutine, Color(200, 140, 240));
 		l_chip(String("INT handlers ").add(curr.interruptHandlerCount), curr.interruptHandlerCount > 0, prev.interruptHandlerCount > 0, Color(140, 160, 255));
-		l_chip(String("Frame ").add(String::getHexStr(curr.stackFrameSize, true, 2)), curr.stackFrameSize > 0, prev.stackFrameSize > 0, Color(150, 220, 200));
+		l_chip(String("Frame ").add(String::getHexStr(curr.stackFrameSize, true, 4)), curr.stackFrameSize > 0, prev.stackFrameSize > 0, Color(150, 220, 200));
 		y += lh + 14;
 		m_infoHeight = y - (bounds.y - m_scroll);
 
@@ -558,8 +558,8 @@ namespace dragon
 		for (i32 i = 0; i < RegisterCount; i++)
 		{
 			const Rectangle r = register_rect(i);
-			const u16 value = value_of(i);
-			const u16 before = cast<u16>(prev.registers[s_registers[i].reg]);
+			const u32 value = value_of(i);
+			const u32 before = cast<u32>(prev.registers[s_registers[i].reg]);
 			const bool isChanged = !running && value != before;
 			gfx.fillRoundRect(r, isChanged ? Color(120, 60, 20, 90) : Color(34, 38, 34), 6);
 			if (i == m_hovered)
@@ -569,13 +569,13 @@ namespace dragon
 			const f32 tx = r.x + 8;
 			const f32 ty = r.y + 4;
 			text(gfx, s_registers[i].name, tx, ty, s_groupColors[s_registers[i].group]);
-			const String hex = String::getHexStr(value, true, 2);
+			const String hex = String::getHexStr(value, true, 4);
 			text(gfx, hex, r.x + r.w - 8 - cw * cast<f32>(hex.len()), ty, isChanged ? Color(255, 235, 200) : Color(235, 235, 235));
 			String second = "";
 			if (isChanged)
-				second.add("was ").add(String::getHexStr(before, true, 2));
+				second.add("was ").add(String::getHexStr(before, true, 4));
 			else
-				second.add(value).add(" / ").add(cast<i16>(value));
+				second.add(value).add(" / ").add(cast<i32>(value));
 			text(gfx, second, tx, ty + lh, isChanged ? changed : dim, m_fontSize - 2);
 		}
 
@@ -583,7 +583,7 @@ namespace dragon
 		const Rectangle flags0 = flag_rect(15);
 		text(gfx, "Flags (FL), click to toggle", bounds.x + 10, flags0.y - lh - 2, label);
 		text(gfx, "FL", bounds.x + 10, flags0.y + 3, s_groupColors[0]);
-		const u16 fl = value_of(5);
+		const u32 fl = value_of(5);
 		for (i32 bit = 15; bit >= 0; bit--)
 		{
 			const Rectangle r = flag_rect(bit);
@@ -599,9 +599,9 @@ namespace dragon
 		const f32 statusY = flags0.y + flags0.h + 14;
 		if (m_hovered >= 0)
 		{
-			const u16 v = value_of(m_hovered);
+			const u32 v = value_of(m_hovered);
 			String info = s_registers[m_hovered].name;
-			info.add(" = ").add(String::getHexStr(v, true, 2)).add(" = ").add(v).add(" (unsigned) = ").add(cast<i16>(v)).add(" (signed) = ").add(String::getBinStr(v, true, 2));
+			info.add(" = ").add(String::getHexStr(v, true, 4)).add(" = ").add(v).add(" (unsigned) = ").add(cast<i32>(v)).add(" (signed) = ").add(String::getBinStr(v, true, 4));
 			const char hi = cast<char>(v >> 8), lo = cast<char>(v & 0xFF);
 			info.add(" = '").addChar(std::isprint(cast<u8>(hi)) ? hi : '.').addChar(std::isprint(cast<u8>(lo)) ? lo : '.').add("'");
 			String symbol = Debugger::Utils::findNearestSymbol(m_debugger.data().labels, v);
@@ -683,7 +683,7 @@ namespace dragon
 		const Rectangle r = register_rect(index);
 		const Vec2 origin = getGlobalContentPosition();
 		m_input.setBounds(r.x - origin.x, r.y - origin.y + r.h * 0.5f - 2, r.w, r.h * 0.5f + 4);
-		m_input.setText(String::getHexStr(value_of(index), true, 2));
+		m_input.setText(String::getHexStr(value_of(index), true, 4));
 		m_input.setVisible(true);
 		getWindow().getFocusManager().requestFocus(m_input);
 	}
@@ -711,12 +711,12 @@ namespace dragon
 
 	void RegisterView::show_menu(i32 index)
 	{
-		const u16 value = value_of(index);
+		const u32 value = value_of(index);
 		const String name = String(s_registers[index].name).toLower();
 		ContextMenu::Instance menu;
 		menu.entries.push_back({ String("Edit ").add(s_registers[index].name).add("..."), 0 });
-		menu.entries.push_back({ String("Show ").add(String::getHexStr(value, true, 2)).add(" in memory"), 1 });
-		menu.entries.push_back({ String("Show ").add(String::getHexStr(value, true, 2)).add(" in the disassembly"), 2 });
+		menu.entries.push_back({ String("Show ").add(String::getHexStr(value, true, 4)).add(" in memory"), 1 });
+		menu.entries.push_back({ String("Show ").add(String::getHexStr(value, true, 4)).add(" in the disassembly"), 2 });
 		menu.entries.push_back({ "Copy value", 3 });
 		menu.entries.push_back(ContextMenu::Entry::separator());
 		menu.entries.push_back({ "Set to 0", 4 });
@@ -728,10 +728,10 @@ namespace dragon
 				case 0: begin_edit(index); break;
 				case 1: if (m_onShowInMemory) m_onShowInMemory(value); break;
 				case 2: if (m_onShowInDisassembly) m_onShowInDisassembly(value); break;
-				case 3: SDL_SetClipboardText(String::getHexStr(value, true, 2).c_str()); break;
+				case 3: SDL_SetClipboardText(String::getHexStr(value, true, 4).c_str()); break;
 				case 4: if (!m_debugger.isRunning()) m_debugger.setRegister(name, 0); break;
-				case 5: if (!m_debugger.isRunning()) m_debugger.setRegister(name, cast<u16>(value + 1)); break;
-				case 6: if (!m_debugger.isRunning()) m_debugger.setRegister(name, cast<u16>(value - 1)); break;
+				case 5: if (!m_debugger.isRunning()) m_debugger.setRegister(name, cast<u32>(value + 1)); break;
+				case 6: if (!m_debugger.isRunning()) m_debugger.setRegister(name, cast<u32>(value - 1)); break;
 				default: break;
 			}
 		};
@@ -781,9 +781,9 @@ namespace dragon
 		const auto& item = m_debugger.data().tracked[row];
 		const auto& prev = m_debugger.getPreviousInfo().trackedValues;
 		const size_t offset = m_valueOffsets[row];
-		for (u16 j = 0; j < item.size; j++)
+		for (u32 j = 0; j < item.size; j++)
 		{
-			if (offset + j < prev.size() && prev[offset + j] != DragonRuntime::memMap.peek8(cast<u16>(item.address + j)))
+			if (offset + j < prev.size() && prev[offset + j] != DragonRuntime::memMap.peek8(cast<u32>(item.address + j)))
 				return true;
 		}
 		return false;
@@ -805,14 +805,14 @@ namespace dragon
 		auto l_bytes = [&](bool previous) {
 			f32 x = bounds.x;
 			const i32 maxBytes = std::max(1, cast<i32>((bounds.w + cw) / (cw * 3)));
-			for (u16 j = 0; j < item.size; j++)
+			for (u32 j = 0; j < item.size; j++)
 			{
 				if (j >= maxBytes - 1 && j + 1 < item.size)
 				{
 					text(gfx, "...", x, bounds.y, DimTextColor);
 					break;
 				}
-				const u8 now = DragonRuntime::memMap.peek8(cast<u16>(item.address + j));
+				const u8 now = DragonRuntime::memMap.peek8(cast<u32>(item.address + j));
 				const bool known = offset + j < prev.size();
 				const u8 before = known ? prev[offset + j] : now;
 				const bool diff = (known && before != now && !m_debugger.isRunning());
@@ -835,10 +835,10 @@ namespace dragon
 			}
 			case 1: text(gfx, item.label, bounds.x, bounds.y, Color(220, 130, 230)); break;
 			case 2: text(gfx, String("").add(item.size), bounds.x, bounds.y, Color(110, 220, 230)); break;
-			case 3: text(gfx, String::getHexStr(item.address, true, 2), bounds.x, bounds.y, Color(180, 180, 190)); break;
+			case 3: text(gfx, String::getHexStr(item.address, true, 4), bounds.x, bounds.y, Color(180, 180, 190)); break;
 			case 4:
 			{
-				const u16 sp = cast<u16>(DragonRuntime::cpu.readRegister(data::Registers::SP));
+				const u32 sp = cast<u32>(DragonRuntime::cpu.readRegister(data::Registers::SP));
 				text(gfx, item.address >= sp ? String("STACK") : DragonRuntime::memMap.getMemoryRegionName(item.address), bounds.x, bounds.y, Color(235, 215, 90));
 				break;
 			}
@@ -847,9 +847,9 @@ namespace dragon
 			case 7:
 			{
 				String str = "";
-				for (u16 j = 0; j < item.size && j < 64; j++)
+				for (u32 j = 0; j < item.size && j < 64; j++)
 				{
-					const u8 c = DragonRuntime::memMap.peek8(cast<u16>(item.address + j));
+					const u8 c = DragonRuntime::memMap.peek8(cast<u32>(item.address + j));
 					str.addChar(std::isprint(c) ? cast<char>(c) : '.');
 				}
 				text(gfx, str, bounds.x, bounds.y, Color(200, 200, 160));
@@ -886,7 +886,7 @@ namespace dragon
 			{
 				case 0: if (m_onShowInMemory) m_onShowInMemory(item.address); break;
 				case 1: m_debugger.setWatch(item.address, !item.breakOnChange); break;
-				case 2: SDL_SetClipboardText(String::getHexStr(item.address, true, 2).c_str()); break;
+				case 2: SDL_SetClipboardText(String::getHexStr(item.address, true, 4).c_str()); break;
 				case 3: m_debugger.untrack(item.address); break;
 				case 4: m_debugger.untrackAll(); break;
 				default: break;
@@ -1009,7 +1009,7 @@ namespace dragon
 		}
 		if (column == 1)
 		{
-			text(gfx, call.info == "HW INT" ? String("  --  ") : String::getHexStr(call.inst_addr, true, 2), bounds.x, bounds.y,
+			text(gfx, call.info == "HW INT" ? String("  --  ") : String::getHexStr(call.inst_addr, true, 4), bounds.x, bounds.y,
 				 call.interrupts_disabled ? DimTextColor : Color(220, 130, 230));
 			return;
 		}
@@ -1045,7 +1045,7 @@ namespace dragon
 			const String symbol = Debugger::Utils::findSymbol(m_debugger.data().labels, call.addr).new_trim();
 			if (symbol != "")
 				l_part(symbol + " ", Color(120, 230, 120));
-			l_part(String(call.info == "CALL REG" ? "*" : "").add(String::getHexStr(call.addr, true, 2)), Color(235, 215, 90));
+			l_part(String(call.info == "CALL REG" ? "*" : "").add(String::getHexStr(call.addr, true, 4)), Color(235, 215, 90));
 		}
 		else if (call.info == "INT")
 		{
@@ -1116,9 +1116,9 @@ namespace dragon
 		ContextMenu::Instance menu;
 		menu.entries.push_back({ "Go back in time to here", 0 });
 		if (call.info != "HW INT")
-			menu.entries.push_back({ String("Show the caller (").add(String::getHexStr(call.inst_addr, true, 2)).add(") in the disassembly"), 1 });
+			menu.entries.push_back({ String("Show the caller (").add(String::getHexStr(call.inst_addr, true, 4)).add(") in the disassembly"), 1 });
 		if (call.info == "CALL IMM" || call.info == "CALL REG")
-			menu.entries.push_back({ String("Show the target (").add(String::getHexStr(call.addr, true, 2)).add(") in the disassembly"), 2 });
+			menu.entries.push_back({ String("Show the target (").add(String::getHexStr(call.addr, true, 4)).add(") in the disassembly"), 2 });
 		menu.entries.push_back(ContextMenu::Entry::separator());
 		if (isCall)
 			menu.entries.push_back({ r.hidden > 0 ? "Expand" : "Collapse", 3 });
@@ -1217,7 +1217,7 @@ namespace dragon
 	Color BreakpointView::getRowColor(i32 row) const
 	{
 		const Row& r = m_rows[row];
-		const u16 ip = cast<u16>(DragonRuntime::cpu.readRegister(data::Registers::IP));
+		const u32 ip = cast<u32>(DragonRuntime::cpu.readRegister(data::Registers::IP));
 		if (!r.watch && r.address == ip && !m_debugger.isRunning())
 			return { 230, 200, 75, 30 };
 		return { 0, 0, 0, 0 };
@@ -1247,14 +1247,14 @@ namespace dragon
 				else
 					text(gfx, bp->debugBreak ? "debug_break" : "breakpoint", bounds.x, bounds.y, enabled ? (bp->debugBreak ? Color(240, 170, 60) : Color(235, 90, 90)) : DimTextColor);
 				break;
-			case 2: text(gfx, String::getHexStr(r.address, true, 2), bounds.x, bounds.y, enabled ? Color(235, 215, 90) : DimTextColor); break;
+			case 2: text(gfx, String::getHexStr(r.address, true, 4), bounds.x, bounds.y, enabled ? Color(235, 215, 90) : DimTextColor); break;
 			case 3: text(gfx, r.label, bounds.x, bounds.y, enabled ? Color(110, 220, 230) : DimTextColor); break;
 			case 4:
 				if (r.watch)
 				{
 					String value = String("").add(r.size).add(r.size == 1 ? " byte: " : " bytes: ");
-					for (u16 j = 0; j < r.size && j < 16; j++)
-						value.add(String::getHexStr(DragonRuntime::memMap.peek8(cast<u16>(r.address + j)), false, 1)).add(" ");
+					for (u32 j = 0; j < r.size && j < 16; j++)
+						value.add(String::getHexStr(DragonRuntime::memMap.peek8(cast<u32>(r.address + j)), false, 1)).add(" ");
 					text(gfx, value, bounds.x, bounds.y, textColor);
 				}
 				else
@@ -1323,10 +1323,10 @@ namespace dragon
 				case 5:
 				case 6:
 				{
-					stdvec<u16> addresses;
+					stdvec<u32> addresses;
 					for (const auto& [address, bp] : m_debugger.data().breakpoints)
 						addresses.push_back(address);
-					for (u16 address : addresses)
+					for (u32 address : addresses)
 						m_debugger.setBreakPointEnabled(address, entry.id == 5);
 					break;
 				}

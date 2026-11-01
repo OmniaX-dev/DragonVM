@@ -103,8 +103,10 @@ namespace dragon
 			void refresh_stack(void);
 			void sync_watches(void);
 			void show_view(Debugger::eView view, i64 argument);
-			void show_in_memory(u16 address);
-			void show_in_disassembly(u16 address);
+			void show_in_memory(u32 address);
+			static u32 stack_end(void);
+			static u32 stack_size(u32 sp);
+			void show_in_disassembly(u32 address);
 			void mark_shown_position(void);
 			void show_programs_menu(void);
 			void add_breakpoint_from_input(void);

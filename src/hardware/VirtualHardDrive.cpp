@@ -23,14 +23,14 @@ namespace dragon
 			m_initialized = true;
 		}
 		
-		bool VirtualHardDrive::read(u32 addr, u16 size, ostd::ByteStream& outData)
+		bool VirtualHardDrive::read(u32 addr, u32 size, ostd::ByteStream& outData)
 		{
 			if (!m_initialized)
 			{
 				data::ErrorHandler::pushError(data::ErrorCodes::HardDrive_Uninitialized, "Attempt to read uninitialized drive.");
 				return false;
 			}
-			if (addr + size > m_fileSize)
+			if (cast<u64>(addr) + size > m_fileSize)
 			{
 				data::ErrorHandler::pushError(data::ErrorCodes::HardDrive_ReadOverflow, "Read Overflow on HardDrive.");
 				return false;
@@ -147,7 +147,7 @@ namespace dragon
 			}
 			ostd::ByteStream oldData;
 			if (s_writeListener)
-				read(addr, cast<u16>(m_writeBuffer.size()), oldData);
+				read(addr, cast<u32>(m_writeBuffer.size()), oldData);
 			m_dataFile.seekp(addr);
 			m_dataFile.write((char*)(&m_writeBuffer[0]), m_writeBuffer.size());
 			m_writeCount++;

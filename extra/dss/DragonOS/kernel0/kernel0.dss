@@ -1,18 +1,18 @@
-.load 0x2C00
+.load 0x00012000				## DPTBootPartStructure.CODE_LOAD_ADDR
 .fixed 1024, 0xFF
 .entry _kernel0_main
 .header KERNEL0_BOOT
 
 @include <../drivers/display_driver.dss>
 @include <../drivers/keyboard_driver.dss>
-@include <sdk/bios_api.dss>
+@include <../../sdk/bios_api.dss>
 @include <memory.dss>
 
 
 ## =========================================================================================================================
 .data
 	$test_str "Hello DragonOS! :)"
-	$cursor_x:1
+	$cursor_x:4
 
 ## =========================================================================================================================
 

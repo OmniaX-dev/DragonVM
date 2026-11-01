@@ -5,10 +5,16 @@
 
 namespace dragon
 {
-	using AddressType = u16;
+	// The machine is 32-bit: registers, words and addresses are 32 bits wide, and the
+	// address bus has AddressBits lines (addresses are masked with AddressMask).
+	using AddressType = u32;
+	using WordType = i32;
 	namespace hw { class VirtualCPU; }
 	namespace data
 	{
+		inline static constexpr u32 AddressBits = 28;
+		inline static constexpr u32 AddressMask = (1u << AddressBits) - 1;	// 0x0FFFFFFF
+		inline static constexpr u32 WordSize = 4;
 		typedef u32 VDiskID;
 
 		class ErrorCodes
@@ -19,10 +25,12 @@ namespace dragon
 
 				inline static constexpr u64 MM_RegionNotFound                     =             0x1000000000000000;
 				inline static constexpr u64 MM_AtomicNotSupported                     =             0x1000000000000001;
+				inline static constexpr u64 RAM_InvalidAddress                     =             0x1000000000000002;
 
 				inline static constexpr u64 CPU_UnknownInstruction             =             0x2000000000000000;
 				inline static constexpr u64 CPU_UnsupportedExtension             =             0x2000000000000001;
 				inline static constexpr u64 CPU_StackOverflow                     =             0x2000000000000002;
+				inline static constexpr u64 CPU_DivisionByZero                     =             0x2000000000000003;
 
 				inline static constexpr u64 BIOS_FailedToLoad                     =             0x3000000000000000;
 				inline static constexpr u64 BIOS_InvalidSize                     =             0x3000000000000001;
@@ -87,35 +95,39 @@ namespace dragon
 		class MemoryMapAddresses
 		{
 			public:
-				inline static constexpr u16 BIOS_Start = 0x0000;
-				inline static constexpr u16 BIOS_End   = 0x0FFF;
+				inline static constexpr u32 BIOS_Start = 0x00000000;
+				inline static constexpr u32 BIOS_End   = 0x00003FFF;
 
-				inline static constexpr u16 CMOS_Start = 0x1000;
-				inline static constexpr u16 CMOS_End   = 0x107F;
+				inline static constexpr u32 CMOS_Start = 0x00004000;
+				inline static constexpr u32 CMOS_End   = 0x0000407F;
 
-				inline static constexpr u16 IntVector_Start = 0x1080;
-				inline static constexpr u16 IntVector_End   = 0x127F;
+				// 256 entries of 5 bytes: status (1), handler address (4).
+				inline static constexpr u32 IntVector_Start = 0x00004080;
+				inline static constexpr u32 IntVector_End   = 0x0000457F;
+				inline static constexpr u32 IntVector_EntrySize = 5;
 
-				inline static constexpr u16 Keyboard_Start = 0x1280;
-				inline static constexpr u16 Keyboard_End   = 0x135F;
+				inline static constexpr u32 Keyboard_Start = 0x00004580;
+				inline static constexpr u32 Keyboard_End   = 0x0000465F;
 
-				inline static constexpr u16 Mouse_Start = 0x1360;
-				inline static constexpr u16 Mouse_End   = 0x137F;
+				inline static constexpr u32 Mouse_Start = 0x00004660;
+				inline static constexpr u32 Mouse_End   = 0x0000467F;
 
-				inline static constexpr u16 MBR_Start = 0x1380;
-				inline static constexpr u16 MBR_End   = 0x157F;
+				inline static constexpr u32 MBR_Start = 0x00004680;
+				inline static constexpr u32 MBR_End   = 0x0000487F;
 
-				inline static constexpr u16 DiskInterface_Start = 0x1580;
-				inline static constexpr u16 DiskInterface_End   = 0x15FF;
+				inline static constexpr u32 DiskInterface_Start = 0x00004880;
+				inline static constexpr u32 DiskInterface_End   = 0x000048FF;
 
-				inline static constexpr u16 VideoCardInterface_Start = 0x1600;
-				inline static constexpr u16 VideoCardInterface_End   = 0x16FF;
+				inline static constexpr u32 VideoCardInterface_Start = 0x00004900;
+				inline static constexpr u32 VideoCardInterface_End   = 0x000049FF;
 
-				inline static constexpr u16 SerialInterface_Start = 0x1700;
-				inline static constexpr u16 SerialInterface_End   = 0x173F;
+				inline static constexpr u32 SerialInterface_Start = 0x00004A00;
+				inline static constexpr u32 SerialInterface_End   = 0x00004A3F;
 
-				inline static constexpr u16 Memory_Start = 0x1740;
-				inline static constexpr u16 Memory_End   = 0xFFFF;
+				// RAM starts here and ends at Memory_Start + (RAM size) - 1 (the machine config's
+				// ram_size_kb), at most at Memory_Max.
+				inline static constexpr u32 Memory_Start = 0x00010000;
+				inline static constexpr u32 Memory_Max   = AddressMask;
 		};
 
 		class IBiosVideoPalette
@@ -221,15 +233,15 @@ namespace dragon
 		{
 			public:
 				inline static constexpr u8 MemoryStart            = 0x00;
-				inline static constexpr u8 MemorySize             = 0x02;
-				inline static constexpr u8 ClockSpeed             = 0x04;
-				inline static constexpr u8 ScreenRedrawRate     = 0x06;
-				inline static constexpr u8 ScreenWidth         = 0x07;
-				inline static constexpr u8 ScreenHeight         = 0x09;
-				inline static constexpr u8 BootDisk             = 0x10;
-				inline static constexpr u8 StackSize             = 0x11;
+				inline static constexpr u8 MemorySize             = 0x04;
+				inline static constexpr u8 ClockSpeed             = 0x08;
+				inline static constexpr u8 ScreenWidth            = 0x0C;
+				inline static constexpr u8 ScreenHeight           = 0x10;
+				inline static constexpr u8 StackSize              = 0x14;
+				inline static constexpr u8 ScreenRedrawRate       = 0x18;
+				inline static constexpr u8 BootDisk               = 0x19;
 
-				inline static constexpr u8 DiskList             = 0x7E;
+				inline static constexpr u8 DiskList               = 0x7C;
 
 				// For the tools (the debugger's CMOS Manager). liveData: written by the
 				// runtime at every start (DragonRuntime::initMachine()), so editing it only
@@ -243,15 +255,15 @@ namespace dragon
 					const char* description;
 				};
 				inline static constexpr tRegisterInfo List[] = {
-					{ MemoryStart,		2, "MemoryStart",		true,	"First address of the RAM" },
-					{ MemorySize,		2, "MemorySize",		true,	"Last address of the RAM" },
-					{ ClockSpeed,		2, "ClockSpeed",		true,	"Clock rate (Hz)" },
+					{ MemoryStart,		4, "MemoryStart",		true,	"First address of the RAM" },
+					{ MemorySize,		4, "MemorySize",		true,	"Last address of the RAM" },
+					{ ClockSpeed,		4, "ClockSpeed",		true,	"Clock rate (Hz)" },
+					{ ScreenWidth,		4, "ScreenWidth",		true,	"Text columns" },
+					{ ScreenHeight,		4, "ScreenHeight",		true,	"Text rows" },
+					{ StackSize,		4, "StackSize",			true,	"Stack size (bytes)" },
 					{ ScreenRedrawRate,	1, "ScreenRedrawRate",	true,	"Screen redraws per second" },
-					{ ScreenWidth,		2, "ScreenWidth",		true,	"Text columns" },
-					{ ScreenHeight,		2, "ScreenHeight",		true,	"Text rows" },
 					{ BootDisk,			1, "BootDisk",			false,	"Disk the BIOS boots from" },
-					{ StackSize,		2, "StackSize",			true,	"Stack size (bytes)" },
-					{ DiskList,			2, "DiskList",			true,	"Connected disks (bit n: disk n)" }
+					{ DiskList,			4, "DiskList",			true,	"Connected disks (bit n: disk n)" }
 				};
 		};
 
@@ -430,7 +442,11 @@ namespace dragon
 		class DefaultValues
 		{
 			public:
-				inline static constexpr u8 MaxMemoryExtensionPages = 255;
+				// RAM size (machine config: ram_size_kb), in KiB.
+				inline static constexpr u32 DefaultRAMSizeKB = 4096;
+				inline static constexpr u32 MinRAMSizeKB = 64;
+				inline static constexpr u32 MaxRAMSizeKB = (MemoryMapAddresses::Memory_Max - MemoryMapAddresses::Memory_Start + 1) / 1024;
+				inline static constexpr u32 DefaultStackSize = 0x10000;
 		};
 	}
 }

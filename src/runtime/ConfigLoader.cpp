@@ -1,3 +1,4 @@
+#include <algorithm>
 #include "ConfigLoader.hpp"
 #include <ostd/io/File.hpp>
 #include "../hardware/CPUExtensions.hpp"
@@ -88,18 +89,16 @@ namespace dragon
 					config.fixed_clock = false;
 				else continue; //TODO: Error
 			}
-			else if (lineEdit == "memory_extension_pages")
+			else if (lineEdit == "ram_size_kb")
 			{
 				lineEdit = tokens.next();
 				lineEdit.trim().toLower();
 				if (!lineEdit.isNumeric()) continue; //TODO: Error
-				config.memory_extension_pages = lineEdit.toInt();
+				i64 size = lineEdit.toInt();
 
 				//TODO: Warnings
-				if (config.memory_extension_pages < 0)
-					config.memory_extension_pages = 0;
-				if (config.memory_extension_pages > data::DefaultValues::MaxMemoryExtensionPages)
-					config.memory_extension_pages = data::DefaultValues::MaxMemoryExtensionPages;
+				size = std::clamp<i64>(size, data::DefaultValues::MinRAMSizeKB, data::DefaultValues::MaxRAMSizeKB);
+				config.ram_size_kb = cast<u32>(size);
 			}
 			else if (lineEdit == "16color_palette")
 			{

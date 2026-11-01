@@ -56,8 +56,8 @@ namespace dragon
 			void select_register(i32 row);
 			void set_value(void);
 			// Writes the bytes at the CMOS offset (live: through the memory map; file: in the copy).
-			bool write_bytes(u16 offset, std::span<const u8> bytes);
-			bool write_live(u16 offset, std::span<const u8> bytes);
+			bool write_bytes(u32 offset, std::span<const u8> bytes);
+			bool write_live(u32 offset, std::span<const u8> bytes);
 			void save(void);
 			void reload(void);
 			void set_status(const String& text, const Color& color);

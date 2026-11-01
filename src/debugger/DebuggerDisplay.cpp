@@ -26,7 +26,7 @@ namespace dragon
 				if (index + labelEdit.len() < instEdit.len() && Utils::isValidLabelNameChar(instEdit.at(index + labelEdit.len())))
 					continue;
 				String instStr = instEdit;
-				instStr.cpp_str_ref().replace(index, labelEdit.len(), labelEdit.cpp_str() + "[@@ style foreground:brightgray](" + String::getHexStr(label.addr, true, 2).cpp_str() + ")[@@/]");
+				instStr.cpp_str_ref().replace(index, labelEdit.len(), labelEdit.cpp_str() + "[@@ style foreground:brightgray](" + String::getHexStr(label.addr, true, 4).cpp_str() + ")[@@/]");
 				instEdit = instStr;
 			}
 		}
@@ -73,7 +73,7 @@ namespace dragon
 			out.fg(ostd::ConsoleColors::Red);
 		else
 			out.fg(ostd::ConsoleColors::BrightGray);
-		out.p(String::getHexStr(_da.addr, true, 2).cpp_str()).p("  ");
+		out.p(String::getHexStr(_da.addr, true, 4).cpp_str()).p("  ");
 		if (specialSection)
 			out.fg(ostd::ConsoleColors::Cyan).p(_da.code.cpp_str());
 		else
@@ -89,41 +89,41 @@ namespace dragon
 	void Debugger::Display::printDiff(ostd::OutputHandlerBase& out, const Debugger& dbg)
 	{
 		String str;
-		str.add("|===============|================PREV================|================CURR================|=====|===PREV====|===CURR====|");
+		str.add("|===============|================PREV============================|================CURR============================|=====|===PREV====|===CURR====|");
 		str.add("\n");
-		str.add("| InstAddr:     |*%PREV_INST_ADDR%*******************|*%CURR_INST_ADDR%*******************| R1  |*%PREV_R1%*|*%CURR_R1%*|");
+		str.add("| InstAddr:     |*%PREV_INST_ADDR%*******************************|*%CURR_INST_ADDR%*******************************| R1  |*%PREV_R1%*|*%CURR_R1%*|");
 		str.add("\n");
-		str.add("| Code:         |*%PREV_CODE%************************|*%CURR_CODE%************************| R2  |*%PREV_R2%*|*%CURR_R2%*|");
+		str.add("| Code:         |*%PREV_CODE%************************************|*%CURR_CODE%************************************| R2  |*%PREV_R2%*|*%CURR_R2%*|");
 		str.add("\n");
-		str.add("| StackFrame:   |*%PREV_STACK_FRAME%*****************|*%CURR_STACK_FRAME%*****************| R3  |*%PREV_R3%*|*%CURR_R3%*|");
+		str.add("| StackFrame:   |*%PREV_STACK_FRAME%*****************************|*%CURR_STACK_FRAME%*****************************| R3  |*%PREV_R3%*|*%CURR_R3%*|");
 		str.add("\n");
-		str.add("| DBG BRK:      |*%PREV_DBG_BRK%*********************|*%CURR_DBG_BRK%*********************| R4  |*%PREV_R4%*|*%CURR_R4%*|");
+		str.add("| DBG BRK:      |*%PREV_DBG_BRK%*********************************|*%CURR_DBG_BRK%*********************************| R4  |*%PREV_R4%*|*%CURR_R4%*|");
 		str.add("\n");
-		str.add("| INT Handler:  |*%PREV_INT_HANDLER%*****************|*%CURR_INT_HANDLER%*****************| R5  |*%PREV_R5%*|*%CURR_R5%*|");
+		str.add("| INT Handler:  |*%PREV_INT_HANDLER%*****************************|*%CURR_INT_HANDLER%*****************************| R5  |*%PREV_R5%*|*%CURR_R5%*|");
 		str.add("\n");
-		str.add("| BIOS Mode:    |*%PREV_BIOS_MODE%*******************|**%CURR_BIOS_MODE%******************| R6  |*%PREV_R6%*|*%CURR_R6%*|");
+		str.add("| BIOS Mode:    |*%PREV_BIOS_MODE%*******************************|**%CURR_BIOS_MODE%******************************| R6  |*%PREV_R6%*|*%CURR_R6%*|");
 		str.add("\n");
-		str.add("| SubRoutine:   |*%PREV_SUB_ROUTINE%*****************|**%CURR_SUB_ROUTINE%****************| R7  |*%PREV_R7%*|*%CURR_R7%*|");
+		str.add("| SubRoutine:   |*%PREV_SUB_ROUTINE%*****************************|**%CURR_SUB_ROUTINE%****************************| R7  |*%PREV_R7%*|*%CURR_R7%*|");
 		str.add("\n");
-		str.add("|    IP:        |*%PREV_IP%**************************|**%CURR_IP%*************************| R8  |*%PREV_R8%*|*%CURR_R8%*|");
+		str.add("|    IP:        |*%PREV_IP%**************************************|**%CURR_IP%*************************************| R8  |*%PREV_R8%*|*%CURR_R8%*|");
 		str.add("\n");
-		str.add("|    SP:        |*%PREV_SP%**************************|**%CURR_SP%*************************| R9  |*%PREV_R9%*|*%CURR_R9%*|");
+		str.add("|    SP:        |*%PREV_SP%**************************************|**%CURR_SP%*************************************| R9  |*%PREV_R9%*|*%CURR_R9%*|");
 		str.add("\n");
-		str.add("|    FP:        |*%PREV_FP%**************************|**%CURR_FP%*************************| R10 |*%PREV_R10%|*%CURR_R10%|");
+		str.add("|    FP:        |*%PREV_FP%**************************************|**%CURR_FP%*************************************| R10 |*%PREV_R10%|*%CURR_R10%|");
 		str.add("\n");
-		str.add("|---------------|------------------------------------|------------------------------------|=====|===========|===========|");
+		str.add("|---------------|------------------------------------------------|------------------------------------------------|=====|===========|===========|");
 		str.add("\n");
-		str.add("|    RV:        |*%PREV_RV%**************************|**%CURR_RV%*************************| S1  |*%PREV_S1%*|*%CURR_S1%*|");
+		str.add("|    RV:        |*%PREV_RV%**************************************|**%CURR_RV%*************************************| S1  |*%PREV_S1%*|*%CURR_S1%*|");
 		str.add("\n");
-		str.add("|    PP:        |*%PREV_PP%**************************|**%CURR_PP%*************************| S2  |*%PREV_S2%*|*%CURR_S2%*|");
+		str.add("|    PP:        |*%PREV_PP%**************************************|**%CURR_PP%*************************************| S2  |*%PREV_S2%*|*%CURR_S2%*|");
 		str.add("\n");
-		str.add("|    FL:        |*%PREV_FL%**************************|**%CURR_FL%*************************| OF  |*%PREV_OF%*|*%CURR_OF%*|");
+		str.add("|    FL:        |*%PREV_FL%**************************************|**%CURR_FL%*************************************| OF  |*%PREV_OF%*|*%CURR_OF%*|");
 		str.add("\n");
-		str.add("|---------------|------------------------------------|------------------------------------|=====|===========|===========|");
+		str.add("|---------------|------------------------------------------------|------------------------------------------------|=====|===========|===========|");
 		str.add("\n");
-		str.add("|    ACC:       |*%PREV_ACC%*************************|**%CURR_ACC%************************|");
+		str.add("|    ACC:       |*%PREV_ACC%*************************************|**%CURR_ACC%************************************|");
 		str.add("\n");
-		str.add("|===============|====================================|====================================|");
+		str.add("|===============|================================================|================================================|");
 
 
 		str.replaceAll("*", "");
@@ -148,7 +148,7 @@ namespace dragon
 			tmpStyle.add(tmp2).add("[@@/]");
 			str.replaceAll(currKey, tmpStyle);
 		};
-		auto l_hex = [](i16 value) { return String::getHexStr(cast<u16>(value), true, 2); };
+		auto l_hex = [](i32 value) { return String::getHexStr(cast<u32>(value), true, 4); };
 		auto l_code = [](const Debugger::tMachineInfo& info) {
 			String code = " (";
 			code.add(info.opCode).add(") ");
@@ -156,7 +156,7 @@ namespace dragon
 				code.add(String::getHexStr(info.footprint[i], false, 1)).add(" ");
 			return code;
 		};
-		i32 item_len = 36;
+		i32 item_len = 48;
 
 		l_pair("%PREV_INST_ADDR%", l_hex(prev.instructionAddress), "%CURR_INST_ADDR%", l_hex(curr.instructionAddress), item_len);
 		l_pair("%PREV_CODE%", l_code(prev), "%CURR_CODE%", l_code(curr), item_len);
@@ -204,7 +204,7 @@ namespace dragon
 		out.nl();
 		out.fg(ostd::ConsoleColors::BrightGray).p(" Cycle ").fg(ostd::ConsoleColors::BrightYellow).p(prev.cycle);
 		out.fg(ostd::ConsoleColors::BrightGray).p(" -> ").fg(ostd::ConsoleColors::BrightYellow).p(curr.cycle);
-		out.fg(ostd::ConsoleColors::BrightGray).p("   Flags: ").fg(ostd::ConsoleColors::Cyan).p(String::getBinStr(cast<u16>(curr.registers[data::Registers::FL]), true, 2));
+		out.fg(ostd::ConsoleColors::BrightGray).p("   Flags: ").fg(ostd::ConsoleColors::Cyan).p(String::getBinStr(cast<u32>(curr.registers[data::Registers::FL]), true, 4));
 		out.fg(ostd::ConsoleColors::BrightGray).p("   Interrupts: ").fg(ostd::ConsoleColors::Cyan).p(STR_BOOL(DragonRuntime::cpu.readFlag(data::Flags::InterruptsEnabled)));
 		out.fg(ostd::ConsoleColors::BrightGray).p("   Halted: ").fg(curr.halted ? ostd::ConsoleColors::Red : ostd::ConsoleColors::Cyan).p(STR_BOOL(curr.halted)).reset().nl();
 	}
@@ -256,8 +256,8 @@ namespace dragon
 		size_t valueIndex = 0;
 		for (const auto& item : dbg.data().tracked)
 		{
-			const u16 addr = item.address;
-			const u16 data_size = item.size;
+			const u32 addr = item.address;
+			const u32 data_size = item.size;
 			String symbol = item.label;
 			if (symbol == "")
 				symbol = Utils::findSymbol(dbg.data().data, addr);
@@ -286,7 +286,7 @@ namespace dragon
 				out.fg(ostd::ConsoleColors::Blue).p("|").fg(ostd::ConsoleColors::BrightCyan).p(tmp).reset();
 
 			tmp = "";
-			tmp.add(String::getHexStr(addr, true, 2));
+			tmp.add(String::getHexStr(addr, true, 4));
 			tmp.fixedLength(addr_len - 1);
 			if (no_symbol)
 				out.fg(ostd::ConsoleColors::Blue).p("|").fg(ostd::ConsoleColors::Gray).p(tmp).reset();
@@ -294,7 +294,7 @@ namespace dragon
 				out.fg(ostd::ConsoleColors::Blue).p("|").fg(ostd::ConsoleColors::BrightGray).p(tmp).reset();
 
 			tmp = "";
-			if (addr >= (u16)DragonRuntime::cpu.readRegister(data::Registers::SP))
+			if (addr >= (u32)DragonRuntime::cpu.readRegister(data::Registers::SP))
 				tmp.add("STACK");
 			else
 				tmp.add(DragonRuntime::memMap.getMemoryRegionName(addr));
@@ -303,7 +303,7 @@ namespace dragon
 
 			auto l_value = [&](const stdvec<u8>& values) {
 				String value = "";
-				for (u16 j = 0; j < data_size; j++)
+				for (u32 j = 0; j < data_size; j++)
 				{
 					if (j > 0)
 						value.add(".");
@@ -313,7 +313,7 @@ namespace dragon
 				return value;
 			};
 			bool data_different = false;
-			for (u16 j = 0; j < data_size; j++)
+			for (u32 j = 0; j < data_size; j++)
 			{
 				if (valueIndex + j >= prev.trackedValues.size() || valueIndex + j >= curr.trackedValues.size())
 					continue;
@@ -357,16 +357,17 @@ namespace dragon
 		// The frames are found by following the saved frame pointers (see VirtualCPU::pushStackFrame()):
 		// above FP are the saved stack frame size, FP, IP, ACC, PP, R10..R1 and the arguments count.
 		auto& mem = DragonRuntime::memMap;
+		constexpr u32 W = data::WordSize;
 		stdvec<tStackFrame> frames;
-		u16 fp = cast<u16>(DragonRuntime::cpu.readRegister(data::Registers::FP));
-		while (fp != 0 && fp < 0xFFFE - 32 && frames.size() < 64)
+		u32 fp = cast<u32>(DragonRuntime::cpu.readRegister(data::Registers::FP));
+		while (fp != 0 && cast<u64>(fp) + 16 * W < DragonRuntime::cpu.getStackTop() + W && frames.size() < 64)
 		{
 			tStackFrame frame;
 			frame.fp = fp;
-			frame.frameSize = mem.peek16(cast<u16>(fp + 2));
-			frame.savedFP = mem.peek16(cast<u16>(fp + 4));
-			frame.savedIP = mem.peek16(cast<u16>(fp + 6));
-			frame.argCount = mem.peek16(cast<u16>(fp + 32));
+			frame.frameSize = mem.peek32(fp + 1 * W);
+			frame.savedFP = mem.peek32(fp + 2 * W);
+			frame.savedIP = mem.peek32(fp + 3 * W);
+			frame.argCount = mem.peek32(fp + 16 * W);
 			frames.push_back(frame);
 			if (frame.savedFP <= fp)
 				break;
@@ -381,29 +382,30 @@ namespace dragon
 		out.fg(ostd::ConsoleColors::Yellow).p("Stack frames (innermost first): ").reset().nl();
 		Utils::printFullLine(out, '=', ostd::ConsoleColors::BrightBlue, width);
 		const auto frames = Utils::getStackFrames();
+		constexpr u32 W = data::WordSize;
 		i32 depth = 0;
 		for (const auto& f : frames)
 		{
-			const u16 fp = f.fp;
-			auto l_word = [&](u16 offset) { return mem.peek16(cast<u16>(fp + offset)); };
-			const u16 argStartAddr = (f.argCount == 0 ? 0 : cast<u16>(fp + 32 + f.argCount * 2));
+			const u32 fp = f.fp;
+			auto l_word = [&](u32 offset) { return mem.peek32(cast<u32>(fp + offset)); };
+			const u32 argStartAddr = (f.argCount == 0 ? 0 : cast<u32>(fp + (16 + f.argCount) * W));
 			String frame = "";
-			frame.add("#").add(depth).add("  args: ").add(String::getHexStr(argStartAddr, true, 2)).add(", argc: ").add(f.argCount);
-			for (u16 i = 0; i < f.argCount && i < 8; i++)
-				frame.add(i == 0 ? "  [" : " ").add(String::getHexStr(l_word(cast<u16>(32 + (f.argCount - i) * 2)), true, 2)).add(i + 1 == std::min<u16>(f.argCount, 8) ? "]" : "");
+			frame.add("#").add(depth).add("  args: ").add(String::getHexStr(argStartAddr, true, 4)).add(", argc: ").add(f.argCount);
+			for (u32 i = 0; i < f.argCount && i < 8; i++)
+				frame.add(i == 0 ? "  [" : " ").add(String::getHexStr(l_word(cast<u32>((16 + f.argCount - i) * W)), true, 4)).add(i + 1 == std::min<u32>(f.argCount, 8) ? "]" : "");
 			frame.add("\n");
-			for (u16 r = 1; r <= 10; r++)
-				frame.add(r == 1 ? "R1: " : String(" R").add(r).add(": ")).add(String::getHexStr(l_word(cast<u16>(32 - r * 2)), true, 2));
+			for (u32 r = 1; r <= 10; r++)
+				frame.add(r == 1 ? "R1: " : String(" R").add(r).add(": ")).add(String::getHexStr(l_word(cast<u32>((16 - r) * W)), true, 4));
 			frame.add("\n");
-			frame.add("PP: ").add(String::getHexStr(l_word(10), true, 2));
-			frame.add(" ACC: ").add(String::getHexStr(l_word(8), true, 2));
-			frame.add(" IP: ").add(String::getHexStr(f.savedIP, true, 2));
+			frame.add("PP: ").add(String::getHexStr(l_word(5 * W), true, 4));
+			frame.add(" ACC: ").add(String::getHexStr(l_word(4 * W), true, 4));
+			frame.add(" IP: ").add(String::getHexStr(f.savedIP, true, 4));
 			String returnSymbol = Utils::findNearestSymbol(dbg.data().labels, f.savedIP);
 			if (returnSymbol != "")
 				frame.add(" (").add(returnSymbol).add(")");
-			frame.add(" FP: ").add(String::getHexStr(f.savedFP, true, 2));
+			frame.add(" FP: ").add(String::getHexStr(f.savedFP, true, 4));
 			frame.add("\n");
-			frame.add("StackFrame: ").add(f.frameSize).add(", New FP: ").add(String::getHexStr(fp, true, 2));
+			frame.add("StackFrame: ").add(f.frameSize).add(", New FP: ").add(String::getHexStr(fp, true, 4));
 
 			ostd::RegexRichString rgxrstr(frame);
 			rgxrstr.fg("0x[0-9A-Fa-f]+|0b[0-1]+|(?<!\\w)[0-9]+(?!\\w)", "Red"); //Number Constants
@@ -424,17 +426,18 @@ namespace dragon
 		}
 	}
 
-	void Debugger::Display::printStack(ostd::OutputHandlerBase& out, const Debugger& dbg, u16 nrows, i32 width)
+	void Debugger::Display::printStack(ostd::OutputHandlerBase& out, const Debugger& dbg, u32 nrows, i32 width)
 	{
 		if (nrows == 0) nrows = 8;
-		u16 ncols = 16;
-		u16 startAddr = (0xFFFF - (ncols * nrows) + 1);
+		u32 ncols = 16;
+		const u64 stackEnd = cast<u64>(DragonRuntime::cpu.getStackTop()) + data::WordSize;
+		u32 startAddr = cast<u32>(stackEnd > ncols * nrows ? stackEnd - ncols * nrows : 0);
 		printStackFrames(out, dbg, width);
 		out.nl();
 		out.fg(ostd::ConsoleColors::Yellow).p("Stack view: ").reset().nl();
-		u16 stack_ptr = DragonRuntime::cpu.readRegister(data::Registers::SP);
+		u32 stack_ptr = DragonRuntime::cpu.readRegister(data::Registers::SP);
 		const auto& image = dbg.getBusImage();
-		ostd::Memory::printByteStream(std::span<const i8>(reinterpret_cast<const i8*>(image.data()), image.size()), startAddr, ncols, nrows, out, stack_ptr, 2, "Stack");
+		ostd::Memory::printByteStream(std::span<const i8>(reinterpret_cast<const i8*>(image.data()), image.size()), startAddr, ncols, nrows, out, stack_ptr, data::WordSize, "Stack");
 	}
 
 	void Debugger::Display::printCallStack(ostd::OutputHandlerBase& out, const Debugger& dbg, i32 width)
@@ -456,7 +459,7 @@ namespace dragon
 			const auto& call = callStack[c];
 			// The depth before the call is the indentation (calls: after - 1, returns: after).
 			String call_info = call.info.new_trim().toLower();
-			String subroutine_addr = String::getHexStr(call.addr, true, 2);
+			String subroutine_addr = String::getHexStr(call.addr, true, 4);
 			String subroutine_name = Utils::findSymbol(dbg.data().labels, call.addr);
 			String call_str = "";
 			i32 level = call.depth;
@@ -508,7 +511,7 @@ namespace dragon
 				out.fg(ostd::ConsoleColors::BrightGray);
 			else
 				out.fg(ostd::ConsoleColors::Magenta);
-			out.p(String::getHexStr(call.inst_addr, true, 2));
+			out.p(String::getHexStr(call.inst_addr, true, 4));
 			out.fg(ostd::ConsoleColors::BrightGray).p("| > ").reset();
 			out.pStyled(rgx).nl().reset();
 		}
@@ -527,13 +530,13 @@ namespace dragon
 				out.fg(ostd::ConsoleColors::BrightGray).p("  o ");
 			else
 				out.fg(bp.debugBreak ? ostd::ConsoleColors::Yellow : ostd::ConsoleColors::Red).p("  * ");
-			out.fg(ostd::ConsoleColors::BrightYellow).p(String::getHexStr(addr, true, 2));
+			out.fg(ostd::ConsoleColors::BrightYellow).p(String::getHexStr(addr, true, 4));
 			if (bp.debugBreak)
 				out.fg(ostd::ConsoleColors::BrightGray).p(bp.enabled ? "  (debug_break)" : "  (debug_break, disabled)");
 			String symbol = Utils::findNearestSymbol(dbg.data().labels, addr);
 			if (symbol != "")
 				out.fg(ostd::ConsoleColors::Cyan).p("  ").p(symbol);
-			u16 instructionSize = 1;
+			u32 instructionSize = 1;
 			String code = Utils::findSymbol(dbg.data().code, addr, &instructionSize);
 			if (code != "")
 				out.fg(ostd::ConsoleColors::BrightGray).p("  ").p(code.new_trim());
@@ -546,7 +549,7 @@ namespace dragon
 			if (!item.breakOnChange)
 				continue;
 			any = true;
-			out.fg(ostd::ConsoleColors::Magenta).p("  w ").fg(ostd::ConsoleColors::BrightYellow).p(String::getHexStr(item.address, true, 2));
+			out.fg(ostd::ConsoleColors::Magenta).p("  w ").fg(ostd::ConsoleColors::BrightYellow).p(String::getHexStr(item.address, true, 4));
 			out.fg(ostd::ConsoleColors::BrightGray).p(" [").p(item.size).p("]  ").fg(ostd::ConsoleColors::Cyan).p(item.label).reset().nl();
 		}
 		if (!any)
@@ -625,7 +628,7 @@ namespace dragon
 		l_cmd("(b)reak <addr/symbol>", "Toggles a breakpoint (enables / disables a debug_break).");
 		l_cmd("bl / breakpoints", "Lists the breakpoints and watches.");
 		l_cmd("bc / clear", "Removes every breakpoint (disables the debug_break ones).");
-		l_cmd("(p)rint [word] <addr/symbol>", "Prints values from memory. Valid [size] values are: byte/word/dword/qword/string.");
+		l_cmd("(p)rint [word] <addr/symbol>", "Prints values from memory. Valid [size] values are: byte/half/word/dword/qword/string (word = 4 bytes, the default).");
 		l_cmd("(t)rack <address[bytes]/symbol>", "Tracks addresses during execution ('t' alone: the tracker).");
 		l_cmd("(w)atch <address[bytes]/symbol>", "Tracks addresses, and stops when they change.");
 		l_cmd("untrack <addr/symbol/all>", "Stops tracking.");

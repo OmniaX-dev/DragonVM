@@ -21,10 +21,10 @@ namespace dragon
 				inline VirtualBIOS(void) { m_initialized = 0; }
 				inline VirtualBIOS(const String& biosFilePath) { init(biosFilePath); }
 				void init(const String& biosFilePath);
-				i8 read8(u16 addr) override;
-				i16 read16(u16 addr) override;
-				i8 write8(u16 addr, i8 value) override;
-				i16 write16(u16 addr, i16 value) override;
+				i8 read8(u32 addr) override;
+				i32 read32(u32 addr) override;
+				i8 write8(u32 addr, i8 value) override;
+				i32 write32(u32 addr, i32 value) override;
 
 				ostd::ByteStream* getByteStream(void) override;
 
@@ -36,10 +36,10 @@ namespace dragon
 		{
 			public:
 				InterruptVector(void);
-				i8 read8(u16 addr) override;
-				i16 read16(u16 addr) override;
-				i8 write8(u16 addr, i8 value) override;
-				i16 write16(u16 addr, i16 value) override;
+				i8 read8(u32 addr) override;
+				i32 read32(u32 addr) override;
+				i8 write8(u32 addr, i8 value) override;
+				i32 write32(u32 addr, i32 value) override;
 
 				ostd::ByteStream* getByteStream(void) override;
 
@@ -219,17 +219,17 @@ namespace dragon
 			};
 			public: struct tRegisters
 			{
-				inline static constexpr u16 Modifiers = 0x00;
-				inline static constexpr u16 KeyCode = 0x02;
+				inline static constexpr u32 Modifiers = 0x00;	// 4 bytes
+				inline static constexpr u32 KeyCode = 0x04;		// 4 bytes
 			};
 
 			public:
 				inline VirtualKeyboard(void) {  }
 				void init(void);
-				i8 read8(u16 addr) override;
-				i16 read16(u16 addr) override;
-				i8 write8(u16 addr, i8 value) override;
-				i16 write16(u16 addr, i16 value) override;
+				i8 read8(u32 addr) override;
+				i32 read32(u32 addr) override;
+				i8 write8(u32 addr, i8 value) override;
+				i32 write32(u32 addr, i32 value) override;
 
 				ostd::ByteStream* getByteStream(void) override;
 
@@ -240,8 +240,8 @@ namespace dragon
 
 			private:
 				ostd::BitField_16 __construct_modifiers_bitfield(void);
-				i8 __write8(u16 addr, i8 value);
-				i16 __write16(u16 addr, i16 value);
+				i8 __write8(u32 addr, i8 value);
+				i32 __write32(u32 addr, i32 value);
 				i16 __sdl_key_code_convert(i32 keyCode);
 
 			private:
@@ -253,10 +253,10 @@ namespace dragon
 		{
 			public:
 				VirtualMouse(void);
-				i8 read8(u16 addr) override;
-				i16 read16(u16 addr) override;
-				i8 write8(u16 addr, i8 value) override;
-				i16 write16(u16 addr, i16 value) override;
+				i8 read8(u32 addr) override;
+				i32 read32(u32 addr) override;
+				i8 write8(u32 addr, i8 value) override;
+				i32 write32(u32 addr, i32 value) override;
 
 				ostd::ByteStream* getByteStream(void) override;
 
@@ -266,10 +266,10 @@ namespace dragon
 		{
 			public:
 				VirtualBootloader(void);
-				i8 read8(u16 addr) override;
-				i16 read16(u16 addr) override;
-				i8 write8(u16 addr, i8 value) override;
-				i16 write16(u16 addr, i16 value) override;
+				i8 read8(u32 addr) override;
+				i32 read32(u32 addr) override;
+				i8 write8(u32 addr, i8 value) override;
+				i32 write32(u32 addr, i32 value) override;
 
 				ostd::ByteStream* getByteStream(void) override;
 
@@ -281,24 +281,24 @@ namespace dragon
 		{
 			class Disk : public IMemoryDevice
 			{
+				// The controller's registers. An operation copies DataSize bytes between the
+				// disk (from DiskAddress) and the memory (from MemoryAddress), one byte per cycle.
 				public: struct tRegisters
 				{
-					inline static constexpr u16 Signal = 0x00;
-					inline static constexpr u16 ModeSelector = 0x01;
-					inline static constexpr u16 DiskSelector = 0x02;
-					inline static constexpr u16 SectorSelector = 0x03;
-					inline static constexpr u16 AddressSelector = 0x05;
-					inline static constexpr u16 DataSize = 0x07;
-					inline static constexpr u16 DataSourceAddress = 0x09;
+					inline static constexpr u32 Signal = 0x00;				// 1 byte
+					inline static constexpr u32 ModeSelector = 0x01;		// 1 byte
+					inline static constexpr u32 DiskSelector = 0x02;		// 1 byte
+					inline static constexpr u32 DiskAddress = 0x04;			// 4 bytes
+					inline static constexpr u32 DataSize = 0x08;			// 4 bytes
+					inline static constexpr u32 MemoryAddress = 0x0C;		// 4 bytes
 
-					inline static constexpr u16 FirstReadOnly = 0x0B;
+					inline static constexpr u32 FirstReadOnly = 0x10;
 
-					inline static constexpr u16 Status = 0x0B;
-					inline static constexpr u16 CurrentDisk = 0x0C;
-					inline static constexpr u16 CurrentSector = 0x0D;
-					inline static constexpr u16 CurrentAddress = 0x0F;
-					inline static constexpr u16 RestDataSize = 0x11;
-					inline static constexpr u16 SourceData = 0x13;
+					inline static constexpr u32 Status = 0x10;				// 1 byte
+					inline static constexpr u32 CurrentDisk = 0x11;			// 1 byte
+					inline static constexpr u32 CurrentDiskAddress = 0x14;	// 4 bytes
+					inline static constexpr u32 RestDataSize = 0x18;		// 4 bytes
+					inline static constexpr u32 CurrentMemoryAddress = 0x1C;	// 4 bytes
 
 				};
 
@@ -325,10 +325,10 @@ namespace dragon
 
 				public:
 					Disk(MemoryMapper& memory, VirtualCPU& cpu);
-					i8 read8(u16 addr) override;
-					i16 read16(u16 addr) override;
-					i8 write8(u16 addr, i8 value) override;
-					i16 write16(u16 addr, i16 value) override;
+					i8 read8(u32 addr) override;
+					i32 read32(u32 addr) override;
+					i8 write8(u32 addr, i8 value) override;
+					i32 write32(u32 addr, i32 value) override;
 
 					ostd::ByteStream* getByteStream(void) override;
 
@@ -341,7 +341,7 @@ namespace dragon
 					inline void setBusy(bool busy) { m_busy = busy; }
 
 				private:
-					ostd::serial::SerialIO m_data { data::MemoryMapAddresses::DiskInterface_End - data::MemoryMapAddresses::DiskInterface_Start };
+					ostd::serial::SerialIO m_data { data::MemoryMapAddresses::DiskInterface_End - data::MemoryMapAddresses::DiskInterface_Start + 1 };
 					bool m_busy { false };
 					std::unordered_map<data::VDiskID, VirtualHardDrive*> m_connectedDisks;
 					MemoryMapper& m_memory;
@@ -373,22 +373,22 @@ namespace dragon
 				// The card's state beside its memory (for the debugger).
 				public: struct tState
 				{
-					u16 currentFrameAddr;
-					u16 secondFrameAddr;
+					u32 currentFrameAddr;
+					u32 secondFrameAddr;
 				};
 				public:
 					Graphics(void);
-					i8 read8(u16 addr) override;
-					i16 read16(u16 addr) override;
-					i8 write8(u16 addr, i8 value) override;
-					i16 write16(u16 addr, i16 value) override;
+					i8 read8(u32 addr) override;
+					i32 read32(u32 addr) override;
+					i8 write8(u32 addr, i8 value) override;
+					i32 write32(u32 addr, i32 value) override;
 
 					bool readFlag(u8 flg);
 					void setFlag(u8 flg, bool val = true);
 
 					ostd::ByteStream* getByteStream(void) override;
 
-					inline u16 getVRAMStart(void) { return m_vramStart; }
+					inline u32 getVRAMStart(void) { return m_vramStart; }
 					bool readVRAM_16Colors(u8 x, u8 y, tText16_Cell& outTextCell);
 					bool writeVRAM_16Colors(u8 x, u8 y, u8 character = 0, u8 background = 0xFF, u8 foreground = 0xFF);
 					bool clearVRAM_16Colors(u8 character = 0, u8 background = 0x00, u8 foreground = 0xFF);
@@ -401,23 +401,23 @@ namespace dragon
 				private:
 					ostd::serial::SerialIO m_videoMemory;
 
-					u16 m_vramStart { 0 };
+					u32 m_vramStart { 0 };
 					u8 m_16Color_cellSize { 4 };
-					u16 m_16Color_frameSize { 0 };
-					u16 m_16Color_secondFrameAddr { 0 };
-					u16 m_16Color_currentFrameAddr { 0 };
+					u32 m_16Color_frameSize { 0 };
+					u32 m_16Color_secondFrameAddr { 0 };
+					u32 m_16Color_currentFrameAddr { 0 };
 					bool m_16Color_doubleBufferingEnabled { false };
 
-					ostd::BitField_16 m_tempFlags;
+					ostd::BitField_32 m_tempFlags;
 			};
 			class SerialPort : public IMemoryDevice
 			{
 				public:
 					SerialPort(void);
-					i8 read8(u16 addr) override;
-					i16 read16(u16 addr) override;
-					i8 write8(u16 addr, i8 value) override;
-					i16 write16(u16 addr, i16 value) override;
+					i8 read8(u32 addr) override;
+					i32 read32(u32 addr) override;
+					i8 write8(u32 addr, i8 value) override;
+					i32 write32(u32 addr, i32 value) override;
 
 					ostd::ByteStream* getByteStream(void) override;
 
@@ -429,10 +429,10 @@ namespace dragon
 					inline CMOS(void) { m_initialized = false; }
 					inline CMOS(const String& cmosFilePath) { init(cmosFilePath); }
 					void init(const String& cmosFilePath);
-					i8 read8(u16 addr) override;
-					i16 read16(u16 addr) override;
-					i8 write8(u16 addr, i8 value) override;
-					i16 write16(u16 addr, i16 value) override;
+					i8 read8(u32 addr) override;
+					i32 read32(u32 addr) override;
+					i8 write8(u32 addr, i8 value) override;
+					i32 write32(u32 addr, i32 value) override;
 
 					ostd::ByteStream* getByteStream(void) override;
 					// Writes the whole chip back to its file.
@@ -440,7 +440,7 @@ namespace dragon
 
 				private:
 					ostd::ByteStream m_data;
-					u16 m_size { 0 };
+					u32 m_size { 0 };
 					std::fstream m_dataFile;
 					bool m_initialized { false };
 					u64 m_fileSize { 0 };

@@ -46,12 +46,12 @@ namespace dragon
 			public: struct tSymbol
 			{
 				std::vector<ostd::UByte> bytes;
-				u16 address { 0 };
+				u32 address { 0 };
 			};
 			public: struct tLabel
 			{
-				std::vector<u16> references;
-				u16 address { 0 };
+				std::vector<u32> references;	// offsets in the code of the (forward) references
+				u32 address { 0 };
 			};
 			public: struct tStructMember
 			{
@@ -148,7 +148,9 @@ namespace dragon
 
 				static String replaceSymbols(String line);
 				static void replaceLabelRefs(void);
-				static eOperandType parseOperand(String op, i16& outOp);
+				static eOperandType parseOperand(String op, i32& outOp);
+				// Appends a 32-bit word (big endian) to the code.
+				static void pushWord(i32 word);
 				static u8 parseRegister(String op);
 
 			private:
@@ -162,12 +164,12 @@ namespace dragon
 				inline static std::unordered_map<String, tSymbol> m_symbolTable;
 				inline static std::unordered_map<String, tLabel> m_labelTable;
 
-				inline static u16 m_fixedSize { 0 };
+				inline static u32 m_fixedSize { 0 };
 				inline static u8 m_fixedFillValue { 0x00 };
-				inline static u16 m_loadAddress { 0x0000 };
-				inline static u16 m_currentDataAddr { 0x0000 };
-				inline static u16 m_dataSize { 0x0000 };
-				inline static u16 m_programSize { 0x0000 };
+				inline static u32 m_loadAddress { 0x00000000 };
+				inline static u32 m_currentDataAddr { 0x00000000 };
+				inline static u32 m_dataSize { 0x00000000 };
+				inline static u32 m_programSize { 0x00000000 };
 				inline static String m_entry_lbl { "" };
 				inline static String m_headerStr { "" };
 
@@ -179,6 +181,8 @@ namespace dragon
 				inline static ostd::ConsoleOutputHandler out;
 
 			public:
+				// Every program starts with a jump to its entry point (opcode + 32-bit address).
+				inline static constexpr u32 EntryJumpSize = 5;
 				inline static bool saveExports { false };
 				inline static bool debugMode { false };
 				inline static std::vector<String> cpuExtensions;

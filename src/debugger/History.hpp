@@ -7,7 +7,7 @@
 
 namespace dragon
 {
-	namespace hw { class VirtualHardDrive; }
+	namespace hw { class VirtualHardDrive; class DirtyPageMap; }
 	namespace debugger
 	{
 		// ============================================================================
@@ -42,6 +42,9 @@ namespace dragon
 				u32 offset { 0 };							// in the flat state
 				std::function<void(void)> capture { nullptr };	// live state -> data (before diffing)
 				std::function<void(void)> apply { nullptr };	// data -> live state (after restoring)
+				// If set, only the pages marked in it are diffed (and it is cleared after each diff):
+				// big segments (the RAM) aren't scanned every cycle.
+				hw::DirtyPageMap* dirtyPages { nullptr };
 			};
 			public: struct FileWrite
 			{
@@ -72,7 +75,7 @@ namespace dragon
 
 			public:
 				// Segments must be added before begin().
-				void addSegment(const String& name, u8* data, u32 size, std::function<void(void)> capture = nullptr, std::function<void(void)> apply = nullptr);
+				void addSegment(const String& name, u8* data, u32 size, std::function<void(void)> capture = nullptr, std::function<void(void)> apply = nullptr, hw::DirtyPageMap* dirtyPages = nullptr);
 				inline const stdvec<Segment>& getSegments(void) const { return m_segments; }
 				inline u32 getStateSize(void) const { return cast<u32>(m_shadow.size()); }
 
@@ -114,6 +117,8 @@ namespace dragon
 			private:
 				void capture_all(void);
 				void diff_segment(const Segment& segment, stdvec<u8>& outRuns, u32& lastEnd);
+				// Diffs [from, to) of the segment; `next` is where the scan continues (runs may end after `to`).
+				void diff_range(const Segment& segment, u32 from, u32 to, stdvec<u8>& outRuns, u32& lastEnd, u32& next);
 				// Writes the old (undo) or new (redo) bytes of an entry into the state.
 				void apply_entry(const CycleDiff& entry, bool undo);
 				void apply_file_writes(const CycleDiff& entry, bool undo);

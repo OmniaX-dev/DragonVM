@@ -98,7 +98,7 @@ namespace dragon
 		});
 		addWidget(m_disassembly);
 		m_disassembly.setFontSize(15);
-		m_disassembly.setShowInMemoryCallback([this](u16 address) { show_in_memory(address); });
+		m_disassembly.setShowInMemoryCallback([this](u32 address) { show_in_memory(address); });
 		m_disassembly.setBreakpointsChangedCallback([this](void) { m_viewsDirty = true; });
 
 		// ===== Console =====
@@ -285,12 +285,12 @@ namespace dragon
 		m_trackerTab = &l_tab("Tracker", m_tracker);
 		m_historyTab = &l_tab("History", m_historyView);
 
-		m_registers.setShowInMemoryCallback([this](u16 address) { show_in_memory(address); });
-		m_registers.setShowInDisassemblyCallback([this](u16 address) { show_in_disassembly(address); });
-		m_breakpoints.setShowInMemoryCallback([this](u16 address) { show_in_memory(address); });
-		m_breakpoints.setShowInDisassemblyCallback([this](u16 address) { show_in_disassembly(address); });
-		m_callTrace.setShowInDisassemblyCallback([this](u16 address) { show_in_disassembly(address); });
-		m_tracker.setShowInMemoryCallback([this](u16 address) { show_in_memory(address); });
+		m_registers.setShowInMemoryCallback([this](u32 address) { show_in_memory(address); });
+		m_registers.setShowInDisassemblyCallback([this](u32 address) { show_in_disassembly(address); });
+		m_breakpoints.setShowInMemoryCallback([this](u32 address) { show_in_memory(address); });
+		m_breakpoints.setShowInDisassemblyCallback([this](u32 address) { show_in_disassembly(address); });
+		m_callTrace.setShowInDisassemblyCallback([this](u32 address) { show_in_disassembly(address); });
+		m_tracker.setShowInMemoryCallback([this](u32 address) { show_in_memory(address); });
 
 		// Stack: the frames (from the saved frame pointers) over the stack's memory.
 		m_stack.addWidget(m_stackFramesView);
@@ -386,19 +386,31 @@ namespace dragon
 		showStatusBar(true);
 	}
 
+	u32 DebuggerWindow::stack_end(void)
+	{
+		// The end of the stack (the end of the RAM): the stack grows down from the word before it.
+		return DragonRuntime::cpu.getStackTop() + data::WordSize;
+	}
+
+	u32 DebuggerWindow::stack_size(u32 sp)
+	{
+		const u32 end = stack_end();
+		return (sp < end ? end - sp : 1);
+	}
+
 	void DebuggerWindow::build_memory(void)
 	{
 		// Memory: the whole address space, the regions of the memory map highlighted.
 		const auto& image = m_debugger.getBusImage();
 		const std::span<const i8> bus(reinterpret_cast<const i8*>(image.data()), image.size());
-		const u16 ip = cast<u16>(DragonRuntime::cpu.readRegister(data::Registers::IP));
-		const u16 sp = cast<u16>(DragonRuntime::cpu.readRegister(data::Registers::SP));
+		const u32 ip = cast<u32>(DragonRuntime::cpu.readRegister(data::Registers::IP));
+		const u32 sp = cast<u32>(DragonRuntime::cpu.readRegister(data::Registers::SP));
 		auto l_write = [this](ogfx::gui::StreamIndex index, u64 value, u8 size) {
-			return m_debugger.writeMemory(cast<u16>(index), value, size);
+			return m_debugger.writeMemory(cast<u32>(index), value, size);
 		};
-		m_memory.setData(bus, ip & 0xFFF0, 16, 0, ip, 1, "Bus");
+		m_memory.setData(bus, ip & ~0xFu, 16, 0, ip, 1, "Bus");
 		m_memory.setBigEndian(true);
-		m_memory.setUnitSize(2);
+		m_memory.setUnitSize(data::WordSize);
 		m_memory.enableFollowHighlight(true);
 		const Color regionColors[] = { { 40, 80, 160, 40 }, { 160, 120, 20, 40 }, { 150, 60, 170, 40 }, { 60, 160, 60, 40 }, { 160, 60, 60, 40 } };
 		i32 colorIndex = 0;
@@ -408,7 +420,7 @@ namespace dragon
 				continue;
 			m_memory.addHighlight(region.startAddress, cast<u32>(region.endAddress) - region.startAddress + 1, regionColors[colorIndex++ % 5], region.name);
 		}
-		m_stackHighlight = m_memory.addHighlight(sp, std::max<u32>(1, 0x10000 - sp), Color(40, 160, 100, 50), "stack");
+		m_stackHighlight = m_memory.addHighlight(sp, stack_size(sp), Color(40, 160, 100, 50), "stack");
 		m_memory.setWriteCallback(l_write);
 
 		// The instructions' opcodes as aliases (with their operand bytes), colored by kind.
@@ -465,9 +477,9 @@ namespace dragon
 		}
 
 		// Stack: the same bus, the frames highlighted by refresh_stack().
-		m_stackMemory.setData(bus, std::min<u16>(sp & 0xFFF0, 0xFF80), 16, 0, sp, 2, "Stack");
+		m_stackMemory.setData(bus, std::min<u32>(sp & ~0xFu, stack_end() - 0x80), 16, 0, sp, data::WordSize, "Stack");
 		m_stackMemory.setBigEndian(true);
-		m_stackMemory.setUnitSize(2);
+		m_stackMemory.setUnitSize(data::WordSize);
 		m_stackMemory.enableFollowHighlight(true);
 		m_stackMemory.setWriteCallback(l_write);
 	}
@@ -597,14 +609,14 @@ namespace dragon
 		for (const auto& item : m_debugger.data().tracked)
 		{
 			const Color color = item.breakOnChange ? Color(240, 80, 80) : colors[index++ % 6];
-			m_memory.addWatch(item.address, cast<u8>(std::min<u16>(item.size, 255)), item.breakOnChange ? String("(w) ").add(item.label) : item.label, color);
+			m_memory.addWatch(item.address, cast<u8>(std::min<u32>(item.size, 255)), item.breakOnChange ? String("(w) ").add(item.label) : item.label, color);
 		}
 	}
 
 	void DebuggerWindow::refresh_views(bool full)
 	{
 		const bool running = m_debugger.isRunning();
-		const u16 ip = cast<u16>(DragonRuntime::cpu.readRegister(data::Registers::IP));
+		const u32 ip = cast<u32>(DragonRuntime::cpu.readRegister(data::Registers::IP));
 		// A program picked in the menu (or an address shown from another view) stays only
 		// until the machine moves: running, stepping or moving in the history follows the IP.
 		if (running || ip != m_shownAtIP || m_debugger.getCycle() != m_shownAtCycle)
@@ -620,8 +632,8 @@ namespace dragon
 		u8 size = 1;
 		Debugger::Utils::decodeInstruction(ip, &size);
 		m_memory.setHighlight(ip, size);
-		const u16 sp = cast<u16>(DragonRuntime::cpu.readRegister(data::Registers::SP));
-		m_memory.updateHighlight(m_stackHighlight, sp, std::max<u32>(1, 0x10000 - sp));
+		const u32 sp = cast<u32>(DragonRuntime::cpu.readRegister(data::Registers::SP));
+		m_memory.updateHighlight(m_stackHighlight, sp, stack_size(sp));
 		sync_watches();
 		m_diskManagerWindow.syncWithMachine();
 		m_cmosManagerWindow.syncWithMachine();
@@ -644,7 +656,7 @@ namespace dragon
 		Debugger::Display::printStackFrames(out, m_debugger, std::max(60, m_stackFramesView.getVisibleColumns() - 1));
 		const auto& image = m_debugger.getBusImage();
 		m_stackMemory.updateData(std::span<const i8>(reinterpret_cast<const i8*>(image.data()), image.size()));
-		const u16 sp = cast<u16>(DragonRuntime::cpu.readRegister(data::Registers::SP));
+		const u32 sp = cast<u32>(DragonRuntime::cpu.readRegister(data::Registers::SP));
 		m_stackMemory.setHighlight(sp, 2);
 		const i32 rows = std::max(1, m_stackMemory.getVisibleRows());
 		if (sp != m_lastStackSP || rows != m_lastStackRows)
@@ -652,7 +664,7 @@ namespace dragon
 			// The top of the stack (the end of memory) at the bottom of the view, as long as SP fits.
 			m_lastStackSP = sp;
 			m_lastStackRows = rows;
-			m_stackMemory.setStart(cast<u64>(std::max<i64>(0, std::min<i64>(sp & 0xFFF0, 0x10000 - cast<i64>(rows) * 16))));
+			m_stackMemory.setStart(cast<u64>(std::max<i64>(0, std::min<i64>(sp & ~0xFu, cast<i64>(stack_end()) - cast<i64>(rows) * 16))));
 		}
 
 		// Each frame's saved registers and arguments, named (hover them).
@@ -664,12 +676,12 @@ namespace dragon
 		{
 			String returnTo = Debugger::Utils::findNearestSymbol(m_debugger.data().labels, frame.savedIP);
 			if (returnTo == "")
-				returnTo = String::getHexStr(frame.savedIP, true, 2);
+				returnTo = String::getHexStr(frame.savedIP, true, 4);
 			const Color saved = (depth % 2 == 0 ? Color(60, 120, 220, 55) : Color(220, 150, 60, 55));
-			m_stackFrameHighlights.push_back(m_stackMemory.addHighlight(cast<u16>(frame.fp + 2), 32,
+			m_stackFrameHighlights.push_back(m_stackMemory.addHighlight(cast<u32>(frame.fp + data::WordSize), 16 * data::WordSize,
 				saved, String("#").add(depth).add(" saved frame (returns to ").add(returnTo).add(")")));
 			if (frame.argCount > 0 && frame.argCount < 64)
-				m_stackFrameHighlights.push_back(m_stackMemory.addHighlight(cast<u16>(frame.fp + 34), cast<u32>(frame.argCount) * 2,
+				m_stackFrameHighlights.push_back(m_stackMemory.addHighlight(cast<u32>(frame.fp + 17 * data::WordSize), cast<u32>(frame.argCount) * data::WordSize,
 					Color(170, 70, 190, 60), String("#").add(depth).add(" arguments (").add(frame.argCount).add(")")));
 			depth++;
 		}
@@ -714,7 +726,7 @@ namespace dragon
 
 		String status = "Cycle ";
 		status.add(m_debugger.getCycle());
-		status.add("   IP ").add(String::getHexStr(cast<u16>(DragonRuntime::cpu.readRegister(data::Registers::IP)), true, 2));
+		status.add("   IP ").add(String::getHexStr(cast<u32>(DragonRuntime::cpu.readRegister(data::Registers::IP)), true, 4));
 		status.add("   depth ").add(m_debugger.getCallDepth());
 		status.add("   speed ");
 		if (m_debugger.isRunning())
@@ -738,7 +750,7 @@ namespace dragon
 		m_updatingTimeline = false;
 	}
 
-	void DebuggerWindow::show_in_memory(u16 address)
+	void DebuggerWindow::show_in_memory(u32 address)
 	{
 		m_tabs.setCurrentTab(*m_memoryTab);
 		m_memory.jumpTo(address);
@@ -750,7 +762,7 @@ namespace dragon
 		m_shownAtCycle = m_debugger.getCycle();
 	}
 
-	void DebuggerWindow::show_in_disassembly(u16 address)
+	void DebuggerWindow::show_in_disassembly(u32 address)
 	{
 		// Until the machine moves (see refresh_views()).
 		mark_shown_position();
@@ -800,7 +812,7 @@ namespace dragon
 			return;
 		// Labels first ($_name, written as is, or without the '$' / '$_'), then any address / symbol.
 		const auto& labels = m_debugger.data().labels;
-		u16 address = 0;
+		u32 address = 0;
 		for (const String& symbol : { text, String("$").add(text), String("$_").add(text) })
 		{
 			if ((address = Debugger::Utils::findSymbol(labels, symbol)) != 0)
@@ -815,7 +827,7 @@ namespace dragon
 		const bool already = existing != nullptr && existing->enabled;
 		m_debugger.addBreakPoint(address);
 		String label = Debugger::Utils::findSymbol(m_debugger.data().labels, address);
-		m_consoleOut.fg(ostd::ConsoleColors::Yellow).p(already ? "Breakpoint already set at " : "Breakpoint set at ").p(String::getHexStr(address, true, 2));
+		m_consoleOut.fg(ostd::ConsoleColors::Yellow).p(already ? "Breakpoint already set at " : "Breakpoint set at ").p(String::getHexStr(address, true, 4));
 		if (label != "")
 			m_consoleOut.p(" (").p(label.new_trim()).p(")");
 		m_consoleOut.reset().nl();

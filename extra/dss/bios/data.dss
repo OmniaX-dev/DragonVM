@@ -11,13 +11,21 @@
 @export_comment BIOS_API " These are the base addresses of the memory map."
 @raw_export_start BIOS_API
 @group MemoryAddresses
-	MBR 			0x1380
-	INT_VEC 		0x1080
-	DISK_INTERFACE 	0x1580
-	RAM 			0x1740
-	CMOS 			0x1000
-	VGA 			0x1600
-	KEYBOARD		0x1280
+	MBR 			0x00004680
+	INT_VEC 		0x00004080
+	DISK_INTERFACE 	0x00004880
+	RAM 			0x00010000
+	CMOS 			0x00004000
+	VGA 			0x00004900
+	KEYBOARD		0x00004580
+@end
+@raw_export_end
+@export_comment BIOS_API " --\n"
+
+@export_comment BIOS_API " Interrupt vector: 256 entries of ENTRY_SIZE bytes (status (1 byte, 0xFF = enabled), handler address (4 bytes))."
+@raw_export_start BIOS_API
+@group IntVector
+	ENTRY_SIZE		5
 @end
 @raw_export_end
 @export_comment BIOS_API " --\n"
@@ -26,15 +34,15 @@
 @raw_export_start BIOS_API
 @group CMOS_Settings
 	MEM_START				{ MemoryAddresses.CMOS + 0x0000 }
-	MEM_SIZE				{ MemoryAddresses.CMOS + 0x0002 }
-	CLOCK_SPEED				{ MemoryAddresses.CMOS + 0x0004 }
-	SCREEN_REDRAW_RATE		{ MemoryAddresses.CMOS + 0x0006 }
-	SCREEN_WIDTH			{ MemoryAddresses.CMOS + 0x0007 }
-	SCREEN_HEIGHT			{ MemoryAddresses.CMOS + 0x0009 }
-	BOOT_DISK 				{ MemoryAddresses.CMOS + 0x0010 }
-	STACK_SIZE 				{ MemoryAddresses.CMOS + 0x0011 }
+	MEM_SIZE				{ MemoryAddresses.CMOS + 0x0004 }
+	CLOCK_SPEED				{ MemoryAddresses.CMOS + 0x0008 }
+	SCREEN_WIDTH			{ MemoryAddresses.CMOS + 0x000C }
+	SCREEN_HEIGHT			{ MemoryAddresses.CMOS + 0x0010 }
+	STACK_SIZE 				{ MemoryAddresses.CMOS + 0x0014 }
+	SCREEN_REDRAW_RATE		{ MemoryAddresses.CMOS + 0x0018 }
+	BOOT_DISK 				{ MemoryAddresses.CMOS + 0x0019 }
 
-	DISK_LIST 				{ MemoryAddresses.CMOS + 0x007E }
+	DISK_LIST 				{ MemoryAddresses.CMOS + 0x007C }
 @end
 @raw_export_end
 @export_comment BIOS_API " --\n"
@@ -74,17 +82,17 @@
 	SIGNAL									{ MemoryAddresses.VGA + 0x0003 }
 	TEXT_SINGLE_CHAR						{ MemoryAddresses.VGA + 0x0004 }
 	TEXT_SIGNLE_INVERT						{ MemoryAddresses.VGA + 0x0005 }
-	TEXT_SIGNLE_STR							{ MemoryAddresses.VGA + 0x0006 }
+	TEXT_SIGNLE_STR							{ MemoryAddresses.VGA + 0x0008 }
 
-	FLAGS									{ MemoryAddresses.VGA + 0x007E }
+	FLAGS									{ MemoryAddresses.VGA + 0x007C }
 
 	MEMORY_CONTROLLER_X						{ MemoryAddresses.VGA + 0x0080 }
-	MEMORY_CONTROLLER_X_BYTE				{ MemoryAddresses.VGA + 0x0080 + 1 }
-	MEMORY_CONTROLLER_Y						{ MemoryAddresses.VGA + 0x0082 }
-	MEMORY_CONTROLLER_Y_BYTE				{ MemoryAddresses.VGA + 0x0082 + 1 }
-	MEMORY_CONTROLLER_CHAR					{ MemoryAddresses.VGA + 0x0084 }
-	MEMORY_CONTROLLER_BG_COL				{ MemoryAddresses.VGA + 0x0085 }
-	MEMORY_CONTROLLER_FG_COL				{ MemoryAddresses.VGA + 0x0086 }
+	MEMORY_CONTROLLER_X_BYTE				{ MemoryAddresses.VGA + 0x0080 + 3 }
+	MEMORY_CONTROLLER_Y						{ MemoryAddresses.VGA + 0x0084 }
+	MEMORY_CONTROLLER_Y_BYTE				{ MemoryAddresses.VGA + 0x0084 + 3 }
+	MEMORY_CONTROLLER_CHAR					{ MemoryAddresses.VGA + 0x0088 }
+	MEMORY_CONTROLLER_BG_COL				{ MemoryAddresses.VGA + 0x0089 }
+	MEMORY_CONTROLLER_FG_COL				{ MemoryAddresses.VGA + 0x008A }
 
 	BUFF_START								{ MemoryAddresses.VGA + 0x00E0 }
 @end
@@ -97,7 +105,7 @@
 @raw_export_start BIOS_API
 @group Keyboard_Registers
 	MODIFIERS_BITFIELD 								{ MemoryAddresses.KEYBOARD + 0x0000 }
-	KEYCODE			 								{ MemoryAddresses.KEYBOARD + 0x0002 }
+	KEYCODE			 								{ MemoryAddresses.KEYBOARD + 0x0004 }
 @end
 @raw_export_end
 @export_comment BIOS_API " --\n"
@@ -189,7 +197,7 @@
 	ID_CODE				0xF1C4
 	CODE_SIZE_B			1024
 	HEADER_SIZE_B		32
-    CODE_LOAD_ADDR      0x2C00
+    CODE_LOAD_ADDR      0x00012000
 @end
 @raw_export_end
 @export_comment BIOS_API " --\n"
@@ -282,37 +290,35 @@
 	SIGNAL 0x00
 	MODE_SELECTOR 0x01
 	DISK_SELECTOR 0x02
-	SECTOR_SELECTOR 0x03
-	ADDRESS_SELECTOR 0x05
-	DATA_SIZE 0x07
-	MEMORY_ADDRESS 0x09
-	RO_STATUS 0x0B
-	RO_CURRENT_DISK 0x0C
-	RO_CURRENT_SECTOR 0x0D
-	RO_CURRENT_ADDRESS 0x0F
-	RO_REST_DATA_SIZE 0x11
-	RO_MEMORY_ADDRESS 0x13
+	DISK_ADDRESS 0x04
+	DATA_SIZE 0x08
+	MEMORY_ADDRESS 0x0C
+	RO_STATUS 0x10
+	RO_CURRENT_DISK 0x11
+	RO_CURRENT_DISK_ADDRESS 0x14
+	RO_REST_DATA_SIZE 0x18
+	RO_CURRENT_MEMORY_ADDRESS 0x1C
 @end
 @raw_export_end
 @export_comment BIOS_API " --\n"
 
-@export_comment BIOS_API " Disk driver data structure."
+@export_comment BIOS_API " Disk driver data structure (int 0x20 / 0x10 and 0x12): copies DataSize bytes between the disk (from Address) and the memory (from MemoryAddress)."
 @raw_export_start BIOS_API
 @struct DiskDriverData
 	Mode:1 > 0x00
 	Disk:1 > 0x00
-	Sector:2 > 0x00, 0x00
-	Address:2 > 0x00, 0x00
-	DataSize:2 > 0x00, 0x00
-	MemoryAddress:2 > 0x00, 0x00
+	Reserved:2 > 0x00
+	Address:4 > 0x00
+	DataSize:4 > 0x00
+	MemoryAddress:4 > 0x00
 @end
 @raw_export_end
 @export_comment BIOS_API " --\n"
 ## ===============================================================================================
 
 .data
-	$_bios_version_number_maj 0x00, 0x00
-	$_bios_version_number_min 0x00, 0x04
+	$_bios_version_number_maj 0x00, 0x00, 0x00, 0x00
+	$_bios_version_number_min 0x00, 0x00, 0x00, 0x05
 	$_bios_name "DragonBIOS "
 	$_clock_str " Clock: "
 	$_mem_str " Memory: "

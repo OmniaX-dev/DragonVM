@@ -7,50 +7,84 @@
 #include "../runtime/DragonRuntime.hpp"
 #include <ostd/io/Memory.hpp>
 
-//TODO: Fix all access functions (reads and writes) ensuring the address is not out of bounds.
-//        Right now the check is done, but just to push an error if out of bounds; the address
-//        gets still used even in that case, which is really dumb and will probably crash the
-//        runtime most of the time.
-
 namespace dragon
 {
 	namespace hw
 	{
+		// Byte / word access to a plain ByteStream, pushing `errorCode` when out of bounds.
+		static i8 stream_read8(ostd::ByteStream& data, u32 addr, u64 errorCode, const char* device)
+		{
+			if (addr >= data.size())
+			{
+				data::ErrorHandler::pushError(errorCode, String("Invalid Byte ").add(device).add(" location at address: ").add(String::getHexStr(addr, true, 4)));
+				return 0;
+			}
+			return data[addr];
+		}
+
+		static i32 stream_read32(ostd::ByteStream& data, u32 addr, u64 errorCode, const char* device)
+		{
+			i32 value = 0;
+			if (!bytes::read32(data, addr, value))
+				data::ErrorHandler::pushError(errorCode, String("Invalid Word ").add(device).add(" location at address: ").add(String::getHexStr(addr, true, 4)));
+			return value;
+		}
+
+		static i8 stream_write8(ostd::ByteStream& data, u32 addr, i8 value, u64 errorCode, const char* device)
+		{
+			if (addr >= data.size())
+			{
+				data::ErrorHandler::pushError(errorCode, String("Invalid Byte ").add(device).add(" location at address: ").add(String::getHexStr(addr, true, 4)));
+				return 0;
+			}
+			data[addr] = value;
+			return value;
+		}
+
+		static i32 stream_write32(ostd::ByteStream& data, u32 addr, i32 value, u64 errorCode, const char* device)
+		{
+			if (!bytes::write32(data, addr, value))
+			{
+				data::ErrorHandler::pushError(errorCode, String("Invalid Word ").add(device).add(" location at address: ").add(String::getHexStr(addr, true, 4)));
+				return 0;
+			}
+			return value;
+		}
+
+
+
+
 		void VirtualBIOS::init(const String& biosFilePath)
 		{
 			bool loaded = ostd::Memory::loadByteStreamFromFile(biosFilePath, m_bios);
 			if (!loaded)
 				data::ErrorHandler::pushError(data::ErrorCodes::BIOS_FailedToLoad, "Failed to load BIOS data.");
-			if (m_bios.size() != 4096) //TODO: Hardcoded
-				data::ErrorHandler::pushError(data::ErrorCodes::BIOS_InvalidSize, String("Invalid BIOS size: ").add(String::getHexStr(m_bios.size(), true, 2)));
+			const u32 biosSize = data::MemoryMapAddresses::BIOS_End - data::MemoryMapAddresses::BIOS_Start + 1;
+			if (m_bios.size() != biosSize)
+				data::ErrorHandler::pushError(data::ErrorCodes::BIOS_InvalidSize, String("Invalid BIOS size: ").add(String::getHexStr(m_bios.size(), true, 4)).add(" (must be ").add(biosSize).add(" bytes)"));
 			m_initialized = true;
 		}
 
-		i8 VirtualBIOS::read8(u16 addr)
+		i8 VirtualBIOS::read8(u32 addr)
 		{
-			if (addr >= m_bios.size())
-				data::ErrorHandler::pushError(data::ErrorCodes::BIOS_InvalidAddress, String("Invalid Byte BIOS location at address: ").add(String::getHexStr(addr, true, 2)));
-			return m_bios[addr];
+			return stream_read8(m_bios, addr, data::ErrorCodes::BIOS_InvalidAddress, "BIOS");
 		}
 
-		i16 VirtualBIOS::read16(u16 addr)
+		i32 VirtualBIOS::read32(u32 addr)
 		{
-			if (addr >= m_bios.size() - 1)
-				data::ErrorHandler::pushError(data::ErrorCodes::BIOS_InvalidAddress, String("Invalid Word BIOS location at address: ").add(String::getHexStr(addr, true, 2)));
-			return ((m_bios[addr + 0] <<  8) & 0xFF00U)
-				 | ( m_bios[addr + 1]        & 0x00FFU);
+			return stream_read32(m_bios, addr, data::ErrorCodes::BIOS_InvalidAddress, "BIOS");
 		}
 
-		i8 VirtualBIOS::write8(u16 addr, i8 value)
+		i8 VirtualBIOS::write8(u32 addr, i8 value)
 		{
-			data::ErrorHandler::pushError(data::ErrorCodes::BIOS_WriteAttempt, String("Attempting to write to BIOS memory map: ").add(String::getHexStr(addr, true, 2)));
+			data::ErrorHandler::pushError(data::ErrorCodes::BIOS_WriteAttempt, String("Attempting to write to BIOS memory map: ").add(String::getHexStr(addr, true, 4)));
 			return 0x00;
 		}
 
-		i16 VirtualBIOS::write16(u16 addr, i16 value)
+		i32 VirtualBIOS::write32(u32 addr, i32 value)
 		{
-			data::ErrorHandler::pushError(data::ErrorCodes::BIOS_WriteAttempt, String("Attempting to write to BIOS memory map: ").add(String::getHexStr(addr, true, 2)));
-			return 0x0000;
+			data::ErrorHandler::pushError(data::ErrorCodes::BIOS_WriteAttempt, String("Attempting to write to BIOS memory map: ").add(String::getHexStr(addr, true, 4)));
+			return 0x00000000;
 		}
 
 		ostd::ByteStream* VirtualBIOS::getByteStream(void)
@@ -64,41 +98,28 @@ namespace dragon
 
 		InterruptVector::InterruptVector(void)
 		{
-			u32 dataSize = data::MemoryMapAddresses::IntVector_End - data::MemoryMapAddresses::IntVector_Start + 1;
-			for (i32 i = 0; i < dataSize; i++)
-				m_data.push_back(0x00);
+			const u32 dataSize = data::MemoryMapAddresses::IntVector_End - data::MemoryMapAddresses::IntVector_Start + 1;
+			m_data.assign(dataSize, 0x00);
 		}
 
-		i8 InterruptVector::read8(u16 addr)
+		i8 InterruptVector::read8(u32 addr)
 		{
-			if (addr >= m_data.size())
-				data::ErrorHandler::pushError(data::ErrorCodes::IntVector_InvalidAddress, String("Invalid Byte IntVector location at address: ").add(String::getHexStr(addr, true, 2)));
-			return m_data[addr];
+			return stream_read8(m_data, addr, data::ErrorCodes::IntVector_InvalidAddress, "IntVector");
 		}
 
-		i16 InterruptVector::read16(u16 addr)
+		i32 InterruptVector::read32(u32 addr)
 		{
-			if (addr >= m_data.size() - 1)
-				data::ErrorHandler::pushError(data::ErrorCodes::IntVector_InvalidAddress, String("Invalid Word IntVector location at address: ").add(String::getHexStr(addr, true, 2)));
-			return ((m_data[addr + 0] <<  8) & 0xFF00U)
-				 | ( m_data[addr + 1]        & 0x00FFU);
+			return stream_read32(m_data, addr, data::ErrorCodes::IntVector_InvalidAddress, "IntVector");
 		}
 
-		i8 InterruptVector::write8(u16 addr, i8 value)
+		i8 InterruptVector::write8(u32 addr, i8 value)
 		{
-			if (addr >= m_data.size())
-				data::ErrorHandler::pushError(data::ErrorCodes::IntVector_InvalidAddress, String("Invalid Word IntVector location at address: ").add(String::getHexStr(addr, true, 2)));
-			m_data[addr] = value;
-			return value;
+			return stream_write8(m_data, addr, value, data::ErrorCodes::IntVector_InvalidAddress, "IntVector");
 		}
 
-		i16 InterruptVector::write16(u16 addr, i16 value)
+		i32 InterruptVector::write32(u32 addr, i32 value)
 		{
-			if (addr >= m_data.size() - 1)
-				data::ErrorHandler::pushError(data::ErrorCodes::IntVector_InvalidAddress, String("Invalid Word IntVector location at address: ").add(String::getHexStr(addr, true, 2)));
-			m_data[addr + 0] = (value >> 8) & 0xFF;
-			m_data[addr + 1] = value & 0xFF;
-			return value;
+			return stream_write32(m_data, addr, value, data::ErrorCodes::IntVector_InvalidAddress, "IntVector");
 		}
 
 		ostd::ByteStream* InterruptVector::getByteStream(void)
@@ -112,9 +133,8 @@ namespace dragon
 
 		void VirtualKeyboard::init(void)
 		{
-			u32 dataSize = data::MemoryMapAddresses::Keyboard_End - data::MemoryMapAddresses::Keyboard_Start + 1;
-			for (i32 i = 0; i < dataSize; i++)
-				m_data.push_back(0x00);
+			const u32 dataSize = data::MemoryMapAddresses::Keyboard_End - data::MemoryMapAddresses::Keyboard_Start + 1;
+			m_data.assign(dataSize, 0x00);
 			enableSignals();
 			validate();
 			connectSignal(ostd::BuiltinSignals::KeyPressed);
@@ -122,43 +142,34 @@ namespace dragon
 			connectSignal(ostd::BuiltinSignals::TextEntered);
 		}
 
-		i8 VirtualKeyboard::read8(u16 addr)
+		i8 VirtualKeyboard::read8(u32 addr)
 		{
-			if (addr >= m_data.size())
-				data::ErrorHandler::pushError(data::ErrorCodes::IntVector_InvalidAddress, String("Invalid Byte KeyboardController location at address: ").add(String::getHexStr(addr, true, 2)));
-			return m_data[addr];
+			return stream_read8(m_data, addr, data::ErrorCodes::IntVector_InvalidAddress, "KeyboardController");
 		}
 
-		i16 VirtualKeyboard::read16(u16 addr)
+		i32 VirtualKeyboard::read32(u32 addr)
 		{
-			if (addr >= m_data.size() - 1)
-				data::ErrorHandler::pushError(data::ErrorCodes::IntVector_InvalidAddress, String("Invalid Word KeyboardController location at address: ").add(String::getHexStr(addr, true, 2)));
-			return ((m_data[addr + 0] <<  8) & 0xFF00U)
-				 | ( m_data[addr + 1]        & 0x00FFU);
+			return stream_read32(m_data, addr, data::ErrorCodes::IntVector_InvalidAddress, "KeyboardController");
 		}
 
-		i8 VirtualKeyboard::write8(u16 addr, i8 value)
+		i8 VirtualKeyboard::write8(u32 addr, i8 value)
 		{
-			if (addr >= m_data.size())
-				data::ErrorHandler::pushError(data::ErrorCodes::IntVector_InvalidAddress, String("Invalid Word KeyboardController location at address: ").add(String::getHexStr(addr, true, 2)));
 			if (!DragonRuntime::cpu.isInBIOSMOde())
 			{
-				data::ErrorHandler::pushError(data::ErrorCodes::AccessViolation_BiosModeRequired, String("Attempting to write byte to KeyboardController while not in BIOS mode. Address: ").add(String::getHexStr(addr, true, 2)));
+				data::ErrorHandler::pushError(data::ErrorCodes::AccessViolation_BiosModeRequired, String("Attempting to write byte to KeyboardController while not in BIOS mode. Address: ").add(String::getHexStr(addr, true, 4)));
 				return 0;
 			}
-			return __write8(addr, value);
+			return stream_write8(m_data, addr, value, data::ErrorCodes::IntVector_InvalidAddress, "KeyboardController");
 		}
 
-		i16 VirtualKeyboard::write16(u16 addr, i16 value)
+		i32 VirtualKeyboard::write32(u32 addr, i32 value)
 		{
-			if (addr >= m_data.size() - 1)
-				data::ErrorHandler::pushError(data::ErrorCodes::IntVector_InvalidAddress, String("Invalid Word KeyboardController location at address: ").add(String::getHexStr(addr, true, 2)));
 			if (!DragonRuntime::cpu.isInBIOSMOde())
 			{
-				data::ErrorHandler::pushError(data::ErrorCodes::AccessViolation_BiosModeRequired, String("Attempting to write word to KeyboardController while not in BIOS mode. Address: ").add(String::getHexStr(addr, true, 2)));
+				data::ErrorHandler::pushError(data::ErrorCodes::AccessViolation_BiosModeRequired, String("Attempting to write word to KeyboardController while not in BIOS mode. Address: ").add(String::getHexStr(addr, true, 4)));
 				return 0;
 			}
-			return __write16(addr, value);
+			return stream_write32(m_data, addr, value, data::ErrorCodes::IntVector_InvalidAddress, "KeyboardController");
 		}
 
 		ostd::ByteStream* VirtualKeyboard::getByteStream(void)
@@ -171,18 +182,17 @@ namespace dragon
 			if (!m_inputEnabled)
 				return;
 			auto& cpu = DragonRuntime::cpu;
-			const auto& state = SDL_GetKeyboardState(nullptr);
 			if (signal.ID == ostd::BuiltinSignals::KeyPressed || signal.ID == ostd::BuiltinSignals::KeyReleased)
 			{
 				if (!signal.userData)
 					return;
 				ogfx::KeyEventData& ked = (ogfx::KeyEventData&)*signal.userData;
 				m_modifiersBitFiels = __construct_modifiers_bitfield();
-				__write16(tRegisters::Modifiers, (i16)m_modifiersBitFiels.value);
-				__write16(tRegisters::KeyCode, __sdl_key_code_convert(ked.keyCode));
+				__write32(tRegisters::Modifiers, cast<i32>(cast<u16>(m_modifiersBitFiels.value)));
+				__write32(tRegisters::KeyCode, cast<i32>(cast<u16>(__sdl_key_code_convert(ked.keyCode))));
 				if (ked.eventType == ogfx::KeyEventData::eKeyEvent::Pressed)
 					cpu.handleInterrupt(data::InterruptCodes::KeyPressed, true);
-				else if (ked.eventType == ogfx::KeyEventData::eKeyEvent::Pressed)
+				else if (ked.eventType == ogfx::KeyEventData::eKeyEvent::Released)
 					cpu.handleInterrupt(data::InterruptCodes::KeyReleased, true);
 			}
 			else if (signal.ID == ostd::BuiltinSignals::TextEntered)
@@ -191,8 +201,8 @@ namespace dragon
 					return;
 				ogfx::KeyEventData& ked = (ogfx::KeyEventData&)*signal.userData;
 				m_modifiersBitFiels = __construct_modifiers_bitfield();
-				__write16(tRegisters::Modifiers, (i16)m_modifiersBitFiels.value);
-				__write16(tRegisters::KeyCode, (i16)ked.text[0]);
+				__write32(tRegisters::Modifiers, cast<i32>(cast<u16>(m_modifiersBitFiels.value)));
+				__write32(tRegisters::KeyCode, cast<i32>(cast<u8>(ked.text[0])));
 				cpu.handleInterrupt(data::InterruptCodes::TextEntered, true);
 			}
 		}
@@ -200,6 +210,7 @@ namespace dragon
 		ostd::BitField_16 VirtualKeyboard::__construct_modifiers_bitfield(void)
 		{
 			ostd::BitField_16 bitfield;
+			bitfield.value = 0;
 			auto mod_state = SDL_GetModState();
 			ostd::Bits::val(bitfield, tModifierBits::LeftShift, (mod_state & SDL_KMOD_LSHIFT));
 			ostd::Bits::val(bitfield, tModifierBits::LeftControl, (mod_state & SDL_KMOD_LCTRL));
@@ -215,17 +226,14 @@ namespace dragon
 			return bitfield;
 		}
 
-		i8 VirtualKeyboard::__write8(u16 addr, i8 value)
+		i8 VirtualKeyboard::__write8(u32 addr, i8 value)
 		{
-			m_data[addr] = value;
-			return value;
+			return stream_write8(m_data, addr, value, data::ErrorCodes::IntVector_InvalidAddress, "KeyboardController");
 		}
 
-		i16 VirtualKeyboard::__write16(u16 addr, i16 value)
+		i32 VirtualKeyboard::__write32(u32 addr, i32 value)
 		{
-			m_data[addr + 0] = (value >> 8) & 0xFF;
-			m_data[addr + 1] = value & 0xFF;
-			return value;
+			return stream_write32(m_data, addr, value, data::ErrorCodes::IntVector_InvalidAddress, "KeyboardController");
 		}
 
 		i16 VirtualKeyboard::__sdl_key_code_convert(i32 keyCode)
@@ -365,24 +373,24 @@ namespace dragon
 		{
 		}
 
-		i8 VirtualMouse::read8(u16 addr)
+		i8 VirtualMouse::read8(u32 addr)
 		{
 			return 0x00;
 		}
 
-		i16 VirtualMouse::read16(u16 addr)
+		i32 VirtualMouse::read32(u32 addr)
 		{
-			return 0x0000;
+			return 0x00000000;
 		}
 
-		i8 VirtualMouse::write8(u16 addr, i8 value)
+		i8 VirtualMouse::write8(u32 addr, i8 value)
 		{
 			return 0x00;
 		}
 
-		i16 VirtualMouse::write16(u16 addr, i16 value)
+		i32 VirtualMouse::write32(u32 addr, i32 value)
 		{
-			return 0x0000;
+			return 0x00000000;
 		}
 
 		ostd::ByteStream* VirtualMouse::getByteStream(void)
@@ -396,40 +404,27 @@ namespace dragon
 
 		VirtualBootloader::VirtualBootloader(void)
 		{
-			for (i32 i = 0; i < 512; i++)
-				m_mbr.push_back(0);
+			m_mbr.assign(data::MemoryMapAddresses::MBR_End - data::MemoryMapAddresses::MBR_Start + 1, 0);
 		}
 
-		i8 VirtualBootloader::read8(u16 addr)
+		i8 VirtualBootloader::read8(u32 addr)
 		{
-			if (addr >= m_mbr.size())
-				data::ErrorHandler::pushError(data::ErrorCodes::BIOS_InvalidAddress, String("Invalid Byte MBR location at address: ").add(String::getHexStr(addr, true, 2)));
-			return m_mbr[addr];
+			return stream_read8(m_mbr, addr, data::ErrorCodes::BIOS_InvalidAddress, "MBR");
 		}
 
-		i16 VirtualBootloader::read16(u16 addr)
+		i32 VirtualBootloader::read32(u32 addr)
 		{
-			if (addr >= m_mbr.size() - 1)
-				data::ErrorHandler::pushError(data::ErrorCodes::BIOS_InvalidAddress, String("Invalid Word MBR location at address: ").add(String::getHexStr(addr, true, 2)));
-			return ((m_mbr[addr + 0] <<  8) & 0xFF00U)
-				 | ( m_mbr[addr + 1]        & 0x00FFU);
+			return stream_read32(m_mbr, addr, data::ErrorCodes::BIOS_InvalidAddress, "MBR");
 		}
 
-		i8 VirtualBootloader::write8(u16 addr, i8 value)
+		i8 VirtualBootloader::write8(u32 addr, i8 value)
 		{
-			if (addr >= m_mbr.size())
-				data::ErrorHandler::pushError(data::ErrorCodes::IntVector_InvalidAddress, String("Invalid Word IntVector location at address: ").add(String::getHexStr(addr, true, 2)));
-			m_mbr[addr] = value;
-			return value;
+			return stream_write8(m_mbr, addr, value, data::ErrorCodes::BIOS_InvalidAddress, "MBR");
 		}
 
-		i16 VirtualBootloader::write16(u16 addr, i16 value)
+		i32 VirtualBootloader::write32(u32 addr, i32 value)
 		{
-			if (addr >= m_mbr.size() - 1)
-				data::ErrorHandler::pushError(data::ErrorCodes::IntVector_InvalidAddress, String("Invalid Word IntVector location at address: ").add(String::getHexStr(addr, true, 2)));
-			m_mbr[addr + 0] = (value >> 8) & 0xFF;
-			m_mbr[addr + 1] = value & 0xFF;
-			return value;
+			return stream_write32(m_mbr, addr, value, data::ErrorCodes::BIOS_InvalidAddress, "MBR");
 		}
 
 		ostd::ByteStream* VirtualBootloader::getByteStream(void)
@@ -447,7 +442,7 @@ namespace dragon
 				m_data.w_Byte(tRegisters::Signal, tSignalValues::Ignore);
 			}
 
-			i8 Disk::read8(u16 addr)
+			i8 Disk::read8(u32 addr)
 			{
 				i8 value = 0;
 				if (!m_data.r_Byte(addr, value))
@@ -458,10 +453,10 @@ namespace dragon
 				return value;
 			}
 
-			i16 Disk::read16(u16 addr)
+			i32 Disk::read32(u32 addr)
 			{
-				i16 value = 0;
-				if (!m_data.r_Word(addr, value))
+				i32 value = 0;
+				if (!m_data.r_DWord(addr, value))
 				{
 					data::ErrorHandler::pushError(data::ErrorCodes::HardDrive_ControllerReadFailed, "Failed to read word from HardDrive Controller");
 					return 0;
@@ -469,7 +464,7 @@ namespace dragon
 				return value;
 			}
 
-			i8 Disk::write8(u16 addr, i8 value)
+			i8 Disk::write8(u32 addr, i8 value)
 			{
 				if (addr >= tRegisters::FirstReadOnly)
 				{
@@ -484,14 +479,14 @@ namespace dragon
 				return value;
 			}
 
-			i16 Disk::write16(u16 addr, i16 value)
+			i32 Disk::write32(u32 addr, i32 value)
 			{
-				if (addr >= tRegisters::FirstReadOnly)
+				if (addr + 3 >= tRegisters::FirstReadOnly)
 				{
 					data::ErrorHandler::pushError(data::ErrorCodes::HardDrive_ControllerWriteFailed, "Attempt to write word to ReadOnly part of HardDrive Controller");
 					return 0;
 				}
-				if (!m_data.w_Word(addr, value))
+				if (!m_data.w_DWord(addr, value))
 				{
 					data::ErrorHandler::pushError(data::ErrorCodes::HardDrive_ControllerWriteFailed, "Failed to write word to HardDrive Controller");
 					return 0;
@@ -532,12 +527,11 @@ namespace dragon
 						return;
 					}
 					u8 currentDisk = 0;
-					u16 currentSector = 0, currentAddress = 0, restDataSize = 0, memoryAddress = 0;
+					u32 diskAddress = 0, restDataSize = 0, memoryAddress = 0;
 					m_data.r_Byte(tRegisters::CurrentDisk, (i8&)currentDisk);
-					m_data.r_Word(tRegisters::CurrentSector, (i16&)currentSector);
-					m_data.r_Word(tRegisters::CurrentAddress, (i16&)currentAddress);
-					m_data.r_Word(tRegisters::RestDataSize, (i16&)restDataSize);
-					m_data.r_Word(tRegisters::SourceData, (i16&)memoryAddress);
+					m_data.r_DWord(tRegisters::CurrentDiskAddress, (i32&)diskAddress);
+					m_data.r_DWord(tRegisters::RestDataSize, (i32&)restDataSize);
+					m_data.r_DWord(tRegisters::CurrentMemoryAddress, (i32&)memoryAddress);
 					if (m_connectedDisks.count((data::VDiskID)currentDisk) == 0)
 					{
 						data::ErrorHandler::pushError(data::ErrorCodes::HardDrive_InvalidDiskSelected, "Invalid HardDrive configuration: selected Disk not found.");
@@ -545,23 +539,22 @@ namespace dragon
 						return;
 					}
 					auto& disk = *m_connectedDisks[currentDisk];
-					u32 hddAddress = 0;
-					if (currentAddress == 0xFFFF)
+					if (diskAddress >= disk.getSize())
 					{
-						if (currentSector == 0xFFFF)
-						{
-							data::ErrorHandler::pushError(data::ErrorCodes::HardDrive_EndOfDisk, "HardDrive Error: Reached end of selected Disk.");
-							m_busy = false;
-							return;
-						}
-						currentSector++;
-						currentAddress = 0x0000;
+						data::ErrorHandler::pushError(data::ErrorCodes::HardDrive_EndOfDisk, "HardDrive Error: Reached end of selected Disk.");
+						m_busy = false;
+						return;
 					}
-					hddAddress = (currentSector << 16) | currentAddress;
+					if (memoryAddress > data::AddressMask)
+					{
+						data::ErrorHandler::pushError(data::ErrorCodes::HardDrive_MemoryOverflow, "HardDrive Error: Reached end of Memory.");
+						m_busy = false;
+						return;
+					}
 					if (status == tStatusValues::Reading)
 					{
 						ostd::ByteStream _data;
-						if (!disk.read(hddAddress, 1, _data))
+						if (!disk.read(diskAddress, 1, _data))
 						{
 							data::ErrorHandler::pushError(data::ErrorCodes::HardDrive_ReadFailed, "HardDrive Error: Failed to read data.");
 							m_busy = false;
@@ -572,7 +565,7 @@ namespace dragon
 					else if (status == tStatusValues::Writing)
 					{
 						i8 dataRead = m_memory.read8(memoryAddress);
-						if (!disk.write(hddAddress, dataRead))
+						if (!disk.write(diskAddress, dataRead))
 						{
 							data::ErrorHandler::pushError(data::ErrorCodes::HardDrive_WriteFailed, "HardDrive Error: Failed to write data.");
 							m_busy = false;
@@ -580,37 +573,29 @@ namespace dragon
 						}
 					}
 					memoryAddress++;
-					if (memoryAddress == 0xFFFF)
-					{
-						data::ErrorHandler::pushError(data::ErrorCodes::HardDrive_MemoryOverflow, "HardDrive Error: Reached end of Memory.");
-						m_busy = false;
-						return;
-					}
+					diskAddress++;
 					restDataSize--;
+					m_data.w_DWord(tRegisters::CurrentDiskAddress, cast<i32>(diskAddress));
+					m_data.w_DWord(tRegisters::RestDataSize, cast<i32>(restDataSize));
+					m_data.w_DWord(tRegisters::CurrentMemoryAddress, cast<i32>(memoryAddress));
 					if (restDataSize == 0)
 					{
 						m_data.w_Byte(tRegisters::Status, tStatusValues::Free);
 						m_data.w_Byte(tRegisters::Signal, tSignalValues::Ignore);
 						m_busy = false;
 						m_cpu.handleInterrupt(data::InterruptCodes::DiskInterfaceFFinished, true);
-						return;
 					}
-					currentAddress++;
-					m_data.w_Word(tRegisters::CurrentSector, currentSector);
-					m_data.w_Word(tRegisters::CurrentAddress, currentAddress);
-					m_data.w_Word(tRegisters::RestDataSize, restDataSize);
-					m_data.w_Word(tRegisters::SourceData, memoryAddress);
 					return;
 				}
 				if (signal != tSignalValues::Start) return;
 				u8 mode = 0, disk = 0;
-				u16 sector = 0, address = 0, size = 0, srcAddr = 0;
+				u32 diskAddress = 0, size = 0, memoryAddress = 0;
 				m_data.r_Byte(tRegisters::ModeSelector, (i8&)mode);
 				m_data.r_Byte(tRegisters::DiskSelector, (i8&)disk);
-				m_data.r_Word(tRegisters::SectorSelector, (i16&)sector);
-				m_data.r_Word(tRegisters::AddressSelector, (i16&)address);
-				m_data.r_Word(tRegisters::DataSize, (i16&)size);
-				m_data.r_Word(tRegisters::DataSourceAddress, (i16&)srcAddr);
+				m_data.r_DWord(tRegisters::DiskAddress, (i32&)diskAddress);
+				m_data.r_DWord(tRegisters::DataSize, (i32&)size);
+				m_data.r_DWord(tRegisters::MemoryAddress, (i32&)memoryAddress);
+				m_data.w_Byte(tRegisters::Signal, tSignalValues::Ignore);
 				if (mode == tModeValues::Read)
 					m_data.w_Byte(tRegisters::Status, tStatusValues::Reading);
 				else if (mode == tModeValues::Write)
@@ -622,12 +607,16 @@ namespace dragon
 					return;
 				}
 				m_data.w_Byte(tRegisters::CurrentDisk, disk);
-				m_data.w_Word(tRegisters::CurrentSector, sector);
-				m_data.w_Word(tRegisters::CurrentAddress, address);
-				m_data.w_Word(tRegisters::RestDataSize, size);
-				m_data.w_Word(tRegisters::SourceData, srcAddr);
-
-				m_data.w_Byte(tRegisters::Signal, tSignalValues::Ignore);
+				m_data.w_DWord(tRegisters::CurrentDiskAddress, cast<i32>(diskAddress));
+				m_data.w_DWord(tRegisters::RestDataSize, cast<i32>(size));
+				m_data.w_DWord(tRegisters::CurrentMemoryAddress, cast<i32>(memoryAddress));
+				if (size == 0)
+				{
+					// Nothing to copy: done right away.
+					m_data.w_Byte(tRegisters::Status, tStatusValues::Free);
+					m_cpu.handleInterrupt(data::InterruptCodes::DiskInterfaceFFinished, true);
+					return;
+				}
 				m_busy = true;
 			}
 
@@ -643,8 +632,6 @@ namespace dragon
 				}
 				m_connectedDisks[disk_id] = &hdd;
 				return true;
-				// m_connectedDisks[Disk::s_nextDiskID] = &hdd;
-				// return Disk::s_nextDiskID++;
 			}
 
 			bool Disk::disconnectDisk(data::VDiskID diskID)
@@ -664,14 +651,14 @@ namespace dragon
 
 			Graphics::Graphics(void)
 			{
-				m_videoMemory.init(0xFFFF);
+				m_videoMemory.init(0x10000);
 				m_vramStart = data::MemoryMapAddresses::VideoCardInterface_End - data::MemoryMapAddresses::VideoCardInterface_Start + 1;
 				m_16Color_frameSize = VirtualDisplay::Columns * VirtualDisplay::Rows * m_16Color_cellSize;
 				m_16Color_currentFrameAddr = m_vramStart;
 				m_16Color_secondFrameAddr = m_vramStart + m_16Color_frameSize;
 			}
 
-			i8 Graphics::read8(u16 addr)
+			i8 Graphics::read8(u32 addr)
 			{
 				i8 outVal = 0;
 				if (!m_videoMemory.r_Byte(addr, outVal))
@@ -682,10 +669,10 @@ namespace dragon
 				return outVal;
 			}
 
-			i16 Graphics::read16(u16 addr)
+			i32 Graphics::read32(u32 addr)
 			{
-				i16 outVal = 0;
-				if (!m_videoMemory.r_Word(addr, outVal))
+				i32 outVal = 0;
+				if (!m_videoMemory.r_DWord(addr, outVal))
 				{
 					data::ErrorHandler::pushError(data::ErrorCodes::Graphics_MemoryReadFailed, "Failed to read word from Graphics Memory");
 					return 0;
@@ -693,7 +680,7 @@ namespace dragon
 				return outVal;
 			}
 
-			i8 Graphics::write8(u16 addr, i8 value)
+			i8 Graphics::write8(u32 addr, i8 value)
 			{
 				if (!m_videoMemory.w_Byte(addr, value))
 				{
@@ -703,9 +690,9 @@ namespace dragon
 				return value;
 			}
 
-			i16 Graphics::write16(u16 addr, i16 value)
+			i32 Graphics::write32(u32 addr, i32 value)
 			{
-				if (!m_videoMemory.w_Word(addr, value))
+				if (!m_videoMemory.w_DWord(addr, value))
 				{
 					data::ErrorHandler::pushError(data::ErrorCodes::Graphics_MemoryWriteFailed, "Failed to write word to Graphics Memory");
 					return 0;
@@ -715,23 +702,23 @@ namespace dragon
 
 			bool Graphics::readFlag(u8 flg)
 			{
-				if (flg >= 16) return false;
-				i16 outValue = 0;
-				if (!m_videoMemory.r_Word(VirtualDisplay::tRegisters::Flags, outValue))
+				if (flg >= 32) return false;
+				i32 outValue = 0;
+				if (!m_videoMemory.r_DWord(VirtualDisplay::tRegisters::Flags, outValue))
 					return false; //TODO: Error
-				m_tempFlags.value = outValue;
+				m_tempFlags.value = cast<u32>(outValue);
 				return ostd::Bits::get(m_tempFlags, flg);
 			}
 
 			void Graphics::setFlag(u8 flg, bool val)
 			{
-				if (flg >= 16) return;
-				i16 outValue = 0;
-				if (!m_videoMemory.r_Word(VirtualDisplay::tRegisters::Flags, outValue))
+				if (flg >= 32) return;
+				i32 outValue = 0;
+				if (!m_videoMemory.r_DWord(VirtualDisplay::tRegisters::Flags, outValue))
 					return; //TODO: Error
-				m_tempFlags.value = outValue;
+				m_tempFlags.value = cast<u32>(outValue);
 				ostd::Bits::val(m_tempFlags, flg, val);
-				if (!m_videoMemory.w_Word(VirtualDisplay::tRegisters::Flags, m_tempFlags.value))
+				if (!m_videoMemory.w_DWord(VirtualDisplay::tRegisters::Flags, cast<i32>(m_tempFlags.value)))
 					return; //TODO: Error
 			}
 
@@ -742,7 +729,7 @@ namespace dragon
 
 			bool Graphics::readVRAM_16Colors(u8 x, u8 y, Graphics::tText16_Cell& outTextCell)
 			{
-				u16 cellOffset = static_cast<u16>(CONVERT_2D_1D(x, y, VirtualDisplay::Columns)) * 4;
+				u32 cellOffset = static_cast<u32>(CONVERT_2D_1D(x, y, VirtualDisplay::Columns)) * 4;
 				cellOffset += m_16Color_currentFrameAddr;
 				i8 outVal = 0;
 				if (!m_videoMemory.r_Byte(cellOffset + tText16_CellStructure::character, outVal))
@@ -759,7 +746,7 @@ namespace dragon
 
 			bool Graphics::writeVRAM_16Colors(u8 x, u8 y, u8 character, u8 background, u8 foreground)
 			{
-				u16 cellOffset = static_cast<u16>(CONVERT_2D_1D(x, y, VirtualDisplay::Columns)) * 4;
+				u32 cellOffset = static_cast<u32>(CONVERT_2D_1D(x, y, VirtualDisplay::Columns)) * 4;
 				if (!readFlag(tFlags::DoubleBufferingEnabled))
 					cellOffset += m_16Color_currentFrameAddr;
 				else
@@ -798,7 +785,7 @@ namespace dragon
 					m_videoMemory.r_Byte(m_16Color_secondFrameAddr + j + 2, outByte);
 					m_videoMemory.w_Byte(i + tText16_CellStructure::foreground, outByte);
 				}
-				u16 tmp = m_16Color_currentFrameAddr;
+				u32 tmp = m_16Color_currentFrameAddr;
 				m_16Color_currentFrameAddr = m_16Color_secondFrameAddr;
 				m_16Color_secondFrameAddr = tmp;
 			}
@@ -833,22 +820,22 @@ namespace dragon
 			{
 			}
 
-			i8 SerialPort::read8(u16 addr)
+			i8 SerialPort::read8(u32 addr)
 			{
 				return 0x00;
 			}
 
-			i16 SerialPort::read16(u16 addr)
+			i32 SerialPort::read32(u32 addr)
 			{
 				return 0x0000;
 			}
 
-			i8 SerialPort::write8(u16 addr, i8 value)
+			i8 SerialPort::write8(u32 addr, i8 value)
 			{
 				return 0x00;
 			}
 
-			i16 SerialPort::write16(u16 addr, i16 value)
+			i32 SerialPort::write32(u32 addr, i32 value)
 			{
 				return 0x0000;
 			}
@@ -888,54 +875,52 @@ namespace dragon
 				m_initialized = true;
 			}
 
-			i8 CMOS::read8(u16 addr)
+			i8 CMOS::read8(u32 addr)
 			{
 				if (!m_initialized)
 				{
 					data::ErrorHandler::pushError(data::ErrorCodes::CMOS_Uninitialized, "Attempt to read uninitialized CMOS chip.");
-					return false;
+					return 0;
 				}
 				if (addr >= m_size)
 				{
-					data::ErrorHandler::pushError(data::ErrorCodes::CMOS_InvalidAddress, String("Invalid Byte CMOS location at address: ").add(String::getHexStr(addr, true, 2)));
-					return false;
+					data::ErrorHandler::pushError(data::ErrorCodes::CMOS_InvalidAddress, String("Invalid Byte CMOS location at address: ").add(String::getHexStr(addr, true, 4)));
+					return 0;
 				}
 				return m_data[addr];
 			}
 
-			i16 CMOS::read16(u16 addr)
+			i32 CMOS::read32(u32 addr)
 			{
 				if (!m_initialized)
 				{
 					data::ErrorHandler::pushError(data::ErrorCodes::CMOS_Uninitialized, "Attempt to read uninitialized CMOS chip.");
-					return false;
-				}
-				if (addr >= m_size - 1)
-				{
-					data::ErrorHandler::pushError(data::ErrorCodes::CMOS_InvalidAddress, String("Invalid Word CMOS location at address: ").add(String::getHexStr(addr, true, 2)));
 					return 0;
 				}
-				i8 b1 = read8(addr);
-				i8 b2 = read8(addr + 1);
-				return ((b1 <<  8) & 0xFF00U)
-					  | (b2        & 0x00FFU);
+				i32 value = 0;
+				if (!bytes::read32(m_data, addr, value))
+				{
+					data::ErrorHandler::pushError(data::ErrorCodes::CMOS_InvalidAddress, String("Invalid Word CMOS location at address: ").add(String::getHexStr(addr, true, 4)));
+					return 0;
+				}
+				return value;
 			}
 
-			i8 CMOS::write8(u16 addr, i8 value)
+			i8 CMOS::write8(u32 addr, i8 value)
 			{
 				if (!m_initialized)
 				{
 					data::ErrorHandler::pushError(data::ErrorCodes::CMOS_Uninitialized, "Attempt to read uninitialized CMOS chip.");
-					return false;
+					return 0;
 				}
 				if (addr >= m_size)
 				{
-					data::ErrorHandler::pushError(data::ErrorCodes::CMOS_InvalidAddress, String("Invalid Byte CMOS location at address: ").add(String::getHexStr(addr, true, 2)));
+					data::ErrorHandler::pushError(data::ErrorCodes::CMOS_InvalidAddress, String("Invalid Byte CMOS location at address: ").add(String::getHexStr(addr, true, 4)));
 					return 0;
 				}
 				if (!DragonRuntime::cpu.isInBIOSMOde())
 				{
-					data::ErrorHandler::pushError(data::ErrorCodes::AccessViolation_BiosModeRequired, String("Attempting to write byte to CMOS while not in BIOS mode. Address: ").add(String::getHexStr(addr, true, 2)));
+					data::ErrorHandler::pushError(data::ErrorCodes::AccessViolation_BiosModeRequired, String("Attempting to write byte to CMOS while not in BIOS mode. Address: ").add(String::getHexStr(addr, true, 4)));
 					return 0;
 				}
 				m_data[addr] = value;
@@ -954,27 +939,28 @@ namespace dragon
 				m_dataFile.flush();
 			}
 
-			i16 CMOS::write16(u16 addr, i16 value)
+			i32 CMOS::write32(u32 addr, i32 value)
 			{
 				if (!m_initialized)
 				{
 					data::ErrorHandler::pushError(data::ErrorCodes::CMOS_Uninitialized, "Attempt to read uninitialized CMOS chip.");
-					return false;
+					return 0;
 				}
-				if (addr >= m_size - 1)
+				if (addr + 4 > m_size)
 				{
-					data::ErrorHandler::pushError(data::ErrorCodes::CMOS_InvalidAddress, String("Invalid Word CMOS location at address: ").add(String::getHexStr(addr, true, 2)));
+					data::ErrorHandler::pushError(data::ErrorCodes::CMOS_InvalidAddress, String("Invalid Word CMOS location at address: ").add(String::getHexStr(addr, true, 4)));
 					return 0;
 				}
 				if (!DragonRuntime::cpu.isInBIOSMOde())
 				{
-					data::ErrorHandler::pushError(data::ErrorCodes::AccessViolation_BiosModeRequired, String("Attempting to write word to CMOS while not in BIOS mode. Address: ").add(String::getHexStr(addr, true, 2)));
+					data::ErrorHandler::pushError(data::ErrorCodes::AccessViolation_BiosModeRequired, String("Attempting to write word to CMOS while not in BIOS mode. Address: ").add(String::getHexStr(addr, true, 4)));
 					return 0;
 				}
-				i8 b1 = (value >> 8) & 0xFF;
-				i8 b2 = (value & 0xFF);
-				write8(addr, b1);
-				write8(addr + 1, b2);
+				const u32 v = cast<u32>(value);
+				write8(addr, cast<i8>(v >> 24));
+				write8(addr + 1, cast<i8>(v >> 16));
+				write8(addr + 2, cast<i8>(v >> 8));
+				write8(addr + 3, cast<i8>(v));
 				return value;
 			}
 

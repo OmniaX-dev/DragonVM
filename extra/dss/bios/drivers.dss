@@ -12,18 +12,16 @@ _int_20_handler:
 	jeq $_int_20_clear_interrupt, 0x0001
 	jmp $_int_20_end
 _int_20_disk_interface:
-	movb [{MemoryAddresses.DISK_INTERFACE + 0x1}], *R9     										## Mode
+	movb [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.MODE_SELECTOR}], *R9 					## Mode
 	inc R9
-	movb [{MemoryAddresses.DISK_INTERFACE + 0x2}], *R9     										## Disk
-	inc R9
-	mov  [{MemoryAddresses.DISK_INTERFACE + 0x3}], *R9     										## Sector
-	addip R9, 2
-	mov  [{MemoryAddresses.DISK_INTERFACE + 0x5}], *R9     										## Address
-	addip R9, 2
-	mov  [{MemoryAddresses.DISK_INTERFACE + 0x7}], *R9     										## Size
-	addip R9, 2
-	mov  [{MemoryAddresses.DISK_INTERFACE + 0x9}], *R9     										## Memory Address
-	movb [MemoryAddresses.DISK_INTERFACE], DiskSignals.START									## Signal set to "Start Operation"
+	movb [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.DISK_SELECTOR}], *R9 					## Disk
+	addip R9, 3																					## (Reserved)
+	mov  [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.DISK_ADDRESS}], *R9 					## Address
+	addip R9, 4
+	mov  [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.DATA_SIZE}], *R9 						## Size
+	addip R9, 4
+	mov  [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.MEMORY_ADDRESS}], *R9 				## Memory Address
+	movb [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.SIGNAL}], DiskSignals.START			## Signal set to "Start Operation"
 	jmp $_int_20_end
 _int_20_disk_interface_get_disk_list:
 	jmp $_int_20_end

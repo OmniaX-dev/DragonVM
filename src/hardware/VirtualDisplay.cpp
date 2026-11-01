@@ -87,7 +87,7 @@ namespace dragon
 		void VirtualDisplay::update(void)
 		{
 			auto& mem = DragonRuntime::memMap;
-			const u16 vga_addr = data::MemoryMapAddresses::VideoCardInterface_Start;
+			const u32 vga_addr = data::MemoryMapAddresses::VideoCardInterface_Start;
 			apply_video_mode(mem.read8(vga_addr + tRegisters::VideoMode));
 			m_redrawScreen = m_redrawScreen && !DragonRuntime::vGraphicsInterface.readFlag(hw::interface::Graphics::tFlags::ScreenRedrawDisabled);
 			if (m_redrawScreen)
@@ -148,7 +148,7 @@ namespace dragon
 		void VirtualDisplay::processSignal(void)
 		{
 			auto& mem = DragonRuntime::memMap;
-			const u16 vga_addr = data::MemoryMapAddresses::VideoCardInterface_Start;
+			const u32 vga_addr = data::MemoryMapAddresses::VideoCardInterface_Start;
 			const u8 signal = mem.read8(vga_addr + tRegisters::Signal);
 			if (signal == tSignalValues::Continue)
 				return;
@@ -162,7 +162,7 @@ namespace dragon
 						break;
 					case tSignalValues::TextSingleColor_DirectPrintString:
 					{
-						u16 char_addr = mem.read16(vga_addr + tRegisters::TextSingleString);
+						u32 char_addr = cast<u32>(mem.read32(vga_addr + tRegisters::TextSingleString));
 						for (char c = (char)mem.read8(char_addr); c != 0; c = (char)mem.read8(++char_addr))
 							single_text_add_char_to_line(c);
 						break;
@@ -199,8 +199,8 @@ namespace dragon
 						const u8 fg = mem.read8(vga_addr + tRegisters::MemControllerFGCol);
 						const u8 bg = mem.read8(vga_addr + tRegisters::MemControllerBGCol);
 						const u8 character = mem.read8(vga_addr + tRegisters::MemControllerChar);
-						const i16 x = mem.read16(vga_addr + tRegisters::MemControllerX);
-						const i16 y = mem.read16(vga_addr + tRegisters::MemControllerY);
+						const i32 x = mem.read32(vga_addr + tRegisters::MemControllerX);
+						const i32 y = mem.read32(vga_addr + tRegisters::MemControllerY);
 						graphics.writeVRAM_16Colors(static_cast<u8>(x), static_cast<u8>(y), character, bg, fg);
 						break;
 					}
@@ -262,7 +262,7 @@ namespace dragon
 		// ===================================================== SINGLE COLOR MODE =====================================================
 		void VirtualDisplay::single_text_add_char_to_line(char c)
 		{
-			const u16 vga_addr = data::MemoryMapAddresses::VideoCardInterface_Start;
+			const u32 vga_addr = data::MemoryMapAddresses::VideoCardInterface_Start;
 			const bool invert = DragonRuntime::memMap.read8(vga_addr + tRegisters::TextSingleInvertColors) != 0;
 			if (m_singleTextLines.empty())
 				m_singleTextLines.emplace_back();
