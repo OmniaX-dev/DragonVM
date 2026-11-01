@@ -103,6 +103,7 @@ namespace dragon
 			void show_view(Debugger::eView view, i64 argument);
 			void show_in_memory(u16 address);
 			void show_in_disassembly(u16 address);
+			void mark_shown_position(void);
 			void show_programs_menu(void);
 			// The window's own commands (detach / attach), the others go to the debugger.
 			void run_command(const String& command);
@@ -172,6 +173,9 @@ namespace dragon
 			bool m_started { false };
 			bool m_viewsDirty { true };
 			u64 m_seenConsoleVersion { 0 };
+			// Where the machine was when a program / address was picked in the disassembly.
+			i32 m_shownAtIP { -1 };
+			u64 m_shownAtCycle { 0 };
 			f64 m_refreshTimer { 0.0 };
 
 		public:

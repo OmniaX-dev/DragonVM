@@ -567,6 +567,10 @@ namespace dragon
 	{
 		const bool running = m_debugger.isRunning();
 		const u16 ip = cast<u16>(DragonRuntime::cpu.readRegister(data::Registers::IP));
+		// A program picked in the menu (or an address shown from another view) stays only
+		// until the machine moves: running, stepping or moving in the history follows the IP.
+		if (running || ip != m_shownAtIP || m_debugger.getCycle() != m_shownAtCycle)
+			m_disassembly.enableFollow(true);
 		m_disassembly.setCurrentAddress(ip, true);
 		m_programLabel.setText(m_disassembly.getProgramName(m_disassembly.getCurrentProgram()));
 
@@ -700,9 +704,16 @@ namespace dragon
 		m_memory.jumpTo(address);
 	}
 
+	void DebuggerWindow::mark_shown_position(void)
+	{
+		m_shownAtIP = cast<i32>(DragonRuntime::cpu.readRegister(data::Registers::IP));
+		m_shownAtCycle = m_debugger.getCycle();
+	}
+
 	void DebuggerWindow::show_in_disassembly(u16 address)
 	{
-		m_followCheck.setChecked(false);
+		// Until the machine moves (see refresh_views()).
+		mark_shown_position();
 		m_disassembly.showAddress(address);
 		m_programLabel.setText(m_disassembly.getProgramName(m_disassembly.getCurrentProgram()));
 	}
@@ -745,8 +756,6 @@ namespace dragon
 	void DebuggerWindow::show_programs_menu(void)
 	{
 		ContextMenu::Instance menu;
-		// First: back to following the IP (picking a program stops it).
-		menu.entries.push_back({ m_disassembly.isFollowEnabled() ? String("Following the IP") : String("Follow the IP"), -1 });
 		for (i32 i = 0; i < m_disassembly.getProgramCount(); i++)
 		{
 			String name = m_disassembly.getProgramName(i);
@@ -755,17 +764,9 @@ namespace dragon
 			menu.entries.push_back({ name, i });
 		}
 		menu.onActivate = [this](const ContextMenu::Entry& entry) {
-			if (entry.id < 0)
-			{
-				m_followCheck.setChecked(true);
-				m_disassembly.enableFollow(true);
-				m_disassembly.setCurrentAddress(cast<u16>(DragonRuntime::cpu.readRegister(data::Registers::IP)), true);
-			}
-			else
-			{
-				m_disassembly.showProgram(entry.id);
-				m_followCheck.setChecked(false);
-			}
+			// Shown until the machine moves (see refresh_views()).
+			mark_shown_position();
+			m_disassembly.showProgram(entry.id);
 			m_programLabel.setText(m_disassembly.getProgramName(m_disassembly.getCurrentProgram()));
 		};
 		const Rectangle bounds = m_programButton.getGlobalBounds();
