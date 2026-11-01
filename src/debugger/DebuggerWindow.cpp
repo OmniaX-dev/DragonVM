@@ -137,8 +137,15 @@ namespace dragon
 		m_display.enableFocus();
 		m_display.enableFocusBorder();
 		m_display.setFocusBorderColor({ 0, 117, 199 });
+		m_screenEffectsButton.setText("FX");
+		m_screenEffectsButton.setFontSize(13);
+		m_screenEffectsButton.setSizeMode(eSizeMode::Manual);
+		m_screenEffectsButton.addThemeID("screen_effects_btn");
+		m_screenEffectsButton.enableTooltip();
+		m_screenEffectsButton.setCallback(Widget::eCallback::ActionPerformed, [this](const Event&) { toggle_screen_effects(); });
 		// Over the screen's top right corner: added after it.
 		addWidget(m_screenDetachButton);
+		addWidget(m_screenEffectsButton);
 	}
 
 	void DebuggerWindow::apply_layout(void)
@@ -166,11 +173,13 @@ namespace dragon
 		// Right column: the tabs take the screen's place when it's detached.
 		m_displayTitle.setVisible(!m_screenDetached);
 		m_screenDetachButton.setVisible(!m_screenDetached);
+		m_screenEffectsButton.setVisible(!m_screenDetached);
 		if (!m_screenDetached)
 		{
 			place(m_tabs, split, 0, 1, ScreenTop, 3, 3, -6, -3);
 			place(m_display, split, ScreenTop, 1, 1, 3, 3, -6, -6);
 			place(m_screenDetachButton, 1, ScreenTop, 1, ScreenTop, -ButtonSize - 10, 7, -10, ButtonSize + 7);
+			place(m_screenEffectsButton, 1, ScreenTop, 1, ScreenTop, -ButtonSize - 10, ButtonSize + 7 + ButtonSpacing, -10, ButtonSize * 2 + 7 + ButtonSpacing);
 		}
 		else
 			place(m_tabs, split, 0, 1, 1, 3, 3, -6, -6);
@@ -186,6 +195,7 @@ namespace dragon
 			window.setCloseCallback([attach](SubWindow&) { attach(); return true; });
 		};
 		l_setup(m_screenWindow, { 260, 140, 940, 640 }, "Put the screen back in the debugger window", [this](void) { set_screen_detached(false); });
+		m_screenWindow.addTitlebarButton("FX", [this](SubWindow&) { toggle_screen_effects(); }, "CRT and bloom effects: on / off");
 		l_setup(m_consoleWindow, { 160, 220, 1000, 560 }, "Put the console back in the debugger window", [this](void) { set_console_detached(false); });
 		// Empty for now.
 		m_diskManagerWindow.setBounds({ 220, 160, 900, 600 });
@@ -211,6 +221,8 @@ namespace dragon
 			// Back over it.
 			removeWidget(m_screenDetachButton);
 			addWidget(m_screenDetachButton);
+			removeWidget(m_screenEffectsButton);
+			addWidget(m_screenEffectsButton);
 			// Not close(): its callback is what may have called this.
 			m_screenWindow.setVisible(false);
 		}
@@ -248,7 +260,25 @@ namespace dragon
 			return tab;
 		};
 		m_registersTab = &l_tab("Registers", m_registers);
-		m_breakpointsTab = &l_tab("Breakpoints", m_breakpoints);
+		// Breakpoints: an address / label to add, over the list.
+		m_breakpointsPage.addWidget(m_breakpointInput);
+		place(m_breakpointInput, 0, 0, 1, 0, 0, 3, -ButtonSize - 5, ButtonSize + 3);
+		m_breakpointInput.setFontSize(15);
+		m_breakpointInput.setTooltipText("Address (0x2CF4) or label ($_kernel0_main, or just kernel0_main): Enter or + adds a breakpoint");
+		m_breakpointInput.enableTooltip();
+		m_breakpointInput.setCallback(Widget::eCallback::ActionPerformed, [this](const Event&) { add_breakpoint_from_input(); });
+		m_breakpointsPage.addWidget(m_breakpointAddButton);
+		place(m_breakpointAddButton, 1, 0, 1, 0, -ButtonSize, 3, 0, ButtonSize + 3);
+		m_breakpointAddButton.setText("+");
+		m_breakpointAddButton.setFontSize(18);
+		m_breakpointAddButton.setSizeMode(eSizeMode::Manual);
+		m_breakpointAddButton.addThemeID("breakpoint_add_btn");
+		m_breakpointAddButton.setTooltipText("Add a breakpoint at the address / label");
+		m_breakpointAddButton.enableTooltip();
+		m_breakpointAddButton.setCallback(Widget::eCallback::ActionPerformed, [this](const Event&) { add_breakpoint_from_input(); });
+		m_breakpointsPage.addWidget(m_breakpoints);
+		place(m_breakpoints, 0, 0, 1, 1, 0, ButtonSize + 8, 0, 0);
+		m_breakpointsTab = &l_tab("Breakpoints", m_breakpointsPage);
 		m_memoryTab = &l_tab("Memory", m_memory);
 		m_stackTab = &l_tab("Stack", m_stack);
 		m_callsTab = &l_tab("Call trace", m_callTrace);
@@ -281,20 +311,20 @@ namespace dragon
 		tb.setHeight(36);
 		// Icon buttons placed one after the other (their text is the tooltip).
 		f32 x = 6;
-		auto l_place = [&](Button& button, const String& text, const String& theme_id) {
+		auto l_place = [&](Button& button, const String& text, const String& theme_id, const String& tooltip) {
 			button.setText(text);
 			button.setFontSize(15);
 			button.addThemeID("toolbar_btn");
 			button.addThemeID(theme_id);
-			button.setTooltipText(text);
+			button.setTooltipText(tooltip);
 			button.enableTooltip();
 			place(button, 0, 0.5f, 0, 0.5f, x, -ButtonSize / 2, x + ButtonSize, ButtonSize / 2);
 			x += ButtonSize + ButtonSpacing;
 		};
-		auto l_button = [&](const String& text, const String& theme_id, std::function<void(void)> action) {
+		auto l_button = [&](const String& text, const String& theme_id, const String& tooltip, std::function<void(void)> action) {
 			Button& button = m_toolButtons.emplace_back(*this);
 			tb.addWidget(button);
-			l_place(button, text, theme_id);
+			l_place(button, text, theme_id, tooltip);
 			button.setCallback(Widget::eCallback::ActionPerformed, [action](const Event&) { action(); });
 		};
 		auto l_separator = [&](void) {
@@ -304,25 +334,29 @@ namespace dragon
 			x += SeparatorWidth + 4 + ButtonSpacing;
 		};
 		tb.addWidget(m_programButton);
-		l_place(m_programButton, "Programs (the loaded disassemblies)", "code_program_btn");
+		l_place(m_programButton, "Programs", "code_program_btn", "Programs: shows another loaded disassembly (until the machine moves)");
 		m_programButton.setCallback(Widget::eCallback::ActionPerformed, [this](const Event&) { show_programs_menu(); });
 		l_separator();
-		l_button("Run (F5)", "toolbar_run", [this](void) { m_debugger.resume(); });
-		l_button("Pause (F6)", "toolbar_pause", [this](void) { m_debugger.pause(); });
-		l_button("Step (F10)", "toolbar_step", [this](void) { m_debugger.stepInto(1); });
-		l_button("Over (F11)", "toolbar_over", [this](void) { m_debugger.stepOver(); });
-		l_button("Out (Sh+F11)", "toolbar_out", [this](void) { m_debugger.stepOut(); });
-		l_button("Back (F9)", "toolbar_back", [this](void) { m_debugger.stepBack(1); });
-		l_button("Reverse run (Sh+F5)", "toolbar_reverse", [this](void) { m_debugger.reverseContinue(); });
-		l_button("Rewind", "toolbar_rewind", [this](void) { m_debugger.seek(m_debugger.history().getFirstPosition()); });
+		l_button("Run", "toolbar_run", "Run (F5): until a breakpoint, a debug_break or a watch", [this](void) { m_debugger.resume(); });
+		l_button("Pause", "toolbar_pause", "Pause (F6)", [this](void) { m_debugger.pause(); });
+		l_button("Step", "toolbar_step", "Step (F10): one instruction, into calls", [this](void) { m_debugger.stepInto(1); });
+		l_button("Over", "toolbar_over", "Step over (F11): a call / int runs whole, pauses after it", [this](void) { m_debugger.stepOver(); });
+		l_button("Out", "toolbar_out", "Step out (Shift+F11): runs until the current subroutine returns", [this](void) { m_debugger.stepOut(); });
+		l_button("Back", "toolbar_back", "Step back (F9): one instruction back in the history", [this](void) { m_debugger.stepBack(1); });
+		l_button("Reverse run", "toolbar_reverse", "Reverse run (Shift+F5): back in the history to a breakpoint or a watch", [this](void) { m_debugger.reverseContinue(); });
+		l_button("Rewind", "toolbar_rewind", "Rewind: to the start of the history (ignores breakpoints)", [this](void) { m_debugger.seek(m_debugger.history().getFirstPosition()); });
 		l_separator();
-		l_button("Disk Manager", "toolbar_disks", [this](void) { m_diskManagerWindow.open(); });
+		l_button("Disk Manager", "toolbar_disks", "Disk Manager", [this](void) { m_diskManagerWindow.open(); });
 		tb.addWidget(m_recordCheck);
 		m_recordCheck.setText("Record history");
+		m_recordCheck.setTooltipText("Records every instruction (step back, reverse run); uses up to 512 MiB");
+		m_recordCheck.enableTooltip();
 		m_recordCheck.setAnchorPreset(eAnchorPreset::CenterRight, ePresetResizeMode::KeepSize, 160);
 		m_recordCheck.setStateChangedCallback([this](CheckBox&, bool checked) { m_debugger.enableHistory(checked); });
 		tb.addWidget(m_maxSpeedCheck);
 		m_maxSpeedCheck.setText("Max speed");
+		m_maxSpeedCheck.setTooltipText("Runs as fast as possible, instead of at the machine's clock");
+		m_maxSpeedCheck.enableTooltip();
 		m_maxSpeedCheck.setAnchorPreset(eAnchorPreset::CenterRight, ePresetResizeMode::KeepSize, 30);
 		m_maxSpeedCheck.setStateChangedCallback([this](CheckBox&, bool checked) { m_debugger.setMaxSpeed(checked); m_viewsDirty = true; });
 		tb.addWidget(m_stateLabel);
@@ -443,6 +477,7 @@ namespace dragon
 		m_display.initialize("font.bmp");
 		m_display.enableCRTEffect(config.crt_effect);
 		m_display.enableBloomEffect(config.bloom_effect);
+		update_screen_effects_tooltip();
 		m_disassembly.build();
 		m_recordCheck.setChecked(m_debugger.isHistoryEnabled());
 		m_maxSpeedCheck.setChecked(m_debugger.isMaxSpeed());
@@ -751,6 +786,51 @@ namespace dragon
 			return;
 		}
 		m_debugger.command(command);
+	}
+
+	void DebuggerWindow::add_breakpoint_from_input(void)
+	{
+		const String text = m_breakpointInput.getText().new_trim();
+		if (text == "")
+			return;
+		// Labels first ($_name, written as is, or without the '$' / '$_'), then any address / symbol.
+		const auto& labels = m_debugger.data().labels;
+		u16 address = 0;
+		for (const String& symbol : { text, String("$").add(text), String("$_").add(text) })
+		{
+			if ((address = Debugger::Utils::findSymbol(labels, symbol)) != 0)
+				break;
+		}
+		if (address == 0 && !Debugger::Utils::parseAddress(m_debugger, text, address))
+		{
+			m_consoleOut.fg(ostd::ConsoleColors::Red).p("Not an address or a label: ").p(text).reset().nl();
+			return;
+		}
+		const Debugger::tBreakPoint* existing = m_debugger.getBreakPoint(address);
+		const bool already = existing != nullptr && existing->enabled;
+		m_debugger.addBreakPoint(address);
+		String label = Debugger::Utils::findSymbol(m_debugger.data().labels, address);
+		m_consoleOut.fg(ostd::ConsoleColors::Yellow).p(already ? "Breakpoint already set at " : "Breakpoint set at ").p(String::getHexStr(address, true, 2));
+		if (label != "")
+			m_consoleOut.p(" (").p(label.new_trim()).p(")");
+		m_consoleOut.reset().nl();
+		m_breakpointInput.setText("");
+		m_viewsDirty = true;
+	}
+
+	void DebuggerWindow::toggle_screen_effects(void)
+	{
+		// Both together: on if either was off before.
+		const bool enable = !(m_display.isCRTEffectEnabled() && m_display.isBloomEffectEnabled());
+		m_display.enableCRTEffect(enable);
+		m_display.enableBloomEffect(enable);
+		update_screen_effects_tooltip();
+	}
+
+	void DebuggerWindow::update_screen_effects_tooltip(void)
+	{
+		const bool on = m_display.isCRTEffectEnabled() && m_display.isBloomEffectEnabled();
+		m_screenEffectsButton.setTooltipText(on ? "CRT and bloom effects: on (click: off)" : "CRT and bloom effects: off (click: on)");
 	}
 
 	void DebuggerWindow::show_programs_menu(void)

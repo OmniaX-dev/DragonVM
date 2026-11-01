@@ -105,6 +105,10 @@ namespace dragon
 			void show_in_disassembly(u16 address);
 			void mark_shown_position(void);
 			void show_programs_menu(void);
+			void add_breakpoint_from_input(void);
+			// CRT and bloom, together.
+			void toggle_screen_effects(void);
+			void update_screen_effects_tooltip(void);
 			// The window's own commands (detach / attach), the others go to the debugger.
 			void run_command(const String& command);
 			ogfx::gui::Label& add_title(ogfx::gui::Label& label, const String& text);
@@ -128,6 +132,9 @@ namespace dragon
 			// Right column
 			ogfx::gui::TabPanel m_tabs { *this };
 			RegisterView m_registers { *this, m_debugger };
+			WidgetGroup m_breakpointsPage { *this };
+			ogfx::gui::TextEdit m_breakpointInput { *this };
+			ogfx::gui::Button m_breakpointAddButton { *this };
 			BreakpointView m_breakpoints { *this, m_debugger };
 			ogfx::gui::HexEditor m_memory { *this };
 			WidgetGroup m_stack { *this };
@@ -145,6 +152,7 @@ namespace dragon
 			ogfx::gui::Panel* m_historyTab { nullptr };
 			ogfx::gui::Label m_displayTitle { *this };
 			ogfx::gui::Button m_screenDetachButton { *this };
+			ogfx::gui::Button m_screenEffectsButton { *this };
 			hw::VirtualDisplay m_display { *this };
 			i32 m_stackHighlight { -1 };
 			stdvec<i32> m_stackFrameHighlights;

@@ -238,8 +238,8 @@ namespace dragon
 		{
 			if (column >= 0 && column < GutterColumns)
 				m_debugger.toggleBreakPoint(addr);
-			else if (doubleClick)
-				m_debugger.runTo(addr);
+			else if (doubleClick && m_onShowInMemory)
+				m_onShowInMemory(addr);
 			return;
 		}
 		if (button != ogfx::MouseEventData::eButton::Right)
