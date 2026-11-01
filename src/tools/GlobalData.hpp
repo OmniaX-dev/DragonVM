@@ -170,6 +170,10 @@ namespace dragon
 				std::vector<ostd::Color> m_colors;
 		};
 
+		// A register operand is one byte: the register index (bits 0-5) and the view (bits 6-7):
+		// the whole register, or its low / high 16 bits (R1L, R1H, ...). Reading a half gives
+		// it zero-extended; writing a half changes only that half. Writes are truncated to the
+		// view's width (and zero-extended within it: movb R1, x sets R1 to x).
 		class Registers
 		{
 			public:
@@ -193,8 +197,49 @@ namespace dragon
 				inline static constexpr u8 R8 = 0x11;
 				inline static constexpr u8 R9 = 0x12;
 				inline static constexpr u8 R10 = 0x13;
+				inline static constexpr u8 R11 = 0x14;
+				inline static constexpr u8 R12 = 0x15;
+				inline static constexpr u8 R13 = 0x16;
+				inline static constexpr u8 R14 = 0x17;
+				inline static constexpr u8 R15 = 0x18;
+				inline static constexpr u8 R16 = 0x19;
+				inline static constexpr u8 R17 = 0x1A;
+				inline static constexpr u8 R18 = 0x1B;
+				inline static constexpr u8 R19 = 0x1C;
+				inline static constexpr u8 R20 = 0x1D;
 
-				inline static constexpr u8 Last = 0x14;
+				inline static constexpr u8 Last = 0x1E;
+
+				inline static constexpr u8 FirstGeneral = R1;
+				inline static constexpr u8 GeneralCount = 20;
+
+				inline static constexpr u8 IndexMask = 0x3F;
+				inline static constexpr u8 ViewMask = 0xC0;
+				inline static constexpr u8 ViewFull = 0x00;
+				inline static constexpr u8 ViewLow = 0x40;		// RxL: bits 0-15
+				inline static constexpr u8 ViewHigh = 0x80;		// RxH: bits 16-31
+
+				inline static constexpr u8 low(u8 reg) { return cast<u8>((reg & IndexMask) | ViewLow); }
+				inline static constexpr u8 high(u8 reg) { return cast<u8>((reg & IndexMask) | ViewHigh); }
+				inline static constexpr u8 general(u8 n) { return cast<u8>(FirstGeneral + n - 1); }	// R<n>, n in 1..20
+				inline static constexpr bool isValid(u8 reg) { return (reg & IndexMask) < Last && (reg & ViewMask) != ViewMask; }
+		};
+
+		// A stack frame (VirtualCPU::pushStackFrame()), in words above FP: the saved stack frame
+		// size, FP, IP, ACC, PP, R20..R1, then the arguments count and the arguments.
+		class StackFrameLayout
+		{
+			public:
+				inline static constexpr u32 FrameSize = 1;
+				inline static constexpr u32 SavedFP = 2;
+				inline static constexpr u32 SavedIP = 3;
+				inline static constexpr u32 SavedACC = 4;
+				inline static constexpr u32 SavedPP = 5;
+				inline static constexpr u32 ArgCount = 6 + Registers::GeneralCount;			// 26
+				inline static constexpr u32 savedGeneral(u32 n) { return ArgCount - n; }	// R<n>
+				inline static constexpr u32 argument(u32 i, u32 count) { return ArgCount + count - i; }	// i-th (0-based) pushed argument
+				// The saved words (frame size .. R1), without the arguments count.
+				inline static constexpr u32 SavedWords = ArgCount - 1;
 		};
 
 		class Flags
@@ -357,6 +402,18 @@ namespace dragon
 				inline static constexpr u8 MovByteImmReg = 0x27;
 				inline static constexpr u8 MovByteDerefRegReg = 0x28;
 				inline static constexpr u8 MovByteRegMem = 0x29;
+
+				// 16-bit moves (movw), like the byte moves.
+				inline static constexpr u8 MovWordImmMem = 0x80;
+				inline static constexpr u8 MovWordDerefRegMem = 0x81;
+				inline static constexpr u8 MovWordImmDerefReg = 0x82;
+				inline static constexpr u8 MovWordRegDerefReg = 0x83;
+				inline static constexpr u8 MovWordMemDerefReg = 0x84;
+				inline static constexpr u8 MovWordDerefRegDerefReg = 0x85;
+				inline static constexpr u8 MovWordMemReg = 0x86;
+				inline static constexpr u8 MovWordImmReg = 0x87;
+				inline static constexpr u8 MovWordDerefRegReg = 0x88;
+				inline static constexpr u8 MovWordRegMem = 0x89;
 
 				inline static constexpr u8 AddRegReg = 0x30;
 				inline static constexpr u8 AddImmReg = 0x31;

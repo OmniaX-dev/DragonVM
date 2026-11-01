@@ -151,6 +151,8 @@ namespace dragon
 				static eOperandType parseOperand(String op, i32& outOp);
 				// Appends a 32-bit word (big endian) to the code.
 				static void pushWord(i32 word);
+				// Appends a 16-bit value (big endian) to the code.
+				static void pushHalf(i32 half);
 				static u8 parseRegister(String op);
 
 			private:

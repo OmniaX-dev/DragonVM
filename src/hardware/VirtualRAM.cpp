@@ -33,6 +33,30 @@ namespace dragon
 			return m_memory[a];
 		}
 
+		i16 VirtualRAM::read16(u32 addr)
+		{
+			const u32 a = final_address(addr);
+			i16 value = 0;
+			if (!bytes::read16(m_memory, a, value))
+			{
+				data::ErrorHandler::pushError(data::ErrorCodes::RAM_InvalidAddress, String("Invalid RAM read at address: ").add(String::getHexStr(a, true, 4)));
+				return 0x0000;
+			}
+			return value;
+		}
+
+		i16 VirtualRAM::write16(u32 addr, i16 value)
+		{
+			const u32 a = final_address(addr);
+			if (!bytes::write16(m_memory, a, value))
+			{
+				data::ErrorHandler::pushError(data::ErrorCodes::RAM_InvalidAddress, String("Invalid RAM write at address: ").add(String::getHexStr(a, true, 4)));
+				return 0x0000;
+			}
+			m_dirty.markRange(a, 2);
+			return value;
+		}
+
 		i32 VirtualRAM::read32(u32 addr)
 		{
 			const u32 a = final_address(addr);

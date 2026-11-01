@@ -1020,13 +1020,23 @@ namespace dragon
 			{ "ip", data::Registers::IP }, { "sp", data::Registers::SP }, { "fp", data::Registers::FP },
 			{ "rv", data::Registers::RV }, { "pp", data::Registers::PP }, { "fl", data::Registers::FL },
 			{ "acc", data::Registers::ACC }, { "s1", data::Registers::S1 }, { "s2", data::Registers::S2 },
-			{ "of", data::Registers::OFFSET }, { "offset", data::Registers::OFFSET },
-			{ "r1", data::Registers::R1 }, { "r2", data::Registers::R2 }, { "r3", data::Registers::R3 },
-			{ "r4", data::Registers::R4 }, { "r5", data::Registers::R5 }, { "r6", data::Registers::R6 },
-			{ "r7", data::Registers::R7 }, { "r8", data::Registers::R8 }, { "r9", data::Registers::R9 },
-			{ "r10", data::Registers::R10 }
+			{ "of", data::Registers::OFFSET }, { "offset", data::Registers::OFFSET }
 		};
 		const String reg = name.new_trim().toLower();
+		// r1..r20, and the halves r1l / r1h .. r20l / r20h (writes change only the half).
+		for (u8 n = 1; n <= data::Registers::GeneralCount; n++)
+		{
+			const String r = String("r").add(n);
+			u8 index = 0xFF;
+			if (reg == r) index = data::Registers::general(n);
+			else if (reg == r + "l") index = data::Registers::low(data::Registers::general(n));
+			else if (reg == r + "h") index = data::Registers::high(data::Registers::general(n));
+			if (index == 0xFF)
+				continue;
+			DragonRuntime::cpu.writeRegister32(index, cast<i32>(value & 0xFFFFFFFF));
+			commitEdit();
+			return true;
+		}
 		for (const auto& entry : registers)
 		{
 			if (reg == entry.first)
@@ -1290,17 +1300,15 @@ namespace dragon
 		String command = commandArgs;
 		const u8 TYPE_STRING = 0;
 		const u8 TYPE_BYTE = 1;
-		const u8 TYPE_HALF = 2;
-		const u8 TYPE_WORD = data::WordSize;	// the machine word (32 bits)
+		const u8 TYPE_WORD = 2;
 		const u8 TYPE_DWORD = 4;
 		const u8 TYPE_QWORD = 8;
-		u8 type = TYPE_WORD;
+		u8 type = TYPE_DWORD;	// the machine's registers / addresses
 		if (command.contains(" "))
 		{
 			String size_str = command.new_substr(0, command.indexOf(" ")).trim().toLower();
 			command.substr(command.indexOf(" ") + 1).trim();
 			if (size_str == "byte") type = TYPE_BYTE;
-			else if (size_str == "half") type = TYPE_HALF;
 			else if (size_str == "word") type = TYPE_WORD;
 			else if (size_str == "dword") type = TYPE_DWORD;
 			else if (size_str == "qword") type = TYPE_QWORD;
@@ -1310,7 +1318,7 @@ namespace dragon
 		if (Utils::parseValue(command, numeric))
 		{
 			if (type == TYPE_STRING)
-				type = TYPE_WORD;
+				type = TYPE_DWORD;
 			u32 addr = cast<u32>(numeric);
 			u32 end_addr = addr;
 			String tmp = "";

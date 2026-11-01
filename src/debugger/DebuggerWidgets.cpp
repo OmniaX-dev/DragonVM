@@ -333,10 +333,10 @@ namespace dragon
 		{ "IP", data::Registers::IP, 0 }, { "SP", data::Registers::SP, 0 }, { "FP", data::Registers::FP, 0 },
 		{ "RV", data::Registers::RV, 0 }, { "PP", data::Registers::PP, 0 }, { "FL", data::Registers::FL, 0 },
 		{ "ACC", data::Registers::ACC, 0 },
-		{ "R1", data::Registers::R1, 1 }, { "R2", data::Registers::R2, 1 }, { "R3", data::Registers::R3, 1 },
-		{ "R4", data::Registers::R4, 1 }, { "R5", data::Registers::R5, 1 }, { "R6", data::Registers::R6, 1 },
-		{ "R7", data::Registers::R7, 1 }, { "R8", data::Registers::R8, 1 }, { "R9", data::Registers::R9, 1 },
-		{ "R10", data::Registers::R10, 1 },
+		{ "R1", data::Registers::R1, 1 }, { "R2", data::Registers::R2, 1 }, { "R3", data::Registers::R3, 1 }, { "R4", data::Registers::R4, 1 }, { "R5", data::Registers::R5, 1 },
+		{ "R6", data::Registers::R6, 1 }, { "R7", data::Registers::R7, 1 }, { "R8", data::Registers::R8, 1 }, { "R9", data::Registers::R9, 1 }, { "R10", data::Registers::R10, 1 },
+		{ "R11", data::Registers::R11, 1 }, { "R12", data::Registers::R12, 1 }, { "R13", data::Registers::R13, 1 }, { "R14", data::Registers::R14, 1 }, { "R15", data::Registers::R15, 1 },
+		{ "R16", data::Registers::R16, 1 }, { "R17", data::Registers::R17, 1 }, { "R18", data::Registers::R18, 1 }, { "R19", data::Registers::R19, 1 }, { "R20", data::Registers::R20, 1 },
 		{ "S1", data::Registers::S1, 2 }, { "S2", data::Registers::S2, 2 }, { "OF", data::Registers::OFFSET, 2 }
 	};
 	static const Color s_groupColors[3] = { { 90, 200, 230 }, { 120, 230, 120 }, { 240, 110, 110 } };

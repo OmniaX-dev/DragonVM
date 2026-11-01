@@ -678,10 +678,10 @@ namespace dragon
 			if (returnTo == "")
 				returnTo = String::getHexStr(frame.savedIP, true, 4);
 			const Color saved = (depth % 2 == 0 ? Color(60, 120, 220, 55) : Color(220, 150, 60, 55));
-			m_stackFrameHighlights.push_back(m_stackMemory.addHighlight(cast<u32>(frame.fp + data::WordSize), 16 * data::WordSize,
+			m_stackFrameHighlights.push_back(m_stackMemory.addHighlight(cast<u32>(frame.fp + data::WordSize), data::StackFrameLayout::ArgCount * data::WordSize,
 				saved, String("#").add(depth).add(" saved frame (returns to ").add(returnTo).add(")")));
 			if (frame.argCount > 0 && frame.argCount < 64)
-				m_stackFrameHighlights.push_back(m_stackMemory.addHighlight(cast<u32>(frame.fp + 17 * data::WordSize), cast<u32>(frame.argCount) * data::WordSize,
+				m_stackFrameHighlights.push_back(m_stackMemory.addHighlight(cast<u32>(frame.fp + (data::StackFrameLayout::ArgCount + 1) * data::WordSize), cast<u32>(frame.argCount) * data::WordSize,
 					Color(170, 70, 190, 60), String("#").add(depth).add(" arguments (").add(frame.argCount).add(")")));
 			depth++;
 		}

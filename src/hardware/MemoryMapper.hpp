@@ -24,8 +24,10 @@ namespace dragon
 			public:
 				MemoryMapper(void);
 				i8 read8(u32 addr) override;
+				i16 read16(u32 addr) override;
 				i32 read32(u32 addr) override;
 				i8 write8(u32 addr, i8 value) override;
+				i16 write16(u32 addr, i16 value) override;
 				i32 write32(u32 addr, i32 value) override;
 
 				void mapDevice(IMemoryDevice& device, u32 startAddr, u32 endAddr, bool remap = false, String name = "");

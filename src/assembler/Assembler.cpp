@@ -1,6 +1,7 @@
 #include "Assembler.hpp"
 #include <ostd/io/File.hpp>
 #include <iostream>
+#include <cctype>
 #include <fstream>
 #include <ostd/io/FileSystem.hpp>
 #include "../tools/LegacyOstdSerial.hpp"
@@ -16,6 +17,13 @@ namespace dragon
 {
 	namespace code
 	{
+		void Assembler::pushHalf(i32 half)
+		{
+			const u16 h = cast<u16>(half);
+			m_code.push_back(cast<i8>((h >> 8) & 0xFF));
+			m_code.push_back(cast<i8>(h & 0xFF));
+		}
+
 		void Assembler::pushWord(i32 word)
 		{
 			// Words are 32 bits, big endian.
@@ -1648,6 +1656,11 @@ namespace dragon
 						break;
 					}
 				}
+				else
+				{
+					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
+					exit(0);
+				}
 				return;
 			}
 			else if (instEdit == "movb")
@@ -1733,6 +1746,102 @@ namespace dragon
 							exit(0);
 						break;
 					}
+				}
+				else
+				{
+					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
+					exit(0);
+				}
+				return;
+			}
+			else if (instEdit == "movw")
+			{
+				m_code.push_back(0x00);
+				i32 word1 = 0x00000000;
+				i32 word2 = 0x00000000;
+				eOperandType opType1 = parseOperand(st.next(), word1);
+				if (opType1 == eOperandType::DerefMemory)
+				{
+					pushWord(word1);
+					eOperandType opType2 = parseOperand(st.next(), word2);
+					switch (opType2)
+					{
+						case eOperandType::Immediate:
+							m_code[m_code.size() - (1 + data::WordSize)] = data::OpCodes::MovWordImmMem;
+							pushHalf(word2);
+						break;
+						case eOperandType::DerefRegister:
+							m_code[m_code.size() - (1 + data::WordSize)] = data::OpCodes::MovWordDerefRegMem;
+							m_code.push_back((u8)word2);
+						break;
+						case eOperandType::Register:
+							m_code[m_code.size() - (1 + data::WordSize)] = data::OpCodes::MovWordRegMem;
+							m_code.push_back((u8)word2);
+						break;
+						default:
+							std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
+							exit(0);
+						break;
+					}
+				}
+				else if (opType1 == eOperandType::DerefRegister)
+				{
+					m_code.push_back((u8)word1);
+					eOperandType opType2 = parseOperand(st.next(), word2);
+					switch (opType2)
+					{
+						case eOperandType::Register:
+							m_code[m_code.size() - 2] = data::OpCodes::MovWordRegDerefReg;
+							m_code.push_back((u8)word2);
+						break;
+						case eOperandType::DerefMemory:
+							m_code[m_code.size() - 2] = data::OpCodes::MovWordMemDerefReg;
+							pushWord(word2);
+						break;
+						case eOperandType::Immediate:
+							m_code[m_code.size() - 2] = data::OpCodes::MovWordImmDerefReg;
+							pushHalf(word2);
+						break;
+						case eOperandType::DerefRegister:
+							m_code[m_code.size() - 2] = data::OpCodes::MovWordDerefRegDerefReg;
+							m_code.push_back((u8)word2);
+							return;
+						break;
+						default:
+							std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
+							exit(0);
+						break;
+					}
+				}
+				else if (opType1 == eOperandType::Register)
+				{
+					m_code.push_back((u8)word1);
+					eOperandType opType2 = parseOperand(st.next(), word2);
+					switch (opType2)
+					{
+						case eOperandType::Immediate:
+							m_code[m_code.size() - 2] = data::OpCodes::MovWordImmReg;
+							pushHalf(word2);
+						break;
+						case eOperandType::DerefMemory:
+							m_code[m_code.size() - 2] = data::OpCodes::MovWordMemReg;
+							pushWord(word2);
+						break;
+						case eOperandType::DerefRegister:
+							m_code[m_code.size() - 2] = data::OpCodes::MovWordDerefRegReg;
+							m_code.push_back((u8)word2);
+							return;
+						break;
+						default:
+							std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
+							exit(0);
+						break;
+					}
+				}
+				else
+				{
+					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
+					exit(0);
 				}
 				return;
 			}
@@ -1893,9 +2002,9 @@ namespace dragon
 						eOperandType opType2 = parseOperand(st.next(), word2);
 						String op3 = st.next();
 						bool word_offset = false;
-						if (op3.startsWith("word"))
+						if (op3.startsWith("dword") || op3.startsWith("word"))
 						{
-							op3.substr(4).trim();
+							op3.substr(op3.startsWith("dword") ? 5 : 4).trim();
 							word_offset = true;
 						}
 						eOperandType opType3 = parseOperand(op3, word3);
@@ -1974,9 +2083,9 @@ namespace dragon
 						eOperandType opType2 = parseOperand(st.next(), word2);
 						String op3 = st.next();
 						bool word_offset = false;
-						if (op3.startsWith("word"))
+						if (op3.startsWith("dword") || op3.startsWith("word"))
 						{
-							op3.substr(4).trim();
+							op3.substr(op3.startsWith("dword") ? 5 : 4).trim();
 							word_offset = true;
 						}
 						eOperandType opType3 = parseOperand(op3, word3);
@@ -2045,9 +2154,9 @@ namespace dragon
 						eOperandType opType2 = parseOperand(st.next(), word2);
 						String op3 = st.next();
 						bool word_offset = false;
-						if (op3.startsWith("word"))
+						if (op3.startsWith("dword") || op3.startsWith("word"))
 						{
-							op3.substr(4).trim();
+							op3.substr(op3.startsWith("dword") ? 5 : 4).trim();
 							word_offset = true;
 						}
 						eOperandType opType3 = parseOperand(op3, word3);
@@ -2126,9 +2235,9 @@ namespace dragon
 						eOperandType opType2 = parseOperand(st.next(), word2);
 						String op3 = st.next();
 						bool word_offset = false;
-						if (op3.startsWith("word"))
+						if (op3.startsWith("dword") || op3.startsWith("word"))
 						{
-							op3.substr(4).trim();
+							op3.substr(op3.startsWith("dword") ? 5 : 4).trim();
 							word_offset = true;
 						}
 						eOperandType opType3 = parseOperand(op3, word3);
@@ -2179,6 +2288,158 @@ namespace dragon
 						return;
 					}
 				}
+				else if (instEdit == "omovw")
+				{
+					m_code.push_back(data::OpCodes::Ext01);
+					m_code.push_back(0x00);
+					if (st.count() != 3)
+					{
+						std::cout << "Invalid operand number; " << line << "3  ->  3 required\n";
+						exit(0);
+						return;
+					}
+					eOperandType opType1 = parseOperand(st.next(), word1);
+					if (opType1 == eOperandType::DerefRegister)
+					{
+						m_code.push_back((u8)word1);
+						code_offset++;
+						eOperandType opType2 = parseOperand(st.next(), word2);
+						String op3 = st.next();
+						bool word_offset = false;
+						if (op3.startsWith("dword") || op3.startsWith("word"))
+						{
+							op3.substr(op3.startsWith("dword") ? 5 : 4).trim();
+							word_offset = true;
+						}
+						eOperandType opType3 = parseOperand(op3, word3);
+						switch (opType2)
+						{
+							case eOperandType::Immediate:
+							case eOperandType::Label:
+								pushHalf(word2);
+								code_offset += 2;
+							break;
+							case eOperandType::DerefRegister:
+								m_code.push_back((u8)word2);
+								code_offset++;
+							break;
+							default:
+								std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
+								exit(0);
+							break;
+						}
+						switch (opType3)
+						{
+							case eOperandType::Immediate:
+							case eOperandType::Label:
+								if (word_offset)
+								{
+									if (opType2 == eOperandType::Immediate || opType2 == eOperandType::Label)
+										m_code[m_code.size() - code_offset] = hw::cpuext::ExtMov::OpCodes::himm_in_dreg_immoffw;
+									else if (opType2 == eOperandType::DerefRegister)
+										m_code[m_code.size() - code_offset] = hw::cpuext::ExtMov::OpCodes::hdreg_in_dreg_immoffw;
+									else
+									{
+										std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
+										exit(0);
+									}
+									pushWord(word3);
+									code_offset += data::WordSize;
+								}
+								else
+								{
+									if (opType2 == eOperandType::Immediate || opType2 == eOperandType::Label)
+										m_code[m_code.size() - code_offset] = hw::cpuext::ExtMov::OpCodes::himm_in_dreg_immoffb;
+									else if (opType2 == eOperandType::DerefRegister)
+										m_code[m_code.size() - code_offset] = hw::cpuext::ExtMov::OpCodes::hdreg_in_dreg_immoffb;
+									else
+									{
+										std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
+										exit(0);
+									}
+									m_code.push_back((u8)word3);
+									code_offset++;
+								}
+							break;
+							case eOperandType::Register:
+								if (opType2 == eOperandType::Immediate || opType2 == eOperandType::Label)
+									m_code[m_code.size() - code_offset] = hw::cpuext::ExtMov::OpCodes::himm_in_dreg_regoff;
+								else if (opType2 == eOperandType::DerefRegister)
+									m_code[m_code.size() - code_offset] = hw::cpuext::ExtMov::OpCodes::hdreg_in_dreg_regoff;
+								else
+								{
+									std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
+									exit(0);
+								}
+								m_code.push_back((u8)word3);
+								code_offset++;
+							break;
+							default:
+								std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
+								exit(0);
+							break;
+						}
+					}
+					else if (opType1 == eOperandType::DerefMemory)
+					{
+						pushWord(word1);
+						code_offset += data::WordSize;
+						eOperandType opType2 = parseOperand(st.next(), word2);
+						String op3 = st.next();
+						bool word_offset = false;
+						if (op3.startsWith("dword") || op3.startsWith("word"))
+						{
+							op3.substr(op3.startsWith("dword") ? 5 : 4).trim();
+							word_offset = true;
+						}
+						eOperandType opType3 = parseOperand(op3, word3);
+						switch (opType2)
+						{
+							case eOperandType::Immediate:
+							case eOperandType::Label:
+								pushHalf(word2);
+								code_offset += 2;
+							break;
+							default:
+								std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
+								exit(0);
+							break;
+						}
+						switch (opType3)
+						{
+							case eOperandType::Immediate:
+							case eOperandType::Label:
+								if (word_offset)
+								{
+									m_code[m_code.size() - code_offset] = hw::cpuext::ExtMov::OpCodes::himm_in_mem_immoffw;
+									pushWord(word3);
+									code_offset += data::WordSize;
+								}
+								else
+								{
+									m_code[m_code.size() - code_offset] = hw::cpuext::ExtMov::OpCodes::himm_in_mem_immoffb;
+									m_code.push_back((u8)word3);
+									code_offset++;
+								}
+							break;
+							case eOperandType::Register:
+								m_code[m_code.size() - code_offset] = hw::cpuext::ExtMov::OpCodes::himm_in_mem_regoff;
+								m_code.push_back((u8)word3);
+								code_offset++;
+							break;
+							default:
+								std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
+								exit(0);
+							break;
+						}
+					}
+					else
+					{
+						std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  DerefRegister or Pointer required\n";
+						exit(0);
+						return;
+					}
+				}
 				else if (instEdit == "movo")
 				{
 					m_code.push_back(data::OpCodes::Ext01);
@@ -2197,9 +2458,9 @@ namespace dragon
 						eOperandType opType2 = parseOperand(st.next(), word2);
 						String op3 = st.next();
 						bool word_offset = false;
-						if (op3.startsWith("word"))
+						if (op3.startsWith("dword") || op3.startsWith("word"))
 						{
-							op3.substr(4).trim();
+							op3.substr(op3.startsWith("dword") ? 5 : 4).trim();
 							word_offset = true;
 						}
 						eOperandType opType3 = parseOperand(op3, word3);
@@ -2277,9 +2538,9 @@ namespace dragon
 						eOperandType opType2 = parseOperand(st.next(), word2);
 						String op3 = st.next();
 						bool word_offset = false;
-						if (op3.startsWith("word"))
+						if (op3.startsWith("dword") || op3.startsWith("word"))
 						{
-							op3.substr(4).trim();
+							op3.substr(op3.startsWith("dword") ? 5 : 4).trim();
 							word_offset = true;
 						}
 						eOperandType opType3 = parseOperand(op3, word3);
@@ -2347,9 +2608,9 @@ namespace dragon
 						eOperandType opType2 = parseOperand(st.next(), word2);
 						String op3 = st.next();
 						bool word_offset = false;
-						if (op3.startsWith("word"))
+						if (op3.startsWith("dword") || op3.startsWith("word"))
 						{
-							op3.substr(4).trim();
+							op3.substr(op3.startsWith("dword") ? 5 : 4).trim();
 							word_offset = true;
 						}
 						eOperandType opType3 = parseOperand(op3, word3);
@@ -2427,9 +2688,9 @@ namespace dragon
 						eOperandType opType2 = parseOperand(st.next(), word2);
 						String op3 = st.next();
 						bool word_offset = false;
-						if (op3.startsWith("word"))
+						if (op3.startsWith("dword") || op3.startsWith("word"))
 						{
-							op3.substr(4).trim();
+							op3.substr(op3.startsWith("dword") ? 5 : 4).trim();
 							word_offset = true;
 						}
 						eOperandType opType3 = parseOperand(op3, word3);
@@ -2479,9 +2740,159 @@ namespace dragon
 						return;
 					}
 				}
+				else if (instEdit == "movwo")
+				{
+					m_code.push_back(data::OpCodes::Ext01);
+					m_code.push_back(0x00);
+					if (st.count() != 3)
+					{
+						std::cout << "Invalid operand number; " << line << "3  ->  3 required\n";
+						exit(0);
+						return;
+					}
+					eOperandType opType1 = parseOperand(st.next(), word1);
+					if (opType1 == eOperandType::Register)
+					{
+						m_code.push_back((u8)word1);
+						code_offset++;
+						eOperandType opType2 = parseOperand(st.next(), word2);
+						String op3 = st.next();
+						bool word_offset = false;
+						if (op3.startsWith("dword") || op3.startsWith("word"))
+						{
+							op3.substr(op3.startsWith("dword") ? 5 : 4).trim();
+							word_offset = true;
+						}
+						eOperandType opType3 = parseOperand(op3, word3);
+						switch (opType2)
+						{
+							case eOperandType::DerefMemory:
+								pushWord(word2);
+								code_offset += data::WordSize;
+							break;
+							case eOperandType::DerefRegister:
+								m_code.push_back((u8)word2);
+								code_offset++;
+							break;
+							default:
+								std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
+								exit(0);
+							break;
+						}
+						switch (opType3)
+						{
+							case eOperandType::Immediate:
+							case eOperandType::Label:
+								if (word_offset)
+								{
+									if (opType2 == eOperandType::DerefMemory)
+										m_code[m_code.size() - code_offset] = hw::cpuext::ExtMov::OpCodes::hmem_immoffw_in_reg;
+									else if (opType2 == eOperandType::DerefRegister)
+										m_code[m_code.size() - code_offset] = hw::cpuext::ExtMov::OpCodes::hdreg_immoffw_in_reg;
+									else
+									{
+										std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
+										exit(0);
+									}
+									pushWord(word3);
+									code_offset += data::WordSize;
+								}
+								else
+								{
+									if (opType2 == eOperandType::DerefMemory)
+										m_code[m_code.size() - code_offset] = hw::cpuext::ExtMov::OpCodes::hmem_immoffb_in_reg;
+									else if (opType2 == eOperandType::DerefRegister)
+										m_code[m_code.size() - code_offset] = hw::cpuext::ExtMov::OpCodes::hdreg_immoffb_in_reg;
+									else
+									{
+										std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
+										exit(0);
+									}
+									m_code.push_back((u8)word3);
+									code_offset++;
+								}
+							break;
+							case eOperandType::Register:
+								if (opType2 == eOperandType::DerefMemory)
+									m_code[m_code.size() - code_offset] = hw::cpuext::ExtMov::OpCodes::hmem_regoff_in_reg;
+								else if (opType2 == eOperandType::DerefRegister)
+									m_code[m_code.size() - code_offset] = hw::cpuext::ExtMov::OpCodes::hdreg_regoff_in_reg;
+								else
+								{
+									std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
+									exit(0);
+								}
+								m_code.push_back((u8)word3);
+								code_offset++;
+							break;
+							default:
+								std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
+								exit(0);
+							break;
+						}
+					}
+					else if (opType1 == eOperandType::DerefRegister)
+					{
+						m_code.push_back((u8)word1);
+						code_offset++;
+						eOperandType opType2 = parseOperand(st.next(), word2);
+						String op3 = st.next();
+						bool word_offset = false;
+						if (op3.startsWith("dword") || op3.startsWith("word"))
+						{
+							op3.substr(op3.startsWith("dword") ? 5 : 4).trim();
+							word_offset = true;
+						}
+						eOperandType opType3 = parseOperand(op3, word3);
+						switch (opType2)
+						{
+							case eOperandType::DerefRegister:
+								m_code.push_back((u8)word2);
+								code_offset++;
+							break;
+							default:
+								std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
+								exit(0);
+							break;
+						}
+						switch (opType3)
+						{
+							case eOperandType::Immediate:
+							case eOperandType::Label:
+								if (word_offset)
+								{
+									m_code[m_code.size() - code_offset] = hw::cpuext::ExtMov::OpCodes::hdreg_immoffw_in_dreg;
+									pushWord(word3);
+									code_offset += data::WordSize;
+								}
+								else
+								{
+									m_code[m_code.size() - code_offset] = hw::cpuext::ExtMov::OpCodes::hdreg_immoffb_in_dreg;
+									m_code.push_back((u8)word3);
+									code_offset++;
+								}
+							break;
+							case eOperandType::Register:
+								m_code[m_code.size() - code_offset] = hw::cpuext::ExtMov::OpCodes::hdreg_regoff_in_dreg;
+								m_code.push_back((u8)word3);
+								code_offset++;
+							break;
+							default:
+								std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
+								exit(0);
+							break;
+						}
+					}
+					else
+					{
+						std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  DerefRegister or Pointer required\n";
+						exit(0);
+						return;
+					}
+				}
 				return;
 			}
-			else if (instEdit == "omov" || instEdit == "omovb" || instEdit == "movo" || instEdit == "movbo")
+			else if (instEdit == "omov" || instEdit == "omovb" || instEdit == "omovw" || instEdit == "movo" || instEdit == "movbo" || instEdit == "movwo")
 			{
 				std::cout << "ExtMov instruction detected, please add '--extmov' flag to dasm.\n";
 				exit(0);
@@ -2578,7 +2989,7 @@ namespace dragon
 				opEdit.trim();
 				derefReg = true;
 			}
-			i8 reg = parseRegister(opEdit);
+			u8 reg = parseRegister(opEdit);
 			if (reg != data::Registers::Last)
 			{
 				outOp = (i32)reg;
@@ -2665,16 +3076,23 @@ namespace dragon
 		{
 			String opEdit(op);
 			opEdit.trim().toLower();
-			if (opEdit == "r1") return data::Registers::R1;
-			if (opEdit == "r2") return data::Registers::R2;
-			if (opEdit == "r3") return data::Registers::R3;
-			if (opEdit == "r4") return data::Registers::R4;
-			if (opEdit == "r5") return data::Registers::R5;
-			if (opEdit == "r6") return data::Registers::R6;
-			if (opEdit == "r7") return data::Registers::R7;
-			if (opEdit == "r8") return data::Registers::R8;
-			if (opEdit == "r9") return data::Registers::R9;
-			if (opEdit == "r10") return data::Registers::R10;
+			// R1..R20, and their halves R1L / R1H .. R20L / R20H.
+			if (opEdit.len() >= 2 && opEdit.cpp_str()[0] == 'r' && std::isdigit(cast<u8>(opEdit.cpp_str()[1])))
+			{
+				String num = opEdit.new_substr(1);
+				u8 view = data::Registers::ViewFull;
+				if (num.endsWith("l") || num.endsWith("h"))
+				{
+					view = (num.endsWith("l") ? data::Registers::ViewLow : data::Registers::ViewHigh);
+					num.substr(0, num.len() - 1);
+				}
+				if (num.len() == 0 || num.len() > 2 || !num.isNumeric() || num.startsWith("0"))
+					return data::Registers::Last;
+				const i64 n = num.toInt();
+				if (n < 1 || n > data::Registers::GeneralCount)
+					return data::Registers::Last;
+				return cast<u8>(data::Registers::general(cast<u8>(n)) | view);
+			}
 			if (opEdit == "acc") return data::Registers::ACC;
 			if (opEdit == "fp") return data::Registers::FP;
 			if (opEdit == "sp") return data::Registers::SP;

@@ -52,6 +52,27 @@ namespace dragon
 						inline static constexpr u8 bdreg_immoffw_in_reg		=	0x59;
 						inline static constexpr u8 bdreg_regoff_in_reg			=	0x5A;
 						inline static constexpr u8 bdreg_immoffb_in_reg		=	0x5B;
+
+						// 16-bit (h) variants. Naming: w = 32-bit word, h = 16-bit, b = byte;
+						// immoffw / immoffb: 32-bit / 8-bit immediate offset, regoff: offset in a register.
+						inline static constexpr u8 himm_in_dreg_immoffw	=	0x1C;
+						inline static constexpr u8 himm_in_dreg_regoff	=	0x1D;
+						inline static constexpr u8 himm_in_dreg_immoffb	=	0x1E;
+						inline static constexpr u8 hdreg_in_dreg_immoffw	=	0x1F;
+						inline static constexpr u8 hdreg_in_dreg_regoff	=	0x20;
+						inline static constexpr u8 hdreg_in_dreg_immoffb	=	0x21;
+						inline static constexpr u8 himm_in_mem_immoffw	=	0x36;
+						inline static constexpr u8 himm_in_mem_regoff	=	0x37;
+						inline static constexpr u8 himm_in_mem_immoffb	=	0x38;
+						inline static constexpr u8 hdreg_immoffw_in_dreg	=	0x46;
+						inline static constexpr u8 hdreg_regoff_in_dreg	=	0x47;
+						inline static constexpr u8 hdreg_immoffb_in_dreg	=	0x48;
+						inline static constexpr u8 hmem_immoffw_in_reg	=	0x5C;
+						inline static constexpr u8 hmem_regoff_in_reg	=	0x5D;
+						inline static constexpr u8 hmem_immoffb_in_reg	=	0x5E;
+						inline static constexpr u8 hdreg_immoffw_in_reg	=	0x5F;
+						inline static constexpr u8 hdreg_regoff_in_reg	=	0x60;
+						inline static constexpr u8 hdreg_immoffb_in_reg	=	0x61;
 				};
 				public:
 					inline ExtMov(void) : data::CPUExtension(data::OpCodes::Ext01, "extmov") {  }

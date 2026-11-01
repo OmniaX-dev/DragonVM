@@ -176,7 +176,7 @@ namespace dragon
 			i32 m_cardColumns { 1 };
 
 		public:
-			inline static constexpr i32 RegisterCount { 20 };
+			inline static constexpr i32 RegisterCount { 30 };
 			inline static constexpr f32 CardChars { 17 };
 			inline static constexpr f32 CardLines { 2.4f };
 	};

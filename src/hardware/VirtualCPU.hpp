@@ -45,12 +45,16 @@ namespace dragon
 				// Sets SP and FP to the top of the stack (the last word of the RAM).
 				void setStackTop(u32 stackTop);
 				inline u32 getStackTop(void) const { return m_stackTop; }
+				// `reg` is a register operand (index + view, see data::Registers): a half (RxL /
+				// RxH) reads zero-extended; writes are truncated to the view's width and change
+				// only the view (the whole register for a full view: smaller values are zero-extended).
 				i32 readRegister(u8 reg);
 				i32 writeRegister32(u8 reg, i32 value);
-				// Zero-extends the byte into the whole register.
+				i16 writeRegister16(u8 reg, i16 value);
 				i8 writeRegister8(u8 reg, i8 value);
 
 				i8 fetch8(void);
+				i16 fetch16(void);
 				i32 fetch32(void);
 
 				void pushToStack(i32 value);
@@ -92,6 +96,9 @@ namespace dragon
 
 				// false (and halts, with an error) if divisor is 0.
 				bool check_divisor(i32 divisor);
+
+			private:
+				void write_register(u8 reg, u32 value);
 
 			private:
 				i32 m_registers[data::Registers::Last];

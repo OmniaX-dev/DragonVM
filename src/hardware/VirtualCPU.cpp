@@ -27,21 +27,43 @@ namespace dragon
 
 		i32 VirtualCPU::readRegister(u8 reg)
 		{
-			if (reg >= data::Registers::Last) return 0x00000000; //TODO: Error
-			return m_registers[reg];
+			if (!data::Registers::isValid(reg)) return 0x00000000; //TODO: Error
+			const u32 value = cast<u32>(m_registers[reg & data::Registers::IndexMask]);
+			switch (reg & data::Registers::ViewMask)
+			{
+				case data::Registers::ViewLow: return cast<i32>(value & 0xFFFF);
+				case data::Registers::ViewHigh: return cast<i32>(value >> 16);
+				default: return cast<i32>(value);
+			}
+		}
+
+		void VirtualCPU::write_register(u8 reg, u32 value)
+		{
+			if (!data::Registers::isValid(reg)) return; //TODO: Error
+			i32& r = m_registers[reg & data::Registers::IndexMask];
+			switch (reg & data::Registers::ViewMask)
+			{
+				case data::Registers::ViewLow: r = cast<i32>((cast<u32>(r) & 0xFFFF0000u) | (value & 0xFFFF)); break;
+				case data::Registers::ViewHigh: r = cast<i32>((cast<u32>(r) & 0x0000FFFFu) | ((value & 0xFFFF) << 16)); break;
+				default: r = cast<i32>(value); break;
+			}
 		}
 
 		i32 VirtualCPU::writeRegister32(u8 reg, i32 value)
 		{
-			if (reg >= data::Registers::Last) return 0x00000000; //TODO: Error
-			m_registers[reg] = value;
+			write_register(reg, cast<u32>(value));
+			return value;
+		}
+
+		i16 VirtualCPU::writeRegister16(u8 reg, i16 value)
+		{
+			write_register(reg, cast<u32>(cast<u16>(value)));
 			return value;
 		}
 
 		i8 VirtualCPU::writeRegister8(u8 reg, i8 value)
 		{
-			if (reg >= data::Registers::Last) return 0x00; //TODO: Error
-			m_registers[reg] = cast<i32>(cast<u8>(value));
+			write_register(reg, cast<u32>(cast<u8>(value)));
 			return value;
 		}
 
@@ -51,6 +73,15 @@ namespace dragon
 			m_currentAddr = nextInstAddr;
 			i8 inst = m_memory.read8(nextInstAddr);
 			writeRegister32(data::Registers::IP, cast<i32>(nextInstAddr + 1));
+			return inst;
+		}
+
+		i16 VirtualCPU::fetch16(void)
+		{
+			u32 nextInstAddr = cast<u32>(readRegister(data::Registers::IP));
+			m_currentAddr = nextInstAddr;
+			i16 inst = m_memory.read16(nextInstAddr);
+			writeRegister32(data::Registers::IP, cast<i32>(nextInstAddr + 2));
 			return inst;
 		}
 
@@ -98,16 +129,8 @@ namespace dragon
 			else
 				argStartAddr += (argCount * data::WordSize);
 
-			pushToStack(readRegister(data::Registers::R1));
-			pushToStack(readRegister(data::Registers::R2));
-			pushToStack(readRegister(data::Registers::R3));
-			pushToStack(readRegister(data::Registers::R4));
-			pushToStack(readRegister(data::Registers::R5));
-			pushToStack(readRegister(data::Registers::R6));
-			pushToStack(readRegister(data::Registers::R7));
-			pushToStack(readRegister(data::Registers::R8));
-			pushToStack(readRegister(data::Registers::R9));
-			pushToStack(readRegister(data::Registers::R10));
+			for (u8 n = 1; n <= data::Registers::GeneralCount; n++)
+				pushToStack(readRegister(data::Registers::general(n)));
 			pushToStack(readRegister(data::Registers::PP));
 			pushToStack(readRegister(data::Registers::ACC));
 			pushToStack(readRegister(data::Registers::IP));
@@ -129,16 +152,8 @@ namespace dragon
 			writeRegister32(data::Registers::IP, popFromStack());
 			writeRegister32(data::Registers::ACC, popFromStack());
 			writeRegister32(data::Registers::PP, popFromStack());
-			writeRegister32(data::Registers::R10, popFromStack());
-			writeRegister32(data::Registers::R9, popFromStack());
-			writeRegister32(data::Registers::R8, popFromStack());
-			writeRegister32(data::Registers::R7, popFromStack());
-			writeRegister32(data::Registers::R6, popFromStack());
-			writeRegister32(data::Registers::R5, popFromStack());
-			writeRegister32(data::Registers::R4, popFromStack());
-			writeRegister32(data::Registers::R3, popFromStack());
-			writeRegister32(data::Registers::R2, popFromStack());
-			writeRegister32(data::Registers::R1, popFromStack());
+			for (u8 n = data::Registers::GeneralCount; n >= 1; n--)
+				writeRegister32(data::Registers::general(n), popFromStack());
 
 			u32 nArgs = cast<u32>(popFromStack());
 			for (u32 i = 0; i < nArgs; i++)
@@ -500,6 +515,85 @@ namespace dragon
 					u8 regAddr = fetch8();
 					i32 value = readRegister(regAddr);
 					m_memory.write8(addr, (i8)(value & 0x00FF));
+				}
+				break;
+				case data::OpCodes::MovWordImmMem:
+				{
+					u32 addr = cast<u32>(fetch32());
+					i16 literal = fetch16();
+					m_memory.write16(addr, literal);
+				}
+				break;
+				case data::OpCodes::MovWordDerefRegMem:
+				{
+					u32 destAddr = cast<u32>(fetch32());
+					u8 srcRegAddr = fetch8();
+					u32 addr = cast<u32>(readRegister(srcRegAddr));
+					m_memory.write16(destAddr, m_memory.read16(addr));
+				}
+				break;
+				case data::OpCodes::MovWordImmDerefReg:
+				{
+					u8 destRegAddr = fetch8();
+					i16 value = fetch16();
+					u32 addr = cast<u32>(readRegister(destRegAddr));
+					m_memory.write16(addr, value);
+				}
+				break;
+				case data::OpCodes::MovWordRegDerefReg:
+				{
+					u8 destRegAddr = fetch8();
+					u8 srcRegAddr = fetch8();
+					i32 value = readRegister(srcRegAddr);
+					u32 addr = cast<u32>(readRegister(destRegAddr));
+					m_memory.write16(addr, cast<i16>(value));
+				}
+				break;
+				case data::OpCodes::MovWordMemDerefReg:
+				{
+					u8 destRegAddr = fetch8();
+					u32 srcAddr = cast<u32>(fetch32());
+					i16 value = m_memory.read16(srcAddr);
+					u32 addr = cast<u32>(readRegister(destRegAddr));
+					m_memory.write16(addr, value);
+				}
+				break;
+				case data::OpCodes::MovWordDerefRegDerefReg:
+				{
+					u8 destRegAddr = fetch8();
+					u8 srcRegAddr = fetch8();
+					u32 srcAddr = cast<u32>(readRegister(srcRegAddr));
+					u32 destAddr = cast<u32>(readRegister(destRegAddr));
+					m_memory.write16(destAddr, m_memory.read16(srcAddr));
+				}
+				break;
+				case data::OpCodes::MovWordMemReg:
+				{
+					u8 destRegAddr = fetch8();
+					u32 srcAddr = cast<u32>(fetch32());
+					writeRegister16(destRegAddr, m_memory.read16(srcAddr));
+				}
+				break;
+				case data::OpCodes::MovWordImmReg:
+				{
+					u8 destRegAddr = fetch8();
+					i16 value = fetch16();
+					writeRegister16(destRegAddr, value);
+				}
+				break;
+				case data::OpCodes::MovWordDerefRegReg:
+				{
+					u8 destRegAddr = fetch8();
+					u8 srcRegAddr = fetch8();
+					u32 srcAddr = cast<u32>(readRegister(srcRegAddr));
+					writeRegister16(destRegAddr, m_memory.read16(srcAddr));
+				}
+				break;
+				case data::OpCodes::MovWordRegMem:
+				{
+					u32 addr = cast<u32>(fetch32());
+					u8 regAddr = fetch8();
+					m_memory.write16(addr, cast<i16>(readRegister(regAddr)));
 				}
 				break;
 				case data::OpCodes::AddImmReg:

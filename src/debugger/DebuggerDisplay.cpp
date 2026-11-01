@@ -12,7 +12,7 @@ namespace dragon
 		ostd::RegexRichString rgxrstr(instBody);
 		rgxrstr.fg("\\{|\\}|\\+|\\*|\\-|\\/|\\(|\\)|\\[|\\]", "Red"); //Operators
 		rgxrstr.fg("0x[0-9A-Fa-f]+|0b[0-1]+|(?<!\\w)[0-9]+(?!\\w)", "BrightYellow"); //Number Constants
-		rgxrstr.fg("(?<!\\w)(r[1-9]|r10|fl|pp|rv|fp|sp|ip|acc)(?!\\w)", "BrightGreen", true); //Registers
+		rgxrstr.fg("(?<!\\w)(r(?:1[0-9]|20|[1-9])[lh]?|fl|pp|rv|fp|sp|ip|acc)(?!\\w)", "BrightGreen", true); //Registers
 		rgxrstr.fg("\\%low", "Magenta");
 		rgxrstr.col("\\$\\w+", "Cyan", "Black"); //Labels
 		String instEdit = rgxrstr.getRawString();
@@ -89,29 +89,29 @@ namespace dragon
 	void Debugger::Display::printDiff(ostd::OutputHandlerBase& out, const Debugger& dbg)
 	{
 		String str;
-		str.add("|===============|================PREV============================|================CURR============================|=====|===PREV====|===CURR====|");
+		str.add("|===============|================PREV============================|================CURR============================|=====|===PREV====|===CURR====|=====|===PREV====|===CURR====|");
 		str.add("\n");
-		str.add("| InstAddr:     |*%PREV_INST_ADDR%*******************************|*%CURR_INST_ADDR%*******************************| R1  |*%PREV_R1%*|*%CURR_R1%*|");
+		str.add("| InstAddr:     |*%PREV_INST_ADDR%*******************************|*%CURR_INST_ADDR%*******************************| R1  |*%PREV_R1%*|*%CURR_R1%*| R11 |*%PREV_R11%|*%CURR_R11%|");
 		str.add("\n");
-		str.add("| Code:         |*%PREV_CODE%************************************|*%CURR_CODE%************************************| R2  |*%PREV_R2%*|*%CURR_R2%*|");
+		str.add("| Code:         |*%PREV_CODE%************************************|*%CURR_CODE%************************************| R2  |*%PREV_R2%*|*%CURR_R2%*| R12 |*%PREV_R12%|*%CURR_R12%|");
 		str.add("\n");
-		str.add("| StackFrame:   |*%PREV_STACK_FRAME%*****************************|*%CURR_STACK_FRAME%*****************************| R3  |*%PREV_R3%*|*%CURR_R3%*|");
+		str.add("| StackFrame:   |*%PREV_STACK_FRAME%*****************************|*%CURR_STACK_FRAME%*****************************| R3  |*%PREV_R3%*|*%CURR_R3%*| R13 |*%PREV_R13%|*%CURR_R13%|");
 		str.add("\n");
-		str.add("| DBG BRK:      |*%PREV_DBG_BRK%*********************************|*%CURR_DBG_BRK%*********************************| R4  |*%PREV_R4%*|*%CURR_R4%*|");
+		str.add("| DBG BRK:      |*%PREV_DBG_BRK%*********************************|*%CURR_DBG_BRK%*********************************| R4  |*%PREV_R4%*|*%CURR_R4%*| R14 |*%PREV_R14%|*%CURR_R14%|");
 		str.add("\n");
-		str.add("| INT Handler:  |*%PREV_INT_HANDLER%*****************************|*%CURR_INT_HANDLER%*****************************| R5  |*%PREV_R5%*|*%CURR_R5%*|");
+		str.add("| INT Handler:  |*%PREV_INT_HANDLER%*****************************|*%CURR_INT_HANDLER%*****************************| R5  |*%PREV_R5%*|*%CURR_R5%*| R15 |*%PREV_R15%|*%CURR_R15%|");
 		str.add("\n");
-		str.add("| BIOS Mode:    |*%PREV_BIOS_MODE%*******************************|**%CURR_BIOS_MODE%******************************| R6  |*%PREV_R6%*|*%CURR_R6%*|");
+		str.add("| BIOS Mode:    |*%PREV_BIOS_MODE%*******************************|**%CURR_BIOS_MODE%******************************| R6  |*%PREV_R6%*|*%CURR_R6%*| R16 |*%PREV_R16%|*%CURR_R16%|");
 		str.add("\n");
-		str.add("| SubRoutine:   |*%PREV_SUB_ROUTINE%*****************************|**%CURR_SUB_ROUTINE%****************************| R7  |*%PREV_R7%*|*%CURR_R7%*|");
+		str.add("| SubRoutine:   |*%PREV_SUB_ROUTINE%*****************************|**%CURR_SUB_ROUTINE%****************************| R7  |*%PREV_R7%*|*%CURR_R7%*| R17 |*%PREV_R17%|*%CURR_R17%|");
 		str.add("\n");
-		str.add("|    IP:        |*%PREV_IP%**************************************|**%CURR_IP%*************************************| R8  |*%PREV_R8%*|*%CURR_R8%*|");
+		str.add("|    IP:        |*%PREV_IP%**************************************|**%CURR_IP%*************************************| R8  |*%PREV_R8%*|*%CURR_R8%*| R18 |*%PREV_R18%|*%CURR_R18%|");
 		str.add("\n");
-		str.add("|    SP:        |*%PREV_SP%**************************************|**%CURR_SP%*************************************| R9  |*%PREV_R9%*|*%CURR_R9%*|");
+		str.add("|    SP:        |*%PREV_SP%**************************************|**%CURR_SP%*************************************| R9  |*%PREV_R9%*|*%CURR_R9%*| R19 |*%PREV_R19%|*%CURR_R19%|");
 		str.add("\n");
-		str.add("|    FP:        |*%PREV_FP%**************************************|**%CURR_FP%*************************************| R10 |*%PREV_R10%|*%CURR_R10%|");
+		str.add("|    FP:        |*%PREV_FP%**************************************|**%CURR_FP%*************************************| R10 |*%PREV_R10%|*%CURR_R10%| R20 |*%PREV_R20%|*%CURR_R20%|");
 		str.add("\n");
-		str.add("|---------------|------------------------------------------------|------------------------------------------------|=====|===========|===========|");
+		str.add("|---------------|------------------------------------------------|------------------------------------------------|=====|===========|===========|=====|===========|===========|");
 		str.add("\n");
 		str.add("|    RV:        |*%PREV_RV%**************************************|**%CURR_RV%*************************************| S1  |*%PREV_S1%*|*%CURR_S1%*|");
 		str.add("\n");
@@ -182,7 +182,10 @@ namespace dragon
 			{ "R1", data::Registers::R1 }, { "R2", data::Registers::R2 }, { "R3", data::Registers::R3 },
 			{ "R4", data::Registers::R4 }, { "R5", data::Registers::R5 }, { "R6", data::Registers::R6 },
 			{ "R7", data::Registers::R7 }, { "R8", data::Registers::R8 }, { "R9", data::Registers::R9 },
-			{ "R10", data::Registers::R10 },
+			{ "R10", data::Registers::R10 }, { "R11", data::Registers::R11 }, { "R12", data::Registers::R12 },
+			{ "R13", data::Registers::R13 }, { "R14", data::Registers::R14 }, { "R15", data::Registers::R15 },
+			{ "R16", data::Registers::R16 }, { "R17", data::Registers::R17 }, { "R18", data::Registers::R18 },
+			{ "R19", data::Registers::R19 }, { "R20", data::Registers::R20 },
 			//Special Registers
 			{ "S1", data::Registers::S1 }, { "S2", data::Registers::S2 }, { "OF", data::Registers::OFFSET }
 		};
@@ -196,7 +199,7 @@ namespace dragon
 		ostd::RegexRichString rgxstr(str);
 		rgxstr.fg("InstAddr|Code|StackFrame|DBG BRK|INT Handler|BIOS Mode|SubRoutine", "Magenta");
 		rgxstr.fg("IP|SP|FP|RV|PP|FL|ACC", "Cyan");
-		rgxstr.fg("R10|R2|R3|R4|R5|R6|R7|R8|R9|R1", "BrightGreen");
+		rgxstr.fg("R1[0-9]|R20|R[1-9]", "BrightGreen");
 		rgxstr.fg("S1|S2|OF", "BrightRed");
 		rgxstr.fg("PREV", "Red");
 		rgxstr.fg("CURR", "Green");
@@ -355,19 +358,19 @@ namespace dragon
 	stdvec<Debugger::tStackFrame> Debugger::Utils::getStackFrames(void)
 	{
 		// The frames are found by following the saved frame pointers (see VirtualCPU::pushStackFrame()):
-		// above FP are the saved stack frame size, FP, IP, ACC, PP, R10..R1 and the arguments count.
+		// above FP are the saved stack frame size, FP, IP, ACC, PP, R20..R1 and the arguments count (data::StackFrameLayout).
 		auto& mem = DragonRuntime::memMap;
 		constexpr u32 W = data::WordSize;
 		stdvec<tStackFrame> frames;
 		u32 fp = cast<u32>(DragonRuntime::cpu.readRegister(data::Registers::FP));
-		while (fp != 0 && cast<u64>(fp) + 16 * W < DragonRuntime::cpu.getStackTop() + W && frames.size() < 64)
+		while (fp != 0 && cast<u64>(fp) + data::StackFrameLayout::ArgCount * W < cast<u64>(DragonRuntime::cpu.getStackTop()) + W && frames.size() < 64)
 		{
 			tStackFrame frame;
 			frame.fp = fp;
-			frame.frameSize = mem.peek32(fp + 1 * W);
-			frame.savedFP = mem.peek32(fp + 2 * W);
-			frame.savedIP = mem.peek32(fp + 3 * W);
-			frame.argCount = mem.peek32(fp + 16 * W);
+			frame.frameSize = mem.peek32(fp + data::StackFrameLayout::FrameSize * W);
+			frame.savedFP = mem.peek32(fp + data::StackFrameLayout::SavedFP * W);
+			frame.savedIP = mem.peek32(fp + data::StackFrameLayout::SavedIP * W);
+			frame.argCount = mem.peek32(fp + data::StackFrameLayout::ArgCount * W);
 			frames.push_back(frame);
 			if (frame.savedFP <= fp)
 				break;
@@ -388,17 +391,17 @@ namespace dragon
 		{
 			const u32 fp = f.fp;
 			auto l_word = [&](u32 offset) { return mem.peek32(cast<u32>(fp + offset)); };
-			const u32 argStartAddr = (f.argCount == 0 ? 0 : cast<u32>(fp + (16 + f.argCount) * W));
+			const u32 argStartAddr = (f.argCount == 0 ? 0 : cast<u32>(fp + (data::StackFrameLayout::ArgCount + f.argCount) * W));
 			String frame = "";
 			frame.add("#").add(depth).add("  args: ").add(String::getHexStr(argStartAddr, true, 4)).add(", argc: ").add(f.argCount);
 			for (u32 i = 0; i < f.argCount && i < 8; i++)
-				frame.add(i == 0 ? "  [" : " ").add(String::getHexStr(l_word(cast<u32>((16 + f.argCount - i) * W)), true, 4)).add(i + 1 == std::min<u32>(f.argCount, 8) ? "]" : "");
+				frame.add(i == 0 ? "  [" : " ").add(String::getHexStr(l_word(cast<u32>(data::StackFrameLayout::argument(i, f.argCount) * W)), true, 4)).add(i + 1 == std::min<u32>(f.argCount, 8) ? "]" : "");
 			frame.add("\n");
-			for (u32 r = 1; r <= 10; r++)
-				frame.add(r == 1 ? "R1: " : String(" R").add(r).add(": ")).add(String::getHexStr(l_word(cast<u32>((16 - r) * W)), true, 4));
+			for (u32 r = 1; r <= data::Registers::GeneralCount; r++)
+				frame.add(r == 1 ? "R1: " : String(" R").add(r).add(": ")).add(String::getHexStr(l_word(cast<u32>(data::StackFrameLayout::savedGeneral(r) * W)), true, 4));
 			frame.add("\n");
-			frame.add("PP: ").add(String::getHexStr(l_word(5 * W), true, 4));
-			frame.add(" ACC: ").add(String::getHexStr(l_word(4 * W), true, 4));
+			frame.add("PP: ").add(String::getHexStr(l_word(data::StackFrameLayout::SavedPP * W), true, 4));
+			frame.add(" ACC: ").add(String::getHexStr(l_word(data::StackFrameLayout::SavedACC * W), true, 4));
 			frame.add(" IP: ").add(String::getHexStr(f.savedIP, true, 4));
 			String returnSymbol = Utils::findNearestSymbol(dbg.data().labels, f.savedIP);
 			if (returnSymbol != "")
@@ -409,7 +412,7 @@ namespace dragon
 
 			ostd::RegexRichString rgxrstr(frame);
 			rgxrstr.fg("0x[0-9A-Fa-f]+|0b[0-1]+|(?<!\\w)[0-9]+(?!\\w)", "Red"); //Number Constants
-			rgxrstr.fg("(?<!\\w)(r[1-9]|r10|fl|pp|rv|fp|sp|ip|acc)(?!\\w)", "BrightGreen", true); //Registers
+			rgxrstr.fg("(?<!\\w)(r(?:1[0-9]|20|[1-9])[lh]?|fl|pp|rv|fp|sp|ip|acc)(?!\\w)", "BrightGreen", true); //Registers
 			rgxrstr.fg("(?<!\\w)(args|argc|StackFrame|New FP)(?!\\w)", "Magenta", true); //Other
 			rgxrstr.fg("\\$[\\w\\.]+", "Cyan"); //Labels
 			rgxrstr.fg("#[0-9]+", "Yellow");
@@ -628,11 +631,11 @@ namespace dragon
 		l_cmd("(b)reak <addr/symbol>", "Toggles a breakpoint (enables / disables a debug_break).");
 		l_cmd("bl / breakpoints", "Lists the breakpoints and watches.");
 		l_cmd("bc / clear", "Removes every breakpoint (disables the debug_break ones).");
-		l_cmd("(p)rint [word] <addr/symbol>", "Prints values from memory. Valid [size] values are: byte/half/word/dword/qword/string (word = 4 bytes, the default).");
+		l_cmd("(p)rint [word] <addr/symbol>", "Prints values from memory. Valid [size] values are: byte/word (16 bits)/dword (32 bits, the default)/qword/string.");
 		l_cmd("(t)rack <address[bytes]/symbol>", "Tracks addresses during execution ('t' alone: the tracker).");
 		l_cmd("(w)atch <address[bytes]/symbol>", "Tracks addresses, and stops when they change.");
 		l_cmd("untrack <addr/symbol/all>", "Stops tracking.");
-		l_cmd("set <register> <value>", "Writes a register (r1..r10, ip, sp, fp, rv, pp, fl, acc, s1, s2, of).");
+		l_cmd("set <register> <value>", "Writes a register (r1..r20, r1l..r20l / r1h..r20h (16-bit halves), ip, sp, fp, rv, pp, fl, acc, s1, s2, of).");
 		l_cmd("x / mem <addr/symbol>", "Shows the memory at the address.");
 		l_cmd("(d)iff-view", "Shows the state of the machine, comparing the current cycle with the last.");
 		l_cmd("(s)tack [rows=8]", "Shows the stack and a description of every stack-frame.");

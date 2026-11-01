@@ -64,13 +64,24 @@ namespace dragon
 		};
 
 		// A device on the memory bus. Addresses are relative to the device's region if the
-		// region is remapped, absolute otherwise. Words are 32 bits, big endian; read32() and
-		// write32() default to four byte accesses.
+		// region is remapped, absolute otherwise. Values are big endian; read16() / read32() and
+		// write16() / write32() default to byte accesses.
 		class IMemoryDevice : public ostd::Object
 		{
 			public:
 				virtual i8 read8(u32 addr) = 0;
 				virtual i8 write8(u32 addr, i8 value) = 0;
+				inline virtual i16 read16(u32 addr)
+				{
+					return cast<i16>((cast<u16>(cast<u8>(read8(addr))) << 8) | cast<u16>(cast<u8>(read8(addr + 1))));
+				}
+				inline virtual i16 write16(u32 addr, i16 value)
+				{
+					const u16 v = cast<u16>(value);
+					write8(addr, cast<i8>(v >> 8));
+					write8(addr + 1, cast<i8>(v));
+					return value;
+				}
 				inline virtual i32 read32(u32 addr)
 				{
 					return cast<i32>((cast<u32>(cast<u8>(read8(addr))) << 24)
@@ -98,6 +109,19 @@ namespace dragon
 		// Helpers for devices backed by a ByteStream (big endian, bounds checked).
 		namespace bytes
 		{
+			inline bool read16(const ostd::ByteStream& data, u64 addr, i16& out)
+			{
+				if (addr + 2 > data.size()) return false;
+				out = cast<i16>((cast<u16>(cast<u8>(data[addr])) << 8) | cast<u16>(cast<u8>(data[addr + 1])));
+				return true;
+			}
+			inline bool write16(ostd::ByteStream& data, u64 addr, i16 value)
+			{
+				if (addr + 2 > data.size()) return false;
+				data[addr] = cast<i8>(cast<u16>(value) >> 8);
+				data[addr + 1] = cast<i8>(value);
+				return true;
+			}
 			inline bool read32(const ostd::ByteStream& data, u64 addr, i32& out)
 			{
 				if (addr + 4 > data.size()) return false;

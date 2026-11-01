@@ -21,6 +21,28 @@ namespace dragon
 			return region->device->read8(finalAddr);
 		}
 
+		i16 MemoryMapper::read16(u32 addr)
+		{
+			addr &= data::AddressMask;
+			auto region = findRegion(addr);
+			if (region == nullptr) return 0x0000;
+			if (cast<u64>(addr) + 1 > region->endAddress)
+				return IMemoryDevice::read16(addr);
+			const u32 finalAddr = (region->remap ? addr - region->startAddress : addr);
+			return region->device->read16(finalAddr);
+		}
+
+		i16 MemoryMapper::write16(u32 addr, i16 value)
+		{
+			addr &= data::AddressMask;
+			auto region = findRegion(addr);
+			if (region == nullptr) return 0x0000;
+			if (cast<u64>(addr) + 1 > region->endAddress)
+				return IMemoryDevice::write16(addr, value);
+			const u32 finalAddr = (region->remap ? addr - region->startAddress : addr);
+			return region->device->write16(finalAddr, value);
+		}
+
 		i32 MemoryMapper::read32(u32 addr)
 		{
 			addr &= data::AddressMask;
