@@ -1,0 +1,7 @@
+// expect-error: ambiguous call to overloaded sub 'f'
+sub f(var a: i32, var b: u32) -> void { }
+sub f(var a: u32, var b: i32) -> void { }
+sub main() -> void {
+    var c: u8 = 1;
+    f(c, c);
+}

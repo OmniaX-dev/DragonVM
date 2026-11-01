@@ -1,0 +1,39 @@
+// expect-rv: 0
+#include(check.ds)
+#include(check.ds)
+#define(ANSWER = 42)
+#define(TWICE = ANSWER * 2)
+#define(FLAG)
+
+#if(ANSWER == 42 and defined(FLAG))
+const A = 1;
+#else
+const A = 2;
+#endif
+
+#ifdef(MISSING)
+const B = 1;
+#elif(TWICE > 80)
+const B = 2;
+#else
+const B = 3;
+#endif
+
+#ifndef(MISSING)
+const C = 1;
+#endif
+
+#undef(FLAG)
+#ifdef(FLAG)
+#error(FLAG should be undefined)
+#endif
+
+#if(defined(__DSCRIPT__))
+const D = 1;
+#endif
+
+sub main() -> i32 {
+    check(1, ANSWER == 42 && TWICE == 84);
+    check(2, A == 1 && B == 2 && C == 1 && D == 1);
+    return result();
+}

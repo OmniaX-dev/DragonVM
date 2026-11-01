@@ -1,0 +1,14 @@
+// Shared by the tests: check(id, condition) remembers the first failed check;
+// main returns result() (0 when every check passed).
+#once
+
+var __first_failure: i32 = 0;
+
+sub check(var id: i32, var condition: bool) -> void {
+    if (!condition && __first_failure == 0)
+        __first_failure = id;
+}
+
+sub result() -> i32 {
+    return __first_failure;
+}

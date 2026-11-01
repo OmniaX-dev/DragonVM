@@ -1,0 +1,46 @@
+// expect-rv: 0
+#include(check.ds)
+
+struct Big {
+    var values: i32[20];
+    var tail: u8[3];
+}
+
+sub many(var a: i32, var b: i32, var c: i32, var d: i32, var e: i32, var f: u8, var g: i16, var h: i8) -> i32 {
+    return a + b + c + d + e + f + g + h;
+}
+
+sub id(var x: i32) -> i32 { return x; }
+
+var g_big: Big;
+
+sub main() -> i32 {
+    var b1: Big;
+    for (var i: i32 = 0; i < 20; i++)
+        b1.values[i] = i * 3;
+    b1.tail[2] = 77;
+    var b2: Big = b1;                       // 83 bytes: copied by a loop
+    check(1, b2.values[19] == 57 && b2.tail[2] == 77);
+    g_big = b2;
+    check(2, g_big.values[10] == 30 && g_big.tail[2] == 77);
+    check(3, many(1, 2, 3, 4, 5, 250, -300, -100) == 1 + 2 + 3 + 4 + 5 + 250 - 300 - 100);
+    // Calls inside deep expressions keep the temporaries.
+    check(4, id(1) + (id(2) * (id(3) + id(4) * (id(5) - id(6)))) == 1 + 2 * (3 + 4 * (5 - 6)));
+    // Assignment as a value, chained.
+    var x: i32; var y: i32;
+    x = y = 12;
+    check(5, x == 12 && y == 12);
+    var n: i32 = 0;
+    var k: i32;
+    while ((k = n++) < 5) { }
+    check(6, k == 5 && n == 6);
+    // Comma-free nested ternaries.
+    var t: i32 = 7;
+    check(7, (t > 5 ? (t > 6 ? 1 : 2) : 3) == 1);
+    // Unsigned comparisons with constants on both sides.
+    var u: u32 = 0x80000001;
+    check(8, u > 0x80000000 && 0x7FFFFFFF < u && u >= 1);
+    var s: i32 = -1;
+    check(9, s < 0 && s <= -1 && !(s > 0));
+    return result();
+}

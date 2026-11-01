@@ -1,0 +1,5 @@
+// expect-error: cannot convert u8* to i32
+sub main() -> i32 {
+    var x: i32 = "text";
+    return x;
+}

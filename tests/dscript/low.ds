@@ -1,0 +1,65 @@
+// expect-rv: 0
+#include(check.ds)
+
+const MAGIC = 0x1234;
+enum E { First = 3, Second }
+
+var g: i32 = 5;
+var gb: u8 = 7;
+
+sub add_one(var x: i32) -> i32 { return x + 1; }
+
+sub main() -> i32 {
+    var a: i32 = 10;
+    var b: i32 = 0;
+    var c: u8 = 200;
+    var p: i32* = &a;
+    var arr: i32[3] = { 1, 2, 3 };
+    low {
+        mov R1, $a          // value of a local
+        addip R1, 5
+        mov $b, R1          // first operand: stored back
+    }
+    check(1, b == 15);
+    low {
+        inc $g              // global, in place
+        mov R2, $MAGIC
+        mov $a, R2
+    }
+    check(2, g == 6 && a == 0x1234);
+    low {
+        mov [$p], 99        // memory at the pointer's value
+    }
+    check(3, a == 99);
+    low {
+        mov R3, &$c         // address of a local
+        movb R4, *R3
+        mov $b, R4
+    }
+    check(4, b == 200);
+    low {
+        mov R5, $arr        // arrays give their address
+        mov R6, *R5
+        addip R5, 8
+        mov R7, *R5
+        add R6, R7
+        mov $b, ACC
+    }
+    check(5, b == 4);
+    low {
+        mov $b, $E.Second
+    }
+    check(6, b == 4);
+    low {
+        push 41
+        push 1
+        call $add_one
+        mov $b, RV
+    }
+    check(7, b == 42);
+    low {
+        movb $gb, 9
+    }
+    check(8, gb == 9);
+    return result();
+}

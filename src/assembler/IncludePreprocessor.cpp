@@ -20,6 +20,25 @@ namespace dragon
 			if (!__can_file_be_included(m_lines))
 				return {  }; //TODO: Error
 			if (!__include_loop()) return {  }; //TODO: Error
+			return __finish();
+		}
+
+		std::vector<String> IncludePreprocessor::loadEntryLines(const std::vector<String>& lines, const String& directory)
+		{
+			m_guards.clear();
+			m_lines = lines;
+			m_directory = directory;
+			if (m_directory != "" && !m_directory.endsWith("/"))
+				m_directory.add("/");
+			if (m_lines.size() == 0) return {  };
+			if (!__can_file_be_included(m_lines))
+				return {  };
+			if (!__include_loop()) return {  };
+			return __finish();
+		}
+
+		std::vector<String> IncludePreprocessor::__finish(void)
+		{
 			std::vector<String> newLines;
 			for (auto& line : m_lines)
 			{

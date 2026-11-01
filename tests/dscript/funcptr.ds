@@ -1,0 +1,44 @@
+// expect-rv: 0
+#include(check.ds)
+
+alias BinOp = sub(i32, i32) -> i32;
+
+sub add(var a: i32, var b: i32) -> i32 { return a + b; }
+sub mul(var a: i32, var b: i32) -> i32 { return a * b; }
+
+sub apply(var op: BinOp, var a: i32, var b: i32) -> i32 {
+    return op(a, b);
+}
+
+sub twice(var x: i32) -> i32 { return x * 2; }
+sub twice(var x: u8) -> i32 { return 1000 + x; }
+
+struct Handler {
+    var id: i32;
+    var fn: sub(i32) -> i32;
+}
+
+sub main() -> i32 {
+    var f: BinOp = add;
+    check(1, f(2, 3) == 5);
+    f = &mul;
+    check(2, f(2, 3) == 6);
+    check(3, apply(add, 4, 5) == 9 && apply(mul, 4, 5) == 20);
+    var ops: BinOp[2] = { add, mul };
+    check(4, ops[0](6, 7) == 13 && ops[1](6, 7) == 42);
+    // Overloaded subs: picked by the pointer's type.
+    var t1: sub(i32) -> i32 = twice;
+    var t2: sub(u8) -> i32 = &twice;
+    check(5, t1(5) == 10 && t2(5) == 1005);
+    var h: Handler = { 1, twice };
+    check(6, h.fn(21) == 42);
+    var ph: Handler* = &h;
+    check(7, ph->fn(1) == 2);
+    var pf: BinOp* = &f;
+    check(8, (*pf)(3, 3) == 9);
+    check(9, f != null && f == mul);
+    var raw: void* = cast<void*>(f);
+    var back: BinOp = cast<BinOp>(raw);
+    check(10, back(2, 2) == 4);
+    return result();
+}

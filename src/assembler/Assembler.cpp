@@ -36,6 +36,16 @@ namespace dragon
 
 		ostd::ByteStream Assembler::assembleFromFile(String fileName)
 		{
+			return assemble(IncludePreprocessor::loadEntryFile(fileName));
+		}
+
+		ostd::ByteStream Assembler::assembleFromLines(const std::vector<String>& lines, const String& directory)
+		{
+			return assemble(IncludePreprocessor::loadEntryLines(lines, directory));
+		}
+
+		ostd::ByteStream Assembler::assemble(const std::vector<String>& sourceLines)
+		{
 			m_rawSource = "";
 			m_code.clear();
 			m_lines.clear();
@@ -47,10 +57,14 @@ namespace dragon
 			m_structDefs.clear();
 			m_fixedSize = 0;
 			m_fixedFillValue = 0x00;
-			m_loadAddress = 0x00000000;
-			m_currentDataAddr = EntryJumpSize;
+			m_loadAddress = defaultLoadAddress;
+			m_currentDataAddr = defaultLoadAddress + EntryJumpSize;
 			m_dataSize = 0x0000;
-			m_lines = IncludePreprocessor::loadEntryFile(fileName);
+			m_programSize = 0;
+			m_entry_lbl = "";
+			m_headerStr = "";
+			m_exports.clear();
+			m_lines = sourceLines;
 			if (m_lines.size() == 0)
 				return {  }; //TODO: Error
 			// for (auto& line : m_lines)
@@ -1213,14 +1227,14 @@ namespace dragon
 						break;
 						default:
 							std::cout << "Invalid operand2 type; " << line << " (" << opEdit << ")\n";
-							exit(0);
+							exit(1);
 						break;
 					}
 				}
 				else
 				{
 					std::cout << "Invalid operand1 type; " << line << " (" << opEdit << ")\n";
-					exit(0);
+					exit(1);
 				}
 
 				return;
@@ -1268,7 +1282,7 @@ namespace dragon
 					if (opType != eOperandType::Register)
 					{
 						std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Register required\n";
-						exit(0);
+						exit(1);
 						return;
 					}
 					m_code.push_back(hw::cpuext::ExtAlu::OpCodes::notip_reg);
@@ -1279,7 +1293,7 @@ namespace dragon
 			else if (instEdit == "notip")
 			{
 				std::cout << "ExtAlu instruction detected, please add '--extalu' flag to dasm.\n";
-				exit(0);
+				exit(1);
 				return;
 			}
 
@@ -1289,7 +1303,7 @@ namespace dragon
 				if (opType != eOperandType::Register)
 				{
 					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Register required\n";
-					exit(0);
+					exit(1);
 					return;
 				}
 				m_code.push_back(data::OpCodes::IncReg);
@@ -1302,7 +1316,7 @@ namespace dragon
 				if (opType != eOperandType::Register)
 				{
 					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Register required\n";
-					exit(0);
+					exit(1);
 					return;
 				}
 				m_code.push_back(data::OpCodes::DecReg);
@@ -1315,7 +1329,7 @@ namespace dragon
 				if (opType != eOperandType::Register)
 				{
 					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Register required\n";
-					exit(0);
+					exit(1);
 					return;
 				}
 				m_code.push_back(data::OpCodes::ArgReg);
@@ -1343,7 +1357,7 @@ namespace dragon
 				else
 				{
 					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Register or Immediate required\n";
-					exit(0);
+					exit(1);
 				}
 				return;
 			}
@@ -1353,7 +1367,7 @@ namespace dragon
 				if (opType != eOperandType::Register)
 				{
 					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Register required\n";
-					exit(0);
+					exit(1);
 					return;
 				}
 				m_code.push_back(data::OpCodes::PopReg);
@@ -1377,7 +1391,7 @@ namespace dragon
 				else
 				{
 					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Register or Immediate (Label) required\n";
-					exit(0);
+					exit(1);
 				}
 				return;
 			}
@@ -1387,7 +1401,7 @@ namespace dragon
 				if (opType != eOperandType::Register)
 				{
 					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Register required\n";
-					exit(0);
+					exit(1);
 					return;
 				}
 				m_code.push_back(data::OpCodes::NotReg);
@@ -1400,7 +1414,7 @@ namespace dragon
 				if (opType != eOperandType::Register)
 				{
 					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Register required\n";
-					exit(0);
+					exit(1);
 					return;
 				}
 				m_code.push_back(data::OpCodes::NegReg);
@@ -1413,7 +1427,7 @@ namespace dragon
 				if (opType != eOperandType::Register)
 				{
 					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Register required\n";
-					exit(0);
+					exit(1);
 					return;
 				}
 				m_code.push_back(data::OpCodes::NegByteReg);
@@ -1427,7 +1441,7 @@ namespace dragon
 				if (opType != eOperandType::Label && opType != eOperandType::Immediate)
 				{
 					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Immediate (or label) required\n";
-					exit(0);
+					exit(1);
 					return;
 				}
 				pushWord(word);
@@ -1439,7 +1453,7 @@ namespace dragon
 				if (opType != eOperandType::Immediate)
 				{
 					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Immediate required\n";
-					exit(0);
+					exit(1);
 					return;
 				}
 				m_code.push_back(data::OpCodes::Int);
@@ -1452,7 +1466,7 @@ namespace dragon
 				if (opType != eOperandType::Immediate)
 				{
 					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Immediate required\n";
-					exit(0);
+					exit(1);
 					return;
 				}
 				m_code.push_back(data::OpCodes::ZeroFlag);
@@ -1465,7 +1479,7 @@ namespace dragon
 				if (opType != eOperandType::Immediate)
 				{
 					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Immediate required\n";
-					exit(0);
+					exit(1);
 					return;
 				}
 				m_code.push_back(data::OpCodes::SetFlag);
@@ -1478,7 +1492,7 @@ namespace dragon
 				if (opType != eOperandType::Immediate)
 				{
 					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Immediate required\n";
-					exit(0);
+					exit(1);
 					return;
 				}
 				m_code.push_back(data::OpCodes::ToggleFlag);
@@ -1488,7 +1502,7 @@ namespace dragon
 			else
 			{
 				std::cout << "Unknown instruction 1; " << line << " (" << instEdit << ")\n";
-				exit(0);
+				exit(1);
 			}
 		}
 
@@ -1512,7 +1526,7 @@ namespace dragon
 					if (opType != eOperandType::Register)
 					{
 						std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Register required\n";
-						exit(0);
+						exit(1);
 						return;
 					}
 					m_code.push_back((u8)word);
@@ -1551,7 +1565,7 @@ namespace dragon
 					else
 					{
 						std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Immediate or register required\n";
-						exit(0);
+						exit(1);
 						return;
 					}
 					return;
@@ -1561,7 +1575,7 @@ namespace dragon
 						|| instEdit == "orip" || instEdit == "andip" || instEdit == "xorip" || instEdit == "notip")
 			{
 				std::cout << "ExtAlu instruction detected, please add '--extalu' flag to dasm.\n";
-				exit(0);
+				exit(1);
 				return;
 			}
 
@@ -1597,7 +1611,7 @@ namespace dragon
 						break;
 						default:
 							std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-							exit(0);
+							exit(1);
 						break;
 					}
 				}
@@ -1622,7 +1636,7 @@ namespace dragon
 						break;
 						default:
 							std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-							exit(0);
+							exit(1);
 						break;
 					}
 				}
@@ -1652,14 +1666,14 @@ namespace dragon
 						break;
 						default:
 							std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-							exit(0);
+							exit(1);
 						break;
 					}
 				}
 				else
 				{
 					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-					exit(0);
+					exit(1);
 				}
 				return;
 			}
@@ -1689,7 +1703,7 @@ namespace dragon
 						break;
 						default:
 							std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-							exit(0);
+							exit(1);
 						break;
 					}
 				}
@@ -1718,7 +1732,7 @@ namespace dragon
 						break;
 						default:
 							std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-							exit(0);
+							exit(1);
 						break;
 					}
 				}
@@ -1743,14 +1757,14 @@ namespace dragon
 						break;
 						default:
 							std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-							exit(0);
+							exit(1);
 						break;
 					}
 				}
 				else
 				{
 					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-					exit(0);
+					exit(1);
 				}
 				return;
 			}
@@ -1780,7 +1794,7 @@ namespace dragon
 						break;
 						default:
 							std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-							exit(0);
+							exit(1);
 						break;
 					}
 				}
@@ -1809,7 +1823,7 @@ namespace dragon
 						break;
 						default:
 							std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-							exit(0);
+							exit(1);
 						break;
 					}
 				}
@@ -1834,14 +1848,14 @@ namespace dragon
 						break;
 						default:
 							std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-							exit(0);
+							exit(1);
 						break;
 					}
 				}
 				else
 				{
 					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-					exit(0);
+					exit(1);
 				}
 				return;
 			}
@@ -1852,7 +1866,7 @@ namespace dragon
 				if (opType != eOperandType::Register)
 				{
 					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Register required\n";
-					exit(0);
+					exit(1);
 					return;
 				}
 				m_code.push_back((u8)word);
@@ -1877,7 +1891,7 @@ namespace dragon
 				else
 				{
 					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Immediate or register required\n";
-					exit(0);
+					exit(1);
 					return;
 				}
 				return;
@@ -1888,7 +1902,7 @@ namespace dragon
 				if (opType != eOperandType::Register)
 				{
 					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Register required\n";
-					exit(0);
+					exit(1);
 					return;
 				}
 				u8 regAddr = (u8)word;
@@ -1916,7 +1930,7 @@ namespace dragon
 				else
 				{
 					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Register or immediate required\n";
-					exit(0);
+					exit(1);
 					return;
 				}
 				return;
@@ -1929,7 +1943,7 @@ namespace dragon
 				{
 					std::cout << (int)opType << "\n";
 					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Immediate (or label) required\n";
-					exit(0);
+					exit(1);
 					return;
 				}
 				pushWord(word);
@@ -1958,7 +1972,7 @@ namespace dragon
 				else
 				{
 					std::cout << "Invalid operand type: " << line << " (" << opEdit << ")  ->  Immediate or register required\n";
-					exit(0);
+					exit(1);
 					return;
 				}
 				return;
@@ -1966,7 +1980,7 @@ namespace dragon
 			else
 			{
 				std::cout << "Unknown instruction 2: " << line << " (" << instEdit << ")\n";
-				exit(0);
+				exit(1);
 			}
 		}
 
@@ -1991,7 +2005,7 @@ namespace dragon
 					if (st.count() != 3)
 					{
 						std::cout << "Invalid operand number; " << line << "3  ->  3 required\n";
-						exit(0);
+						exit(1);
 						return;
 					}
 					eOperandType opType1 = parseOperand(st.next(), word1);
@@ -2021,7 +2035,7 @@ namespace dragon
 							break;
 							default:
 								std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-								exit(0);
+								exit(1);
 							break;
 						}
 						switch (opType3)
@@ -2037,7 +2051,7 @@ namespace dragon
 									else
 									{
 										std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-										exit(0);
+										exit(1);
 									}
 									pushWord(word3);
 									code_offset += data::WordSize;
@@ -2051,7 +2065,7 @@ namespace dragon
 									else
 									{
 										std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-										exit(0);
+										exit(1);
 									}
 									m_code.push_back((u8)word3);
 									code_offset++;
@@ -2065,14 +2079,14 @@ namespace dragon
 								else
 								{
 									std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-									exit(0);
+									exit(1);
 								}
 								m_code.push_back((u8)word3);
 								code_offset++;
 							break;
 							default:
 								std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-								exit(0);
+								exit(1);
 							break;
 						}
 					}
@@ -2098,7 +2112,7 @@ namespace dragon
 							break;
 							default:
 								std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-								exit(0);
+								exit(1);
 							break;
 						}
 						switch (opType3)
@@ -2125,14 +2139,14 @@ namespace dragon
 							break;
 							default:
 								std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-								exit(0);
+								exit(1);
 							break;
 						}
 					}
 					else
 					{
 						std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  DerefRegister or Pointer required\n";
-						exit(0);
+						exit(1);
 						return;
 					}
 				}
@@ -2143,7 +2157,7 @@ namespace dragon
 					if (st.count() != 3)
 					{
 						std::cout << "Invalid operand number; " << line << "3  ->  3 required\n";
-						exit(0);
+						exit(1);
 						return;
 					}
 					eOperandType opType1 = parseOperand(st.next(), word1);
@@ -2173,7 +2187,7 @@ namespace dragon
 							break;
 							default:
 								std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-								exit(0);
+								exit(1);
 							break;
 						}
 						switch (opType3)
@@ -2189,7 +2203,7 @@ namespace dragon
 									else
 									{
 										std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-										exit(0);
+										exit(1);
 									}
 									pushWord(word3);
 									code_offset += data::WordSize;
@@ -2203,7 +2217,7 @@ namespace dragon
 									else
 									{
 										std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-										exit(0);
+										exit(1);
 									}
 									m_code.push_back((u8)word3);
 									code_offset++;
@@ -2217,14 +2231,14 @@ namespace dragon
 								else
 								{
 									std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-									exit(0);
+									exit(1);
 								}
 								m_code.push_back((u8)word3);
 								code_offset++;
 							break;
 							default:
 								std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-								exit(0);
+								exit(1);
 							break;
 						}
 					}
@@ -2250,7 +2264,7 @@ namespace dragon
 							break;
 							default:
 								std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-								exit(0);
+								exit(1);
 							break;
 						}
 						switch (opType3)
@@ -2277,14 +2291,14 @@ namespace dragon
 							break;
 							default:
 								std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-								exit(0);
+								exit(1);
 							break;
 						}
 					}
 					else
 					{
 						std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  DerefRegister or Pointer required\n";
-						exit(0);
+						exit(1);
 						return;
 					}
 				}
@@ -2295,7 +2309,7 @@ namespace dragon
 					if (st.count() != 3)
 					{
 						std::cout << "Invalid operand number; " << line << "3  ->  3 required\n";
-						exit(0);
+						exit(1);
 						return;
 					}
 					eOperandType opType1 = parseOperand(st.next(), word1);
@@ -2325,7 +2339,7 @@ namespace dragon
 							break;
 							default:
 								std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-								exit(0);
+								exit(1);
 							break;
 						}
 						switch (opType3)
@@ -2341,7 +2355,7 @@ namespace dragon
 									else
 									{
 										std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-										exit(0);
+										exit(1);
 									}
 									pushWord(word3);
 									code_offset += data::WordSize;
@@ -2355,7 +2369,7 @@ namespace dragon
 									else
 									{
 										std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-										exit(0);
+										exit(1);
 									}
 									m_code.push_back((u8)word3);
 									code_offset++;
@@ -2369,14 +2383,14 @@ namespace dragon
 								else
 								{
 									std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-									exit(0);
+									exit(1);
 								}
 								m_code.push_back((u8)word3);
 								code_offset++;
 							break;
 							default:
 								std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-								exit(0);
+								exit(1);
 							break;
 						}
 					}
@@ -2402,7 +2416,7 @@ namespace dragon
 							break;
 							default:
 								std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-								exit(0);
+								exit(1);
 							break;
 						}
 						switch (opType3)
@@ -2429,14 +2443,14 @@ namespace dragon
 							break;
 							default:
 								std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-								exit(0);
+								exit(1);
 							break;
 						}
 					}
 					else
 					{
 						std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  DerefRegister or Pointer required\n";
-						exit(0);
+						exit(1);
 						return;
 					}
 				}
@@ -2447,7 +2461,7 @@ namespace dragon
 					if (st.count() != 3)
 					{
 						std::cout << "Invalid operand number; " << line << "3  ->  3 required\n";
-						exit(0);
+						exit(1);
 						return;
 					}
 					eOperandType opType1 = parseOperand(st.next(), word1);
@@ -2476,7 +2490,7 @@ namespace dragon
 							break;
 							default:
 								std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-								exit(0);
+								exit(1);
 							break;
 						}
 						switch (opType3)
@@ -2492,7 +2506,7 @@ namespace dragon
 									else
 									{
 										std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-										exit(0);
+										exit(1);
 									}
 									pushWord(word3);
 									code_offset += data::WordSize;
@@ -2506,7 +2520,7 @@ namespace dragon
 									else
 									{
 										std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-										exit(0);
+										exit(1);
 									}
 									m_code.push_back((u8)word3);
 									code_offset++;
@@ -2520,14 +2534,14 @@ namespace dragon
 								else
 								{
 									std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-									exit(0);
+									exit(1);
 								}
 								m_code.push_back((u8)word3);
 								code_offset++;
 							break;
 							default:
 								std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-								exit(0);
+								exit(1);
 							break;
 						}
 					}
@@ -2552,7 +2566,7 @@ namespace dragon
 							break;
 							default:
 								std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-								exit(0);
+								exit(1);
 							break;
 						}
 						switch (opType3)
@@ -2579,14 +2593,14 @@ namespace dragon
 							break;
 							default:
 								std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-								exit(0);
+								exit(1);
 							break;
 						}
 					}
 					else
 					{
 						std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  DerefRegister or Pointer required\n";
-						exit(0);
+						exit(1);
 						return;
 					}
 				}
@@ -2597,7 +2611,7 @@ namespace dragon
 					if (st.count() != 3)
 					{
 						std::cout << "Invalid operand number; " << line << "3  ->  3 required\n";
-						exit(0);
+						exit(1);
 						return;
 					}
 					eOperandType opType1 = parseOperand(st.next(), word1);
@@ -2626,7 +2640,7 @@ namespace dragon
 							break;
 							default:
 								std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-								exit(0);
+								exit(1);
 							break;
 						}
 						switch (opType3)
@@ -2642,7 +2656,7 @@ namespace dragon
 									else
 									{
 										std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-										exit(0);
+										exit(1);
 									}
 									pushWord(word3);
 									code_offset += data::WordSize;
@@ -2656,7 +2670,7 @@ namespace dragon
 									else
 									{
 										std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-										exit(0);
+										exit(1);
 									}
 									m_code.push_back((u8)word3);
 									code_offset++;
@@ -2670,14 +2684,14 @@ namespace dragon
 								else
 								{
 									std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-									exit(0);
+									exit(1);
 								}
 								m_code.push_back((u8)word3);
 								code_offset++;
 							break;
 							default:
 								std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-								exit(0);
+								exit(1);
 							break;
 						}
 					}
@@ -2702,7 +2716,7 @@ namespace dragon
 							break;
 							default:
 								std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-								exit(0);
+								exit(1);
 							break;
 						}
 						switch (opType3)
@@ -2729,14 +2743,14 @@ namespace dragon
 							break;
 							default:
 								std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-								exit(0);
+								exit(1);
 							break;
 						}
 					}
 					else
 					{
 						std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  DerefRegister or Pointer required\n";
-						exit(0);
+						exit(1);
 						return;
 					}
 				}
@@ -2747,7 +2761,7 @@ namespace dragon
 					if (st.count() != 3)
 					{
 						std::cout << "Invalid operand number; " << line << "3  ->  3 required\n";
-						exit(0);
+						exit(1);
 						return;
 					}
 					eOperandType opType1 = parseOperand(st.next(), word1);
@@ -2776,7 +2790,7 @@ namespace dragon
 							break;
 							default:
 								std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-								exit(0);
+								exit(1);
 							break;
 						}
 						switch (opType3)
@@ -2792,7 +2806,7 @@ namespace dragon
 									else
 									{
 										std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-										exit(0);
+										exit(1);
 									}
 									pushWord(word3);
 									code_offset += data::WordSize;
@@ -2806,7 +2820,7 @@ namespace dragon
 									else
 									{
 										std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-										exit(0);
+										exit(1);
 									}
 									m_code.push_back((u8)word3);
 									code_offset++;
@@ -2820,14 +2834,14 @@ namespace dragon
 								else
 								{
 									std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-									exit(0);
+									exit(1);
 								}
 								m_code.push_back((u8)word3);
 								code_offset++;
 							break;
 							default:
 								std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-								exit(0);
+								exit(1);
 							break;
 						}
 					}
@@ -2852,7 +2866,7 @@ namespace dragon
 							break;
 							default:
 								std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-								exit(0);
+								exit(1);
 							break;
 						}
 						switch (opType3)
@@ -2879,14 +2893,14 @@ namespace dragon
 							break;
 							default:
 								std::cout << "Invalid operand type; " << line << " (" << opEdit << ")\n";
-								exit(0);
+								exit(1);
 							break;
 						}
 					}
 					else
 					{
 						std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  DerefRegister or Pointer required\n";
-						exit(0);
+						exit(1);
 						return;
 					}
 				}
@@ -2895,7 +2909,7 @@ namespace dragon
 			else if (instEdit == "omov" || instEdit == "omovb" || instEdit == "omovw" || instEdit == "movo" || instEdit == "movbo" || instEdit == "movwo")
 			{
 				std::cout << "ExtMov instruction detected, please add '--extmov' flag to dasm.\n";
-				exit(0);
+				exit(1);
 				return;
 			}
 		}
@@ -2908,7 +2922,7 @@ namespace dragon
 				if (m_labelTable.count("$" + m_entry_lbl) == 0)
 				{
 					std::cout << "Invalid entry label: " << m_entry_lbl << ".\n";
-					exit(0);
+					exit(1);
 					return;
 				}
 				auto lbl = m_labelTable["$" + m_entry_lbl];

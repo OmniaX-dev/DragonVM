@@ -1,0 +1,35 @@
+// expect-rv: 0
+#include(check.ds)
+
+const SIZE = 4;
+const MASK: u32 = 0xFF00 | 0x00FF;
+enum Color { Red, Green = 5, Blue }
+
+var counter: i32 = 10;
+var table: i32[SIZE] = { 1, 2, 3 };
+var message: string = "hi";
+var letters: u8[6] = "abc";
+var ptr: i32* = &counter;
+var color: i32 = Color.Blue;
+var zeroes: u8[100];
+var first: i32 = table[0];          // not constant: set by __ds_init
+
+sub bump() -> void {
+    counter++;
+}
+
+sub main() -> i32 {
+    check(1, counter == 10);
+    bump(); bump();
+    check(2, counter == 12);
+    check(3, table[2] == 3 && table[3] == 0);
+    check(4, message[0] == 'h' && message[2] == 0);
+    check(5, letters[1] == 'b' && letters[3] == 0);
+    check(6, *ptr == 12);
+    check(7, color == 6 && Color.Red == 0 && Color.Green == 5);
+    check(8, zeroes[99] == 0);
+    check(9, MASK == 0xFFFF && SIZE * 2 == 8);
+    check(10, first == 1);
+    check(11, sizeof(table) == 16);
+    return result();
+}

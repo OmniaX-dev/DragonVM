@@ -1,23 +1,27 @@
-#include(some/file.ds)
+// DScript example (the original mock-up, adjusted to what dsc compiles).
+// Compile: dsc other/dscript.ds -I extra/ds/sdk          (relocatable .drx)
+//          dsc other/dscript.ds -I extra/ds/sdk --raw    (bare metal .bin)
+#include(<bios.ds>)            // print(...), new_line(), println(...)
 
 #define(SOME_DEF = 4)
 
-struct TestStruct { // Data-Only structs
+struct TestStruct {             // data-only structs; fields can have default values
     var a: i32;
     var b: i32 = 0;
-	var c: string = "";
-	var d: i32 = SOME_DEF;
+    var c: string = "";
+    var d: i32 = SOME_DEF;
 }
 
 #if(SOME_DEF and SOME_DEF == 4)
-	// Something
+const MODE = 1;
 #else
-	// Something else
+const MODE = 2;
 #endif
 
-sub print(var text: string) -> void {
+// The BIOS already has print(string) in bios.ds: this one prints in a low block too.
+sub show(var text: string) -> void {
     low {
-        mov R9, $text // '$' to access any in-scope variable, when inside a "low" block
+        mov R9, $text           // '$' accesses any in-scope variable inside a low block
         mov R10, 0x0C
         int 0x30
     }
@@ -28,16 +32,18 @@ sub test_function(var param1: i32, var param2: i32 = 0) -> i32 {
     result = param1 + param2;
     if (result == 40) {
         var str: string = "Result is 40";
-        print(str);
+        show(str);
+        new_line();
         return 0;
     }
     else {
-        var str: string = "Test String";
+        var str: string = "Test String ";
         var i: i32 = 0;
-        while (i < 10) {
-            print(str);
-            i = i + 1
+        while (i < 3) {
+            show(str);
+            i = i + 1;
         }
+        new_line();
     }
     return 1;
 }
@@ -45,8 +51,8 @@ sub test_function(var param1: i32, var param2: i32 = 0) -> i32 {
 sub main(void) -> void {
     var num: i32;
     var num2: i32 = 10;
-	var decimal: f32 = 1.0;
-    num = test_function(22, num2);
+    // var decimal: f32 = 1.0;  -- no floating point: the machine has no FPU
+    num = test_function(30, num2);
 
     var pointer: i32* = null;
     pointer = &num;
@@ -55,6 +61,8 @@ sub main(void) -> void {
 
     var test: TestStruct;
     test.a = 10;
+    print(test.d + MODE);
+    new_line();
 }
 
 /*
@@ -62,4 +70,3 @@ sub main(void) -> void {
 	Line
 	Comment
 */
-

@@ -1,0 +1,77 @@
+// expect-rv: 0
+#include(check.ds)
+
+sub set(var p: i32*, var v: i32) -> void {
+    *p = v;
+}
+
+sub sum(var values: i32*, var count: u32) -> i32 {
+    var total: i32 = 0;
+    for (var i: u32 = 0; i < count; i++)
+        total += values[i];
+    return total;
+}
+
+sub swap(var a: u8**, var b: u8**) -> void {
+    var t: u8* = *a;
+    *a = *b;
+    *b = t;
+}
+
+sub main() -> i32 {
+    var x: i32 = 1;
+    var p: i32* = &x;
+    *p = 5;
+    check(1, x == 5);
+    set(&x, 9);
+    check(2, x == 9);
+    // Arrays and pointer arithmetic.
+    var arr: i32[5] = { 10, 20, 30, 40, 50 };
+    check(3, arr[0] == 10 && arr[4] == 50);
+    check(4, sum(arr, 5) == 150);
+    var q: i32* = arr;
+    check(5, *(q + 2) == 30);
+    q += 3;
+    check(6, *q == 40 && q[-1] == 30);
+    check(7, q - arr == 3);
+    q--;
+    check(8, *q == 30);
+    check(9, &arr[4] - &arr[1] == 3);
+    check(10, cast<u32>(&arr[1]) - cast<u32>(&arr[0]) == 4);
+    arr[2] = 99;
+    check(11, *(arr + 2) == 99);
+    // Bytes and halves.
+    var bytes: u8[4] = { 1, 2, 3, 4 };
+    var bp: u8* = bytes;
+    check(12, bp[3] == 4);
+    var hp: u16* = cast<u16*>(bytes);
+    check(13, *hp == 0x0102 && hp[1] == 0x0304);     // big endian
+    var wp: u32* = cast<u32*>(bytes);
+    check(14, *wp == 0x01020304);
+    // Pointer to pointer.
+    var s1: string = "one";
+    var s2: string = "two";
+    swap(&s1, &s2);
+    check(15, s1[0] == 't' && s2[0] == 'o');
+    var pp: i32** = &p;
+    **pp = 77;
+    check(16, x == 77);
+    // void* and comparisons.
+    var v: void* = &x;
+    var back: i32* = cast<i32*>(v);
+    check(17, *back == 77 && v == back);
+    check(18, &arr[1] > &arr[0] && &arr[0] < q);
+    // Strings.
+    var str: string = "Hello";
+    check(19, str[1] == 'e' && str[5] == 0);
+    var buf: u8[8] = "abc";
+    check(20, buf[2] == 'c' && buf[3] == 0);
+    // Address of parameters and small locals.
+    var small: u8 = 7;
+    var sp: u8* = &small;
+    *sp = 8;
+    check(21, small == 8);
+    var neg: i8 = -3;
+    check(22, *(&neg) == -3);
+    return result();
+}

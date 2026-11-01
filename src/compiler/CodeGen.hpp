@@ -1,0 +1,150 @@
+#pragma once
+
+#include "Types.hpp"
+#include <map>
+#include <set>
+
+namespace dscript
+{
+	struct VarInfo
+	{
+		enum class Storage { Global, Local, Param };
+		std::string name;
+		Type* type { nullptr };
+		Storage storage { Storage::Global };
+		int32_t offset { 0 };		// Local: from FP; Param: argument index
+		std::string symbol;			// Global: the dasm data symbol (without '$')
+		SourcePos pos;
+	};
+
+	struct FuncInfo
+	{
+		std::string name;
+		std::string label;			// the dasm label
+		Type* type { nullptr };		// a Function type
+		std::vector<std::string> paramNames;
+		std::vector<Node*> defaults;	// default values (constant expressions) or nullptr
+		size_t requiredParams { 0 };
+		Node* decl { nullptr };
+		bool interrupt { false };
+		bool defined { false };
+	};
+
+	struct CodeGenOptions
+	{
+		bool raw { false };			// bare metal: ends with hlt instead of ret
+		std::vector<std::string> directives;	// .load / .fixed / .header lines for raw mode
+	};
+
+	// Checks the program (types, names, overloads) and generates dasm source for it.
+	// Generated code layout:
+	//   .entry __ds_start; data (globals, string literals); code: __ds_start (calls __ds_init,
+	//   which runs the non-constant global initializers, then main, then hlt (raw) or ret),
+	//   the top-level low blocks, the subs, the runtime helpers that are used.
+	class CodeGen
+	{
+		public:
+			CodeGen(const CodeGenOptions& options);
+			std::vector<std::string> generate(Node* program);
+
+		private:
+			struct ConstInfo { Node* decl { nullptr }; bool resolving { false }; bool resolved { false }; int64_t value { 0 }; Type* type { nullptr }; };
+			struct EnumInfo { Node* decl { nullptr }; bool resolving { false }; bool resolved { false }; std::map<std::string, int64_t> values; };
+			struct AliasInfo { Node* decl { nullptr }; bool resolving { false }; Type* type { nullptr }; };
+			struct Loop { std::string breakLabel; std::string continueLabel; };
+			typedef std::string Reg;
+
+		private:
+			// ===== declarations =====
+			void collect(Node* program);
+			void declareName(const std::string& name, const SourcePos& pos, const std::string& what);
+			Type* resolveType(TypeSyntax* ts);
+			void resolveStruct(StructInfo* info, const SourcePos& usePos);
+			int64_t resolveConst(const std::string& name, const SourcePos& usePos);
+			void resolveEnum(EnumInfo& info);
+			void resolveFunction(FuncInfo* f);
+			int64_t constExpr(Node* e, const std::string& what);
+			std::string mangle(Type* t);
+
+			// ===== checking =====
+			void check(Node* e, Type* expected = nullptr);
+			void checkIdent(Node* e, Type* expected);
+			void checkUnary(Node* e);
+			void checkBinary(Node* e);
+			void checkAssign(Node* e);
+			void checkCall(Node* e);
+			void checkMember(Node* e);
+			Type* decay(Type* t);
+			Type* promote(Type* t);
+			Type* arithmeticType(Type* a, Type* b);
+			int conversionCost(Node* from, Type* to);
+			void requireConvertible(Node* from, Type* to, const std::string& context);
+			FuncInfo* resolveOverload(const std::string& name, const std::vector<Node*>& args, const SourcePos& pos);
+			FuncInfo* functionForType(const std::vector<FuncInfo*>& funcs, Type* fnType);
+			VarInfo* lookupVar(const std::string& name);
+			bool isTypeName(const std::string& name);
+
+			// ===== code generation =====
+			void genFunction(FuncInfo* f);
+			void genGlobals(void);
+			void genStatement(Node* s);
+			void genLocalVar(Node* s);
+			void genInit(Reg addr, Type* type, Node* init, int32_t offset);
+			void genBranch(Node* e, const std::string& label, bool jumpIfTrue);
+			Reg gen(Node* e);
+			Reg genAddr(Node* e);
+			Reg genBinary(Node* e);
+			Reg genAssign(Node* e);
+			Reg genIncDec(Node* e);
+			Reg genCall(Node* e);
+			Reg genLogicalValue(Node* e);
+			void genLow(Node* low, bool topLevel);
+			void load(const Reg& dst, const Reg& addr, Type* t);
+			void store(const Reg& addr, const Reg& value, Type* t);
+			void loadVar(const Reg& dst, VarInfo* v);
+			void varAddress(const Reg& dst, VarInfo* v);
+			void convert(const Reg& r, Type* from, Type* to);
+			void normalize(const Reg& r, Type* t);
+			void copyMemory(const Reg& dst, const Reg& src, uint32_t size);
+			void zeroMemory(const Reg& dst, uint32_t size);
+			void addImmediate(const Reg& r, int64_t value);
+			void scale(const Reg& r, uint32_t size);
+			Reg alloc(const SourcePos& pos);
+			void release(const Reg& r);
+			void emit(const std::string& line);
+			void label(const std::string& name);
+			std::string newLabel(void);
+			std::string stringLiteral(const std::string& text);
+			static std::string imm(int64_t value);
+
+		private:
+			CodeGenOptions m_options;
+			TypeTable m_types;
+			std::map<std::string, std::string> m_names;		// every global name -> what it is
+			std::map<std::string, StructInfo*> m_structs;
+			std::map<std::string, EnumInfo> m_enums;
+			std::map<std::string, AliasInfo> m_aliases;
+			std::map<std::string, ConstInfo> m_consts;
+			std::map<std::string, VarInfo*> m_globals;
+			std::vector<Node*> m_globalDecls;
+			std::map<std::string, std::vector<FuncInfo*>> m_funcs;
+			std::vector<FuncInfo*> m_funcList;
+			std::vector<Node*> m_topLows;
+
+			// The sub being generated.
+			FuncInfo* m_func { nullptr };
+			std::vector<std::map<std::string, VarInfo*>> m_scopes;
+			int32_t m_localCursor { 4 };
+			int32_t m_localMin { 4 };
+			std::vector<Loop> m_loops;
+			int m_regDepth { 0 };
+			std::vector<std::string>* m_out { nullptr };
+
+			std::vector<std::string> m_data;
+			std::vector<std::string> m_code;
+			std::vector<std::string> m_initCode;
+			std::map<std::string, std::string> m_strings;
+			std::set<std::string> m_helpers;
+			int m_labelCounter { 0 };
+	};
+}

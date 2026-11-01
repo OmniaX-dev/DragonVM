@@ -94,6 +94,40 @@ list(APPEND ASSEMBLER_SOURCE_FILES
 	${CMAKE_CURRENT_LIST_DIR}/src/tools/Utils.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/tools/LegacyOstdSerial.cpp
 )
+list(APPEND COMPILER_SOURCE_FILES
+	${CMAKE_CURRENT_LIST_DIR}/src/compiler/dsc_main.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/compiler/Lexer.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/compiler/Preprocessor.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/compiler/Parser.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/compiler/Types.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/compiler/CodeGen.cpp
+
+	${CMAKE_CURRENT_LIST_DIR}/src/assembler/Assembler.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/assembler/IncludePreprocessor.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/assembler/DASMApp.cpp
+
+	${CMAKE_CURRENT_LIST_DIR}/src/hardware/VirtualHardDrive.cpp
+
+	${CMAKE_CURRENT_LIST_DIR}/src/tools/Utils.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/tools/LegacyOstdSerial.cpp
+)
+list(APPEND HEADLESS_SOURCE_FILES
+	${CMAKE_CURRENT_LIST_DIR}/src/runtime/drun_main.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/runtime/DragonRuntime.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/runtime/ConfigLoader.cpp
+
+	${CMAKE_CURRENT_LIST_DIR}/src/hardware/VirtualCPU.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/hardware/VirtualRAM.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/hardware/MemoryMapper.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/hardware/VirtualIODevices.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/hardware/VirtualHardDrive.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/hardware/VirtualDisplay.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/hardware/CPUExtensions.cpp
+
+	${CMAKE_CURRENT_LIST_DIR}/src/tools/Utils.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/tools/GlobalData.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/tools/LegacyOstdSerial.cpp
+)
 list(APPEND TOOLS_SOURCE_FILES
 	${CMAKE_CURRENT_LIST_DIR}/src/tools/tools_main.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/tools/Utils.cpp
@@ -144,6 +178,16 @@ if(WIN32)
 endif()
 target_include_directories(${TOOLS_TARGET} PUBLIC ${INCLUDE_DIRS})
 
+set(COMPILER_TARGET dsc)
+add_executable(${COMPILER_TARGET} ${COMPILER_SOURCE_FILES})
+target_include_directories(${COMPILER_TARGET} PUBLIC ${INCLUDE_DIRS})
+
+set(HEADLESS_TARGET drun)
+add_executable(${HEADLESS_TARGET} ${HEADLESS_SOURCE_FILES})
+target_include_directories(${HEADLESS_TARGET} PUBLIC ${INCLUDE_DIRS})
+
+target_compile_definitions(${COMPILER_TARGET} PUBLIC  BUILD_NR=${BUILD_NUMBER} MAJ_V=${MAJOR_VER} MIN_V=${MINOR_VER} VERSION_STR="${MAJOR_VER}.${MINOR_VER}.${BUILD_NUMBER}")
+target_compile_definitions(${HEADLESS_TARGET} PUBLIC  BUILD_NR=${BUILD_NUMBER} MAJ_V=${MAJOR_VER} MIN_V=${MINOR_VER} VERSION_STR="${MAJOR_VER}.${MINOR_VER}.${BUILD_NUMBER}")
 target_compile_definitions(${RUNTIME_TARGET} PUBLIC  BUILD_NR=${BUILD_NUMBER} MAJ_V=${MAJOR_VER} MIN_V=${MINOR_VER} VERSION_STR="${MAJOR_VER}.${MINOR_VER}.${BUILD_NUMBER}")
 target_compile_definitions(${DEBUGGER_TARGET} PUBLIC  BUILD_NR=${BUILD_NUMBER} MAJ_V=${MAJOR_VER} MIN_V=${MINOR_VER} VERSION_STR="${MAJOR_VER}.${MINOR_VER}.${BUILD_NUMBER}")
 target_compile_definitions(${ASSEMBLER_TARGET} PUBLIC  BUILD_NR=${BUILD_NUMBER} MAJ_V=${MAJOR_VER} MIN_V=${MINOR_VER} VERSION_STR="${MAJOR_VER}.${MINOR_VER}.${BUILD_NUMBER}")
@@ -195,6 +239,8 @@ if (UNIX)
 	target_link_libraries(${ASSEMBLER_TARGET} xcb xcb-randr boost_regex)
 	target_link_libraries(${TOOLS_TARGET} xcb xcb-randr boost_regex)
 	target_link_libraries(${DEBUGGER_TARGET} xcb xcb-randr boost_regex)
+	target_link_libraries(${COMPILER_TARGET} xcb xcb-randr boost_regex)
+	target_link_libraries(${HEADLESS_TARGET} xcb xcb-randr boost_regex)
 endif (UNIX)
 
 target_link_libraries(${RUNTIME_TARGET} SDL3 SDL3_image)
@@ -204,4 +250,6 @@ target_link_libraries(${RUNTIME_TARGET} ostd ogfx)
 target_link_libraries(${DEBUGGER_TARGET} ostd ogfx)
 target_link_libraries(${ASSEMBLER_TARGET} ostd)
 target_link_libraries(${TOOLS_TARGET} ostd)
+target_link_libraries(${COMPILER_TARGET} ostd)
+target_link_libraries(${HEADLESS_TARGET} SDL3 SDL3_image ostd ogfx)
 #-----------------------------------------------------------------------------------------

@@ -1,0 +1,10 @@
+// expect-rv: 42
+sub add(var a: i32, var b: i32) -> i32 {
+    return a + b;
+}
+
+sub main() -> i32 {
+    var x: i32 = 40;
+    var y = 2;
+    return add(x, y);
+}

@@ -1,0 +1,29 @@
+// expect-rv: 0
+#include(check.ds)
+
+sub fact(var n: u32) -> u32 {
+    if (n <= 1)
+        return 1;
+    return n * fact(n - 1);
+}
+
+sub fib(var n: i32) -> i32 {
+    return n < 2 ? n : fib(n - 1) + fib(n - 2);
+}
+
+sub is_even(var n: i32) -> bool;
+sub is_odd(var n: i32) -> bool {
+    return n == 0 ? false : is_even(n - 1);
+}
+sub is_even(var n: i32) -> bool {
+    return n == 0 ? true : is_odd(n - 1);
+}
+
+sub main() -> i32 {
+    check(1, fact(10) == 3628800);
+    check(2, fib(12) == 144);
+    check(3, is_even(10) && is_odd(7) && !is_odd(4));
+    // Temporaries survive calls.
+    check(4, fib(5) + fib(6) * fact(3) == 5 + 8 * 6);
+    return result();
+}

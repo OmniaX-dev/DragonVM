@@ -1,0 +1,5 @@
+// expect-error: expression too complex
+sub main() -> i32 {
+    var a: i32 = 1;
+    return a+(a+(a+(a+(a+(a+(a+(a+(a+(a+(a+(a+(a+(a+(a+(a+(a+a))))))))))))))));
+}

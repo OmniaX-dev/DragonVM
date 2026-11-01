@@ -1,0 +1,37 @@
+// expect-rv: 0
+#include(check.ds)
+
+sub kind(var x: i32) -> i32 { return 1; }
+sub kind(var x: u32) -> i32 { return 2; }
+sub kind(var x: u8) -> i32 { return 3; }
+sub kind(var x: string) -> i32 { return 4; }
+sub kind(var x: i32, var y: i32) -> i32 { return 5; }
+sub kind(var p: void*) -> i32 { return 6; }
+
+sub defaults(var a: i32, var b: i32 = 10, var c: i32 = 100) -> i32 {
+    return a + b + c;
+}
+
+// A declaration first, the definition later.
+sub later(var x: i32 = 5) -> i32;
+
+sub main() -> i32 {
+    var u: u32 = 1;
+    var c: u8 = 1;
+    var w: u16 = 1;
+    var arr: i32[2];
+    check(1, kind(5) == 1);
+    check(2, kind(u) == 2);
+    check(3, kind('a') == 3 && kind(c) == 3);
+    check(4, kind("text") == 4);
+    check(5, kind(1, 2) == 5);
+    check(6, kind(w) == 2);              // u16 -> u32 (same signedness) beats i32
+    check(7, kind(&arr[0]) == 6);        // i32* -> void*
+    check(8, defaults(1) == 111 && defaults(1, 2) == 103 && defaults(1, 2, 3) == 6);
+    check(9, later() == 6 && later(1) == 2);
+    return result();
+}
+
+sub later(var x: i32) -> i32 {
+    return x + 1;
+}

@@ -1,0 +1,72 @@
+// expect-rv: 0
+#include(check.ds)
+
+struct Point {
+    var x: i32;
+    var y: i32 = 7;
+}
+
+struct Rect {
+    var tl: Point;
+    var br: Point;
+    var tag: u8 = 'R';
+    var name: string = "rect";
+}
+
+struct Node {
+    var value: i32;
+    var next: Node*;
+}
+
+sub area(var r: Rect*) -> i32 {
+    return (r->br.x - r->tl.x) * (r->br.y - r->tl.y);
+}
+
+sub length(var n: Node*) -> i32 {
+    var count: i32 = 0;
+    while (n != null) {
+        count++;
+        n = n->next;
+    }
+    return count;
+}
+
+var g_rect: Rect = { { 1, 2 }, { 5, 6 } };
+
+sub main() -> i32 {
+    var p: Point;
+    check(1, p.x == 0 && p.y == 7);                 // zeroed + default
+    p.x = 3;
+    check(2, p.x == 3);
+    var r: Rect;
+    check(3, r.tag == 'R' && r.tl.y == 7 && r.br.y == 7 && r.name[0] == 'r');
+    r.tl.x = 1; r.tl.y = 1;
+    r.br.x = 4; r.br.y = 5;
+    check(4, area(&r) == 12);
+    // Struct copy.
+    var r2: Rect = r;
+    r.br.x = 100;
+    check(5, r2.br.x == 4 && area(&r2) == 12);
+    r2 = r;
+    check(6, r2.br.x == 100);
+    // Initializer lists.
+    var q: Point = { 10, 20 };
+    check(7, q.x == 10 && q.y == 20);
+    var q2: Point = { 5 };
+    check(8, q2.x == 5 && q2.y == 7);
+    // Arrays of structs.
+    var pts: Point[3] = { { 1, 1 }, { 2, 2 } };
+    check(9, pts[1].x == 2 && pts[2].y == 7);
+    pts[2].x = 9;
+    var pp: Point* = &pts[2];
+    check(10, pp->x == 9 && (pp - 1)->x == 2);
+    // Linked list.
+    var a: Node; var b: Node; var c: Node;
+    a.next = &b; b.next = &c; c.next = null;
+    check(11, length(&a) == 3);
+    // Globals.
+    check(12, g_rect.tl.y == 2 && g_rect.br.x == 5 && g_rect.tag == 'R');
+    check(13, g_rect.name[1] == 'e');
+    check(14, sizeof(Point) == 8 && sizeof(Rect) == 21 && sizeof<Node> == 8);
+    return result();
+}

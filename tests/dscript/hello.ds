@@ -1,0 +1,11 @@
+// expect-output: Hello, DragonOS!\n-42 / 4294967295 / x
+#include(<bios.ds>)
+
+sub main() -> void {
+    println("Hello, DragonOS!");
+    print(-42);
+    print(" / ");
+    print(0xFFFFFFFF);
+    print(" / ");
+    print('x');
+}

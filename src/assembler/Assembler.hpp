@@ -16,10 +16,12 @@ namespace dragon
         {
             public:
                 static std::vector<String> loadEntryFile(const String& filePath);
+                static std::vector<String> loadEntryLines(const std::vector<String>& lines, const String& directory);
 
             private:
                 static bool __can_file_be_included(std::vector<String>& lines);
                 static bool __include_loop(void);
+                static std::vector<String> __finish(void);
                 static std::vector<String> __load_file(const String& filePath);
 
             private:
@@ -115,12 +117,15 @@ namespace dragon
 
 			public:
 				static ostd::ByteStream assembleFromFile(String fileName);
+				// Assembles source lines (@include paths relative to `directory`).
+				static ostd::ByteStream assembleFromLines(const std::vector<String>& lines, const String& directory = "");
 				static ostd::ByteStream assembleToFile(String sourceFileName, String binaryFileName);
 				static ostd::ByteStream assembleToVirtualDisk(String fileName, hw::VirtualHardDrive& vhdd, u32 address);
 				static bool saveDisassemblyToFile(String fileName, String programName = "");
 				static void printProgramInfo(i32 verbose_level = 1);
 
 			private:
+				static ostd::ByteStream assemble(const std::vector<String>& sourceLines);
 				static void insertHeader(void);
 
 				static void removeComments(void);
@@ -186,6 +191,8 @@ namespace dragon
 				// Every program starts with a jump to its entry point (opcode + 32-bit address).
 				inline static constexpr u32 EntryJumpSize = 5;
 				inline static bool saveExports { false };
+				// The load address of programs without a .load directive.
+				inline static u32 defaultLoadAddress { 0x00000000 };
 				inline static bool debugMode { false };
 				inline static std::vector<String> cpuExtensions;
 		};

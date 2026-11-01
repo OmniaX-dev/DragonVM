@@ -1,0 +1,52 @@
+// DScript SDK: the BIOS text output (int 0x30, single color text mode).
+// The BIOS must have run (it installs the interrupt handlers).
+#once
+
+// Prints a null-terminated string.
+sub print(var text: string) -> void {
+    low {
+        mov R9, $text
+        mov R10, 0x0C
+        int 0x30
+    }
+}
+
+// Prints one character.
+sub print(var c: u8) -> void {
+    low {
+        mov R9, $c
+        mov R10, 0x01
+        int 0x30
+    }
+}
+
+// Prints an unsigned integer (decimal).
+sub print(var n: u32) -> void {
+    low {
+        mov R9, $n
+        mov R10, 0x04
+        int 0x30
+    }
+}
+
+// Prints a signed integer (decimal).
+sub print(var n: i32) -> void {
+    if (n < 0) {
+        print('-');
+        print(cast<u32>(-n));
+        return;
+    }
+    print(cast<u32>(n));
+}
+
+sub new_line() -> void {
+    low {
+        mov R10, 0x02
+        int 0x30
+    }
+}
+
+sub println(var text: string) -> void {
+    print(text);
+    new_line();
+}

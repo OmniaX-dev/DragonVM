@@ -1,0 +1,14 @@
+// expect-rv: 0
+#include(check.ds)
+
+sub main() -> i32 {
+    var s: string = "a\tb\n\x41\0z";
+    check(1, s[0] == 'a' && s[1] == 9 && s[2] == 'b' && s[3] == 10 && s[4] == 'A' && s[5] == 0);
+    check(2, '\n' == 10 && '\\' == 92 && '\'' == 39 && '"' == 34 && '\x7F' == 127);
+    var joined: string = "con" "cat";
+    check(3, joined[3] == 'c' && joined[6] == 0);
+    var same1: string = "same";
+    var same2: string = "same";
+    check(4, same1 == same2);                 // literals are shared
+    return result();
+}

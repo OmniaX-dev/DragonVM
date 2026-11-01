@@ -1,4 +1,5 @@
 #include "DragonRuntime.hpp"
+#include "../tools/DRX.hpp"
 #include <ostd/io/Memory.hpp>
 #include <ostd/utils/Time.hpp>
 
@@ -299,14 +300,28 @@ namespace dragon
 
 	void DragonRuntime::forceLoad(const String& filePath, u32 loadAddress)
 	{
-		// loadAddress is an offset in the RAM.
+		// loadAddress is an offset in the RAM. DRX programs (dsc's output) are relocated there.
 		ostd::ByteStream code;
 		ostd::Memory::loadByteStreamFromFile(filePath, code);
-
-		u32 index = 0;
-		for (auto& b : code)
+		std::vector<uint8_t> bytes(code.begin(), code.end());
+		if (drx::isDRX(bytes))
 		{
-			ram.write8(loadAddress + index, b);
+			drx::Program program;
+			std::string message;
+			if (!drx::read(bytes, program, message))
+			{
+				output().fg(ostd::ConsoleColors::Red).p("Invalid DRX file: ").p(filePath).p(" (").p(message).p(")").reset().nl();
+				return;
+			}
+			const u32 base = data::MemoryMapAddresses::Memory_Start + loadAddress;
+			bytes = drx::relocate(program, base);
+			output().fg(ostd::ConsoleColors::BrightYellow).p("DRX program loaded at ").p(String::getHexStr(base, true, 4)).p(", entry ")
+				.p(String::getHexStr(base + program.entry, true, 4)).p(" (").p((i32)program.relocations.size()).p(" relocations)").reset().nl();
+		}
+		u32 index = 0;
+		for (auto& b : bytes)
+		{
+			ram.write8(loadAddress + index, cast<i8>(b));
 			index++;
 		}
 	}

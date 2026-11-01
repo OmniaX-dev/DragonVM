@@ -1,0 +1,4 @@
+// expect-error: unknown name: missing
+sub main() -> i32 {
+    return missing + 1;
+}

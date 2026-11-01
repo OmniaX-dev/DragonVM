@@ -1,0 +1,60 @@
+// DScript SDK: memory and string helpers.
+#once
+
+sub memcpy(var dst: void*, var src: void*, var size: u32) -> void* {
+    var d: u8* = cast<u8*>(dst);
+    var s: u8* = cast<u8*>(src);
+    while (size > 0) {
+        *d = *s;
+        d++;
+        s++;
+        size--;
+    }
+    return dst;
+}
+
+sub memset(var dst: void*, var value: u8, var size: u32) -> void* {
+    var d: u8* = cast<u8*>(dst);
+    while (size > 0) {
+        *d = value;
+        d++;
+        size--;
+    }
+    return dst;
+}
+
+sub memcmp(var a: void*, var b: void*, var size: u32) -> i32 {
+    var x: u8* = cast<u8*>(a);
+    var y: u8* = cast<u8*>(b);
+    for (var i: u32 = 0; i < size; i++) {
+        if (x[i] != y[i])
+            return cast<i32>(x[i]) - cast<i32>(y[i]);
+    }
+    return 0;
+}
+
+sub strlen(var s: string) -> u32 {
+    var n: u32 = 0;
+    while (s[n] != 0)
+        n++;
+    return n;
+}
+
+sub strcmp(var a: string, var b: string) -> i32 {
+    while (*a != 0 and *a == *b) {
+        a++;
+        b++;
+    }
+    return cast<i32>(*a) - cast<i32>(*b);
+}
+
+sub strcpy(var dst: string, var src: string) -> string {
+    var d: string = dst;
+    while (*src != 0) {
+        *d = *src;
+        d++;
+        src++;
+    }
+    *d = 0;
+    return dst;
+}

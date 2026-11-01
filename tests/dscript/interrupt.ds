@@ -1,0 +1,31 @@
+// expect-output: tick 1\ntick 2\nticks: 2
+#include(<bios.ds>)
+
+var ticks: i32 = 0;
+
+// Interrupt subs end with rti and can't be called directly.
+interrupt sub on_tick() {
+    ticks++;
+    print("tick ");
+    print(ticks);
+    new_line();
+}
+
+sub install(var code: u8, var handler: sub() -> void) -> void {
+    low {
+        mov R8, $code
+        mov R9, $handler
+        mov R10, 0x00       // int 0x20 / 0x00: set an interrupt handler
+        int 0x20
+    }
+}
+
+sub main() -> void {
+    install(0x40, on_tick);
+    low {
+        int 0x40
+        int 0x40
+    }
+    print("ticks: ");
+    print(ticks);
+}

@@ -1,0 +1,4 @@
+// expect-error: structs are passed by pointer
+struct P { var x: i32; }
+sub f(var p: P) -> void { }
+sub main() -> void { }
