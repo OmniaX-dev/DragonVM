@@ -1,0 +1,13 @@
+name = "dasm"
+grammar = "dasm"
+path_suffixes = ["dss"]
+line_comments = ["## "]
+tab_size = 4
+hard_tabs = true
+brackets = [
+	{ start = "{", end = "}", close = true, newline = false },
+	{ start = "[", end = "]", close = true, newline = false },
+	{ start = "(", end = ")", close = true, newline = false },
+	{ start = "<", end = ">", close = false, newline = false },
+	{ start = "\"", end = "\"", close = true, newline = false, not_in = ["string", "comment"] },
+]

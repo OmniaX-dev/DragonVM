@@ -1,0 +1,210 @@
+================================================================================
+Declarations
+================================================================================
+
+#include(<bios.ds>)
+const SIZE: u32 = 4;
+enum Color { Red, Green = 5, }
+alias Handler = sub(i32) -> void;
+struct Point { var x: i32; var y: i32 = 7; }
+var table: i32[SIZE] = { 1, 2 };
+interrupt sub tick() { }
+sub later(var x: i32 = 5) -> i32;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (preproc_directive)
+  (const_declaration
+    (identifier)
+    (primitive_type)
+    (number_literal))
+  (enum_declaration
+    (type_identifier)
+    (enumerator_list
+      (enumerator
+        (identifier))
+      (enumerator
+        (identifier)
+        (number_literal))))
+  (alias_declaration
+    (type_identifier)
+    (function_type
+      (primitive_type)
+      (primitive_type)))
+  (struct_declaration
+    (type_identifier)
+    (field_list
+      (field_declaration
+        (field_identifier)
+        (primitive_type))
+      (field_declaration
+        (field_identifier)
+        (primitive_type)
+        (number_literal))))
+  (variable_declaration
+    (identifier)
+    (array_type
+      (primitive_type)
+      (identifier))
+    (initializer_list
+      (number_literal)
+      (number_literal)))
+  (function_declaration
+    (interrupt_modifier)
+    (identifier)
+    (parameter_list)
+    (block))
+  (function_declaration
+    (identifier)
+    (parameter_list
+      (parameter
+        (identifier)
+        (primitive_type)
+        (number_literal)))
+    (primitive_type)))
+
+================================================================================
+Expression precedence
+================================================================================
+
+sub f() -> i32 {
+	return a + b * c << 1 == d and not e || f ? g : h = i;
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    (identifier)
+    (parameter_list)
+    (primitive_type)
+    (block
+      (return_statement
+        (assignment_expression
+          (ternary_expression
+            (binary_expression
+              (binary_expression
+                (binary_expression
+                  (binary_expression
+                    (binary_expression
+                      (identifier)
+                      (binary_expression
+                        (identifier)
+                        (identifier)))
+                    (number_literal))
+                  (identifier))
+                (unary_expression
+                  (identifier)))
+              (identifier))
+            (identifier)
+            (identifier))
+          (identifier))))))
+
+================================================================================
+Postfix, casts and sizeof
+================================================================================
+
+sub f() -> void {
+	p->next.values[i++]--;
+	var s = sizeof(u8*) + sizeof<Point> + cast<u16*>(q)[2];
+	fns[0](1, "two" "three", 'c', '\n');
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    (identifier)
+    (parameter_list)
+    (primitive_type)
+    (block
+      (expression_statement
+        (update_expression
+          (index_expression
+            (member_expression
+              (member_expression
+                (identifier)
+                (field_identifier))
+              (field_identifier))
+            (update_expression
+              (identifier)))))
+      (variable_declaration
+        (identifier)
+        (binary_expression
+          (binary_expression
+            (sizeof_expression
+              (pointer_type
+                (primitive_type)))
+            (sizeof_expression
+              (type_identifier)))
+          (index_expression
+            (cast_expression
+              (pointer_type
+                (primitive_type))
+              (identifier))
+            (number_literal))))
+      (expression_statement
+        (call_expression
+          (index_expression
+            (identifier)
+            (number_literal))
+          (argument_list
+            (number_literal)
+            (concatenated_string
+              (string_literal)
+              (string_literal))
+            (char_literal)
+            (char_literal
+              (escape_sequence))))))))
+
+================================================================================
+Statements and low blocks
+================================================================================
+
+sub f(void) -> void {
+	for (var i: u32 = 0; i < 10; i++) { if (i == 3) continue; else break; }
+	do { x--; } while (x > 0);
+	low {
+		mov R1, $x
+		mov [{ 0x10 + 2 }], R1
+	}
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    (identifier)
+    (parameter_list
+      (primitive_type))
+    (primitive_type)
+    (block
+      (for_statement
+        (variable_declaration
+          (identifier)
+          (primitive_type)
+          (number_literal))
+        (binary_expression
+          (identifier)
+          (number_literal))
+        (update_expression
+          (identifier))
+        (block
+          (if_statement
+            (binary_expression
+              (identifier)
+              (number_literal))
+            (continue_statement)
+            (break_statement))))
+      (do_statement
+        (block
+          (expression_statement
+            (update_expression
+              (identifier))))
+        (binary_expression
+          (identifier)
+          (number_literal)))
+      (low_block
+        (low_content
+          (low_content))))))

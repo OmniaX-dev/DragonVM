@@ -1,0 +1,15 @@
+{
+  "name": "dragonvm-editors",
+  "private": true,
+  "description": "Tree-sitter grammars (DScript, dasm) and the Zed extension of DragonVM",
+  "scripts": {
+    "generate": "cd tree-sitter-dscript && tree-sitter generate --abi 14 && cd ../tree-sitter-dasm && tree-sitter generate --abi 14",
+    "test": "./check.sh"
+  },
+  "devDependencies": {
+    "tree-sitter-cli": "0.26.13"
+  },
+  "allowScripts": {
+    "tree-sitter-cli@0.26.13": true
+  }
+}
