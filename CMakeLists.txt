@@ -74,6 +74,7 @@ list(APPEND DEBUGGER_SOURCE_FILES
 	${CMAKE_CURRENT_LIST_DIR}/src/tools/Utils.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/tools/GlobalData.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/tools/LegacyOstdSerial.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/tools/Tools.cpp
 )
 list(APPEND ASSEMBLER_SOURCE_FILES
 	${CMAKE_CURRENT_LIST_DIR}/src/assembler/assembler_main.cpp

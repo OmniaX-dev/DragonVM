@@ -9,10 +9,10 @@ cp -r ../extra/dss/DragonOS/* ./dss/DragonOS/
 
 printf "\n${green}1) kernel0.dss\n${clear}"
 ./dasm dss/DragonOS/kernel0/kernel0.dss -o dragon/kernel0.bin -D --verbose
-./dtools load-binary dragon/disk1.dr dragon/kernel0.bin 0x00018000
+./dtools load-binary dragon/disk1.drd dragon/kernel0.bin 0x00018000
 
 printf "\n"
 
 
-cp dragon/disk1.dr ../extra/dragon/disk1.dr
+cp dragon/disk1.drd ../extra/dragon/disk1.drd
 # rm dragon/kernel0.bin

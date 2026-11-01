@@ -1,4 +1,4 @@
-Disks = dragon/disk1.dr
+Disks = dragon/disk1.drd
 Bios = dragon/bios.bin
 CMOS = dragon/cmos.dr
 
