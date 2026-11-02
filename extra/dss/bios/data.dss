@@ -323,7 +323,7 @@
 	$_clock_str " Clock: "
 	$_mem_str " Memory: "
 	$_hz_str " Hz"
-	$_byte_str " Bytes"
+	$_byte_str " KiB"
 
 	$_bios_logo_2_line_1  "|===================================================|"
 	$_bios_logo_2_line_2  "|     '$$$o.                                        |"
