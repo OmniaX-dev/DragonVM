@@ -42,7 +42,7 @@ static void printHelp(void)
 		"  (default)                 DRX: relocatable executable, loaded anywhere by a loader (an OS):\n"
 		"                            the program is called and returns when main returns (RV = main's value)\n"
 		"  --raw                     Bare metal binary at a fixed address; ends with hlt after main\n"
-		"    --load <address>        .load: the address the binary runs at (default 0x00010000, the RAM)\n"
+		"    --load <address>        .load: the address the binary runs at (default 0x01010000, the RAM)\n"
 		"    --fixed <size>,<fill>   .fixed: pads the binary to exactly <size> bytes\n"
 		"    --header <name>         .header: adds a header (e.g. KERNEL0_BOOT)\n"
 		"    --save-disassembly <dir>  Saves the debugger disassembly (as dasm does)\n"
@@ -152,7 +152,7 @@ int main(int argc, char** argv)
 		cg.raw = o.raw;
 		if (o.raw)
 		{
-			cg.directives.push_back(".load " + (o.load.empty() ? std::string("0x00010000") : o.load));
+			cg.directives.push_back(".load " + (o.load.empty() ? std::string("0x01010000") : o.load));
 			if (!o.fixed.empty())
 				cg.directives.push_back(".fixed " + o.fixed);
 			if (!o.header.empty())

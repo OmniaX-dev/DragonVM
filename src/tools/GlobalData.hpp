@@ -96,37 +96,37 @@ namespace dragon
 		{
 			public:
 				inline static constexpr u32 BIOS_Start = 0x00000000;
-				inline static constexpr u32 BIOS_End   = 0x00003FFF;
+				inline static constexpr u32 BIOS_End   = 0x00FFFFFF;
 
-				inline static constexpr u32 CMOS_Start = 0x00004000;
-				inline static constexpr u32 CMOS_End   = 0x0000407F;
+				inline static constexpr u32 CMOS_Start = 0x01000000;
+				inline static constexpr u32 CMOS_End   = 0x0100007F;
 
 				// 256 entries of 5 bytes: status (1), handler address (4).
-				inline static constexpr u32 IntVector_Start = 0x00004080;
-				inline static constexpr u32 IntVector_End   = 0x0000457F;
+				inline static constexpr u32 IntVector_Start = 0x01000080;
+				inline static constexpr u32 IntVector_End   = 0x0100057F;
 				inline static constexpr u32 IntVector_EntrySize = 5;
 
-				inline static constexpr u32 Keyboard_Start = 0x00004580;
-				inline static constexpr u32 Keyboard_End   = 0x0000465F;
+				inline static constexpr u32 Keyboard_Start = 0x01000580;
+				inline static constexpr u32 Keyboard_End   = 0x0100065F;
 
-				inline static constexpr u32 Mouse_Start = 0x00004660;
-				inline static constexpr u32 Mouse_End   = 0x0000467F;
+				inline static constexpr u32 Mouse_Start = 0x01000660;
+				inline static constexpr u32 Mouse_End   = 0x0100067F;
 
-				inline static constexpr u32 MBR_Start = 0x00004680;
-				inline static constexpr u32 MBR_End   = 0x0000487F;
+				inline static constexpr u32 MBR_Start = 0x01000680;
+				inline static constexpr u32 MBR_End   = 0x0100087F;
 
-				inline static constexpr u32 DiskInterface_Start = 0x00004880;
-				inline static constexpr u32 DiskInterface_End   = 0x000048FF;
+				inline static constexpr u32 DiskInterface_Start = 0x01000880;
+				inline static constexpr u32 DiskInterface_End   = 0x010008FF;
 
-				inline static constexpr u32 VideoCardInterface_Start = 0x00004900;
-				inline static constexpr u32 VideoCardInterface_End   = 0x000049FF;
+				inline static constexpr u32 VideoCardInterface_Start = 0x01000900;
+				inline static constexpr u32 VideoCardInterface_End   = 0x010009FF;
 
-				inline static constexpr u32 SerialInterface_Start = 0x00004A00;
-				inline static constexpr u32 SerialInterface_End   = 0x00004A3F;
+				inline static constexpr u32 SerialInterface_Start = 0x01000A00;
+				inline static constexpr u32 SerialInterface_End   = 0x01000A3F;
 
 				// RAM starts here and ends at Memory_Start + (RAM size) - 1 (the machine config's
 				// ram_size_kb), at most at Memory_Max.
-				inline static constexpr u32 Memory_Start = 0x00010000;
+				inline static constexpr u32 Memory_Start = 0x01010000;
 				inline static constexpr u32 Memory_Max   = AddressMask;
 		};
 

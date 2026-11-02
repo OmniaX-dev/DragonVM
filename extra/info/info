@@ -29,10 +29,10 @@
 #==========================================================================================================================================
 # Memory Map
 #==========================================================================================================================================
-    0x00000000 BIOS (16384 Bytes) (write to this section is disabled)
-    0x00003FFF
+    0x00000000 BIOS (16 MiB: 16777216 Bytes) (write to this section is disabled)
+    0x00FFFFFF
     -------
-    0x00004000 CMOS (128 Bytes) (write to this section is only allowed in BIOS Mode)
+    0x01000000 CMOS (128 Bytes) (write to this section is only allowed in BIOS Mode)
         MemStart: (4 bytes) 0x00
         MemSize: (4 bytes) 0x04             (last address of the RAM)
         ClockSpeed: (4 bytes) 0x08
@@ -43,17 +43,17 @@
         BootDisk: (1 byte) 0x19
 
         DiskList: (4 bytes) 0x7C
-    0x0000407F
+    0x0100007F
     -------
-    0x00004080 INTERRUPT VECTOR (1280 Bytes: 256 entries x 5 bytes)
+    0x01000080 INTERRUPT VECTOR (1280 Bytes: 256 entries x 5 bytes)
         Status: 1 Byte
             0xFF: Enabled
             0x00: Disabled
         Handler Address: 4 Bytes
         ...Repeat...
-    0x0000457F
+    0x0100057F
     -------
-    0x00004580 KEYBOARD MAPPING (224 Bytes) (write to this section is only allowed in BIOS Mode)
+    0x01000580 KEYBOARD MAPPING (224 Bytes) (write to this section is only allowed in BIOS Mode)
         0x00: Modifiers (4 bytes)
             0b00000000.00000001: Left Shift
             0b00000000.00000010: Left Ctrl
@@ -67,15 +67,15 @@
             0b00000010.00000000: Num Lock
             0b00000100.00000000: Scroll Lock
         0x04: KeyCode (4 bytes)
-    0x0000465F
+    0x0100065F
     -------
-    0x00004660 MOUSE MAPPING (32 Bytes)
-    0x0000467F
+    0x01000660 MOUSE MAPPING (32 Bytes)
+    0x0100067F
     -------
-    0x00004680 BOOTLOADER (512 Bytes)
-    0x0000487F
+    0x01000680 BOOTLOADER (512 Bytes)
+    0x0100087F
     -------
-    0x00004880 DISK INTERFACE (128 Bytes)
+    0x01000880 DISK INTERFACE (128 Bytes)
         Read/Write:
             0x00 Signal: 1 Byte
                 0x00: Start Operation
@@ -97,9 +97,9 @@
             0x14 CurrentDiskAddress: 4 Bytes
             0x18 RestDataSize: 4 Bytes
             0x1C CurrentMemoryAddress: 4 Bytes
-    0x000048FF
+    0x010008FF
     -------
-    0x00004900 VIDEO CARD INTERFACE (256 Bytes)
+    0x01000900 VIDEO CARD INTERFACE (256 Bytes)
         0x00:  Video Mode (1 Byte)
             0x00: Text Single Color
             0x01: Text 16-color
@@ -141,16 +141,16 @@
             0x8A: Foreground (1 Byte)
 
         (VRAM Memory Cell: Character:1, Foreground:1, Background:1, Reserved:1)
-    0x000049FF
+    0x010009FF
     -------
-    0x00004A00 GENERIC SERIAL INTERFACE (64 Bytes)
-    0x00004A3F
+    0x01000A00 GENERIC SERIAL INTERFACE (64 Bytes)
+    0x01000A3F
     -------
-    0x00004A40 (unmapped)
-    0x0000FFFF
+    0x01000A40 (unmapped)
+    0x0100FFFF
     -------
-    0x00010000 RAM (machine config: ram_size_kb, default 4096 KiB)
-    0x00010000 + RAM size - 1 (at most 0x0FFFFFFF)
+    0x01010000 RAM (machine config: ram_size_kb, default 4096 KiB)
+    0x01010000 + RAM size - 1 (at most 0x0FFFFFFF)
 
 
 
@@ -287,7 +287,7 @@
         Reserved (30 Bytes)
 
     Kernel first stage block must start at PART_ADDR + 32 and must be 1024 bytes in size.
-    Drake loads it at 0x00012000 (DPTBootPartStructure.CODE_LOAD_ADDR).
+    Drake loads it at 0x01012000 (DPTBootPartStructure.CODE_LOAD_ADDR).
 
-    Boot sequence: BIOS (0x00000000) -> Drake loader (disk 0x0000, 512 bytes, at 0x00004680)
-        -> Drake bootsector (disk 0x0400, 5120 bytes, at 0x00010000) -> kernel first stage (0x00012000)
+    Boot sequence: BIOS (0x00000000) -> Drake loader (disk 0x0000, 512 bytes, at 0x01000680)
+        -> Drake bootsector (disk 0x0400, 5120 bytes, at 0x01010000) -> kernel first stage (0x01012000)

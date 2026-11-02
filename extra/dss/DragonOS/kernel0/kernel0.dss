@@ -1,4 +1,4 @@
-.load 0x00012000				## DPTBootPartStructure.CODE_LOAD_ADDR
+.load 0x01012000				## DPTBootPartStructure.CODE_LOAD_ADDR
 .fixed 1024, 0xFF
 .entry _kernel0_main
 .header KERNEL0_BOOT

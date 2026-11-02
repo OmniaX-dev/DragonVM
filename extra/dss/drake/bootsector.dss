@@ -1,4 +1,4 @@
-.load 0x00010000
+.load 0x01010000
 .entry _drake_bootsector_entry_point
 .fixed 5120, 0xFF
 

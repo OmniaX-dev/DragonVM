@@ -6,7 +6,7 @@ binary (`--raw`).
 
 ```
 dsc program.ds -I extra/ds/sdk                    -> program.drx (relocatable)
-dsc kernel.ds --raw --load 0x00012000 --fixed 1024,0xFF --header KERNEL0_BOOT
+dsc kernel.ds --raw --load 0x01012000 --fixed 1024,0xFF --header KERNEL0_BOOT
 dsc program.ds --emit-dasm program.dasm           (also writes the generated dasm)
 drun config/testMachine.dvm program.drx --boot    (runs it without a window)
 ```
@@ -157,7 +157,7 @@ then `push 0; call base + entry`. The program returns when `main` returns (its v
 <ram offset>` and `drun` load them.
 
 `--raw` makes a bare metal binary instead (like dasm): fixed address (`--load`, default
-0x00010000), optional `--fixed` and `--header`, `hlt` after `main`.
+0x01010000), optional `--fixed` and `--header`, `hlt` after `main`.
 
 
 ## Tests

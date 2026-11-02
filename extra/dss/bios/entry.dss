@@ -1,6 +1,6 @@
 .load 0x00000000       															## BIOS is mapped to address 0x00000000 in memory
 .entry _bios_entry_point
-.fixed 16384, 0xFF     ## BIOS Needs to be 16384 Bytes exactly
+.fixed 16777216, 0xFF  ## BIOS Needs to be 16 MiB (16777216 Bytes) exactly
 
 @include <data.dss>
 @include <utils.dss>

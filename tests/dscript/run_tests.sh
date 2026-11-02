@@ -5,8 +5,8 @@
 #   // expect-rv: <n>          main's return value (RV)
 #   // expect-output: <text>   what the program prints (\n for new lines); the BIOS runs first
 #   // expect-error: <text>    the compilation must fail with this text in the message
-# Every test runs twice: as a DRX (relocatable, loaded at 0x00020000) and as a raw binary
-# (--raw --load 0x00030000).
+# Every test runs twice: as a DRX (relocatable, loaded at 0x01020000) and as a raw binary
+# (--raw --load 0x01030000).
 
 cd "$(dirname "$0")"
 ROOT="$(cd ../.. && pwd)"
@@ -42,8 +42,8 @@ for t in "${tests[@]}"; do
 				"$DSC" "$t" -I "$ROOT/extra/ds/sdk" -o "$OUT/$name.drx" > "$OUT/$name.log" 2>&1 || { ok=0; msg="$mode: compile error: $(cat "$OUT/$name.log")"; break; }
 				prog="$OUT/$name.drx"; at=()
 			else
-				"$DSC" "$t" -I "$ROOT/extra/ds/sdk" --raw --load 0x00030000 -o "$OUT/$name.bin" > "$OUT/$name.log" 2>&1 || { ok=0; msg="$mode: compile error: $(cat "$OUT/$name.log")"; break; }
-				prog="$OUT/$name.bin"; at=(--at 0x00030000)
+				"$DSC" "$t" -I "$ROOT/extra/ds/sdk" --raw --load 0x01030000 -o "$OUT/$name.bin" > "$OUT/$name.log" 2>&1 || { ok=0; msg="$mode: compile error: $(cat "$OUT/$name.log")"; break; }
+				prog="$OUT/$name.bin"; at=(--at 0x01030000)
 			fi
 			boot=()
 			[ -n "$output" ] && boot=(--boot)

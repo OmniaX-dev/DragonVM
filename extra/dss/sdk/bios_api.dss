@@ -5,13 +5,13 @@
 
 ## These are the base addresses of the memory map.
 @group MemoryAddresses
-    MBR             0x00004680
-    INT_VEC         0x00004080
-    DISK_INTERFACE     0x00004880
-    RAM             0x00010000
-    CMOS             0x00004000
-    VGA             0x00004900
-    KEYBOARD        0x00004580
+    MBR             0x01000680
+    INT_VEC         0x01000080
+    DISK_INTERFACE     0x01000880
+    RAM             0x01010000
+    CMOS             0x01000000
+    VGA             0x01000900
+    KEYBOARD        0x01000580
 @end
 ## --
 
@@ -134,7 +134,7 @@
     ID_CODE                0xF1C4
     CODE_SIZE_B            1024
     HEADER_SIZE_B        32
-    CODE_LOAD_ADDR      0x00012000
+    CODE_LOAD_ADDR      0x01012000
 @end
 ## --
 

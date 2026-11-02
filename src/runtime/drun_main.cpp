@@ -90,7 +90,7 @@ static bool step(u64& cycles)
 static void usage(void)
 {
 	std::cout << "Usage: drun <machine.dvm> [program.drx | program.bin --at <address>] [options]\n"
-				 "  --at <address>         Load address (DRX: default 0x00020000; raw binaries: required)\n"
+				 "  --at <address>         Load address (DRX: default 0x01020000; raw binaries: required)\n"
 				 "  --boot                 Runs the BIOS first (its interrupts then work)\n"
 				 "  --max-cycles <n>       Stops after n cycles (default 50000000)\n"
 				 "  --dump <address>[:n]   Prints n bytes (default 4) of memory at the end\n"
@@ -179,7 +179,7 @@ int main(int argc, char** argv)
 				std::cerr << "drun: " << programPath << ": " << message << "\n";
 				return 1;
 			}
-			const u32 base = (at < 0 ? 0x00020000u : (u32)at);
+			const u32 base = (at < 0 ? 0x01020000u : (u32)at);
 			image = drx::relocate(program, base);
 			entry = base + program.entry;
 			at = base;
