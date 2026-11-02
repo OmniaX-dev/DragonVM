@@ -1,0 +1,40 @@
+struct DPTBlock {
+	var ID: u16;
+	var versionMaj: u8;
+	var versionMin: u8;
+	var partitionCount: u8;
+	var reserved: u8[7];
+	var entries: u8[500];
+};
+
+struct DPTPartitionBlock {
+	var startAddress: u32;
+	var size: u32;
+	var flags: u16;
+	var reserved: u8[26];
+	var label: u8[64];
+};
+
+const DPTStructure: struct {
+	var DiskAddress: u32 					= 0x0200;
+	var EntriesStart: u32			 		= 0x000C;
+
+	var EntryStart: u32  					= 0x0000;
+	var EntryPartitionSize: u32 			= 0x0004;
+	var EntryFlags: u32						= 0x0008;
+	var EntryPartLabel: u32					= 0x0024;
+
+	var ID: u32								= 0xF1CA;
+	var EntrySize: u32						= 100;
+};
+
+const DPTBootPartStructure: struct {
+	var IDAddr: u32 						= 0x0000;
+	var CodeStart: u32			 			= 0x0020;
+
+	var CodeSize: u32  						= 1024;
+	var HeaderSize: u32						= 32;
+	var CodeLoadAddr: u32					= 0x01012000;
+
+	var ID: u32								= 0xF1C4;
+};

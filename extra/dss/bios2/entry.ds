@@ -1,9 +1,16 @@
 #include(data.ds)
 #include(<bios.ds>)
+#include(<dpt.ds>)
+#include(int20.ds)
+#include(int30.ds)
 
 sub main() {
 	for (var i: u32 = 0; i < sizeof(BiosLogo) / sizeof(BiosLogo[0]); i++) {
 	    print(BiosLogo[i]);     // a row decays to a string (u8*)
 	    new_line();
 	}
+	print(sizeof(DPTBlock));
+	new_line();
+	print(sizeof(DPTPartitionBlock));
+	new_line();
 }

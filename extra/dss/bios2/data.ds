@@ -1,10 +1,12 @@
+#once
+
 const S_REG_1 = 0x07;
 const S_REG_2 = 0x08;
 const S_REG_OFFSET = 0x09;
 
 const INST_BIOS_NODE_TOGGLE = 0x02;
 
-var BiosLogo: u8[54][19] = {
+const BiosLogo: u8[54][] = {
     "|===================================================|",
     "|     '$$$o.                                        |",
     "|       '$$$$bo...       ..o:                       |",
@@ -25,102 +27,4 @@ var BiosLogo: u8[54][19] = {
     "|                            .$'                    |",
     "|===================================================|"
 };
-var BiosName: u8[10] = "DragonBIOS";
-
-// ============================= Memory Mapped Devices and Registers =============================
-const MemoryLayout: struct {
-	var MBR: u32 							= 0x01000680;
-	var InterruptVector: u32 				= 0x01000080;
-	var DiskInterface: u32					= 0x01000880;
-	var RAM: u32							= 0x01010000;
-	var CMOS: u32							= 0x01000000;
-	var VGA: u32							= 0x01000900;
-	var Keyboard: u32						= 0x01000580;
-};
-
-const InterruptVectorData: struct {
-	var EntrySize: u32						= 0x5;
-};
-
-const CMOSRegisters: struct {
-	var MemoryStart: u32					= MemoryLayout.CMOS + 0x0000;
-	var MemorySize: u32						= MemoryLayout.CMOS + 0x0004;
-	var ClockSpeed: u32						= MemoryLayout.CMOS + 0x0008;
-	var ScreenColumns: u32					= MemoryLayout.CMOS + 0x000C;
-	var ScreenRows: u32						= MemoryLayout.CMOS + 0x0010;
-	var StackSize: u32						= MemoryLayout.CMOS + 0x0014;
-	var ScreenRedrawRate: u32				= MemoryLayout.CMOS + 0x0018;
-	var BootDisk: u32						= MemoryLayout.CMOS + 0x0019;
-	var DiskList: u32						= MemoryLayout.CMOS + 0x007C;
-};
-
-const CPUFlags: struct {
-	var InterruptsEnabled: u32				= 0b00000000_00000001;
-};
-
-const HardwareInterrupts: struct {
-	var DiskInterfaceFinished: u32			= 0x80;
-	var KeyPressed: u32						= 0xA0;
-	var KeyReleased: u32					= 0xA1;
-	var TextEntered: u32					= 0xA2;
-
-	var Text16ScreenRefreshed: u32			= 0xE0;
-};
-
-const VGARegisters: struct {
-	var VideoMode: u32 						= MemoryLayout.VGA + 0x0000;
-	var ClearColor: u32						= MemoryLayout.VGA + 0x0001;
-	var Palette: u32						= MemoryLayout.VGA + 0x0002;
-	var Signal: u32							= MemoryLayout.VGA + 0x0003;
-	var TextSingleChar: u32					= MemoryLayout.VGA + 0x0004;
-	var TextSingleInvert: u32				= MemoryLayout.VGA + 0x0005;
-	var TextSingleStr: u32					= MemoryLayout.VGA + 0x0008;
-	var Flags: u32							= MemoryLayout.VGA + 0x007C;
-	var MemoryControllerX: u32				= MemoryLayout.VGA + 0x0080;
-	var MemoryControllerXByte: u32			= MemoryLayout.VGA + 0x0080 + 3;
-	var MemoryControllerY: u32				= MemoryLayout.VGA + 0x0084;
-	var MemoryControllerYByte: u32			= MemoryLayout.VGA + 0x0084 + 3;
-	var MemoryControllerChar: u32			= MemoryLayout.VGA + 0x0088;
-	var MemoryControllerBGCol: u32			= MemoryLayout.VGA + 0x0089;
-	var MemoryControllerFGCol: u32			= MemoryLayout.VGA + 0x008A;
-	var BufferStart: u32					= MemoryLayout.VGA + 0x00E0;
-};
-
-const KeyboardRegisters: struct {
-	var ModifiersBitfield: u32				= MemoryLayout.Keyboard + 0x0000;
-	var KeyCode: u32						= MemoryLayout.Keyboard + 0x0004;
-};
-
-const VGAVideoModes: struct {
-	var TextSingleColor: u32				= 0x00;
-	var Text16Color: u32					= 0x01;
-};
-
-const VGATextSingleColorSignals: struct {
-	var Continue: u32 						= 0x00;
-	var PrintChar: u32						= 0x02;
-	var StoreChar: u32						= 0x03;
-	var PrintFlushBuffer: u32				= 0x04;
-	var FlushBuffer: u32					= 0x05;
-	var PrintBuffer: u32					= 0x06;
-	var PrintString: u32					= 0x07;
-	var RefreshScreen: u32 					= 0xE0;
-	var ClearScreen: u32 					= 0xE1;
-	var RedrawScreen: u32 					= 0xE2;
-};
-
-const VGAText16ColorSignals: struct {
-	var Continue: u32 						= 0x00;
-	var SwapBuffer: u32						= 0x10;
-	var WriteVRAM: u32						= 0x11;
-	var Scroll: u32							= 0x12;
-	var ForceRefreshScreen: u32				= 0xE0;
-	var ForceClearScreen: u32				= 0xE1;
-	var ForceRedrawScreen: u32				= 0xE2;
-};
-// ===============================================================================================
-
-
-
-// ========================================== Other Data =========================================
-// ===============================================================================================
+const BiosName = "DragonBIOS";

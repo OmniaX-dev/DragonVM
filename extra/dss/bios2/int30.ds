@@ -1,0 +1,135 @@
+#include(<bios.ds>)
+
+const INT30_DIRECT_PRINT_CHAR_TEXT_SINGLE 		= 0x0001;
+const INT30_DIRECT_NEW_LINE_TEXT_SINGLE 		= 0x0002;
+const INT30_DIRECT_PRINT_STRING_TEXT_SINGLE 	= 0x0003;
+const INT30_DIRECT_PRINT_INTEGER_TEXT_SINGLE 	= 0x0004;
+const INT30_STORE_INTEGER_TEXT_SINGLE 			= 0x0005;
+const INT30_STORE_CHAR_TEXT_SINGLE 				= 0x0006;
+const INT30_PRINT_BUFFER_NO_FLUSH_TEXT_SINGLE 	= 0x0007;
+const INT30_PRINT_BUFFER_AND_FLUSH_TEXT_SINGLE 	= 0x0008;
+const INT30_FLUSH_BUFFER_TEXT_SINGLE 			= 0x0009;
+const INT30_STORE_STRING_TEXT_SINGLE 			= 0x000A;
+const INT30_INVERT_COLORS_TEXT_SINGLE 			= 0x000B;
+const INT30_PRINT_STRING_BUFFERED 				= 0x000C;
+
+const INT30_WRITE_VRAM_TEXT16 					= 0x0021;
+const INT30_PRINT_STRING_TEXT16 				= 0x0022;
+const INT30_PRINT_INTEGER_TEXT16 				= 0x0023;
+const INT30_CLEAR_SCREEN_TEXT16 				= 0x0024;
+const INT30_SCROLL_TEXT16 						= 0x0025;
+
+const INT30_CLEAR_SCREEN 						= 0x00E0;
+const INT30_REFRESH_SCREEN 						= 0x00E1;
+
+struct VGARegs {
+	var mode: u8;
+	var clearColor: u8;
+	var palette: u8;
+	var signal: u8;
+	var textSingleColorChar: u8;
+	var textSingleColorInverted: u8;
+	var textSingleColorBufferStringAddr: u32;
+	var __padding: u8[118];
+
+	var flags: u32;
+
+	var text16MemoryController: struct {
+		var x: u32;
+		var y: u32;
+		var character: u8;
+		var background: u8;
+		var foreground: u8;
+	};
+};
+
+interrupt sub __int_30_handler() {
+	var code: u32;
+	var param1: u32;
+	var param2: u32;
+	low {
+		mov $code, R10
+		mov $param1, R9
+		mov $param2, R8
+	}
+	var device: VGARegs* = cast<VGARegs*>(MemoryLayout.VGA);
+	if (code == INT30_DIRECT_PRINT_CHAR_TEXT_SINGLE)
+	{
+		*device.textSingleColorChar = cast<u8>(param1);
+		*device.signal = VGATextSingleColorSignals.PrintChar;
+	}
+	else if (code == INT30_DIRECT_NEW_LINE_TEXT_SINGLE)
+	{
+		*device.textSingleColorChar = 10;
+		*device.signal = VGATextSingleColorSignals.PrintChar;
+	}
+	else if (code == INT30_DIRECT_PRINT_STRING_TEXT_SINGLE) // selector is a DiskDriverData*
+	{
+		var str: u8* = cast<u8*>(param1);
+		var c: u8 = str[0];
+		var i: i32 = 1;
+		while (c != 0)
+		{
+			*device.textSingleColorChar = c;
+			*device.signal = VGATextSingleColorSignals.PrintChar;
+			c = str[i++];
+		}
+	}
+	else if (code == INT30_DIRECT_PRINT_INTEGER_TEXT_SINGLE)
+	{
+	}
+	else if (code == INT30_STORE_INTEGER_TEXT_SINGLE)
+	{
+	}
+	else if (code == INT30_STORE_CHAR_TEXT_SINGLE)
+	{
+		*device.textSingleColorChar = cast<u8>(param1);
+		*device.signal = VGATextSingleColorSignals.StoreChar;
+	}
+	else if (code == INT30_PRINT_BUFFER_NO_FLUSH_TEXT_SINGLE)
+	{
+		*device.signal = VGATextSingleColorSignals.PrintBuffer;
+	}
+	else if (code == INT30_PRINT_BUFFER_AND_FLUSH_TEXT_SINGLE)
+	{
+		*device.signal = VGATextSingleColorSignals.PrintFlushBuffer;
+	}
+	else if (code == INT30_FLUSH_BUFFER_TEXT_SINGLE)
+	{
+		*device.signal = VGATextSingleColorSignals.FlushBuffer;
+	}
+	else if (code == INT30_STORE_STRING_TEXT_SINGLE)
+	{
+	}
+	else if (code == INT30_INVERT_COLORS_TEXT_SINGLE)
+	{
+	}
+	else if (code == INT30_PRINT_STRING_BUFFERED)
+	{
+	}
+	else if (code == INT30_WRITE_VRAM_TEXT16)
+	{
+	}
+	else if (code == INT30_PRINT_STRING_TEXT16)
+	{
+	}
+	else if (code == INT30_PRINT_INTEGER_TEXT16)
+	{
+	}
+	else if (code == INT30_CLEAR_SCREEN_TEXT16)
+	{
+	}
+	else if (code == INT30_SCROLL_TEXT16)
+	{
+	}
+	else if (code == INT30_CLEAR_SCREEN)
+	{
+	}
+	else if (code == INT30_REFRESH_SCREEN)
+	{
+	}
+	else
+	{
+		// TODO: Eventually this should probably raise some kind of error/warning
+	}
+}

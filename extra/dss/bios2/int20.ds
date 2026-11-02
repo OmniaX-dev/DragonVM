@@ -1,0 +1,74 @@
+#include(<bios.ds>)
+
+const INT20_START_DISK_CONTROLLER = 0x10;
+const INT20_GET_DISK_LIST = 0x11;
+const INT20_LOAD_FROM_DDD_BLOCKING = 0x12;
+const INT20_SET_NEW_INT_HANDLER = 0x00;
+const INT20_CLEAR_INT_HANDLER = 0x01;
+
+interrupt sub __int_20_handler() {
+	var code: u32;
+	var param1: u32;
+	var param2: u32;
+	low {
+		mov $code, R10
+		mov $param1, R9
+		mov $param2, R8
+	}
+	if (code == INT20_START_DISK_CONTROLLER)
+	{
+		var ddd: DiskDriverData* = cast<DiskDriverData*>(param1);
+		__int20_load_from_ddd(ddd);
+	}
+	else if (code == INT20_GET_DISK_LIST)
+	{
+		// TODO: Implement
+	}
+	else if (code == INT20_LOAD_FROM_DDD_BLOCKING) // selector is a DiskDriverData*
+	{
+		var ddd: DiskDriverData* = cast<DiskDriverData*>(param1);
+		__int20_load_from_ddd(ddd, true);
+	}
+	else if (code == INT20_SET_NEW_INT_HANDLER)
+	{
+		if (param2 > 0xFF)
+			return; // TODO: Eventually this should probably raise some kind of error/warning
+		__int20_set_interrupt_vector_entry(param2, param1);
+	}
+	else if (code == INT20_CLEAR_INT_HANDLER)
+	{
+		if (param1 > 0xFF)
+			return; // TODO: Eventually this should probably raise some kind of error/warning
+		__int20_set_interrupt_vector_entry(param1, 0x0000);
+	}
+	else
+	{
+		// TODO: Eventually this should probably raise some kind of error/warning
+	}
+}
+
+struct DiskInterfaceRegs { var signal: u8; var mode: u8; var disk: u8; var reserved: u8; var address: u32;
+						   var dataSize: u32; var memoryAddress: u32; var status: u8; };
+sub __int20_load_from_ddd(var ddd: DiskDriverData*, var blocking: bool = false) {
+        var regs: DiskInterfaceRegs* = cast<DiskInterfaceRegs*>(MemoryLayout.DiskInterface);
+        regs->mode = ddd->mode;
+        regs->disk = ddd->disk;
+        regs->address = ddd->address;
+        regs->dataSize = ddd->dataSize;
+        regs->memoryAddress = ddd->memoryAddress;
+        if (!blocking) {
+            regs->signal = DiskSignals.Start;
+            return;
+        }
+        low { zflg $CPUFlags.InterruptsEnabled }
+        regs->signal = DiskSignals.Start;
+        while (regs->status != DiskStatus.Free) {}
+        low { sflg $CPUFlags.InterruptsEnabled }
+}
+
+struct IntVectorEntry { var enabled: u8; var handler: u32; };
+sub __int20_set_interrupt_vector_entry(var code: u8, var handler_addr: u32) {
+        var entry: IntVectorEntry* = cast<IntVectorEntry*>(MemoryLayout.InterruptVector) + code;
+        entry->enabled = handler_addr != 0 ? 0xFF : 0x00;
+        entry->handler = handler_addr;
+}
