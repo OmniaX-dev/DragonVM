@@ -47,6 +47,7 @@ sub name(var a: i32, b: u8 = 0) -> i32 { ... }  // 'var' is optional; default va
 sub name(var a: string) -> void { ... } // overloads: same name, other parameter types
 sub later(var x: i32) -> i32;           // a declaration (the definition can come later)
 interrupt sub handler() { ... }         // ends with rti; no parameters, returns void
+inline sub sq(var x: i32) -> i32 { ... }    // the body is generated at every call (see below)
 low { ... }                             // raw dasm (e.g. helper routines with labels)
 ```
 Everything can be used before it is declared. `main` (no parameters) is the program's entry.
@@ -66,6 +67,35 @@ var table: struct { var key: u8; var value: i32; }[8];
 Every nameless struct is its own type (as in C): two variables declared with the same fields
 cannot be assigned to each other. To share one, give it a name (`struct`, or
 `alias Pair = struct { ... };`). In messages they are shown as `struct { ... } (file:line)`.
+
+### Lambdas
+`sub(params) -> type { body }` is an expression: a sub without a name, whose value is a sub
+pointer (`sub(params) -> type`). It is compiled as a normal (hidden) sub, so it costs nothing
+more than one.
+```
+var twice = sub(var x: u32) -> u32 { return x * 2; };      // inferred: sub(u32) -> u32
+map(arr, 3, sub(var x: u32) -> u32 { return x * x; });     // as an argument
+var f: sub(u32) -> u32 = sub(var x: u32) -> u32 { return x - 1; };
+var n = sub(var a: i32, var b: i32 = 10) -> i32 { return a * b; }(4);   // called right away: 40
+install(0x41, interrupt sub() { ticks++; });               // an interrupt sub (ends with rti)
+```
+Parameters, default values and the return type work as in a named sub (no `-> type`: void).
+Lambdas capture nothing: the body can use globals, constants, subs and its own parameters,
+not the local variables or parameters of the sub around it (an error; pass them as parameters).
+
+### Inline subs
+`inline sub` works like a sub, but every direct call generates the body in place: no `call`,
+no frame, the arguments are stored in hidden locals of the caller.
+```
+inline sub square(var x: i32) -> i32 { return x * x; }
+var y = square(a + 1);      // the parameter is a copy: a is not changed
+```
+- Useful for small, often called subs (register accessors, tiny math); every call adds the
+  body's code, so big inline subs make the program bigger.
+- An inline sub used as a sub pointer (`var f: sub(i32) -> i32 = square;`) also gets real code;
+  otherwise it has none (but it is still checked).
+- Not allowed: recursion (also through other inline subs), `low` blocks (the code needs a real
+  call frame), `inline interrupt sub`, `inline sub main`.
 
 ### Struct constants
 A `const` with a struct type (named or nameless) is a group of compile-time values: reading a
@@ -259,6 +289,7 @@ machine config (e.g. one with a known-good BIOS).
 - `#define` has no parameters.
 - No `switch`, `goto`, unions, floating point, variadic subs.
 - Structs are passed and returned through pointers.
+- Lambdas do not capture the variables of the sub around them.
 - Uninitialized global arrays are stored in the program (zeroes).
 - The assembler replaces data symbols line by line: very big programs assemble slowly.
 

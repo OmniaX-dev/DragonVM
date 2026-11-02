@@ -1,0 +1,4 @@
+// expect-error: unknown name: nothing
+// An inline sub is checked even if nothing calls it.
+inline sub never() -> i32 { return nothing; }
+sub main() -> void { }

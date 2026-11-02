@@ -94,6 +94,10 @@
           "named": true
         },
         {
+          "type": "lambda_expression",
+          "named": true
+        },
+        {
           "type": "member_expression",
           "named": true
         },
@@ -211,6 +215,10 @@
             "named": true
           },
           {
+            "type": "lambda_expression",
+            "named": true
+          },
+          {
             "type": "member_expression",
             "named": true
           },
@@ -292,6 +300,10 @@
           },
           {
             "type": "index_expression",
+            "named": true
+          },
+          {
+            "type": "lambda_expression",
             "named": true
           },
           {
@@ -423,6 +435,10 @@
             "named": true
           },
           {
+            "type": "lambda_expression",
+            "named": true
+          },
+          {
             "type": "member_expression",
             "named": true
           },
@@ -504,6 +520,10 @@
           },
           {
             "type": "index_expression",
+            "named": true
+          },
+          {
+            "type": "lambda_expression",
             "named": true
           },
           {
@@ -671,6 +691,10 @@
             "named": true
           },
           {
+            "type": "lambda_expression",
+            "named": true
+          },
+          {
             "type": "member_expression",
             "named": true
           },
@@ -834,6 +858,10 @@
             "named": true
           },
           {
+            "type": "lambda_expression",
+            "named": true
+          },
+          {
             "type": "member_expression",
             "named": true
           },
@@ -949,6 +977,10 @@
           },
           {
             "type": "index_expression",
+            "named": true
+          },
+          {
+            "type": "lambda_expression",
             "named": true
           },
           {
@@ -1114,6 +1146,10 @@
             "named": true
           },
           {
+            "type": "lambda_expression",
+            "named": true
+          },
+          {
             "type": "member_expression",
             "named": true
           },
@@ -1261,6 +1297,10 @@
             "named": true
           },
           {
+            "type": "lambda_expression",
+            "named": true
+          },
+          {
             "type": "member_expression",
             "named": true
           },
@@ -1386,6 +1426,10 @@
             "named": true
           },
           {
+            "type": "lambda_expression",
+            "named": true
+          },
+          {
             "type": "member_expression",
             "named": true
           },
@@ -1482,6 +1526,10 @@
         },
         {
           "type": "index_expression",
+          "named": true
+        },
+        {
+          "type": "lambda_expression",
           "named": true
         },
         {
@@ -1609,6 +1657,10 @@
           },
           {
             "type": "index_expression",
+            "named": true
+          },
+          {
+            "type": "lambda_expression",
             "named": true
           },
           {
@@ -1769,6 +1821,10 @@
             "named": true
           },
           {
+            "type": "lambda_expression",
+            "named": true
+          },
+          {
             "type": "member_expression",
             "named": true
           },
@@ -1844,6 +1900,10 @@
           },
           {
             "type": "index_expression",
+            "named": true
+          },
+          {
+            "type": "lambda_expression",
             "named": true
           },
           {
@@ -1926,6 +1986,10 @@
           },
           {
             "type": "index_expression",
+            "named": true
+          },
+          {
+            "type": "lambda_expression",
             "named": true
           },
           {
@@ -2041,6 +2105,10 @@
       "multiple": false,
       "required": false,
       "types": [
+        {
+          "type": "inline_modifier",
+          "named": true
+        },
         {
           "type": "interrupt_modifier",
           "named": true
@@ -2225,6 +2293,10 @@
             "named": true
           },
           {
+            "type": "lambda_expression",
+            "named": true
+          },
+          {
             "type": "member_expression",
             "named": true
           },
@@ -2367,6 +2439,10 @@
             "named": true
           },
           {
+            "type": "lambda_expression",
+            "named": true
+          },
+          {
             "type": "member_expression",
             "named": true
           },
@@ -2442,6 +2518,10 @@
           },
           {
             "type": "index_expression",
+            "named": true
+          },
+          {
+            "type": "lambda_expression",
             "named": true
           },
           {
@@ -2533,6 +2613,10 @@
           "named": true
         },
         {
+          "type": "lambda_expression",
+          "named": true
+        },
+        {
           "type": "member_expression",
           "named": true
         },
@@ -2566,6 +2650,76 @@
         },
         {
           "type": "update_expression",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "lambda_expression",
+    "named": true,
+    "fields": {
+      "body": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "block",
+            "named": true
+          }
+        ]
+      },
+      "parameters": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "parameter_list",
+            "named": true
+          }
+        ]
+      },
+      "return_type": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "array_type",
+            "named": true
+          },
+          {
+            "type": "function_type",
+            "named": true
+          },
+          {
+            "type": "parenthesized_type",
+            "named": true
+          },
+          {
+            "type": "pointer_type",
+            "named": true
+          },
+          {
+            "type": "primitive_type",
+            "named": true
+          },
+          {
+            "type": "struct_type",
+            "named": true
+          },
+          {
+            "type": "type_identifier",
+            "named": true
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": false,
+      "required": false,
+      "types": [
+        {
+          "type": "interrupt_modifier",
           "named": true
         }
       ]
@@ -2653,6 +2807,10 @@
           },
           {
             "type": "index_expression",
+            "named": true
+          },
+          {
+            "type": "lambda_expression",
             "named": true
           },
           {
@@ -2751,6 +2909,10 @@
           },
           {
             "type": "index_expression",
+            "named": true
+          },
+          {
+            "type": "lambda_expression",
             "named": true
           },
           {
@@ -2898,6 +3060,10 @@
         },
         {
           "type": "index_expression",
+          "named": true
+        },
+        {
+          "type": "lambda_expression",
           "named": true
         },
         {
@@ -3068,6 +3234,10 @@
           "named": true
         },
         {
+          "type": "lambda_expression",
+          "named": true
+        },
+        {
           "type": "member_expression",
           "named": true
         },
@@ -3190,6 +3360,10 @@
           },
           {
             "type": "index_expression",
+            "named": true
+          },
+          {
+            "type": "lambda_expression",
             "named": true
           },
           {
@@ -3394,6 +3568,10 @@
             "named": true
           },
           {
+            "type": "lambda_expression",
+            "named": true
+          },
+          {
             "type": "member_expression",
             "named": true
           },
@@ -3472,6 +3650,10 @@
             "named": true
           },
           {
+            "type": "lambda_expression",
+            "named": true
+          },
+          {
             "type": "member_expression",
             "named": true
           },
@@ -3547,6 +3729,10 @@
           },
           {
             "type": "index_expression",
+            "named": true
+          },
+          {
+            "type": "lambda_expression",
             "named": true
           },
           {
@@ -3631,6 +3817,10 @@
           },
           {
             "type": "index_expression",
+            "named": true
+          },
+          {
+            "type": "lambda_expression",
             "named": true
           },
           {
@@ -3749,6 +3939,10 @@
           },
           {
             "type": "index_expression",
+            "named": true
+          },
+          {
+            "type": "lambda_expression",
             "named": true
           },
           {
@@ -3898,6 +4092,10 @@
             "named": true
           },
           {
+            "type": "lambda_expression",
+            "named": true
+          },
+          {
             "type": "member_expression",
             "named": true
           },
@@ -4037,6 +4235,10 @@
           },
           {
             "type": "index_expression",
+            "named": true
+          },
+          {
+            "type": "lambda_expression",
             "named": true
           },
           {
@@ -4327,6 +4529,10 @@
   {
     "type": "if",
     "named": false
+  },
+  {
+    "type": "inline_modifier",
+    "named": true
   },
   {
     "type": "int",

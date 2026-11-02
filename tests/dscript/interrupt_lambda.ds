@@ -1,0 +1,29 @@
+// expect-output: hit 1\nhit 2\nhits: 2
+// An interrupt sub written as a lambda, installed with int 0x20.
+#include(<bios.ds>)
+
+var hits: i32 = 0;
+
+sub install(var code: u8, var handler: sub() -> void) -> void {
+    low {
+        mov R8, $code
+        mov R9, $handler
+        mov R10, 0x00       // int 0x20 / 0x00: set an interrupt handler
+        int 0x20
+    }
+}
+
+sub main() -> void {
+    install(0x41, interrupt sub() {
+        hits++;
+        print("hit ");
+        print(hits);
+        new_line();
+    });
+    low {
+        int 0x41
+        int 0x41
+    }
+    print("hits: ");
+    print(hits);
+}

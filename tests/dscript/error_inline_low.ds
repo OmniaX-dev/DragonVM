@@ -1,0 +1,3 @@
+// expect-error: inline subs cannot contain low blocks
+inline sub nop() { low { nop } }
+sub main() -> void { nop(); }

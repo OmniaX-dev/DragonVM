@@ -28,6 +28,8 @@ namespace dscript
 		size_t requiredParams { 0 };
 		Node* decl { nullptr };
 		bool interrupt { false };
+		bool isInline { false };		// inline sub: its body is generated at every direct call
+		bool addressTaken { false };	// used as a value (a sub pointer): an inline sub also needs real code
 		bool defined { false };
 	};
 
@@ -107,6 +109,7 @@ namespace dscript
 			Reg genAssign(Node* e);
 			Reg genIncDec(Node* e);
 			Reg genCall(Node* e);
+			Reg genInlineCall(Node* e, FuncInfo* f);
 			Reg genLogicalValue(Node* e);
 			void genLow(Node* low, bool topLevel);
 			void load(const Reg& dst, const Reg& addr, Type* t);
@@ -148,7 +151,12 @@ namespace dscript
 			int32_t m_localCursor { 4 };
 			int32_t m_localMin { 4 };
 			std::vector<Loop> m_loops;
+			// Inline subs being expanded (innermost last): return jumps to endLabel.
+			struct InlineCall { FuncInfo* func; std::string endLabel; };
+			std::vector<InlineCall> m_inline;
+			bool m_discarding { false };	// checking an inline sub whose code is not kept
 			int m_regDepth { 0 };
+			int m_stmtDepth { 0 };		// m_regDepth at the start of a statement (> 0 in inline subs)
 			std::vector<std::string>* m_out { nullptr };
 
 			std::vector<std::string> m_data;

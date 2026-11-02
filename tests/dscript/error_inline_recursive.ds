@@ -1,0 +1,3 @@
+// expect-error: inline subs cannot be recursive
+inline sub fact(var n: i32) -> i32 { if (n <= 1) return 1; return n * fact(n - 1); }
+sub main() -> i32 { return fact(5); }

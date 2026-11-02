@@ -41,6 +41,7 @@
 ] @keyword
 
 (interrupt_modifier) @keyword
+(inline_modifier) @keyword
 
 ; Types
 (primitive_type) @type.builtin

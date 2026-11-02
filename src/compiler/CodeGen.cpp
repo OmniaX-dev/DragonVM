@@ -20,6 +20,55 @@ namespace dscript
 
 	static uint32_t alignUp(uint32_t value, uint32_t align) { return (value + align - 1) / align * align; }
 
+	// The first low block in a sub's body (nullptr: none).
+	static const Node* findLow(const Node* n)
+	{
+		if (n == nullptr)
+			return nullptr;
+		if (n->kind == NodeKind::LowBlock)
+			return n;
+		for (const Node* c : { n->a, n->b, n->c, n->d })
+		{
+			if (const Node* low = findLow(c))
+				return low;
+		}
+		for (const Node* c : n->list)
+		{
+			if (const Node* low = findLow(c))
+				return low;
+		}
+		return nullptr;
+	}
+
+	// Does the sub (FuncDecl) have a parameter or a local variable with this name?
+	static bool declaresName(const Node* n, const std::string& name, bool top = true)
+	{
+		if (n == nullptr)
+			return false;
+		if (top)
+		{
+			for (const Node* p : n->list)
+			{
+				if (p->name == name)
+					return true;
+			}
+			return declaresName(n->a, name, false);
+		}
+		if (n->kind == NodeKind::VarDecl && n->name == name)
+			return true;
+		for (const Node* c : { n->a, n->b, n->c, n->d })
+		{
+			if (declaresName(c, name, false))
+				return true;
+		}
+		for (const Node* c : n->list)
+		{
+			if (declaresName(c, name, false))
+				return true;
+		}
+		return false;
+	}
+
 	static bool isPowerOfTwo(uint32_t v, int& shift)
 	{
 		if (v == 0 || (v & (v - 1)) != 0)
@@ -127,8 +176,11 @@ namespace dscript
 						declareName(d->name, d->pos, "a sub");
 					FuncInfo* f = new FuncInfo();
 					f->name = d->name;
+					if (d->name.rfind("__lambda_", 0) == 0)
+						f->name = "the lambda at " + posString(d->pos);
 					f->decl = d;
-					f->interrupt = d->value != 0;
+					f->interrupt = (d->value & 1) != 0;
+					f->isInline = (d->value & 2) != 0;
 					f->defined = d->a != nullptr;
 					m_funcs[d->name].push_back(f);
 					m_funcList.push_back(f);
@@ -509,6 +561,14 @@ namespace dscript
 		f->type = m_types.function(params, ret);
 		if (f->interrupt && (!params.empty() || ret->kind != Type::Kind::Void))
 			error(d->pos, "interrupt subs take no parameters and return void");
+		if (f->isInline && f->name == "main")
+			error(d->pos, "main cannot be inline");
+		if (f->isInline && d->a)
+		{
+			if (const Node* low = findLow(d->a))
+				error(low->pos, "inline subs cannot contain low blocks (the code is copied into every caller, "
+					"and low code needs a real call frame): use a normal sub");
+		}
 		for (size_t i = 0; i < f->defaults.size(); i++)
 		{
 			if (f->defaults[i] == nullptr)
@@ -888,7 +948,19 @@ namespace dscript
 			else if (expected && expected->isFunction())
 				e->func = functionForType(funcs, expected);
 			e->type = e->func ? e->func->type : nullptr;
+			if (e->func && !m_discarding)
+				e->func->addressTaken = true;
 			return;
+		}
+		if (m_func && m_inline.empty())
+		{
+			// A lambda using a local variable of the sub it is written in.
+			for (Node* outer = m_func->decl->d; outer != nullptr; outer = outer->d)
+			{
+				if (declaresName(outer, e->name))
+					error(e->pos, "lambdas cannot use the local variables or parameters of the sub around them ('" + e->name +
+						"'): pass it as a parameter (or use a global)");
+			}
 		}
 		if (m_globals.count(e->name) > 0)
 		{
@@ -1855,9 +1927,85 @@ namespace dscript
 		return d;
 	}
 
+	// Inline sub call: the arguments go into new locals of the caller, the body is generated
+	// here (seeing only its parameters and the globals), return jumps to the end, with the
+	// value in RV (as a real call).
+	CodeGen::Reg CodeGen::genInlineCall(Node* e, FuncInfo* f)
+	{
+		for (const auto& c : m_inline)
+		{
+			if (c.func == f)
+				error(e->pos, "inline sub '" + f->name + "' calls itself (directly or through another inline sub): "
+					"inline subs cannot be recursive");
+		}
+		if (m_func == f)
+			error(e->pos, "inline sub '" + f->name + "' calls itself: inline subs cannot be recursive");
+		const auto& params = f->type->params;
+		std::map<std::string, VarInfo*> paramScope;
+		for (size_t i = 0; i < params.size(); i++)
+		{
+			VarInfo* v = new VarInfo();
+			v->name = f->paramNames[i];
+			v->type = params[i];
+			v->storage = VarInfo::Storage::Local;
+			v->pos = f->decl->list[i]->pos;
+			m_localCursor -= 4;
+			v->offset = m_localCursor;
+			m_localMin = std::min(m_localMin, m_localCursor);
+			Reg r;
+			if (i < e->list.size())
+			{
+				r = gen(e->list[i]);
+				convert(r, decay(e->list[i]->type), params[i]);
+			}
+			else
+			{
+				Node* def = f->defaults[i];
+				r = alloc(e->pos);
+				if (def->kind == NodeKind::StrLit)
+					emit("mov " + r + ", $" + stringLiteral(def->text));
+				else
+					emit("mov " + r + ", " + imm(wrapTo(def->constValue, params[i])));
+			}
+			Reg a = alloc(e->pos);
+			varAddress(a, v);
+			store(a, r, params[i]);
+			release(a);
+			release(r);
+			paramScope[v->name] = v;
+		}
+		// The body sees its parameters (and the globals), not the caller's variables or loops.
+		auto scopes = std::move(m_scopes);
+		auto loops = std::move(m_loops);
+		m_scopes.clear();
+		m_scopes.push_back(std::move(paramScope));
+		m_loops.clear();
+		m_inline.push_back({ f, newLabel() });
+		const int stmtDepth = m_stmtDepth;
+		m_stmtDepth = m_regDepth;	// the caller's temporaries stay in their registers
+		Node* body = f->decl->a;
+		for (Node* s : body->list)
+			genStatement(s);
+		const bool endsWithReturn = !body->list.empty() && body->list.back()->kind == NodeKind::Return;
+		if (!endsWithReturn && f->type->base->kind != Type::Kind::Void)
+			emit("mov RV, 0");
+		label(m_inline.back().endLabel);
+		m_inline.pop_back();
+		m_stmtDepth = stmtDepth;
+		m_scopes = std::move(scopes);
+		m_loops = std::move(loops);
+		if (f->type->base->kind == Type::Kind::Void)
+			return "";
+		Reg r = alloc(e->pos);
+		emit("mov " + r + ", RV");
+		return r;
+	}
+
 	CodeGen::Reg CodeGen::genCall(Node* e)
 	{
 		FuncInfo* f = e->func;
+		if (f && f->isInline)
+			return genInlineCall(e, f);
 		Type* fnType = nullptr;
 		Reg fr;
 		if (f == nullptr)
@@ -2153,11 +2301,12 @@ namespace dscript
 			break;
 			case NodeKind::Return:
 			{
-				Type* ret = m_func->type->base;
+				FuncInfo* fn = m_inline.empty() ? m_func : m_inline.back().func;
+				Type* ret = fn->type->base;
 				if (s->a)
 				{
 					if (ret->kind == Type::Kind::Void)
-						error(s->pos, m_func->name + " returns void");
+						error(s->pos, fn->name + " returns void");
 					check(s->a, ret);
 					requireConvertible(s->a, ret, "in the return value");
 					Reg r = gen(s->a);
@@ -2166,8 +2315,11 @@ namespace dscript
 					release(r);
 				}
 				else if (ret->kind != Type::Kind::Void)
-					error(s->pos, m_func->name + " must return a value (" + ret->name() + ")");
-				emit(m_func->interrupt ? "rti" : "ret");
+					error(s->pos, fn->name + " must return a value (" + ret->name() + ")");
+				if (!m_inline.empty())
+					emit("jmp $" + m_inline.back().endLabel);
+				else
+					emit(m_func->interrupt ? "rti" : "ret");
 			}
 			break;
 			case NodeKind::Break:
@@ -2186,7 +2338,7 @@ namespace dscript
 			default:
 				error(s->pos, "statement expected");
 		}
-		if (m_regDepth != 0)
+		if (m_regDepth != m_stmtDepth)
 			error(s->pos, "internal error: temporaries left after a statement");
 	}
 
@@ -2467,8 +2619,11 @@ namespace dscript
 				resolveStruct(t->structInfo, d->pos);
 			v->type = t;
 		}
-		// Values: constants go in the data, the rest is done by __ds_init.
+		// Values: constants go in the data, the rest is done by __ds_init (which has locals
+		// when an initializer calls an inline sub).
 		m_out = &m_initCode;
+		m_localCursor = 4;
+		m_localMin = 4;
 		for (Node* d : m_globalDecls)
 		{
 			VarInfo* v = m_globals[d->name];
@@ -2642,6 +2797,7 @@ namespace dscript
 							keep->defaults[k] = drop->defaults[k];
 					}
 					keep->requiredParams = std::min(keep->requiredParams, drop->requiredParams);
+					keep->isInline = keep->isInline || drop->isInline;
 					funcs[i] = keep;
 					funcs.erase(funcs.begin() + j);
 					m_funcList.erase(std::find(m_funcList.begin(), m_funcList.end(), drop));
@@ -2667,6 +2823,7 @@ namespace dscript
 			error(mainFunc->decl->pos, "main takes no parameters (sub main() -> i32 or -> void)");
 
 		genGlobals();
+		const int32_t initLocalMin = m_localMin;
 		for (Node* low : m_topLows)
 		{
 			std::vector<std::string> lowCode;
@@ -2680,7 +2837,37 @@ namespace dscript
 		{
 			if (!f->defined)
 				error(f->decl->pos, "sub '" + f->name + "' is declared but not defined");
+			if (!f->isInline)
+				genFunction(f);
+		}
+		// Inline subs get real code only if they are used as sub pointers (which the generated
+		// code can make true for more of them); the others are only checked.
+		std::set<FuncInfo*> kept;
+		for (bool more = true; more; )
+		{
+			more = false;
+			for (FuncInfo* f : m_funcList)
+			{
+				if (f->isInline && f->addressTaken && kept.insert(f).second)
+				{
+					genFunction(f);
+					more = true;
+				}
+			}
+		}
+		for (FuncInfo* f : m_funcList)
+		{
+			if (!f->isInline || kept.count(f))
+				continue;
+			const size_t codeSize = m_code.size();
+			const auto strings = m_strings;
+			const auto helpers = m_helpers;
+			m_discarding = true;
 			genFunction(f);
+			m_discarding = false;
+			m_code.resize(codeSize);
+			m_strings = strings;
+			m_helpers = helpers;
 		}
 
 		// Assemble the dasm source.
@@ -2720,6 +2907,12 @@ namespace dscript
 		{
 			out.push_back("");
 			out.push_back("__ds_init:");
+			if (initLocalMin < 4)
+			{
+				out.push_back(std::string("\tmov ") + ScratchCounter + ", SP");
+				out.push_back(std::string("\tsubip ") + ScratchCounter + ", " + imm(4 - initLocalMin));
+				out.push_back(std::string("\tmov SP, ") + ScratchCounter);
+			}
 			out.insert(out.end(), m_initCode.begin(), m_initCode.end());
 			out.push_back("\tret");
 		}

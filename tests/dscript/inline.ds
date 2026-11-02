@@ -1,0 +1,59 @@
+// expect-rv: 0
+// inline subs: the body is generated at every direct call.
+#include(check.ds)
+
+inline sub square(var x: i32) -> i32 { return x * x; }
+
+inline sub clamp(var v: i32, var lo: i32 = 0, var hi: i32 = 100) -> i32 {
+    if (v < lo) return lo;
+    if (v > hi) return hi;
+    return v;
+}
+
+inline sub first_zero(var s: u8*) -> u32 {
+    var i: u32 = 0;
+    while (s[i] != 0) {
+        if (s[i] == ' ')
+            return i;      // a return in a loop
+        i++;
+    }
+    return i;
+}
+
+var g_count: i32 = 0;
+inline sub count(var n: i32 = 1) { g_count += n; }
+
+inline sub sum_squares(var a: i32, var b: i32) -> i32 { return square(a) + square(b); }   // inline in inline
+
+inline sub tag(var s: string = "def") -> u8 { return s[0]; }
+
+var g_base: i32 = 6;
+var g_sq: i32 = square(g_base);     // in a global's initializer (run by __ds_init)
+
+sub main() -> i32 {
+    check(1, square(7) == 49);
+    var x: i32 = 3;
+    check(2, square(x + 1) == 16);
+    check(3, x == 3);                                   // the parameter is a copy
+    check(4, clamp(-5) == 0 && clamp(500) == 100 && clamp(42) == 42 && clamp(5, 10, 20) == 10);
+    check(5, first_zero("ab cd") == 2 && first_zero("abc") == 3);
+    count();
+    count(4);
+    check(6, g_count == 5);
+    check(7, sum_squares(3, 4) == 25);
+    check(8, 1 + square(2) * square(3) == 37);          // inside an expression
+    var total: i32 = 0;
+    for (var i: i32 = 0; i < 4; i++) {
+        if (i == 2)
+            continue;                                   // the caller's loop still works
+        total += square(i);
+    }
+    check(9, total == 0 + 1 + 9);
+    check(10, tag() == 'd' && tag("xyz") == 'x');
+    var f: sub(i32) -> i32 = square;                    // a sub pointer: square also gets real code
+    check(11, f(9) == 81);
+    var l = sub(var v: i32) -> i32 { return square(v) + 1; };   // inline in a lambda
+    check(12, l(3) == 10);
+    check(13, g_sq == 36);
+    return result();
+}

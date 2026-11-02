@@ -323,3 +323,74 @@ var nums: i32[] = { 1, 2 };
     (initializer_list
       (number_literal)
       (number_literal))))
+
+================================================================================
+Lambdas and inline subs
+================================================================================
+
+inline sub square(var x: i32) -> i32 { return x * x; }
+var twice = sub(var x: u32) -> u32 { return x * 2; };
+sub main() {
+	apply(sub(var x: u32) -> u32 { return x; }, 3);
+	install(0x41, interrupt sub() { hits++; });
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    (inline_modifier)
+    (identifier)
+    (parameter_list
+      (parameter
+        (identifier)
+        (primitive_type)))
+    (primitive_type)
+    (block
+      (return_statement
+        (binary_expression
+          (identifier)
+          (identifier)))))
+  (variable_declaration
+    (identifier)
+    (lambda_expression
+      (parameter_list
+        (parameter
+          (identifier)
+          (primitive_type)))
+      (primitive_type)
+      (block
+        (return_statement
+          (binary_expression
+            (identifier)
+            (number_literal))))))
+  (function_declaration
+    (identifier)
+    (parameter_list)
+    (block
+      (expression_statement
+        (call_expression
+          (identifier)
+          (argument_list
+            (lambda_expression
+              (parameter_list
+                (parameter
+                  (identifier)
+                  (primitive_type)))
+              (primitive_type)
+              (block
+                (return_statement
+                  (identifier))))
+            (number_literal))))
+      (expression_statement
+        (call_expression
+          (identifier)
+          (argument_list
+            (number_literal)
+            (lambda_expression
+              (interrupt_modifier)
+              (parameter_list)
+              (block
+                (expression_statement
+                  (update_expression
+                    (identifier)))))))))))

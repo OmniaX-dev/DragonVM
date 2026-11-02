@@ -30,7 +30,9 @@ namespace dscript
 			Node* parseConst(void);
 			Node* parseAlias(void);
 			Node* parseVarDecl(bool allowNoType = true);
-			Node* parseFunction(bool interrupt);
+			Node* parseFunction(int flags);
+			void parseParams(Node* fn);
+			Node* parseLambda(void);
 			Node* parseLow(void);
 			TypeSyntax* parseType(void);
 			bool startsType(void) const;
@@ -53,5 +55,9 @@ namespace dscript
 			// Nameless structs (struct { ... } used as a type): hidden top-level StructDecls.
 			std::vector<Node*> m_anonStructs;
 			int m_anonCount { 0 };
+			// Lambdas: hidden top-level FuncDecls.
+			std::vector<Node*> m_lambdas;
+			int m_lambdaCount { 0 };
+			Node* m_currentFunc { nullptr };	// the sub being parsed (for lambdas)
 	};
 }

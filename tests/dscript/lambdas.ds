@@ -1,0 +1,59 @@
+// expect-rv: 0
+// Lambdas: sub(params) -> type { body } is a value (a sub pointer); no captures.
+#include(check.ds)
+
+alias UnaryOp = sub(u32) -> u32;
+
+var g_scale: u32 = 3;
+var g_op = sub(var x: u32) -> u32 { return x * g_scale; };   // a global: globals can be used
+
+sub apply(var f: UnaryOp, var v: u32) -> u32 {
+    return f(v);
+}
+
+sub map(var arr: u32*, var n: u32, var f: UnaryOp) -> void {
+    for (var i: u32 = 0; i < n; i++)
+        arr[i] = f(arr[i]);
+}
+
+sub pick(var add: bool) -> sub(i32, i32) -> i32 {
+    if (add)
+        return sub(var a: i32, var b: i32) -> i32 { return a + b; };
+    return sub(var a: i32, var b: i32) -> i32 { return a - b; };
+}
+
+var g_calls: i32 = 0;
+
+sub main() -> i32 {
+    var twice = sub(var x: u32) -> u32 { return x * 2; };     // inferred: sub(u32) -> u32
+    check(1, twice(21) == 42);
+    check(2, apply(twice, 5) == 10);
+    check(3, apply(sub(var x: u32) -> u32 { return x + 1; }, 5) == 6);
+    check(4, g_op(4) == 12);
+
+    var arr: u32[] = { 1, 2, 3 };
+    map(arr, 3, sub(var x: u32) -> u32 { return x * x; });
+    check(5, arr[0] == 1 && arr[1] == 4 && arr[2] == 9);
+
+    check(6, pick(true)(7, 2) == 9);
+    check(7, pick(false)(7, 2) == 5);
+
+    // called right away, a default value, void, and a lambda inside a lambda
+    check(8, sub(var a: i32, var b: i32 = 10) -> i32 { return a * b; }(4) == 40);
+    var bump = sub() { g_calls++; };
+    bump();
+    bump();
+    check(9, g_calls == 2);
+    var outer = sub(var x: i32) -> i32 {
+        var inner = sub(var y: i32) -> i32 { return y + 100; };
+        return inner(x) * 2;
+    };
+    check(10, outer(1) == 202);
+
+    // the typed form
+    var f: UnaryOp = sub(var x: u32) -> u32 { return x - 1; };
+    check(11, f(10) == 9);
+    f = twice;
+    check(12, f(10) == 20);
+    return result();
+}

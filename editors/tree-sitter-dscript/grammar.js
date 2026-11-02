@@ -118,7 +118,7 @@ module.exports = grammar({
 		),
 
 		function_declaration: $ => seq(
-			optional($.interrupt_modifier),
+			optional(choice($.interrupt_modifier, $.inline_modifier)),
 			'sub',
 			field('name', $.identifier),
 			field('parameters', $.parameter_list),
@@ -126,6 +126,7 @@ module.exports = grammar({
 			choice(field('body', $.block), ';'),
 		),
 		interrupt_modifier: _ => 'interrupt',
+		inline_modifier: _ => 'inline',
 		parameter_list: $ => seq('(', choice(alias('void', $.primitive_type), commaSep($.parameter)), ')'),
 		parameter: $ => seq(
 			optional('var'),
@@ -215,6 +216,7 @@ module.exports = grammar({
 			$.update_expression,
 			$.cast_expression,
 			$.sizeof_expression,
+			$.lambda_expression,
 			$.call_expression,
 			$.index_expression,
 			$.member_expression,
@@ -278,6 +280,15 @@ module.exports = grammar({
 		sizeof_expression: $ => choice(
 			seq('sizeof', '<', field('type', $._type), '>'),
 			seq('sizeof', '(', field('value', choice($._expression, $._type)), ')'),
+		),
+
+		// A lambda: sub(var x: u32) -> u32 { ... } (no captures), or interrupt sub() { ... }.
+		lambda_expression: $ => seq(
+			optional($.interrupt_modifier),
+			'sub',
+			field('parameters', $.parameter_list),
+			optional(seq('->', field('return_type', $._type))),
+			field('body', $.block),
 		),
 
 		call_expression: $ => prec(PREC.POSTFIX, seq(field('function', $._expression), field('arguments', $.argument_list))),

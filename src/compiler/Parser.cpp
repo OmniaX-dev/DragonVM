@@ -121,6 +121,9 @@ namespace dscript
 		for (Node* s : m_anonStructs)
 			program->list.push_back(s);
 		m_anonStructs.clear();
+		for (Node* l : m_lambdas)
+			program->list.push_back(l);
+		m_lambdas.clear();
 		return program;
 	}
 
@@ -137,14 +140,22 @@ namespace dscript
 			expectPunct(";", "after the variable declaration");
 			return v;
 		}
-		if (isKeyword("sub")) return parseFunction(false);
+		if (isKeyword("sub")) return parseFunction(0);
 		if (acceptKeyword("interrupt"))
 		{
 			if (!isKeyword("sub"))
 				error(peek().pos, "'sub' expected after 'interrupt'");
-			return parseFunction(true);
+			return parseFunction(1);
 		}
-		error(peek().pos, "declaration expected (var, sub, struct, enum, const, alias or low), found " + describe(peek()));
+		if (acceptKeyword("inline"))
+		{
+			if (isKeyword("interrupt"))
+				error(peek().pos, "interrupt subs cannot be inline (they are entered by an interrupt, not called)");
+			if (!isKeyword("sub"))
+				error(peek().pos, "'sub' expected after 'inline'");
+			return parseFunction(2);
+		}
+		error(peek().pos, "declaration expected (var, sub, inline sub, struct, enum, const, alias or low), found " + describe(peek()));
 	}
 
 	Node* Parser::parseStruct(void)
@@ -250,12 +261,27 @@ namespace dscript
 		return n;
 	}
 
-	Node* Parser::parseFunction(bool interrupt)
+	// FuncDecl flags (value): 1 interrupt, 2 inline.
+	Node* Parser::parseFunction(int flags)
 	{
 		Node* n = make(NodeKind::FuncDecl, next().pos);
-		n->value = interrupt ? 1 : 0;
+		n->value = flags;
 		n->name = expectIdentifier("after 'sub'");
 		expectPunct("(", "after the sub name");
+		parseParams(n);
+		if (acceptPunct("->"))
+			n->typeSyntax = parseType();
+		if (acceptPunct(";"))
+			return n;
+		Node* outer = m_currentFunc;
+		m_currentFunc = n;
+		n->a = parseBlock();
+		m_currentFunc = outer;
+		return n;
+	}
+
+	void Parser::parseParams(Node* n)
+	{
 		if (isKeyword("void") && isPunct(")", 1))
 			next();
 		while (!acceptPunct(")"))
@@ -275,12 +301,32 @@ namespace dscript
 				break;
 			}
 		}
+	}
+
+	// A lambda: sub(params) -> type { body }, or interrupt sub() { body }. It becomes a hidden
+	// top-level sub (d: the sub it is written in, for the error about its local variables);
+	// the expression is its name.
+	Node* Parser::parseLambda(void)
+	{
+		const bool interrupt = acceptKeyword("interrupt");
+		Node* n = make(NodeKind::FuncDecl, next().pos);
+		n->value = interrupt ? 1 : 0;
+		n->name = "__lambda_" + std::to_string(m_lambdaCount++);
+		expectPunct("(", "after 'sub' (a lambda: sub(var x: i32) -> i32 { ... })");
+		parseParams(n);
 		if (acceptPunct("->"))
 			n->typeSyntax = parseType();
-		if (acceptPunct(";"))
-			return n;
+		if (!isPunct("{"))
+			error(peek().pos, "'{' expected: a lambda needs a body (sub(...) -> type { ... })");
+		n->d = m_currentFunc;
+		Node* outer = m_currentFunc;
+		m_currentFunc = n;
 		n->a = parseBlock();
-		return n;
+		m_currentFunc = outer;
+		m_lambdas.push_back(n);
+		Node* id = make(NodeKind::Ident, n->pos);
+		id->name = n->name;
+		return id;
 	}
 
 	Node* Parser::parseLow(void)
@@ -483,7 +529,7 @@ namespace dscript
 			expectPunct(";", "after continue");
 			return make(NodeKind::Continue, pos);
 		}
-		if (isKeyword("sub") || isKeyword("struct") || isKeyword("enum"))
+		if ((isKeyword("sub") && peek(1).kind == TokenKind::Identifier) || isKeyword("inline") || isKeyword("struct") || isKeyword("enum"))
 			error(pos, "'" + peek().text + "' declarations are only allowed at the top level");
 		Node* n = make(NodeKind::ExprStmt, pos);
 		n->a = parseExpression();
@@ -719,6 +765,8 @@ namespace dscript
 		}
 		if (acceptKeyword("null"))
 			return make(NodeKind::Null, t.pos);
+		if (isKeyword("sub") || (isKeyword("interrupt") && isKeyword("sub", 1)))
+			return parseLambda();
 		if (acceptPunct("("))
 		{
 			Node* n = parseExpression();
