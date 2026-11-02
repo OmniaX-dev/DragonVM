@@ -1,0 +1,25 @@
+// expect-rom-rv: 0
+// A program that runs from ROM (dsc --rom): only constants in the program, state in locals.
+
+const VERSION = "ROM 1.0";
+const Lines: u8[6][] = { "first", "secnd" };
+const Ports: struct { var VGA: u32 = 0x01000900; var Disk: u32 = 0x01000880; };
+const Messages: string[] = { "ok", "failed" };
+
+sub length(var s: string) -> u32 {
+    var n: u32 = 0;
+    while (s[n] != 0) n++;
+    return n;
+}
+
+sub main() -> i32 {
+    var total: u32 = 0;
+    for (var i: u32 = 0; i < 2; i++)
+        total += length(Lines[i]);
+    var ram: u32* = cast<u32*>(0x01010100);     // what changes goes to RAM
+    *ram = total;
+    if (*ram != 10) return 1;
+    if (length(VERSION) != 7 || Ports.VGA != 0x01000900) return 2;
+    if (Messages[1][0] != 'f') return 3;
+    return 0;
+}

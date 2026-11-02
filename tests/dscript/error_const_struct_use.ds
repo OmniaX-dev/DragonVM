@@ -1,0 +1,6 @@
+// expect-error: is a struct constant: it has no address
+const Origin: struct { var x: i32; } = { 1 };
+sub f(var p: struct { var x: i32; }*) -> void { }
+sub main() -> void {
+    var c = Origin;
+}

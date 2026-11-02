@@ -183,3 +183,25 @@ DScript low block content
       (memory
         (symbol))
       (number))))
+
+================================================================================
+Data symbol addresses
+================================================================================
+
+.data
+	$names $__S0, $__S1, 0x00
+	$one $__S0
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (section_directive
+    (section_name))
+  (data_entry
+    (symbol)
+    (symbol)
+    (symbol)
+    (number))
+  (data_entry
+    (symbol)
+    (symbol)))

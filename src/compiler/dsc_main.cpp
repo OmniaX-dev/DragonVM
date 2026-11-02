@@ -19,6 +19,7 @@ struct Options
 	std::vector<std::string> includeDirs;
 	std::vector<std::pair<std::string, std::string>> defines;
 	bool raw { false };
+	bool rom { false };
 	std::string load;
 	std::string fixed;
 	std::string header;
@@ -46,6 +47,9 @@ static void printHelp(void)
 		"    --fixed <size>,<fill>   .fixed: pads the binary to exactly <size> bytes\n"
 		"    --header <name>         .header: adds a header (e.g. KERNEL0_BOOT)\n"
 		"    --save-disassembly <dir>  Saves the debugger disassembly (as dasm does)\n"
+		"  --rom                     A ROM image (e.g. the BIOS): --raw, loaded at 0x00000000 unless --load is\n"
+		"                            given, and everything that would write into the program is an error\n"
+		"                            (global variables: use const and RAM instead). Defines __ROM__\n"
 		"  --help                    This help\n";
 }
 
@@ -78,6 +82,7 @@ static int parseArgs(int argc, char** argv, Options& o)
 		else if (a == "--debug" || a == "-g") o.debug = true;
 		else if (a == "--verbose") o.verbose = true;
 		else if (a == "--raw") o.raw = true;
+		else if (a == "--rom") { o.rom = true; o.raw = true; }
 		else if (a == "--load") o.load = l_value(a);
 		else if (a == "--fixed") o.fixed = l_value(a);
 		else if (a == "--header") o.header = l_value(a);
@@ -143,6 +148,8 @@ int main(int argc, char** argv)
 		pp.define("__DSCRIPT__", "1");
 		if (o.raw)
 			pp.define("__RAW__", "1");
+		if (o.rom)
+			pp.define("__ROM__", "1");
 		for (const auto& d : o.defines)
 			pp.define(d.first, d.second);
 		std::vector<Token> tokens = pp.processFile(o.input);
@@ -150,9 +157,11 @@ int main(int argc, char** argv)
 		Node* program = parser.parseProgram();
 		CodeGenOptions cg;
 		cg.raw = o.raw;
+		cg.rom = o.rom;
 		if (o.raw)
 		{
-			cg.directives.push_back(".load " + (o.load.empty() ? std::string("0x01010000") : o.load));
+			const std::string defaultLoad = (o.rom ? "0x00000000" : "0x01010000");
+			cg.directives.push_back(".load " + (o.load.empty() ? defaultLoad : o.load));
 			if (!o.fixed.empty())
 				cg.directives.push_back(".fixed " + o.fixed);
 			if (!o.header.empty())

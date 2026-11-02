@@ -941,8 +941,10 @@ namespace dragon
 
 		void Assembler::parseDataSection(void)
 		{
-			// for (auto& line : m_rawDataSection)
-			//     std::cout << line << "\n";
+			// $symbol in a data list: the 4-byte address of a data symbol (big endian), patched
+			// below once every data symbol has its address.
+			struct tDataRef { String entry; u32 offset; String target; String line; };
+			std::vector<tDataRef> dataRefs;
 			for (auto& line : m_rawDataSection)
 			{
 				String lineEdit(line);
@@ -1037,10 +1039,10 @@ namespace dragon
 					m_symbolTable[symbolName] = symbol;
 					continue;
 				}
-				else if (lineEdit.contains(","))
+				else if (lineEdit.contains(",") || (lineEdit.startsWith("$") && !lineEdit.contains(" ")))
 				{
 					auto tokens = lineEdit.tokenize(",");
-					if (tokens.count() < 2)
+					if (tokens.count() < 2 && !lineEdit.startsWith("$"))
 					{
 						std::cout << "Invalid data entry2: " << line << "\n";
 						return;
@@ -1048,6 +1050,14 @@ namespace dragon
 					for (auto& token : tokens)
 					{
 						lineEdit = token;
+						lineEdit.trim();
+						if (lineEdit.startsWith("$"))
+						{
+							dataRefs.push_back({ symbolName, cast<u32>(symbol.bytes.size()), lineEdit, line });
+							for (i32 i = 0; i < data::WordSize; i++)
+								symbol.bytes.push_back(0x00);
+							continue;
+						}
 						if (!lineEdit.isNumeric())
 						{
 							std::cout << "Invalid byte in data entry: " << lineEdit << "\n";
@@ -1067,6 +1077,18 @@ namespace dragon
 				}
 			}
 
+			for (auto& ref : dataRefs)
+			{
+				if (m_symbolTable.count(ref.target) == 0)
+				{
+					std::cout << "Unknown data symbol in data entry: " << ref.target << " (" << ref.line << ")\n";
+					exit(1);
+				}
+				const u32 address = m_symbolTable[ref.target].address;
+				auto& bytes = m_symbolTable[ref.entry].bytes;
+				for (i32 i = 0; i < data::WordSize; i++)
+					bytes[ref.offset + i] = cast<u8>(address >> (8 * (data::WordSize - 1 - i)));
+			}
 			for (auto& symbol : m_symbolTable)
 			{
 				m_dataSize += symbol.second.bytes.size();

@@ -1,0 +1,53 @@
+// expect-output: |=====|\n| ab  |\n|=====|\nred green blue
+// Constant arrays (read-only data in the program) and array sizes from the value ([]).
+#include(<bios.ds>)
+#include(check.ds)
+
+const Logo: u8[8][] = {
+    "|=====|",
+    "| ab  |",
+    "|=====|"
+};
+const Names: string[] = { "red", "green", "blue" };     // pointers to the literals, stored as data
+const Primes: u16[] = { 2, 3, 5, 7, 11 };
+const Hello: u8[] = "hello";                            // 6 bytes (with the 0)
+
+struct Entry { var key: u8; var name: string; var addr: u8* = cast<u8*>(0x01000900); }
+const Table: Entry[] = { { 'a', "alpha" }, { 'b', "beta", null } };
+
+var g_copy: i32[] = { 10, 20, 30 };                     // [] for variables too
+
+sub sum(var values: u16*, var count: u32) -> u32 {
+    var total: u32 = 0;
+    for (var i: u32 = 0; i < count; i++)
+        total += values[i];
+    return total;
+}
+
+sub main() -> void {
+    for (var i: u32 = 0; i < sizeof(Logo) / sizeof(Logo[0]); i++)
+        println(Logo[i]);
+    for (var i: u32 = 0; i < sizeof(Names) / sizeof(Names[0]); i++) {
+        if (i > 0) print(" ");
+        print(Names[i]);
+    }
+    check(1, sizeof(Logo) == 24 && sizeof(Names) == 12 && sizeof(Primes) == 10);
+    check(2, sum(Primes, sizeof(Primes) / sizeof(Primes[0])) == 28);
+    check(3, sizeof(Hello) == 6 && Hello[4] == 'o' && Hello[5] == 0);
+    check(4, Table[1].key == 'b' && Table[1].name[0] == 'b' && Table[0].name[4] == 'a');
+    check(5, cast<u32>(Table[0].addr) == 0x01000900 && Table[1].addr == null);
+    check(6, sizeof(g_copy) == 12 && g_copy[2] == 30);
+    var local: u8[] = "abc";
+    var nums: i32[] = { -1, -2 };
+    check(7, sizeof(local) == 4 && sizeof(nums) == 8 && nums[1] == -2);
+    var p: u16* = &Primes[2];                           // reading through a pointer
+    check(8, *p == 5 && p[1] == 7);
+    var first: u8 = 0;
+    low {
+        mov R1, $Primes
+        movw R2, *R1
+        mov $first, R2
+    }
+    check(9, first == 2);
+    if (result() != 0) { print(" failed: "); print(result()); }
+}

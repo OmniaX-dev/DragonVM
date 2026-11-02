@@ -636,6 +636,10 @@
                     },
                     {
                       "type": "SYMBOL",
+                      "name": "symbol"
+                    },
+                    {
+                      "type": "SYMBOL",
                       "name": "expression_block"
                     }
                   ]
@@ -663,6 +667,10 @@
                           {
                             "type": "SYMBOL",
                             "name": "identifier"
+                          },
+                          {
+                            "type": "SYMBOL",
+                            "name": "symbol"
                           },
                           {
                             "type": "SYMBOL",

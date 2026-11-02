@@ -1,0 +1,58 @@
+// expect-rv: 0
+// Struct constants: their fields are compile-time values (like enum members).
+#include(check.ds)
+
+struct Point {
+    var x: i32;
+    var y: i32 = 7;
+}
+
+// The fields' defaults are the values.
+const MemoryLayout: struct {
+    var MBR: u32       = 0x01000680;
+    var CMOS: u32      = 0x01000000;
+    var VGA: u32       = 0x01000900;
+    var RAM: u32       = 0x01010000;
+    var Video: u8*     = cast<u8*>(0x01000900);
+    var Nothing: u8*;  // null
+};
+
+// { ... } values (the rest: defaults, then 0).
+const Origin: Point = { 3 };
+const Box: struct { var tl: Point; var br: Point; var tag: u8; var small: i8; } = { { 1, 2 }, { 10 }, 'B', -1 };
+const DEPTH = Box.br.x * 2;                     // other constants can use them
+const Limits: struct { var max: u16; var half: u16 = 0; } = { 0xFFFF, DEPTH };
+var g_buffer: u8[Box.br.x];                     // array sizes too
+var g_vga: u32 = MemoryLayout.VGA;
+var g_ptr: u8* = MemoryLayout.Video;
+
+enum Slot { First = Origin.x, Second }
+
+// cast<T*>(constant) as a default value, in ordinary structs too.
+struct Device { var regs: u8* = cast<u8*>(0x01000880); var id: u8 = 2; }
+var g_device: Device;
+
+sub main() -> i32 {
+    check(1, MemoryLayout.MBR == 0x01000680 && MemoryLayout.RAM == 0x01010000);
+    check(2, Origin.x == 3 && Origin.y == 7);
+    check(3, Box.tl.x == 1 && Box.tl.y == 2 && Box.br.x == 10 && Box.br.y == 7);
+    check(4, Box.tag == 'B' && Box.small == -1);
+    check(5, DEPTH == 20 && Limits.max == 0xFFFF && Limits.half == 20);
+    check(6, sizeof(g_buffer) == 10 && Slot.Second == 4);
+    check(7, g_vga == 0x01000900 && cast<u32>(g_ptr) == 0x01000900);
+    var p: u8* = MemoryLayout.Video + 4;
+    check(8, cast<u32>(p) == 0x01000904 && MemoryLayout.Nothing == null);
+    check(9, sizeof(MemoryLayout) == 24 && sizeof(Box) == 18 && sizeof(Box.tl) == 8);
+    var u: u32 = MemoryLayout.CMOS + 0x80;
+    check(10, u == 0x01000080);
+    var lowValue: u32 = 0;
+    var lowNested: i32 = 0;
+    low {
+        mov $lowValue, $MemoryLayout.VGA
+        mov $lowNested, $Box.br.y
+    }
+    check(11, lowValue == 0x01000900 && lowNested == 7);
+    var dev: Device;
+    check(12, cast<u32>(dev.regs) == 0x01000880 && cast<u32>(g_device.regs) == 0x01000880 && g_device.id == 2);
+    return result();
+}

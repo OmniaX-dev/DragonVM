@@ -1,0 +1,4 @@
+// expect-error: --rom: 'counter' is a global variable
+// dsc-flags: --rom
+var counter: u32 = 0;
+sub main() -> void { counter++; }

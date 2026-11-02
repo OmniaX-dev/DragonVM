@@ -90,8 +90,8 @@ module.exports = grammar({
 			'const',
 			field('name', $.identifier),
 			optional(seq(':', field('type', $._type))),
-			'=',
-			field('value', $._expression),
+			// Struct constants: { ... }, or no value (the fields' defaults).
+			optional(seq('=', field('value', choice($._expression, $.initializer_list)))),
 			';',
 		),
 
@@ -154,7 +154,8 @@ module.exports = grammar({
 		),
 		primitive_type: _ => choice('i8', 'u8', 'i16', 'u16', 'i32', 'u32', 'bool', 'char', 'string', 'int', 'uint', 'void'),
 		pointer_type: $ => prec(2, seq(field('type', $._type), '*')),
-		array_type: $ => prec(2, seq(field('element', $._type), '[', field('size', $._expression), ']')),
+		// T[]: the size comes from the value
+		array_type: $ => prec(2, seq(field('element', $._type), '[', optional(field('size', $._expression)), ']')),
 		function_type: $ => prec.right(1, seq(
 			'sub',
 			'(',

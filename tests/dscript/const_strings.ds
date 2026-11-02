@@ -1,0 +1,33 @@
+// expect-output: DragonBIOS 0.5\nv=DragonBIOS 0.5\nhi there\n[abc]
+// String constants: used like the string literal (stored once in the program).
+#include(<bios.ds>)
+#include(check.ds)
+
+const VERSION = "DragonBIOS 0.5";
+const GREETING: string = "hi" " there";     // joined literals
+const ALSO = VERSION;                       // a constant from another one
+
+struct Banner { var text: string = VERSION; var width: u8 = 20; }
+var g_banner: Banner;
+var g_name: u8[] = VERSION;                 // copied into an array (its size: 15)
+
+sub label(var s: string = GREETING) -> string { return s; }
+
+sub main() -> void {
+    println(VERSION);
+    print("v=");
+    println(g_banner.text);
+    println(label());
+    var buf: u8[8] = "[abc]";
+    print(buf);
+    check(1, VERSION == ALSO);                  // the same literal: the same address
+    check(2, VERSION[0] == 'D' && sizeof(g_name) == 15 && g_name[14] == 0);
+    var p: string = VERSION;
+    check(3, p == VERSION);
+    var lowAddr: u32 = 0;
+    low {
+        mov $lowAddr, $VERSION
+    }
+    check(4, lowAddr == cast<u32>(VERSION));
+    if (result() != 0) { print(" failed: "); print(result()); }
+}

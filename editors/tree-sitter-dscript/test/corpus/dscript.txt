@@ -260,3 +260,66 @@ sub f() -> u32 { return sizeof<struct { var a: u8; }>; }
               (field_declaration
                 (field_identifier)
                 (primitive_type)))))))))
+
+================================================================================
+Struct constants
+================================================================================
+
+const Layout: struct { var MBR: u32 = 0x01000680; };
+const Origin: Point = { 3, { 1 } };
+var x = Layout.MBR;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (const_declaration
+    (identifier)
+    (struct_type
+      (field_list
+        (field_declaration
+          (field_identifier)
+          (primitive_type)
+          (number_literal)))))
+  (const_declaration
+    (identifier)
+    (type_identifier)
+    (initializer_list
+      (number_literal)
+      (initializer_list
+        (number_literal))))
+  (variable_declaration
+    (identifier)
+    (member_expression
+      (identifier)
+      (field_identifier))))
+
+================================================================================
+Constant arrays and implicit sizes
+================================================================================
+
+const VERSION = "1.0";
+const Logo: u8[8][] = { "|==|", "|ab|" };
+var nums: i32[] = { 1, 2 };
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (const_declaration
+    (identifier)
+    (string_literal))
+  (const_declaration
+    (identifier)
+    (array_type
+      (array_type
+        (primitive_type)
+        (number_literal)))
+    (initializer_list
+      (string_literal)
+      (string_literal)))
+  (variable_declaration
+    (identifier)
+    (array_type
+      (primitive_type))
+    (initializer_list
+      (number_literal)
+      (number_literal))))

@@ -25,6 +25,7 @@ Pipeline: lexer -> preprocessor (on tokens) -> parser (AST) -> checking + code g
 | `T*` | 4 | pointers; `void*` converts to and from any pointer |
 | `string` | 4 | the same as `u8*` (null-terminated) |
 | `T[N]` | N * size | arrays; they decay to `T*` |
+| `T[]` | the value's | in a declaration with a value: `{ 1, 2, 3 }` -> 3, `"text"` -> 5 (with the 0) |
 | `struct Name` | sum of the fields | packed (no padding) |
 | `struct { fields }` | sum of the fields | a nameless struct, usable wherever a type goes |
 | `sub(T1, T2) -> R` | 4 | sub pointers; `(sub(i32) -> i32)[4]` for an array of them |
@@ -36,6 +37,9 @@ There is no floating point (the machine has no FPU).
 ```
 var name: type = value;                 // global variable (the type can be inferred: var n = 5;)
 const NAME = 5;  const MASK: u32 = 0xFF;    // integer constants
+const Origin: Point = { 3, 4 };         // struct constants (see below)
+const VERSION = "DragonBIOS 0.5";       // string constants
+const Primes: u16[] = { 2, 3, 5, 7 };   // constant arrays: read-only data in the program
 enum Color { Red, Green = 5, Blue }     // Color.Blue == 6
 alias Handler = sub(i32) -> void;       // a name for a type
 struct Point { var x: i32; var y: i32 = 7; }    // fields can have constant default values
@@ -63,6 +67,65 @@ Every nameless struct is its own type (as in C): two variables declared with the
 cannot be assigned to each other. To share one, give it a name (`struct`, or
 `alias Pair = struct { ... };`). In messages they are shown as `struct { ... } (file:line)`.
 
+### Struct constants
+A `const` with a struct type (named or nameless) is a group of compile-time values: reading a
+field gives its value, like an enum member (no memory is read).
+```
+const MemoryLayout: struct {            // no value: the fields' defaults
+    var CMOS: u32 = 0x01000000;
+    var VGA: u32  = 0x01000900;
+    var Video: u8* = cast<u8*>(0x01000900);
+};
+const Origin: Point = { 3 };            // { ... }: the fields in order (the rest: defaults, then 0)
+
+var p: u8* = MemoryLayout.Video + 4;
+const VGA_END = MemoryLayout.VGA + 0xFF;    // usable in constants, array sizes, enum values...
+low { mov R1, $MemoryLayout.VGA }           // and in low blocks ($Box.br.x for nested fields)
+```
+- The fields can be integers, pointers (`null`, `cast<T*>(constant)`) and structs (nested
+  `{ ... }`); arrays and strings are not allowed (they would need memory).
+- Every value must be a constant: no variables, no sub calls.
+- A struct constant has no address: only its integer and pointer fields can be used.
+  `var c = MemoryLayout;`, `&MemoryLayout` or passing it to a sub is an error, and so is
+  assigning to its fields. `sizeof(MemoryLayout)` works.
+
+### String constants
+`const NAME = "text";` (or `const NAME: string = ...`) is used exactly like the literal: a
+`string` pointing at the text, stored once in the program (no code runs to set it up). It works
+wherever a literal does: values, default values (of fields and parameters), `u8[]` / `u8[N]`
+initializers, other constants (`const ALSO = VERSION;`), and `$NAME` in low blocks (the text's
+address). Its address is only known when the program is assembled, so it cannot be used in
+integer constant expressions, nor as a field of a struct constant.
+
+### Constant arrays
+`const Name: T[N] = value;` (or `T[]`) is an array stored in the program and never written:
+```
+const Logo: u8[54][] = {                // 19 rows of u8[54] (sizes are read left to right)
+    "|===================================================|",
+    ...
+};
+const Names: string[] = { "red", "green", "blue" };     // pointers to the literals
+const Table: Entry[] = { { 'a', "alpha" }, { 'b', "beta" } };
+
+for (var i: u32 = 0; i < sizeof(Logo) / sizeof(Logo[0]); i++) { print(Logo[i]); new_line(); }
+```
+- The values must be constants, strings, `null` or `cast<T*>(constant)` (the elements can be
+  integers, pointers, arrays and structs of them); everything is in the program's data, so it
+  is safe in ROM.
+- Assigning to an element (or `++` / `--`) is an error. Its address can be taken (`&Primes[2]`,
+  or passing it to a sub): the compiler cannot stop writes through such a pointer (there are
+  no read-only pointer types), so in ROM they fail at run time.
+- In low blocks `$Name` is its address.
+
+### ROM programs (`--rom`)
+`dsc --rom` compiles a program that runs from ROM (the BIOS): it is a `--raw` binary (loaded at
+0x00000000 unless `--load` is given; use `--fixed 16777216,0xFF` for a BIOS image) and defines
+`__ROM__`. Everything stored in the program is read-only there, so whatever would be written
+into it is an error: every global `var`. What is left is ROM-safe: constants, string
+constants, constant arrays, string literals, code. What changes goes into RAM: locals (on the
+stack), or memory at a RAM address (`var state: State* = cast<State*>(0x01010000);`).
+Not checked: low blocks (raw dasm), and writes through pointers to the program's data.
+
 ### Statements
 `var` declarations (locals: scalars are not initialized unless given a value; structs are zeroed
 and get their default values), `if` / `else`, `while`, `do ... while (...);`,
@@ -74,7 +137,8 @@ C operators and precedence: `= += -= *= /= %= &= |= ^= <<= >>=`, `?:`, `|| &&` (
 `and`, short-circuit), `| ^ &`, `== != < <= > >=`, `<< >>`, `+ -`, `* / %`, unary `- ! ~ * &`
 (`not` = `!`), `++ --` (prefix and postfix), calls, `a[i]`, `s.field`, `p->field`.
 
-- `cast<T>(value)`: conversions between integers, pointers and sub pointers.
+- `cast<T>(value)`: conversions between integers, pointers and sub pointers. `cast<T*>(constant)`
+  is a constant address (it can be a field's default value).
 - `sizeof(type or value)`, `sizeof<type>`: a `u32` constant.
 - Literals: `42`, `0x2A`, `0b101010`, `1_000` (underscores), `'a'` (a `u8`), `"text"`
   (escapes `\n \t \r \0 \\ \' \" \xNN`, adjacent strings are joined), `true`, `false`, `null`.
@@ -95,8 +159,9 @@ var p: Point = { 10, 20 };  var q: Point = { 5 };     // q.y is 7 (its default)
 var buf: u8[16] = "text";
 var r: Rect = { { 1, 2 }, { 5, 6 } };
 ```
-Globals with constant values are stored in the program; the others (string pointers,
-addresses, non-constant expressions) are set by `__ds_init` before `main` runs.
+Globals with constant values are stored in the program, string literal pointers too (as the
+literal's address); the others (addresses of variables and subs, non-constant expressions) are
+set by `__ds_init` before `main` runs.
 
 ### Overloading
 The sub whose parameters fit the arguments best is called: an exact type is best, then
@@ -174,14 +239,18 @@ then `push 0; call base + entry`. The program returns when `main` returns (its v
 <ram offset>` and `drun` load them.
 
 `--raw` makes a bare metal binary instead (like dasm): fixed address (`--load`, default
-0x01010000), optional `--fixed` and `--header`, `hlt` after `main`.
+0x01010000), optional `--fixed` and `--header`, `hlt` after `main`. `--rom`: the same, for a
+program in ROM (see "ROM programs").
 
 
 ## Tests
 
 `tests/dscript/run_tests.sh` compiles every test (as a DRX and as a raw binary), runs it with
 `drun` and checks its return value (`// expect-rv:`), its output (`// expect-output:`, the BIOS
-runs first) or the compilation error (`// expect-error:`).
+runs first) or the compilation error (`// expect-error:`). `// expect-rom-rv:` compiles the
+test with `--rom` as the machine's BIOS, boots it and checks `main`'s return value;
+`// dsc-flags:` adds dsc options. `DSCRIPT_TEST_CONFIG=<file.dvm>` runs the tests on another
+machine config (e.g. one with a known-good BIOS).
 
 
 ## Limitations (for now)

@@ -172,7 +172,7 @@
       },
       "size": {
         "multiple": false,
-        "required": true,
+        "required": false,
         "types": [
           {
             "type": "assignment_expression",
@@ -1071,7 +1071,7 @@
       },
       "value": {
         "multiple": false,
-        "required": true,
+        "required": false,
         "types": [
           {
             "type": "assignment_expression",
@@ -1107,6 +1107,10 @@
           },
           {
             "type": "index_expression",
+            "named": true
+          },
+          {
+            "type": "initializer_list",
             "named": true
           },
           {

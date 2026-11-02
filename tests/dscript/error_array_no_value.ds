@@ -1,0 +1,2 @@
+// expect-error: an array without a size ([]) needs a value
+sub main() -> void { var a: i32[]; }

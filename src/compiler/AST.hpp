@@ -17,7 +17,7 @@ namespace dscript
 		SourcePos pos;
 		std::string name;					// Named
 		TypeSyntax* base { nullptr };		// Pointer / Array; Function: the return type (nullptr: void)
-		struct Node* count { nullptr };		// Array (a constant expression)
+		struct Node* count { nullptr };		// Array (a constant expression; nullptr: [], the size of the value)
 		std::vector<TypeSyntax*> params;	// Function
 	};
 
@@ -50,9 +50,11 @@ namespace dscript
 		// Filled in by the code generator.
 		Type* type { nullptr };
 		bool lvalue { false };
+		bool readOnly { false };		// in a constant array (assignments are errors)
 		VarInfo* var { nullptr };		// Ident naming a variable
 		FuncInfo* func { nullptr };		// Ident / Call naming a function
 		bool isConst { false };			// a compile-time integer constant
+		bool constPtr { false };		// a constant pointer value (a field of a struct constant), in constValue
 		int64_t constValue { 0 };
 	};
 }

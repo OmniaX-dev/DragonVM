@@ -1,0 +1,3 @@
+// expect-error: the array needs a size
+struct S { var data: u8[]; }
+sub main() -> void { var s: S; }

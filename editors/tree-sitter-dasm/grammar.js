@@ -75,7 +75,8 @@ module.exports = grammar({
 			choice(
 				seq(token.immediate(':'), field('size', $.number)),
 				seq('<', field('struct', $.identifier), '>', optional(seq('=', '(', optional(commaSep1($._value)), ')'))),
-				commaSep1(choice($.number, $.string, $.identifier, $.expression_block)),
+				// $symbol: the address of a data symbol (4 bytes)
+				commaSep1(choice($.number, $.string, $.identifier, $.symbol, $.expression_block)),
 			),
 		),
 

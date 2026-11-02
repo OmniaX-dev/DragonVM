@@ -14,6 +14,7 @@ namespace dscript
 		Storage storage { Storage::Global };
 		int32_t offset { 0 };		// Local: from FP; Param: argument index
 		std::string symbol;			// Global: the dasm data symbol (without '$')
+		bool readOnly { false };	// a constant array (const Name: T[N] = ...)
 		SourcePos pos;
 	};
 
@@ -33,6 +34,7 @@ namespace dscript
 	struct CodeGenOptions
 	{
 		bool raw { false };			// bare metal: ends with hlt instead of ret
+		bool rom { false };			// the program runs from ROM: everything stored in it is read-only
 		std::vector<std::string> directives;	// .load / .fixed / .header lines for raw mode
 	};
 
@@ -48,7 +50,10 @@ namespace dscript
 			std::vector<std::string> generate(Node* program);
 
 		private:
-			struct ConstInfo { Node* decl { nullptr }; bool resolving { false }; bool resolved { false }; int64_t value { 0 }; Type* type { nullptr }; };
+			// Struct constants: type is the struct, fields holds every scalar field's value by its
+			// path ("pos.x"); they have no memory (only their fields are used).
+			// String constants: isString, text (they are used as that string literal).
+			struct ConstInfo { Node* decl { nullptr }; bool resolving { false }; bool resolved { false }; int64_t value { 0 }; Type* type { nullptr }; std::map<std::string, int64_t> fields; bool isString { false }; std::string text; };
 			struct EnumInfo { Node* decl { nullptr }; bool resolving { false }; bool resolved { false }; std::map<std::string, int64_t> values; };
 			struct AliasInfo { Node* decl { nullptr }; bool resolving { false }; Type* type { nullptr }; };
 			struct Loop { std::string breakLabel; std::string continueLabel; };
@@ -64,6 +69,11 @@ namespace dscript
 			void resolveEnum(EnumInfo& info);
 			void resolveFunction(FuncInfo* f);
 			int64_t constExpr(Node* e, const std::string& what);
+			void constStructValues(StructInfo* info, Node* init, const std::string& prefix, ConstInfo& c, const std::string& constName);
+			ConstInfo* constStructRef(Node* e, Type*& structType, std::string& path);
+			bool sizeofConstStruct(Node* e, uint32_t& size);
+			void foldStringConst(Node* e);
+			void inferArraySize(TypeSyntax* ts, Node* init, const SourcePos& pos);
 			std::string mangle(Type* t);
 
 			// ===== checking =====
@@ -125,6 +135,7 @@ namespace dscript
 			std::map<std::string, EnumInfo> m_enums;
 			std::map<std::string, AliasInfo> m_aliases;
 			std::map<std::string, ConstInfo> m_consts;
+			bool m_inDeclarations { false };	// resolving the declarations (only constants are known)
 			std::map<std::string, VarInfo*> m_globals;
 			std::vector<Node*> m_globalDecls;
 			std::map<std::string, std::vector<FuncInfo*>> m_funcs;

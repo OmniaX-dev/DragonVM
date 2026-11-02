@@ -5,7 +5,8 @@
 //   StructDecl:  name, list = fields (VarDecl), value = 1 if nameless (struct { ... } as a type,
 //                named __anon_struct_<n> and added at the end of the program)
 //   EnumDecl:    name, list = members (EnumMember: name, a = value or nullptr)
-//   ConstDecl:   name, typeSyntax (optional), a = value
+//   ConstDecl:   name, typeSyntax (optional), a = value (struct constants: an InitList, or nullptr
+//                for the fields' defaults)
 //   AliasDecl:   name, typeSyntax
 //   VarDecl:     name, typeSyntax (optional if initialized), a = initializer (expression / InitList)
 //   FuncDecl:    name, list = params (VarDecl, a = default value), typeSyntax = return type
@@ -196,8 +197,14 @@ namespace dscript
 		n->name = expectIdentifier("after 'const'");
 		if (acceptPunct(":"))
 			n->typeSyntax = parseType();
+		// Struct constants can omit the value (the fields' defaults) or use { ... }.
+		if (n->typeSyntax != nullptr && isPunct(";"))
+		{
+			next();
+			return n;
+		}
 		expectPunct("=", "(a constant needs a value)");
-		n->a = parseTernary();
+		n->a = isPunct("{") ? parseInitializer() : parseTernary();
 		expectPunct(";", "after the constant");
 		return n;
 	}
@@ -364,8 +371,11 @@ namespace dscript
 				a->kind = TypeSyntax::Kind::Array;
 				a->pos = next().pos;
 				a->base = t;
-				a->count = parseTernary();
-				expectPunct("]", "after the array size");
+				if (!acceptPunct("]"))	// T[]: the size comes from the value
+				{
+					a->count = parseTernary();
+					expectPunct("]", "after the array size");
+				}
 				t = a;
 			}
 			else

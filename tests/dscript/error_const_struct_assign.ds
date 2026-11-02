@@ -1,0 +1,5 @@
+// expect-error: cannot assign to this
+const Origin: struct { var x: i32; } = { 1 };
+sub main() -> void {
+    Origin.x = 2;
+}

@@ -1,0 +1,3 @@
+// expect-error: cannot assign to a constant array
+const Primes: u16[] = { 2, 3, 5 };
+sub main() -> void { Primes[1] = 4; }

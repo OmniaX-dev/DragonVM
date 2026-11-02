@@ -92,6 +92,20 @@ namespace dscript
 					m_aliases[d->name].decl = d;
 				break;
 				case NodeKind::ConstDecl:
+					if (d->typeSyntax != nullptr && d->typeSyntax->kind == TypeSyntax::Kind::Array)
+					{
+						// const Name: T[N] = ...: read-only data in the program.
+						declareName(d->name, d->pos, "a constant array");
+						VarInfo* v = new VarInfo();
+						v->name = d->name;
+						v->storage = VarInfo::Storage::Global;
+						v->symbol = d->name;
+						v->pos = d->pos;
+						v->readOnly = true;
+						m_globals[d->name] = v;
+						m_globalDecls.push_back(d);
+						break;
+					}
 					declareName(d->name, d->pos, "a constant");
 					m_consts[d->name].decl = d;
 				break;
@@ -165,6 +179,8 @@ namespace dscript
 				return m_types.pointer(resolveType(ts->base));
 			case TypeSyntax::Kind::Array:
 			{
+				if (ts->count == nullptr)
+					error(ts->pos, "the array needs a size ([] is only allowed for the outer array of a variable or constant with a value)");
 				Type* base = resolveType(ts->base);
 				if (base->kind == Type::Kind::Void)
 					error(ts->pos, "arrays of void are not allowed");
@@ -227,13 +243,14 @@ namespace dscript
 		{
 			if (field.init == nullptr)
 				continue;
+			foldStringConst(field.init);
 			if (!field.type->isScalar())
 				error(field.pos, "only integer and pointer fields can have a default value");
 			if (field.init->kind == NodeKind::StrLit && field.type->isPointer())
 				continue;	// set at run time
 			check(field.init, field.type);
 			requireConvertible(field.init, field.type, "for the default value of field '" + field.name + "'");
-			if (!field.init->isConst)
+			if (!field.init->isConst && !field.init->constPtr)
 				error(field.init->pos, "default values must be constants");
 		}
 	}
@@ -255,6 +272,36 @@ namespace dscript
 			error(usePos, "constant '" + name + "' depends on itself");
 		c.resolving = true;
 		Type* t = c.decl->typeSyntax ? resolveType(c.decl->typeSyntax) : nullptr;
+		if (c.decl->a != nullptr)
+			foldStringConst(c.decl->a);
+		if (c.decl->a != nullptr && c.decl->a->kind == NodeKind::StrLit)
+		{
+			// A string constant: used as that string literal (stored once in the program).
+			Type* str = m_types.pointer(m_types.u8());
+			if (t != nullptr && !(t->kind == Type::Kind::Pointer && t->base->size() == 1 && t->base->isInteger()))
+				error(c.decl->pos, "a string constant is a string (u8* / i8*), not " + t->name());
+			c.isString = true;
+			c.text = c.decl->a->text;
+			c.type = (t != nullptr ? t : str);
+			c.resolved = true;
+			c.resolving = false;
+			return 0;
+		}
+		if (t != nullptr && t->kind == Type::Kind::Array)
+			error(c.decl->pos, "constant arrays need their array type written in the declaration (const " + name + ": T[N] = ...)");
+		if (t != nullptr && t->kind == Type::Kind::Struct)
+		{
+			resolveStruct(t->structInfo, c.decl->pos);
+			constStructValues(t->structInfo, c.decl->a, "", c, name);
+			c.type = t;
+			c.resolved = true;
+			c.resolving = false;
+			return 0;
+		}
+		if (c.decl->a == nullptr)
+			error(c.decl->pos, "constant '" + name + "' needs a value (only struct constants can use their fields' defaults)");
+		if (c.decl->a->kind == NodeKind::InitList)
+			error(c.decl->a->pos, "{ ... } is the value of struct constants only");
 		int64_t value = constExpr(c.decl->a, "the value of constant '" + name + "'");
 		if (t == nullptr)
 			t = promote(c.decl->a->type);
@@ -265,6 +312,125 @@ namespace dscript
 		c.resolved = true;
 		c.resolving = false;
 		return c.value;
+	}
+
+	void CodeGen::constStructValues(StructInfo* info, Node* init, const std::string& prefix, ConstInfo& c, const std::string& constName)
+	{
+		if (init != nullptr && init->kind != NodeKind::InitList)
+			error(init->pos, "a struct constant's value is a { ... } list (or nothing: the fields' defaults)");
+		if (init != nullptr && init->list.size() > info->fields.size())
+			error(init->list[info->fields.size()]->pos, "too many values for " + (info->anonymous ? info->displayName() : "struct " + info->name));
+		for (size_t i = 0; i < info->fields.size(); i++)
+		{
+			const StructField& field = info->fields[i];
+			const std::string path = prefix + field.name;
+			Node* v = (init != nullptr && i < init->list.size()) ? init->list[i] : nullptr;
+			if (field.type->kind == Type::Kind::Struct)
+			{
+				resolveStruct(field.type->structInfo, field.pos);
+				constStructValues(field.type->structInfo, v, path + ".", c, constName);
+				continue;
+			}
+			if (!field.type->isScalar())
+				error(v ? v->pos : c.decl->pos, "constant '" + constName + "': field '" + path + "' is " + field.type->name()
+					+ " (struct constants can only have integer, pointer and struct fields)");
+			if (v == nullptr)
+				v = field.init;
+			int64_t value = 0;
+			if (v != nullptr)
+			{
+				foldStringConst(v);
+				if (v->kind == NodeKind::InitList)
+					error(v->pos, "constant '" + constName + "': field '" + path + "' is not a struct");
+				if (v->kind == NodeKind::StrLit)
+					error(v->pos, "constant '" + constName + "': field '" + path + "' cannot be a string (a struct constant has no memory)");
+				check(v, field.type);
+				requireConvertible(v, field.type, "for field '" + path + "' of constant '" + constName + "'");
+				if (!v->isConst && !v->constPtr)
+					error(v->pos, "constant '" + constName + "': the value of field '" + path + "' must be a constant");
+				value = v->constValue;
+			}
+			c.fields[path] = wrapTo(value, field.type);
+		}
+	}
+
+	bool CodeGen::sizeofConstStruct(Node* e, uint32_t& size)
+	{
+		Type* st = nullptr;
+		std::string path;
+		if (constStructRef(e, st, path) == nullptr)
+			return false;
+		size = st->size();
+		return true;
+	}
+
+	void CodeGen::foldStringConst(Node* e)
+	{
+		// The name of a string constant -> that string literal.
+		if (e == nullptr || e->kind != NodeKind::Ident || lookupVar(e->name) != nullptr || m_consts.count(e->name) == 0)
+			return;
+		resolveConst(e->name, e->pos);
+		const ConstInfo& c = m_consts[e->name];
+		if (!c.isString)
+			return;
+		e->kind = NodeKind::StrLit;
+		e->text = c.text;
+	}
+
+	void CodeGen::inferArraySize(TypeSyntax* ts, Node* init, const SourcePos& pos)
+	{
+		// T[] = value: the size of the value ({ ... }: its count; a string: its length + 1).
+		if (ts == nullptr || ts->kind != TypeSyntax::Kind::Array || ts->count != nullptr)
+			return;
+		if (init == nullptr)
+			error(pos, "an array without a size ([]) needs a value (its size is the value's)");
+		foldStringConst(init);
+		int64_t count = 0;
+		if (init->kind == NodeKind::InitList)
+			count = (int64_t)init->list.size();
+		else if (init->kind == NodeKind::StrLit)
+			count = (int64_t)init->text.size() + 1;
+		else
+			error(init->pos, "an array without a size ([]) is initialized with { ... } or a string");
+		if (count == 0)
+			error(init->pos, "an array without a size ([]) needs at least one value");
+		Node* n = new Node();
+		n->kind = NodeKind::IntLit;
+		n->pos = ts->pos;
+		n->value = count;
+		ts->count = n;
+	}
+
+	CodeGen::ConstInfo* CodeGen::constStructRef(Node* e, Type*& structType, std::string& path)
+	{
+		// e names a struct constant (Name) or a struct field of one (Name.field...).
+		if (e->kind == NodeKind::Ident)
+		{
+			if (lookupVar(e->name) != nullptr || m_consts.count(e->name) == 0)
+				return nullptr;
+			resolveConst(e->name, e->pos);
+			ConstInfo& c = m_consts[e->name];
+			if (c.type == nullptr || c.type->kind != Type::Kind::Struct)
+				return nullptr;
+			structType = c.type;
+			path.clear();
+			return &c;
+		}
+		if (e->kind == NodeKind::Member && e->value == 0)
+		{
+			ConstInfo* c = constStructRef(e->a, structType, path);
+			if (c == nullptr)
+				return nullptr;
+			const StructField* f = structType->structInfo->field(e->name);
+			if (f == nullptr)
+				error(e->pos, (structType->structInfo->anonymous ? structType->structInfo->displayName() : "struct " + structType->structInfo->name) + " has no field '" + e->name + "'");
+			if (f->type->kind != Type::Kind::Struct)
+				return nullptr;
+			structType = f->type;
+			path += e->name + ".";
+			return c;
+		}
+		return nullptr;
 	}
 
 	void CodeGen::resolveEnum(EnumInfo& info)
@@ -349,6 +515,7 @@ namespace dscript
 				continue;
 			check(f->defaults[i], params[i]);
 			requireConvertible(f->defaults[i], params[i], "for the default value of '" + f->paramNames[i] + "'");
+			foldStringConst(f->defaults[i]);
 			if (!f->defaults[i]->isConst && f->defaults[i]->kind != NodeKind::StrLit)
 				error(f->defaults[i]->pos, "default values must be constants");
 		}
@@ -520,7 +687,9 @@ namespace dscript
 	void CodeGen::check(Node* e, Type* expected)
 	{
 		e->isConst = false;
+		e->constPtr = false;
 		e->lvalue = false;
+		e->readOnly = false;
 		switch (e->kind)
 		{
 			case NodeKind::IntLit:
@@ -598,6 +767,7 @@ namespace dscript
 					error(e->b->pos, "the index must be an integer");
 				e->type = ta->base;
 				e->lvalue = true;
+				e->readOnly = e->a->readOnly && e->a->type->kind == Type::Kind::Array;
 			}
 			break;
 			case NodeKind::Cast:
@@ -615,6 +785,11 @@ namespace dscript
 				{
 					e->isConst = true;
 					e->constValue = wrapTo(e->a->constValue, to);
+				}
+				else if ((e->a->isConst || e->a->constPtr) && to->isPointer())
+				{
+					e->constPtr = true;		// cast<T*>(constant): a constant address
+					e->constValue = (uint32_t)e->a->constValue;
 				}
 			}
 			break;
@@ -643,6 +818,8 @@ namespace dscript
 						resolveStruct(t->structInfo, e->pos);
 					size = t->size();
 				}
+				else if (sizeofConstStruct(e->a, size))
+					;	// a struct constant (or a struct field of one): its type's size
 				else
 				{
 					check(e->a);
@@ -660,6 +837,8 @@ namespace dscript
 				check(e->a);
 				if (!e->a->lvalue || e->a->type->kind == Type::Kind::Array)
 					error(e->pos, "++ and -- need a variable");
+				if (e->a->readOnly)
+					error(e->pos, "cannot change a constant array");
 				if (!e->a->type->isInteger() && e->a->type->kind != Type::Kind::Pointer)
 					error(e->pos, "++ and -- work on integers and pointers");
 				e->type = e->a->type;
@@ -681,11 +860,22 @@ namespace dscript
 			e->var = v;
 			e->type = v->type;
 			e->lvalue = true;
+			e->readOnly = v->readOnly;
 			return;
 		}
 		if (m_consts.count(e->name) > 0)
 		{
 			e->constValue = resolveConst(e->name, e->pos);
+			if (m_consts[e->name].isString)
+			{
+				Type* t = m_consts[e->name].type;
+				foldStringConst(e);
+				check(e);
+				e->type = t;
+				return;
+			}
+			if (m_consts[e->name].type->kind == Type::Kind::Struct)
+				error(e->pos, "'" + e->name + "' is a struct constant: it has no address, use its fields (" + e->name + ".field)");
 			e->type = m_consts[e->name].type;
 			e->isConst = true;
 			return;
@@ -701,7 +891,11 @@ namespace dscript
 			return;
 		}
 		if (m_globals.count(e->name) > 0)
+		{
+			if (m_inDeclarations)
+				error(e->pos, "'" + e->name + "' is a variable, not a constant");
 			error(e->pos, "global '" + e->name + "' is used in its own declaration");
+		}
 		if (isTypeName(e->name))
 			error(e->pos, "'" + e->name + "' is a type, not a value");
 		error(e->pos, "unknown name: " + e->name);
@@ -849,6 +1043,8 @@ namespace dscript
 		Type* t = e->a->type;
 		if (!e->a->lvalue)
 			error(e->a->pos, "cannot assign to this (not a variable)");
+		if (e->a->readOnly)
+			error(e->a->pos, "cannot assign to a constant array");
 		if (t->kind == Type::Kind::Array)
 			error(e->pos, "cannot assign to an array (assign its elements)");
 		if (e->name == "=")
@@ -879,6 +1075,13 @@ namespace dscript
 		e->func = nullptr;
 		if (callee->kind == NodeKind::Ident && lookupVar(callee->name) == nullptr && m_funcs.count(callee->name) > 0)
 		{
+			// The subs get their types after the declarations (constants, enum values, array
+			// sizes, default values): a call there is not a constant.
+			for (FuncInfo* f : m_funcs[callee->name])
+			{
+				if (f->type == nullptr)
+					error(e->pos, "a sub call is not a constant");
+			}
 			for (Node* arg : e->list)
 				check(arg);
 			FuncInfo* f = resolveOverload(callee->name, e->list, e->pos);
@@ -923,6 +1126,27 @@ namespace dscript
 			e->constValue = info.values[e->name];
 			return;
 		}
+		// Constant.field: the field's value.
+		if (e->value == 0)
+		{
+			Type* st = nullptr;
+			std::string path;
+			if (ConstInfo* c = constStructRef(e->a, st, path))
+			{
+				const StructField* f = st->structInfo->field(e->name);
+				if (f == nullptr)
+					error(e->pos, (st->structInfo->anonymous ? st->structInfo->displayName() : "struct " + st->structInfo->name) + " has no field '" + e->name + "'");
+				if (f->type->kind == Type::Kind::Struct)
+					error(e->pos, "'" + e->name + "' is a struct field of a constant: it has no address, use its fields");
+				e->type = f->type;
+				e->constValue = c->fields[path + e->name];
+				if (f->type->isInteger())
+					e->isConst = true;
+				else
+					e->constPtr = true;	// pointers and sub pointers
+				return;
+			}
+		}
 		check(e->a);
 		Type* t = e->a->type;
 		if (t == nullptr)
@@ -946,6 +1170,7 @@ namespace dscript
 			error(e->pos, (t->structInfo->anonymous ? t->structInfo->displayName() : "struct " + t->structInfo->name) + " has no field '" + e->name + "'");
 		e->type = f->type;
 		e->lvalue = (e->value == 1) || e->a->lvalue;
+		e->readOnly = (e->value == 0) && e->a->readOnly;
 	}
 
 	// ==================================== Code generation ===================================
@@ -1187,7 +1412,7 @@ namespace dscript
 
 	CodeGen::Reg CodeGen::gen(Node* e)
 	{
-		if (e->isConst && e->type && (e->type->isInteger() || e->type->kind == Type::Kind::Null))
+		if ((e->isConst && e->type && (e->type->isInteger() || e->type->kind == Type::Kind::Null)) || e->constPtr)
 		{
 			Reg r = alloc(e->pos);
 			emit("mov " + r + ", " + imm(e->constValue));
@@ -1683,6 +1908,7 @@ namespace dscript
 	void CodeGen::genInit(Reg addr, Type* type, Node* init, int32_t offset)
 	{
 		// addr holds the variable's address; the value at addr + offset is initialized.
+		foldStringConst(init);
 		if (type->kind == Type::Kind::Array && init->kind == NodeKind::StrLit)
 		{
 			if (type->base->size() != 1)
@@ -1770,6 +1996,7 @@ namespace dscript
 		if (m_scopes.back().count(s->name) > 0)
 			error(s->pos, "'" + s->name + "' is already declared in this block");
 		Type* t = nullptr;
+		inferArraySize(s->typeSyntax, s->a, s->pos);
 		if (s->typeSyntax)
 			t = resolveType(s->typeSyntax);
 		else
@@ -2046,6 +2273,32 @@ namespace dscript
 					j = k;
 				}
 				VarInfo* v = name.empty() ? nullptr : lookupVar(name);
+				// $Constant.field.field...: a field of a struct constant (its value).
+				if (v == nullptr && member.empty() && m_consts.count(name) > 0 && j < line.size() && line[j] == '.'
+					&& (resolveConst(name, pos), m_consts[name].type->kind == Type::Kind::Struct))
+				{
+					ConstInfo& c = m_consts[name];
+					Type* st = c.type;
+					std::string path;
+					while (j < line.size() && line[j] == '.' && st != nullptr && st->kind == Type::Kind::Struct)
+					{
+						size_t k = j + 1;
+						while (k < line.size() && (std::isalnum((unsigned char)line[k]) || line[k] == '_'))
+							k++;
+						std::string fieldName = line.substr(j + 1, k - j - 1);
+						const StructField* f = st->structInfo->field(fieldName);
+						if (f == nullptr)
+							error(pos, "$" + name + ": " + (st->structInfo->anonymous ? st->structInfo->displayName() : "struct " + st->structInfo->name) + " has no field '" + fieldName + "'");
+						path += (path.empty() ? "" : ".") + fieldName;
+						st = f->type;
+						j = k;
+					}
+					if (st->kind == Type::Kind::Struct)
+						error(pos, "$" + name + "." + path + " is a struct: use its fields");
+					out += imm(c.fields[path]);
+					i = j;
+					continue;
+				}
 				if (v != nullptr && (topLevel ? v->storage == VarInfo::Storage::Global : true))
 				{
 					bool address = (!out.empty() && out.back() == '&');
@@ -2076,7 +2329,18 @@ namespace dscript
 					out += imm(info.values[member]);
 				}
 				else if (m_consts.count(name) > 0)
-					out += imm(resolveConst(name, pos));
+				{
+					const int64_t value = resolveConst(name, pos);
+					if (m_consts[name].isString)
+					{
+						out += "$" + stringLiteral(m_consts[name].text);	// the string's address
+						i = j;
+						continue;
+					}
+					if (m_consts[name].type->kind == Type::Kind::Struct)
+						error(pos, "$" + name + " is a struct constant: it has no address, use its fields ($" + name + ".field)");
+					out += imm(value);
+				}
 				else if (m_funcs.count(name) > 0 && lookupVar(name) == nullptr)
 				{
 					if (m_funcs[name].size() > 1)
@@ -2181,7 +2445,11 @@ namespace dscript
 		for (Node* d : m_globalDecls)
 		{
 			VarInfo* v = m_globals[d->name];
+			if (m_options.rom && !v->readOnly)
+				error(d->pos, "--rom: '" + d->name + "' is a global variable, but the program (and its data) is in ROM, "
+					"where nothing can change: use const for read-only values, and keep what changes in RAM (locals, or a pointer to a RAM address)");
 			Type* t = nullptr;
+			inferArraySize(d->typeSyntax, d->a, d->pos);
 			if (d->typeSyntax)
 				t = resolveType(d->typeSyntax);
 			else
@@ -2208,12 +2476,14 @@ namespace dscript
 			std::vector<uint8_t> bytes(t->size(), 0);
 			struct Pending { uint32_t offset; Type* type; Node* init; const StructField* field; };
 			std::vector<Pending> pending;
+			// Pointers to string literals: stored as the literal's address ($symbol in the data).
+			std::map<uint32_t, std::string> refs;
 			std::vector<std::pair<int32_t, const StructField*>> defaults;
 			collectDefaults(t, 0, defaults);
 			for (const auto& def : defaults)
 			{
 				if (def.second->init->kind == NodeKind::StrLit)
-					pending.push_back({ (uint32_t)def.first, def.second->type, def.second->init, def.second });
+					refs[(uint32_t)def.first] = stringLiteral(def.second->init->text);
 				else
 					putBytes(bytes, def.first, def.second->type->size(), def.second->init->constValue);
 			}
@@ -2226,6 +2496,7 @@ namespace dscript
 				Pending p = work.back();
 				work.pop_back();
 				Node* init = p.init;
+				foldStringConst(init);
 				if (init->kind == NodeKind::InitList)
 				{
 					if (p.type->kind == Type::Kind::Array)
@@ -2261,13 +2532,23 @@ namespace dscript
 				requireConvertible(init, p.type, "in the initialization of '" + d->name + "'");
 				if (p.type->kind == Type::Kind::Struct || p.type->kind == Type::Kind::Array)
 					error(init->pos, "global structs and arrays are initialized with { ... }");
-				if (init->isConst)
-					putBytes(bytes, p.offset, p.type->size(), wrapTo(init->constValue, p.type));
+				if (init->kind == NodeKind::StrLit)
+				{
+					refs[p.offset] = stringLiteral(init->text);
+					continue;
+				}
+				refs.erase(p.offset);	// replaces a default
+				if (init->isConst || init->constPtr)
+					putBytes(bytes, p.offset, p.type->size(), init->isConst ? wrapTo(init->constValue, p.type) : init->constValue);
 				else
+				{
+					if (v->readOnly)
+						error(init->pos, "the values of a constant array must be constants or strings ('" + d->name + "' is stored in the program)");
 					pending.push_back(p);
+				}
 			}
 			// The data line.
-			bool allZero = true;
+			bool allZero = refs.empty();
 			for (uint8_t b : bytes)
 				allZero = allZero && b == 0;
 			std::string line = "\t$" + v->symbol;
@@ -2278,9 +2559,18 @@ namespace dscript
 				line += " ";
 				for (size_t i = 0; i < bytes.size(); i++)
 				{
+					if (i > 0)
+						line += ", ";
+					auto ref = refs.find((uint32_t)i);
+					if (ref != refs.end())
+					{
+						line += "$" + ref->second;
+						i += 3;
+						continue;
+					}
 					char buf[8];
 					std::snprintf(buf, sizeof(buf), "0x%02X", bytes[i]);
-					line += (i > 0 ? ", " : "") + std::string(buf);
+					line += buf;
 				}
 			}
 			m_data.push_back(line);
@@ -2310,6 +2600,7 @@ namespace dscript
 	{
 		collect(program);
 		// Resolve the declarations (in any order: they can refer to each other).
+		m_inDeclarations = true;
 		for (auto& s : m_structs)
 			resolveStruct(s.second, s.second->decl->pos);
 		for (auto& e : m_enums)
@@ -2325,6 +2616,7 @@ namespace dscript
 		}
 		for (FuncInfo* f : m_funcList)
 			resolveFunction(f);
+		m_inDeclarations = false;
 		// Overloads: merge declarations with their definition; labels.
 		for (auto& entry : m_funcs)
 		{

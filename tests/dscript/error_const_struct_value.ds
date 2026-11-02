@@ -1,0 +1,4 @@
+// expect-error: a sub call is not a constant
+sub notConstant() -> i32 { return 5; }
+const Bad: struct { var x: i32; } = { notConstant() };
+sub main() -> i32 { return Bad.x; }
