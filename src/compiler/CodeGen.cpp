@@ -78,6 +78,8 @@ namespace dscript
 					StructInfo* info = new StructInfo();
 					info->name = d->name;
 					info->decl = d;
+					info->anonymous = d->value != 0;
+					info->pos = d->pos;
 					m_structs[d->name] = info;
 				}
 				break;
@@ -197,13 +199,13 @@ namespace dscript
 		if (info->complete)
 			return;
 		if (info->resolving)
-			error(usePos, "struct '" + info->name + "' contains itself (use a pointer)");
+			error(usePos, (info->anonymous ? info->displayName() : "struct '" + info->name + "'") + " contains itself (use a pointer)");
 		info->resolving = true;
 		uint32_t offset = 0;
 		for (Node* f : info->decl->list)
 		{
 			if (info->field(f->name) != nullptr)
-				error(f->pos, "duplicate field '" + f->name + "' in struct " + info->name);
+				error(f->pos, "duplicate field '" + f->name + "' in " + (info->anonymous ? info->displayName() : "struct " + info->name));
 			StructField field;
 			field.name = f->name;
 			field.pos = f->pos;
@@ -941,7 +943,7 @@ namespace dscript
 		resolveStruct(t->structInfo, e->pos);
 		const StructField* f = t->structInfo->field(e->name);
 		if (f == nullptr)
-			error(e->pos, "struct " + t->structInfo->name + " has no field '" + e->name + "'");
+			error(e->pos, (t->structInfo->anonymous ? t->structInfo->displayName() : "struct " + t->structInfo->name) + " has no field '" + e->name + "'");
 		e->type = f->type;
 		e->lvalue = (e->value == 1) || e->a->lvalue;
 	}

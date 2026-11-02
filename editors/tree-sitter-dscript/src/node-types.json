@@ -38,6 +38,10 @@
             "named": true
           },
           {
+            "type": "struct_type",
+            "named": true
+          },
+          {
             "type": "type_identifier",
             "named": true
           }
@@ -154,6 +158,10 @@
           },
           {
             "type": "primitive_type",
+            "named": true
+          },
+          {
+            "type": "struct_type",
             "named": true
           },
           {
@@ -894,6 +902,10 @@
             "named": true
           },
           {
+            "type": "struct_type",
+            "named": true
+          },
+          {
             "type": "type_identifier",
             "named": true
           }
@@ -1045,6 +1057,10 @@
           },
           {
             "type": "primitive_type",
+            "named": true
+          },
+          {
+            "type": "struct_type",
             "named": true
           },
           {
@@ -1542,6 +1558,10 @@
             "named": true
           },
           {
+            "type": "struct_type",
+            "named": true
+          },
+          {
             "type": "type_identifier",
             "named": true
           }
@@ -2003,6 +2023,10 @@
             "named": true
           },
           {
+            "type": "struct_type",
+            "named": true
+          },
+          {
             "type": "type_identifier",
             "named": true
           }
@@ -2049,6 +2073,10 @@
             "named": true
           },
           {
+            "type": "struct_type",
+            "named": true
+          },
+          {
             "type": "type_identifier",
             "named": true
           }
@@ -2077,6 +2105,10 @@
         },
         {
           "type": "primitive_type",
+          "named": true
+        },
+        {
+          "type": "struct_type",
           "named": true
         },
         {
@@ -2790,6 +2822,10 @@
             "named": true
           },
           {
+            "type": "struct_type",
+            "named": true
+          },
+          {
             "type": "type_identifier",
             "named": true
           }
@@ -2928,6 +2964,10 @@
           "named": true
         },
         {
+          "type": "struct_type",
+          "named": true
+        },
+        {
           "type": "type_identifier",
           "named": true
         }
@@ -2960,6 +3000,10 @@
           },
           {
             "type": "primitive_type",
+            "named": true
+          },
+          {
+            "type": "struct_type",
             "named": true
           },
           {
@@ -3087,6 +3131,10 @@
             "named": true
           },
           {
+            "type": "struct_type",
+            "named": true
+          },
+          {
             "type": "type_identifier",
             "named": true
           }
@@ -3174,6 +3222,10 @@
           },
           {
             "type": "string_literal",
+            "named": true
+          },
+          {
+            "type": "struct_type",
             "named": true
           },
           {
@@ -3271,6 +3323,22 @@
         "types": [
           {
             "type": "type_identifier",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "struct_type",
+    "named": true,
+    "fields": {
+      "body": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "field_list",
             "named": true
           }
         ]
@@ -3769,6 +3837,10 @@
           },
           {
             "type": "primitive_type",
+            "named": true
+          },
+          {
+            "type": "struct_type",
             "named": true
           },
           {

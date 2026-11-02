@@ -1,0 +1,5 @@
+// expect-error: has no field 'z'
+var a: struct { var x: i32; };
+sub main() -> void {
+    a.z = 1;
+}

@@ -2,7 +2,8 @@
 
 // Node fields by kind (see AST.hpp):
 //   Program:     list = declarations
-//   StructDecl:  name, list = fields (VarDecl)
+//   StructDecl:  name, list = fields (VarDecl), value = 1 if nameless (struct { ... } as a type,
+//                named __anon_struct_<n> and added at the end of the program)
 //   EnumDecl:    name, list = members (EnumMember: name, a = value or nullptr)
 //   ConstDecl:   name, typeSyntax (optional), a = value
 //   AliasDecl:   name, typeSyntax
@@ -116,6 +117,9 @@ namespace dscript
 		Node* program = make(NodeKind::Program, peek().pos);
 		while (peek().kind != TokenKind::End)
 			program->list.push_back(parseDeclaration());
+		for (Node* s : m_anonStructs)
+			program->list.push_back(s);
+		m_anonStructs.clear();
 		return program;
 	}
 
@@ -146,6 +150,13 @@ namespace dscript
 	{
 		Node* n = make(NodeKind::StructDecl, next().pos);
 		n->name = expectIdentifier("after 'struct'");
+		parseStructFields(n);
+		acceptPunct(";");
+		return n;
+	}
+
+	void Parser::parseStructFields(Node* decl)
+	{
 		expectPunct("{", "to start the struct");
 		while (!acceptPunct("}"))
 		{
@@ -153,10 +164,8 @@ namespace dscript
 				error(peek().pos, "struct fields are declared with 'var', found " + describe(peek()));
 			Node* field = parseVarDecl(false);
 			expectPunct(";", "after the struct field");
-			n->list.push_back(field);
+			decl->list.push_back(field);
 		}
-		acceptPunct(";");
-		return n;
 	}
 
 	Node* Parser::parseEnum(void)
@@ -283,7 +292,7 @@ namespace dscript
 	{
 		const Token& t = peek();
 		if (t.kind == TokenKind::Keyword)
-			return t.text == "void" || t.text == "sub";
+			return t.text == "void" || t.text == "sub" || t.text == "struct";
 		if (t.kind != TokenKind::Identifier)
 			return false;
 		static const char* names[] = { "i8", "u8", "i16", "u16", "i32", "u32", "bool", "char", "string", "int", "uint", nullptr };
@@ -322,6 +331,18 @@ namespace dscript
 			}
 			if (acceptPunct("->"))
 				t->base = parseType();
+		}
+		else if (isKeyword("struct"))
+		{
+			// struct { fields }: a nameless struct, declared at the top level under a hidden name.
+			Node* decl = make(NodeKind::StructDecl, next().pos);
+			decl->name = "__anon_struct_" + std::to_string(++m_anonCount);
+			decl->value = 1;
+			if (!isPunct("{"))
+				error(peek().pos, "'{' expected after 'struct' in a type (struct { fields }), found " + describe(peek()));
+			parseStructFields(decl);
+			m_anonStructs.push_back(decl);
+			t->name = decl->name;
 		}
 		else if (acceptKeyword("void"))
 			t->name = "void";

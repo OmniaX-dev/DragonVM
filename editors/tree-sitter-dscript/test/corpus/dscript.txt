@@ -208,3 +208,55 @@ sub f(void) -> void {
       (low_block
         (low_content
           (low_content))))))
+
+================================================================================
+Nameless structs
+================================================================================
+
+struct Window { var pos: struct { var x: i32; var y: i32 = 7; }; }
+var g: struct { var n: u8; }[2] = { { 1 }, { 2 } };
+sub f() -> u32 { return sizeof<struct { var a: u8; }>; }
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (struct_declaration
+    (type_identifier)
+    (field_list
+      (field_declaration
+        (field_identifier)
+        (struct_type
+          (field_list
+            (field_declaration
+              (field_identifier)
+              (primitive_type))
+            (field_declaration
+              (field_identifier)
+              (primitive_type)
+              (number_literal)))))))
+  (variable_declaration
+    (identifier)
+    (array_type
+      (struct_type
+        (field_list
+          (field_declaration
+            (field_identifier)
+            (primitive_type))))
+      (number_literal))
+    (initializer_list
+      (initializer_list
+        (number_literal))
+      (initializer_list
+        (number_literal))))
+  (function_declaration
+    (identifier)
+    (parameter_list)
+    (primitive_type)
+    (block
+      (return_statement
+        (sizeof_expression
+          (struct_type
+            (field_list
+              (field_declaration
+                (field_identifier)
+                (primitive_type)))))))))

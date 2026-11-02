@@ -150,6 +150,7 @@ module.exports = grammar({
 			$.array_type,
 			$.function_type,
 			$.parenthesized_type,
+			$.struct_type,
 		),
 		primitive_type: _ => choice('i8', 'u8', 'i16', 'u16', 'i32', 'u32', 'bool', 'char', 'string', 'int', 'uint', 'void'),
 		pointer_type: $ => prec(2, seq(field('type', $._type), '*')),
@@ -162,6 +163,8 @@ module.exports = grammar({
 			optional(seq('->', field('return_type', $._type))),
 		)),
 		parenthesized_type: $ => seq('(', $._type, ')'),
+		// A nameless struct used as a type: var p: struct { var x: i32; };
+		struct_type: $ => seq('struct', field('body', $.field_list)),
 
 		// ===== Statements =====
 		block: $ => seq('{', repeat($._statement), '}'),

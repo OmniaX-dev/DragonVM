@@ -31,7 +31,7 @@ namespace dscript
 			case Kind::Null: return "null";
 			case Kind::Pointer: return (base->kind == Kind::Function ? "(" + base->name() + ")" : base->name()) + "*";
 			case Kind::Array: return base->name() + "[" + std::to_string(count) + "]";
-			case Kind::Struct: return structInfo->name;
+			case Kind::Struct: return structInfo->displayName();
 			case Kind::Function:
 			{
 				std::string s = "sub(";
@@ -41,6 +41,13 @@ namespace dscript
 			}
 		}
 		return "?";
+	}
+
+	std::string StructInfo::displayName(void) const
+	{
+		if (!anonymous)
+			return name;
+		return "struct { ... } (" + pos.file + ":" + std::to_string(pos.line) + ")";
 	}
 
 	const StructField* StructInfo::field(const std::string& fieldName) const

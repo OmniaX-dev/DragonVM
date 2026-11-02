@@ -1,0 +1,18 @@
+
+const MemoryLayout: struct {
+	var MBR: u32 							= 0x01000680;
+	var InterruptVector: u32 				= 0x01000080;
+	var DiskInterface: u32					= 0x01000880;
+	var RAM: u32							= 0x01010000;
+	var CMOS: u32							= 0x01000000;
+	var VGA: u32							= 0x01000900;
+	var Keyboard: u32						= 0x01000580;
+};
+
+struct __Memory_layout {
+
+}
+
+struct __IntVector_layout {
+	var EntrySize:
+}

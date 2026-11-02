@@ -26,6 +26,7 @@ Pipeline: lexer -> preprocessor (on tokens) -> parser (AST) -> checking + code g
 | `string` | 4 | the same as `u8*` (null-terminated) |
 | `T[N]` | N * size | arrays; they decay to `T*` |
 | `struct Name` | sum of the fields | packed (no padding) |
+| `struct { fields }` | sum of the fields | a nameless struct, usable wherever a type goes |
 | `sub(T1, T2) -> R` | 4 | sub pointers; `(sub(i32) -> i32)[4]` for an array of them |
 | enums | 4 | their values are `i32` constants: `Color.Red` |
 
@@ -45,6 +46,22 @@ interrupt sub handler() { ... }         // ends with rti; no parameters, returns
 low { ... }                             // raw dasm (e.g. helper routines with labels)
 ```
 Everything can be used before it is declared. `main` (no parameters) is the program's entry.
+
+### Nameless structs
+`struct { fields }` is a type: it can be used for variables (global and local), fields, arrays,
+pointers, `sizeof`, aliases, and so on. The fields are declared as in a named struct (`var`, and
+default values).
+```
+var cursor: struct { var x: i32; var y: i32; } = { 3, 4 };
+struct Window {
+    var pos: struct { var x: i32; var y: i32 = 7; };    // window.pos.x
+    var title: string;
+}
+var table: struct { var key: u8; var value: i32; }[8];
+```
+Every nameless struct is its own type (as in C): two variables declared with the same fields
+cannot be assigned to each other. To share one, give it a name (`struct`, or
+`alias Pair = struct { ... };`). In messages they are shown as `struct { ... } (file:line)`.
 
 ### Statements
 `var` declarations (locals: scalars are not initialized unless given a value; structs are zeroed

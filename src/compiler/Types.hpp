@@ -44,7 +44,11 @@ namespace dscript
 		bool complete { false };	// layout computed
 		bool resolving { false };
 		Node* decl { nullptr };
+		bool anonymous { false };	// struct { ... } used as a type (name is a hidden one)
+		SourcePos pos;
 		const StructField* field(const std::string& name) const;
+		// The name for messages ("struct { ... } (file:line)" for nameless structs).
+		std::string displayName(void) const;
 	};
 
 	class TypeTable

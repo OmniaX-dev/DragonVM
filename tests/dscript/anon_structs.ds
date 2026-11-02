@@ -1,0 +1,59 @@
+// expect-rv: 0
+// Nameless structs: struct { fields } used as a type.
+#include(check.ds)
+
+struct Window {
+    var pos: struct { var x: i32; var y: i32 = 7; };
+    var size: struct { var w: u16; var h: u16; };
+    var title: string = "win";
+}
+
+var g_cursor: struct { var x: i32; var y: i32; } = { 3, 4 };
+var g_table: struct { var key: u8; var value: i32; }[3] = { { 'a', 1 }, { 'b', 2 } };
+var g_ptr: struct { var n: i32; }*;
+alias Pair = struct { var a: i32; var b: i32; };
+var g_pair: Pair = { 1, 2 };
+
+sub sum(var w: Window*) -> i32 {
+    return w->pos.x + w->pos.y + w->size.w + w->size.h;
+}
+
+sub main() -> i32 {
+    check(1, g_cursor.x == 3 && g_cursor.y == 4);
+    g_cursor.x += 10;
+    check(2, g_cursor.x == 13);
+
+    var w: Window;
+    check(3, w.pos.x == 0 && w.pos.y == 7 && w.title[0] == 'w');   // zeroed + defaults
+    w.pos.x = 1; w.size.w = 2; w.size.h = 3;
+    check(4, sum(&w) == 13);
+
+    var local: struct { var a: u8; var b: i32; var c: struct { var d: i16; }; } = { 1, 2, { -3 } };
+    check(5, local.a == 1 && local.b == 2 && local.c.d == -3);
+    check(6, sizeof(local) == 7 && sizeof<struct { var a: u8; var b: u32; }> == 5);
+    check(7, sizeof(Window) == 8 + 4 + 4);
+
+    check(8, g_table[1].key == 'b' && g_table[1].value == 2 && g_table[2].value == 0);
+    var p = &g_table[0];
+    check(9, (p + 1)->value == 2);
+
+    // A copy of the same nameless struct (same variable type).
+    var w2: Window = w;
+    w.pos.x = 100;
+    check(10, w2.pos.x == 1);
+
+    var holder: struct { var n: i32; };
+    holder.n = 42;
+    var n: i32 = 0;
+    low {
+        mov R1, $holder
+        mov R2, *R1
+        mov $n, R2
+    }
+    check(11, n == 42);
+    check(12, g_ptr == null);
+    var pair: Pair;
+    pair = g_pair;                  // the same type through the alias
+    check(13, pair.a + pair.b == 3);
+    return result();
+}

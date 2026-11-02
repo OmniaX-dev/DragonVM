@@ -25,6 +25,7 @@ namespace dscript
 
 			Node* parseDeclaration(void);
 			Node* parseStruct(void);
+			void parseStructFields(Node* decl);
 			Node* parseEnum(void);
 			Node* parseConst(void);
 			Node* parseAlias(void);
@@ -49,5 +50,8 @@ namespace dscript
 		private:
 			std::vector<Token> m_tokens;
 			size_t m_pos { 0 };
+			// Nameless structs (struct { ... } used as a type): hidden top-level StructDecls.
+			std::vector<Node*> m_anonStructs;
+			int m_anonCount { 0 };
 	};
 }

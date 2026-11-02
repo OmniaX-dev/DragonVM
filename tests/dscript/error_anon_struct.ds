@@ -1,0 +1,7 @@
+// expect-error: cannot
+// Each nameless struct is its own type.
+var a: struct { var x: i32; };
+var b: struct { var x: i32; };
+sub main() -> void {
+    a = b;
+}
