@@ -1,4 +1,5 @@
 #include(<bios.ds>)
+#include(<mem.ds>)
 
 const INT30_DIRECT_PRINT_CHAR_TEXT_SINGLE 		= 0x0001;
 const INT30_DIRECT_NEW_LINE_TEXT_SINGLE 		= 0x0002;
@@ -29,18 +30,17 @@ struct VGARegs {
 	var signal: u8;
 	var textSingleColorChar: u8;
 	var textSingleColorInverted: u8;
-	var textSingleColorBufferStringAddr: u32;
-	var __padding: u8[118];
-
-	var flags: u32;
-
-	var text16MemoryController: struct {
-		var x: u32;
-		var y: u32;
-		var character: u8;
-		var background: u8;
-		var foreground: u8;
-	};
+    var __padding0: u8[2];
+    var textSingleColorBufferStringAddr: u32;
+    var __padding1: u8[112];
+    var flags: u32;
+    var text16MemoryController: struct {
+            var x: u32;
+            var y: u32;
+            var character: u8;
+            var background: u8;
+            var foreground: u8;
+    };
 };
 
 interrupt sub __int_30_handler() {
@@ -53,83 +53,171 @@ interrupt sub __int_30_handler() {
 		mov $param2, R8
 	}
 	var device: VGARegs* = cast<VGARegs*>(MemoryLayout.VGA);
-	if (code == INT30_DIRECT_PRINT_CHAR_TEXT_SINGLE)
-	{
-		*device.textSingleColorChar = cast<u8>(param1);
-		*device.signal = VGATextSingleColorSignals.PrintChar;
-	}
-	else if (code == INT30_DIRECT_NEW_LINE_TEXT_SINGLE)
-	{
-		*device.textSingleColorChar = 10;
-		*device.signal = VGATextSingleColorSignals.PrintChar;
-	}
-	else if (code == INT30_DIRECT_PRINT_STRING_TEXT_SINGLE) // selector is a DiskDriverData*
-	{
-		var str: u8* = cast<u8*>(param1);
+	var l_textSingleStr = sub(var param: u32, var device: VGARegs*, var store: bool) {
+		var str: u8* = cast<u8*>(param);
 		var c: u8 = str[0];
 		var i: i32 = 1;
 		while (c != 0)
 		{
-			*device.textSingleColorChar = c;
-			*device.signal = VGATextSingleColorSignals.PrintChar;
+			device->textSingleColorChar = c;
+			device->signal = store ? VGATextSingleColorSignals.StoreChar : VGATextSingleColorSignals.PrintChar;
 			c = str[i++];
 		}
+	};
+	if (code == INT30_DIRECT_PRINT_CHAR_TEXT_SINGLE)
+	{
+		device->textSingleColorChar = cast<u8>(param1);
+		device->signal = VGATextSingleColorSignals.PrintChar;
+	}
+	else if (code == INT30_DIRECT_NEW_LINE_TEXT_SINGLE)
+	{
+		device->textSingleColorChar = 10;
+		device->signal = VGATextSingleColorSignals.PrintChar;
+	}
+	else if (code == INT30_DIRECT_PRINT_STRING_TEXT_SINGLE)
+	{
+		l_textSingleStr(param1, device, false);
 	}
 	else if (code == INT30_DIRECT_PRINT_INTEGER_TEXT_SINGLE)
 	{
+		var buff: u8[12];
+		itoa(param1, buff);
+		l_textSingleStr(cast<u32>(buff), device, false);
 	}
 	else if (code == INT30_STORE_INTEGER_TEXT_SINGLE)
 	{
+		var buff: u8[12];
+		itoa(param1, buff);
+		l_textSingleStr(cast<u32>(buff), device, true);
 	}
 	else if (code == INT30_STORE_CHAR_TEXT_SINGLE)
 	{
-		*device.textSingleColorChar = cast<u8>(param1);
-		*device.signal = VGATextSingleColorSignals.StoreChar;
+		device->textSingleColorChar = cast<u8>(param1);
+		device->signal = VGATextSingleColorSignals.StoreChar;
 	}
 	else if (code == INT30_PRINT_BUFFER_NO_FLUSH_TEXT_SINGLE)
 	{
-		*device.signal = VGATextSingleColorSignals.PrintBuffer;
+		device->signal = VGATextSingleColorSignals.PrintBuffer;
 	}
 	else if (code == INT30_PRINT_BUFFER_AND_FLUSH_TEXT_SINGLE)
 	{
-		*device.signal = VGATextSingleColorSignals.PrintFlushBuffer;
+		device->signal = VGATextSingleColorSignals.PrintFlushBuffer;
 	}
 	else if (code == INT30_FLUSH_BUFFER_TEXT_SINGLE)
 	{
-		*device.signal = VGATextSingleColorSignals.FlushBuffer;
+		device->signal = VGATextSingleColorSignals.FlushBuffer;
 	}
 	else if (code == INT30_STORE_STRING_TEXT_SINGLE)
 	{
+		l_textSingleStr(param1, device, true);
 	}
 	else if (code == INT30_INVERT_COLORS_TEXT_SINGLE)
 	{
+		if (device->textSingleColorInverted == 0)
+			device->textSingleColorInverted = 1;
+		else
+			device->textSingleColorInverted = 0;
 	}
 	else if (code == INT30_PRINT_STRING_BUFFERED)
 	{
+		device->textSingleColorBufferStringAddr = param1;
+		device->signal = VGATextSingleColorSignals.PrintString;
 	}
 	else if (code == INT30_WRITE_VRAM_TEXT16)
 	{
+		var cell: VGAText16Cell* = cast<VGAText16Cell*>(param1);
+		if (__ensure_cell_coords_text16(cell))
+		{
+			device->text16MemoryController.character = cell->character;
+			device->text16MemoryController.background = cell->background;
+			device->text16MemoryController.foreground = cell->foreground;
+			device->text16MemoryController.x = cell->x;
+			device->text16MemoryController.y = cell->y;
+			device->signal = VGAText16ColorSignals.WriteVRAM;
+		}
 	}
 	else if (code == INT30_PRINT_STRING_TEXT16)
 	{
+		var cell: VGAText16Cell* = cast<VGAText16Cell*>(param1);
+		var str: u8* = cast<u8*>(param2);
+		__int30_print_string_text16(str, cell);
 	}
 	else if (code == INT30_PRINT_INTEGER_TEXT16)
 	{
+		var cell: VGAText16Cell* = cast<VGAText16Cell*>(param1);
+		__int30_print_integer_text16(param2, cell);
 	}
 	else if (code == INT30_CLEAR_SCREEN_TEXT16)
 	{
+		var cell: VGAText16Cell* = cast<VGAText16Cell*>(param1);
+		device->text16MemoryController.character = cell->character;
+		device->text16MemoryController.background = cell->background;
+		device->text16MemoryController.foreground = cell->foreground;
+		device->signal = VGAText16ColorSignals.ForceClearScreen;
 	}
 	else if (code == INT30_SCROLL_TEXT16)
 	{
+		device->signal = VGAText16ColorSignals.Scroll;
 	}
 	else if (code == INT30_CLEAR_SCREEN)
 	{
+		device->signal = VGATextSingleColorSignals.ClearScreen;
 	}
 	else if (code == INT30_REFRESH_SCREEN)
 	{
+		device->signal = VGATextSingleColorSignals.RefreshScreen;
 	}
 	else
 	{
 		// TODO: Eventually this should probably raise some kind of error/warning
 	}
+}
+
+sub __int30_print_integer_text16(var num: i32, var cell: VGAText16Cell*) {
+	var buff: u8[12];
+	itoa(num, buff);
+	__int30_print_string_text16(buff, cell);
+}
+
+sub __int30_print_string_text16(var buff: u8*, var cell: VGAText16Cell*) {
+	var device: VGARegs* = cast<VGARegs*>(MemoryLayout.VGA);
+	while (*buff and __ensure_cell_coords_text16(cell))
+	{
+		cell->character = *buff++;
+		device->text16MemoryController.character = cell->character;
+		device->text16MemoryController.background = cell->background;
+		device->text16MemoryController.foreground = cell->foreground;
+		device->text16MemoryController.x = cell->x;
+		device->text16MemoryController.y = cell->y;
+		device->signal = VGAText16ColorSignals.WriteVRAM;
+		cell->x++;
+	}
+}
+
+sub __ensure_cell_coords_text16(var cell: VGAText16Cell*, var allow_x_wrap: bool = true, var allow_scroll: bool = true) -> bool {
+        var scrx: u32 = *cast<u32*>(CMOSRegisters.ScreenColumns);
+        var scry: u32 = *cast<u32*>(CMOSRegisters.ScreenRows);
+        var old_cell: VGAText16Cell = *cell;
+
+        if (cell->x >= scrx)
+        {
+            if (!allow_x_wrap)
+                return false;
+            while (cell->x >= scrx)
+            {
+                cell->x -= scrx;
+                cell->y++;
+            }
+        }
+        while (cell->y >= scry)
+        {
+            if (!allow_scroll)
+            {
+                *cell = old_cell;
+                return false;
+            }
+            cast<VGARegs*>(MemoryLayout.VGA)->signal = VGAText16ColorSignals.Scroll;
+            cell->y--;
+        }
+        return true;
 }

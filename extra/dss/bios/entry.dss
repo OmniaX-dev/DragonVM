@@ -25,7 +25,7 @@ _bios_entry_point:
 	movb R1, [CMOS_Settings.BOOT_DISK]
 	movb [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.DISK_SELECTOR}], R1						## Disk = Default
 	mov  [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.DISK_ADDRESS}], 0x20C000
-	mov  [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.DATA_SIZE}], 1410
+	mov  [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.DATA_SIZE}], 5566
 	mov  [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.MEMORY_ADDRESS}], 0x01020000
 	movb [{MemoryAddresses.DISK_INTERFACE + DiskRegisters.SIGNAL}], DiskSignals.START				## Signal = Start
 _test_wait_loop:
