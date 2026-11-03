@@ -1,6 +1,8 @@
 #pragma once
 
 #include "Types.hpp"
+#include "Index.hpp"
+#include <functional>
 #include <map>
 #include <set>
 
@@ -16,6 +18,8 @@ namespace dscript
 		std::string symbol;			// Global: the dasm data symbol (without '$')
 		bool readOnly { false };	// a constant array (const Name: T[N] = ...)
 		SourcePos pos;
+		SourcePos defPos;			// where the name is declared
+		bool param { false };		// a parameter (also those of an expanded inline sub)
 	};
 
 	struct FuncInfo
@@ -38,6 +42,11 @@ namespace dscript
 		bool raw { false };			// bare metal: ends with hlt instead of ret
 		bool rom { false };			// the program runs from ROM: everything stored in it is read-only
 		std::vector<std::string> directives;	// .load / .fixed / .header lines for raw mode
+		// For the language server: errors are collected (errors()) instead of stopping at the
+		// first one (each declaration and sub is checked on its own), no code is returned, and
+		// what every name refers to goes in the index.
+		bool analysis { false };
+		Index* index { nullptr };
 	};
 
 	// Checks the program (types, names, overloads) and generates dasm source for it.
@@ -50,6 +59,8 @@ namespace dscript
 		public:
 			CodeGen(const CodeGenOptions& options);
 			std::vector<std::string> generate(Node* program);
+			// Analysis mode: the errors found.
+			const std::vector<CompileError>& errors(void) const { return m_errors; }
 
 		private:
 			// Struct constants: type is the struct, fields holds every scalar field's value by its
@@ -62,6 +73,20 @@ namespace dscript
 			typedef std::string Reg;
 
 		private:
+			// ===== analysis (language server) =====
+			bool attempt(const std::function<void()>& fn);
+			void indexName(const SourcePos& pos, const std::string& written, const SourcePos& def, const std::string& hover);
+			void indexDeclarations(void);
+			void indexLow(const SourcePos& pos, const std::string& name);
+			std::string hoverVar(VarInfo* v);
+			std::string hoverFunc(FuncInfo* f);
+			std::string hoverConst(const std::string& name);
+			std::string hoverStruct(StructInfo* info);
+			std::string hoverField(StructInfo* info, const StructField& f);
+			std::string hoverEnum(const std::string& name);
+			std::string hoverAlias(const std::string& name);
+			std::string hoverType(const std::string& name, const SourcePos& usePos, SourcePos& def);
+
 			// ===== declarations =====
 			void collect(Node* program);
 			void declareName(const std::string& name, const SourcePos& pos, const std::string& what);
@@ -165,5 +190,6 @@ namespace dscript
 			std::map<std::string, std::string> m_strings;
 			std::set<std::string> m_helpers;
 			int m_labelCounter { 0 };
+			std::vector<CompileError> m_errors;
 	};
 }

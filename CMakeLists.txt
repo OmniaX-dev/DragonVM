@@ -182,6 +182,18 @@ set(COMPILER_TARGET dsc)
 add_executable(${COMPILER_TARGET} ${COMPILER_SOURCE_FILES})
 target_include_directories(${COMPILER_TARGET} PUBLIC ${INCLUDE_DIRS})
 
+# dsls: the DScript language server (the compiler without the assembler).
+set(LSP_TARGET dsls)
+add_executable(${LSP_TARGET}
+	${CMAKE_CURRENT_LIST_DIR}/src/lsp/dsls_main.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/compiler/Lexer.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/compiler/Preprocessor.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/compiler/Parser.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/compiler/Types.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/compiler/CodeGen.cpp
+)
+target_include_directories(${LSP_TARGET} PUBLIC ${INCLUDE_DIRS})
+
 set(HEADLESS_TARGET drun)
 add_executable(${HEADLESS_TARGET} ${HEADLESS_SOURCE_FILES})
 target_include_directories(${HEADLESS_TARGET} PUBLIC ${INCLUDE_DIRS})

@@ -1,0 +1,14 @@
+[package]
+name = "dragonvm"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Zed compiles this to WebAssembly when the extension is installed (Install Dev Extension needs
+# Rust installed with rustup). It only tells Zed how to start dsls, the DScript language server.
+[lib]
+path = "src/lib.rs"
+crate-type = ["cdylib"]
+
+[dependencies]
+zed_extension_api = "0.1.0"

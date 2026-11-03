@@ -23,6 +23,7 @@ namespace dscript
 			const Token& expectKeyword(const std::string& k, const std::string& context);
 			std::string expectIdentifier(const std::string& context);
 			Node* make(NodeKind kind, const SourcePos& pos);
+			const SourcePos& lastPos(void) const;	// of the token just read
 
 			Node* parseDeclaration(void);
 			Node* parseStruct(void);

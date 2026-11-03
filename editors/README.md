@@ -3,16 +3,41 @@
 ```
 tree-sitter-dscript/   DScript grammar (grammar.js; src/ is generated and committed)
 tree-sitter-dasm/      dasm grammar (.dss files, and the low { } blocks of DScript)
-zed/                   the Zed extension: extension.toml + languages/{dscript,dasm}/*.scm
+zed/                   the Zed extension: extension.toml + languages/{dscript,dasm}/*.scm,
+                       src/lib.rs (starts the language server)
 check.sh               checks the grammars and the queries
 ```
+The DScript language server, `dsls`, is built with the rest (`make dsls` in `bin/`); its source
+is `src/lsp/dsls_main.cpp`.
 
 ## Zed
 
-Install: command palette -> `zed: install dev extension` -> pick `editors/zed`. The extension has
-no Rust code, so no toolchain is needed: Zed fetches the grammars (this repository, at the
-`rev` in `extension.toml`) and compiles them itself. `.ds` files open as DScript, `.dss` files
-as dasm, and the inside of `low { }` blocks is highlighted as dasm.
+Install: command palette -> `zed: install dev extension` -> pick `editors/zed`. Zed needs Rust
+installed with rustup for this (it compiles `src/lib.rs` to WebAssembly). It fetches the grammars
+(this repository, at the `rev` in `extension.toml`) and compiles them itself. `.ds` files open
+as DScript, `.dss` files as dasm, and the inside of `low { }` blocks is highlighted as dasm.
+
+### The language server (dsls)
+
+For DScript files Zed starts `dsls`: errors as you type, go to definition (ctrl+click; also on
+`#include` lines and `$name`s in low blocks), hover (types, signatures, constant values, struct
+layouts), document and project symbols. Zed finds it on the `PATH`, or with this setting:
+```
+"lsp": { "dsls": { "binary": { "path": "/path/to/DragonVM/bin/dsls" } } }
+```
+Each analysis compiles the program the file belongs to (without generating code): a file with a
+`main` sub is a program; another file is checked as part of the closest program that includes
+it (or on its own). Unsaved changes are used. The options come from `dsls.json` in the
+workspace root (this repository has one):
+```
+{
+    "args": ["-I", "extra/ds/sdk"],                     dsc options for every program
+    "files": { "extra/ds/bios/entry.ds": ["--rom"] }    more options for one program
+}
+```
+(`-I <dir>`, `-D NAME[=value]`, `--rom`, `--raw`; paths relative to the workspace root.) Errors
+are reported one per declaration or sub (the first one in each). Tests:
+`tests/dsls/run_tests.py`. The log (Zed: `dev: open language server logs`) shows what dsls did.
 
 ## Changing a grammar
 

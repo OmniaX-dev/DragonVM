@@ -16,7 +16,7 @@ namespace dscript
 		return 0;
 	}
 
-	std::string Type::name(void) const
+	std::string Type::name(bool brief) const
 	{
 		switch (kind)
 		{
@@ -29,15 +29,15 @@ namespace dscript
 			case Kind::I32: return "i32";
 			case Kind::U32: return "u32";
 			case Kind::Null: return "null";
-			case Kind::Pointer: return (base->kind == Kind::Function ? "(" + base->name() + ")" : base->name()) + "*";
-			case Kind::Array: return base->name() + "[" + std::to_string(count) + "]";
-			case Kind::Struct: return structInfo->displayName();
+			case Kind::Pointer: return (base->kind == Kind::Function ? "(" + base->name(brief) + ")" : base->name(brief)) + "*";
+			case Kind::Array: return base->name(brief) + "[" + std::to_string(count) + "]";
+			case Kind::Struct: return (brief && structInfo->anonymous) ? "struct { ... }" : structInfo->displayName();
 			case Kind::Function:
 			{
 				std::string s = "sub(";
 				for (size_t i = 0; i < params.size(); i++)
-					s += (i > 0 ? ", " : "") + params[i]->name();
-				return s + ") -> " + base->name();
+					s += (i > 0 ? ", " : "") + params[i]->name(brief);
+				return s + ") -> " + base->name(brief);
 			}
 		}
 		return "?";

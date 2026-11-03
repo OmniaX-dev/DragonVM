@@ -14,8 +14,20 @@ namespace dscript
 		throw CompileError { pos, message };
 	}
 
+	static WarningHandler s_warningHandler = nullptr;
+
+	void setWarningHandler(WarningHandler handler)
+	{
+		s_warningHandler = handler;
+	}
+
 	void warning(const SourcePos& pos, const std::string& message)
 	{
+		if (s_warningHandler != nullptr)
+		{
+			s_warningHandler(pos, message);
+			return;
+		}
 		std::cerr << posString(pos) << ": warning: " << message << "\n";
 	}
 

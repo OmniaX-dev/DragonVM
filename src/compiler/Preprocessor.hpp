@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Lexer.hpp"
+#include "Index.hpp"
 #include <map>
 #include <set>
 
@@ -21,6 +22,13 @@ namespace dscript
 			Preprocessor(const std::vector<std::string>& includeDirs);
 			void define(const std::string& name, const std::string& value);
 			std::vector<Token> processFile(const std::string& path);
+
+			// For the language server: the text of files open in the editor (by canonical path),
+			// used instead of what is on the disk; the #includes go in the index.
+			static void setOverlay(const std::map<std::string, std::string>* files);
+			void setIndex(Index* index) { m_index = index; }
+			// Every file read (canonical paths).
+			const std::set<std::string>& files(void) const { return m_files; }
 
 		private:
 			struct Conditional
@@ -45,5 +53,7 @@ namespace dscript
 			std::map<std::string, std::vector<Token>> m_defines;
 			std::set<std::string> m_onceFiles;
 			std::vector<std::string> m_includeStack;
+			std::set<std::string> m_files;
+			Index* m_index { nullptr };
 	};
 }

@@ -1,6 +1,6 @@
 id = "dragonvm"
 name = "DragonVM"
-description = "DScript and dasm (Dragon assembly): syntax highlighting, outline, brackets, indentation"
+description = "DScript and dasm (Dragon assembly): syntax highlighting, outline, brackets, indentation; DScript language server (dsls)"
 version = "0.1.0"
 schema_version = 1
 authors = ["OmniaX-Dev"]
@@ -19,3 +19,9 @@ path = "editors/tree-sitter-dscript"
 repository = "file:///home/sylar/GitRepos/Dragon/DragonVM"
 rev = "ed54d2e4782ea534e30d827c4d52859886a0d98b"
 path = "editors/tree-sitter-dasm"
+
+# dsls, the DScript language server (bin/dsls; see src/lib.rs for how it is found): errors as
+# you type, go to definition, hover, symbols. Configuration: dsls.json in the workspace root.
+[language_servers.dsls]
+name = "dsls"
+languages = ["DScript"]

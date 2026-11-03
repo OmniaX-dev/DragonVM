@@ -29,5 +29,8 @@ namespace dscript
 
 	[[noreturn]] void error(const SourcePos& pos, const std::string& message);
 	void warning(const SourcePos& pos, const std::string& message);
+	// Where warnings go (default: stderr); nullptr restores the default.
+	typedef void (*WarningHandler)(const SourcePos& pos, const std::string& message);
+	void setWarningHandler(WarningHandler handler);
 	std::string posString(const SourcePos& pos);
 }

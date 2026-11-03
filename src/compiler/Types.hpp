@@ -24,7 +24,8 @@ namespace dscript
 		bool isScalar(void) const { return isInteger() || isPointer() || isFunction(); }
 		bool isVoidPointer(void) const { return kind == Kind::Pointer && base->kind == Kind::Void; }
 		uint32_t size(void) const;
-		std::string name(void) const;
+		// brief: nameless structs as "struct { ... }" (without where they are declared)
+		std::string name(bool brief = false) const;
 	};
 
 	struct StructField
@@ -34,6 +35,7 @@ namespace dscript
 		uint32_t offset { 0 };
 		Node* init { nullptr };		// default value (constant expression), or nullptr
 		SourcePos pos;
+		SourcePos namePos;
 	};
 
 	struct StructInfo

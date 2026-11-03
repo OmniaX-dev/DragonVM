@@ -1,0 +1,4 @@
+# Built by Zed when the extension is installed
+/target
+/Cargo.lock
+/extension.wasm

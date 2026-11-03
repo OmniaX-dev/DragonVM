@@ -1,0 +1,15 @@
+#once
+
+struct Point {
+	var x: i32;
+	var y: i32 = 7;
+};
+
+enum Color { Red, Green = 5, Blue }
+
+const ORIGIN_X = 0x10;
+const GREETING = "hello";
+
+sub area(var w: i32, var h: i32 = 2) -> i32 {
+	return w * h;
+}

@@ -6,8 +6,25 @@
 
 namespace dscript
 {
+	static const std::map<std::string, std::string>* s_overlay = nullptr;
+
+	void Preprocessor::setOverlay(const std::map<std::string, std::string>* files)
+	{
+		s_overlay = files;
+	}
+
 	static bool readFile(const std::string& path, std::string& out)
 	{
+		if (s_overlay != nullptr)
+		{
+			std::error_code ec;
+			auto it = s_overlay->find(std::filesystem::weakly_canonical(path, ec).string());
+			if (it != s_overlay->end())
+			{
+				out = it->second;
+				return true;
+			}
+		}
 		std::ifstream file(path, std::ios::binary);
 		if (!file)
 			return false;
@@ -55,6 +72,7 @@ namespace dscript
 		if (!readFile(path, source))
 			error({ path, 0, 0 }, "cannot open file");
 		std::string canonical = std::filesystem::weakly_canonical(path).string();
+		m_files.insert(canonical);
 		m_includeStack.push_back(canonical);
 		Lexer lexer(source, path);
 		std::vector<Token> tokens = lexer.tokenize();
@@ -221,6 +239,11 @@ namespace dscript
 		else if (name == "include")
 		{
 			std::string path = resolveInclude(tok, argument(tok, rest, name), directory);
+			if (m_index != nullptr)
+			{
+				const std::string target = std::filesystem::weakly_canonical(path).string();
+				m_index->add(tok.pos, (int)tok.text.size() + 1, { target, 1, 1 }, "#include " + target);
+			}
 			std::string canonical = std::filesystem::weakly_canonical(path).string();
 			if (m_onceFiles.count(canonical) > 0)
 				return;

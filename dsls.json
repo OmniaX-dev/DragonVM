@@ -1,0 +1,6 @@
+{
+	"args": ["-I", "extra/ds/sdk"],
+	"files": {
+		"extra/ds/bios/entry.ds": ["--rom"]
+	}
+}

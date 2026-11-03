@@ -67,6 +67,76 @@ namespace dscript
 		return j;
 	}
 
+	// The name of a local constant / static as written (hidden name: <sub>::<name>[::<n>]).
+	static std::string shownName(const std::string& name)
+	{
+		size_t p = name.find("::");
+		if (p == std::string::npos)
+			return name;
+		size_t q = name.find("::", p + 2);
+		return name.substr(p + 2, q == std::string::npos ? std::string::npos : q - p - 2);
+	}
+
+	// "in sub X" for local constants / statics ("" otherwise).
+	static std::string ownerOf(const std::string& name)
+	{
+		size_t p = name.find("::");
+		if (p == std::string::npos)
+			return "";
+		const std::string owner = name.substr(0, p);
+		return owner.rfind("__lambda_", 0) == 0 ? "in a lambda" : "in sub " + owner;
+	}
+
+	static std::string comment(const std::vector<std::string>& notes)
+	{
+		std::string s;
+		for (const auto& n : notes)
+		{
+			if (!n.empty())
+				s += (s.empty() ? "  // " : ", ") + n;
+		}
+		return s;
+	}
+
+	static std::string quoted(const std::string& text)
+	{
+		std::string s = "\"";
+		for (unsigned char c : text)
+		{
+			if (c == '\n') s += "\\n";
+			else if (c == '\t') s += "\\t";
+			else if (c == '\r') s += "\\r";
+			else if (c == '"') s += "\\\"";
+			else if (c == '\\') s += "\\\\";
+			else if (c < 32 || c >= 127)
+			{
+				char buf[8];
+				std::snprintf(buf, sizeof(buf), "\\x%02X", c);
+				s += buf;
+			}
+			else
+				s += (char)c;
+		}
+		return s + "\"";
+	}
+
+	static std::string number(int64_t value)
+	{
+		std::string s = std::to_string(value);
+		if (value < 0 || value > 9)
+		{
+			char buf[16];
+			std::snprintf(buf, sizeof(buf), " (0x%X)", (uint32_t)value);
+			s += buf;
+		}
+		return s;
+	}
+
+	static std::string bytes(uint32_t size)
+	{
+		return std::to_string(size) + (size == 1 ? " byte" : " bytes");
+	}
+
 	// Does the sub (FuncDecl) have a parameter or a local variable with this name?
 	static bool declaresName(const Node* n, const std::string& name, bool top = true)
 	{
@@ -146,79 +216,83 @@ namespace dscript
 	{
 		for (Node* d : program->list)
 		{
-			switch (d->kind)
-			{
-				case NodeKind::StructDecl:
+			attempt([&] {
+				switch (d->kind)
 				{
-					declareName(d->name, d->pos, "a struct");
-					StructInfo* info = new StructInfo();
-					info->name = d->name;
-					info->decl = d;
-					info->anonymous = d->value != 0;
-					info->pos = d->pos;
-					m_structs[d->name] = info;
-				}
-				break;
-				case NodeKind::EnumDecl:
-					declareName(d->name, d->pos, "an enum");
-					m_enums[d->name].decl = d;
-				break;
-				case NodeKind::AliasDecl:
-					declareName(d->name, d->pos, "an alias");
-					m_aliases[d->name].decl = d;
-				break;
-				case NodeKind::ConstDecl:
-					if (d->typeSyntax != nullptr && d->typeSyntax->kind == TypeSyntax::Kind::Array)
+					case NodeKind::StructDecl:
 					{
-						// const Name: T[N] = ...: read-only data in the program.
-						declareName(d->name, d->pos, "a constant array");
+						declareName(d->name, d->pos, "a struct");
+						StructInfo* info = new StructInfo();
+						info->name = d->name;
+						info->decl = d;
+						info->anonymous = d->value != 0;
+						info->pos = d->pos;
+						m_structs[d->name] = info;
+					}
+					break;
+					case NodeKind::EnumDecl:
+						declareName(d->name, d->pos, "an enum");
+						m_enums[d->name].decl = d;
+					break;
+					case NodeKind::AliasDecl:
+						declareName(d->name, d->pos, "an alias");
+						m_aliases[d->name].decl = d;
+					break;
+					case NodeKind::ConstDecl:
+						if (d->typeSyntax != nullptr && d->typeSyntax->kind == TypeSyntax::Kind::Array)
+						{
+							// const Name: T[N] = ...: read-only data in the program.
+							declareName(d->name, d->pos, "a constant array");
+							VarInfo* v = new VarInfo();
+							v->name = d->name;
+							v->storage = VarInfo::Storage::Global;
+							v->symbol = dataSymbol(d->name);
+							v->pos = d->pos;
+							v->defPos = d->namePos;
+							v->readOnly = true;
+							m_globals[d->name] = v;
+							m_globalDecls.push_back(d);
+							break;
+						}
+						declareName(d->name, d->pos, "a constant");
+						m_consts[d->name].decl = d;
+					break;
+					case NodeKind::VarDecl:
+					{
+						declareName(d->name, d->pos, "a global variable");
 						VarInfo* v = new VarInfo();
 						v->name = d->name;
 						v->storage = VarInfo::Storage::Global;
 						v->symbol = dataSymbol(d->name);
 						v->pos = d->pos;
-						v->readOnly = true;
+						v->defPos = d->namePos;
 						m_globals[d->name] = v;
 						m_globalDecls.push_back(d);
-						break;
 					}
-					declareName(d->name, d->pos, "a constant");
-					m_consts[d->name].decl = d;
-				break;
-				case NodeKind::VarDecl:
-				{
-					declareName(d->name, d->pos, "a global variable");
-					VarInfo* v = new VarInfo();
-					v->name = d->name;
-					v->storage = VarInfo::Storage::Global;
-					v->symbol = dataSymbol(d->name);
-					v->pos = d->pos;
-					m_globals[d->name] = v;
-					m_globalDecls.push_back(d);
+					break;
+					case NodeKind::FuncDecl:
+					{
+						if (m_funcs.count(d->name) == 0)
+							declareName(d->name, d->pos, "a sub");
+						FuncInfo* f = new FuncInfo();
+						f->name = d->name;
+						if (d->name.rfind("__lambda_", 0) == 0)
+							f->name = "the lambda at " + posString(d->pos);
+						f->decl = d;
+						f->interrupt = (d->value & 1) != 0;
+						f->isInline = (d->value & 2) != 0;
+						f->defined = d->a != nullptr;
+						m_funcs[d->name].push_back(f);
+						m_funcList.push_back(f);
+					}
+					break;
+					case NodeKind::LowBlock:
+						m_topLows.push_back(d);
+					break;
+					default:
+						error(d->pos, "unexpected declaration");
 				}
-				break;
-				case NodeKind::FuncDecl:
-				{
-					if (m_funcs.count(d->name) == 0)
-						declareName(d->name, d->pos, "a sub");
-					FuncInfo* f = new FuncInfo();
-					f->name = d->name;
-					if (d->name.rfind("__lambda_", 0) == 0)
-						f->name = "the lambda at " + posString(d->pos);
-					f->decl = d;
-					f->interrupt = (d->value & 1) != 0;
-					f->isInline = (d->value & 2) != 0;
-					f->defined = d->a != nullptr;
-					m_funcs[d->name].push_back(f);
-					m_funcList.push_back(f);
-				}
-				break;
-				case NodeKind::LowBlock:
-					m_topLows.push_back(d);
-				break;
-				default:
-					error(d->pos, "unexpected declaration");
-			}
+			});
 		}
 	}
 
@@ -234,13 +308,29 @@ namespace dscript
 			case TypeSyntax::Kind::Named:
 			{
 				if (Type* t = m_types.builtin(ts->name))
+				{
+					if (m_options.index != nullptr)
+						indexName(ts->pos, ts->name, {}, ts->name + comment({ "builtin type" + (t->name() != ts->name ? ": " + t->name() : std::string()),
+							t->kind == Type::Kind::Void ? "" : bytes(t->size()) }));
 					return t;
+				}
 				if (m_structs.count(ts->name) > 0)
-					return m_types.structType(m_structs[ts->name]);
+				{
+					StructInfo* info = m_structs[ts->name];
+					if (m_options.index != nullptr)
+						indexName(ts->pos, info->anonymous ? "struct" : ts->name, info->decl->namePos, hoverStruct(info));
+					return m_types.structType(info);
+				}
 				if (m_enums.count(ts->name) > 0)
+				{
+					if (m_options.index != nullptr)
+						indexName(ts->pos, ts->name, m_enums[ts->name].decl->namePos, hoverEnum(ts->name));
 					return m_types.i32();
+				}
 				if (m_aliases.count(ts->name) > 0)
 				{
+					if (m_options.index != nullptr)
+						indexName(ts->pos, ts->name, m_aliases[ts->name].decl->namePos, "alias " + ts->name);
 					AliasInfo& a = m_aliases[ts->name];
 					if (a.type == nullptr)
 					{
@@ -304,6 +394,7 @@ namespace dscript
 			StructField field;
 			field.name = f->name;
 			field.pos = f->pos;
+			field.namePos = f->namePos;
 			field.type = resolveType(f->typeSyntax);
 			if (field.type->kind == Type::Kind::Void)
 				error(f->pos, "fields cannot be void");
@@ -452,6 +543,8 @@ namespace dscript
 		const ConstInfo& c = m_consts[e->name];
 		if (!c.isString)
 			return;
+		if (m_options.index != nullptr)
+			indexName(e->pos, (e->text.empty() ? e->name : e->text), c.decl->namePos, hoverConst(e->name));
 		e->kind = NodeKind::StrLit;
 		e->text = c.text;
 	}
@@ -491,6 +584,8 @@ namespace dscript
 			ConstInfo& c = m_consts[e->name];
 			if (c.type == nullptr || c.type->kind != Type::Kind::Struct)
 				return nullptr;
+			if (m_options.index != nullptr)
+				indexName(e->pos, (e->text.empty() ? e->name : e->text), c.decl->namePos, hoverConst(e->name));
 			structType = c.type;
 			path.clear();
 			return &c;
@@ -502,9 +597,11 @@ namespace dscript
 				return nullptr;
 			const StructField* f = structType->structInfo->field(e->name);
 			if (f == nullptr)
-				error(e->pos, (structType->structInfo->anonymous ? structType->structInfo->displayName() : "struct " + structType->structInfo->name) + " has no field '" + e->name + "'");
+				error(e->namePos, (structType->structInfo->anonymous ? structType->structInfo->displayName() : "struct " + structType->structInfo->name) + " has no field '" + e->name + "'");
 			if (f->type->kind != Type::Kind::Struct)
 				return nullptr;
+			if (m_options.index != nullptr)
+				indexName(e->namePos, e->name, f->namePos, hoverField(structType->structInfo, *f));
 			structType = f->type;
 			path += e->name + ".";
 			return c;
@@ -944,6 +1041,8 @@ namespace dscript
 		e->func = nullptr;
 		if (VarInfo* v = lookupVar(e->name))
 		{
+			if (m_options.index != nullptr && !m_discarding)
+				indexName(e->pos, (e->text.empty() ? e->name : e->text), v->defPos, hoverVar(v));
 			e->var = v;
 			e->type = v->type;
 			e->lvalue = true;
@@ -953,6 +1052,8 @@ namespace dscript
 		if (m_consts.count(e->name) > 0)
 		{
 			e->constValue = resolveConst(e->name, e->pos);
+			if (m_options.index != nullptr)
+				indexName(e->pos, (e->text.empty() ? e->name : e->text), m_consts[e->name].decl->namePos, hoverConst(e->name));
 			if (m_consts[e->name].isString)
 			{
 				Type* t = m_consts[e->name].type;
@@ -977,6 +1078,17 @@ namespace dscript
 			e->type = e->func ? e->func->type : nullptr;
 			if (e->func && !m_discarding)
 				e->func->addressTaken = true;
+			if (m_options.index != nullptr)
+			{
+				// Overloaded and not chosen by the expected type: all of them.
+				std::string hover;
+				for (FuncInfo* f : funcs)
+				{
+					if (e->func == nullptr || e->func == f)
+						hover += (hover.empty() ? "" : "\n") + hoverFunc(f);
+				}
+				indexName(e->pos, e->name, (e->func ? e->func : funcs[0])->decl->namePos, hover);
+			}
 			return;
 		}
 		if (m_func && m_inline.empty())
@@ -1193,6 +1305,8 @@ namespace dscript
 			}
 			e->func = f;
 			e->type = f->type->base;
+			if (m_options.index != nullptr)
+				indexName(callee->pos, callee->name, f->decl->namePos, hoverFunc(f));
 			return;
 		}
 		check(callee);
@@ -1218,8 +1332,18 @@ namespace dscript
 		{
 			EnumInfo& info = m_enums[e->a->name];
 			resolveEnum(info);
+			if (m_options.index != nullptr)
+				indexName(e->a->pos, e->a->name, info.decl->namePos, hoverEnum(e->a->name));
 			if (info.values.count(e->name) == 0)
 				error(e->pos, "enum " + e->a->name + " has no member '" + e->name + "'");
+			if (m_options.index != nullptr)
+			{
+				for (const Node* m : info.decl->list)
+				{
+					if (m->name == e->name)
+						indexName(e->namePos, e->name, m->namePos, e->a->name + "." + e->name + " = " + std::to_string(info.values[e->name]));
+				}
+			}
 			e->type = m_types.i32();
 			e->isConst = true;
 			e->constValue = info.values[e->name];
@@ -1234,7 +1358,9 @@ namespace dscript
 			{
 				const StructField* f = st->structInfo->field(e->name);
 				if (f == nullptr)
-					error(e->pos, (st->structInfo->anonymous ? st->structInfo->displayName() : "struct " + st->structInfo->name) + " has no field '" + e->name + "'");
+					error(e->namePos, (st->structInfo->anonymous ? st->structInfo->displayName() : "struct " + st->structInfo->name) + " has no field '" + e->name + "'");
+				if (m_options.index != nullptr)
+					indexName(e->namePos, e->name, f->namePos, hoverField(st->structInfo, *f));
 				if (f->type->kind == Type::Kind::Struct)
 					error(e->pos, "'" + e->name + "' is a struct field of a constant: it has no address, use its fields");
 				e->type = f->type;
@@ -1266,7 +1392,9 @@ namespace dscript
 		resolveStruct(t->structInfo, e->pos);
 		const StructField* f = t->structInfo->field(e->name);
 		if (f == nullptr)
-			error(e->pos, (t->structInfo->anonymous ? t->structInfo->displayName() : "struct " + t->structInfo->name) + " has no field '" + e->name + "'");
+			error(e->namePos, (t->structInfo->anonymous ? t->structInfo->displayName() : "struct " + t->structInfo->name) + " has no field '" + e->name + "'");
+		if (m_options.index != nullptr && !m_discarding)
+			indexName(e->namePos, e->name, f->namePos, hoverField(t->structInfo, *f));
 		e->type = f->type;
 		e->lvalue = (e->value == 1) || e->a->lvalue;
 		e->readOnly = (e->value == 0) && e->a->readOnly;
@@ -1976,6 +2104,10 @@ namespace dscript
 			v->type = params[i];
 			v->storage = VarInfo::Storage::Local;
 			v->pos = f->decl->list[i]->pos;
+			v->defPos = f->decl->list[i]->namePos;
+			v->param = true;
+			if (m_options.index != nullptr && !m_discarding)
+				indexName(v->defPos, v->name, v->defPos, hoverVar(v));
 			m_localCursor -= 4;
 			v->offset = m_localCursor;
 			m_localMin = std::min(m_localMin, m_localCursor);
@@ -2192,6 +2324,9 @@ namespace dscript
 		v->type = t;
 		v->storage = VarInfo::Storage::Local;
 		v->pos = s->pos;
+		v->defPos = s->namePos;
+		if (m_options.index != nullptr)
+			indexName(v->defPos, v->name, v->defPos, hoverVar(v));
 		m_localCursor -= (int32_t)alignUp(std::max<uint32_t>(t->size(), 1), 4);
 		v->offset = m_localCursor;
 		m_localMin = std::min(m_localMin, m_localCursor);
@@ -2449,6 +2584,13 @@ namespace dscript
 					member = line.substr(j + 1, k - j - 1);
 					j = k;
 				}
+				if (m_options.index != nullptr && !name.empty())
+				{
+					// The column of the name in the source (the line was trimmed; the first line of
+					// the block starts after its '{').
+					const int base = (pos.line == low->pos.line ? low->pos.column + 1 : 1) + (int)a;
+					indexLow({ pos.file, pos.line, base + (int)i + 1 }, name);
+				}
 				VarInfo* v = name.empty() ? nullptr : lookupVar(name);
 				// $Constant.field.field...: a field of a struct constant (its value).
 				if (v == nullptr && member.empty() && m_consts.count(name) > 0 && j < line.size() && line[j] == '.'
@@ -2578,6 +2720,10 @@ namespace dscript
 			v->storage = VarInfo::Storage::Param;
 			v->offset = (int32_t)i;
 			v->pos = f->decl->list[i]->pos;
+			v->defPos = f->decl->list[i]->namePos;
+			v->param = true;
+			if (m_options.index != nullptr)
+				indexName(v->defPos, v->name, v->defPos, hoverVar(v));
 			m_scopes.back()[v->name] = v;
 		}
 		m_localCursor = 4;
@@ -2621,31 +2767,35 @@ namespace dscript
 		// Types first (subs can use any global).
 		for (Node* d : m_globalDecls)
 		{
-			VarInfo* v = m_globals[d->name];
-			if (m_options.rom && !v->readOnly && d->name.find("::") != std::string::npos)
-				error(d->pos, "--rom: '" + d->text + "' is a static variable (stored in the program, like a global), but the program is in ROM, "
-					"where nothing can change: use const for read-only values, and keep what changes in RAM (locals, or a pointer to a RAM address)");
-			if (m_options.rom && !v->readOnly)
-				error(d->pos, "--rom: '" + d->name + "' is a global variable, but the program (and its data) is in ROM, "
-					"where nothing can change: use const for read-only values, and keep what changes in RAM (locals, or a pointer to a RAM address)");
-			Type* t = nullptr;
-			inferArraySize(d->typeSyntax, d->a, d->pos);
-			if (d->typeSyntax)
-				t = resolveType(d->typeSyntax);
-			else
-			{
-				check(d->a);
-				t = decay(d->a->type);
-				if (t == nullptr || t->kind == Type::Kind::Null || t->kind == Type::Kind::Void)
-					error(d->pos, "cannot tell the type of '" + d->name + "' (write var " + d->name + ": <type>)");
-				if (t->isInteger() && d->a->kind == NodeKind::IntLit)
-					t = m_types.i32();
-			}
-			if (t->kind == Type::Kind::Void)
-				error(d->pos, "variables cannot be void");
-			if (t->kind == Type::Kind::Struct)
-				resolveStruct(t->structInfo, d->pos);
-			v->type = t;
+			const bool ok = attempt([&] {
+				VarInfo* v = m_globals[d->name];
+				if (m_options.rom && !v->readOnly && d->name.find("::") != std::string::npos)
+					error(d->pos, "--rom: '" + d->text + "' is a static variable (stored in the program, like a global), but the program is in ROM, "
+						"where nothing can change: use const for read-only values, and keep what changes in RAM (locals, or a pointer to a RAM address)");
+				if (m_options.rom && !v->readOnly)
+					error(d->pos, "--rom: '" + d->name + "' is a global variable, but the program (and its data) is in ROM, "
+						"where nothing can change: use const for read-only values, and keep what changes in RAM (locals, or a pointer to a RAM address)");
+				Type* t = nullptr;
+				inferArraySize(d->typeSyntax, d->a, d->pos);
+				if (d->typeSyntax)
+					t = resolveType(d->typeSyntax);
+				else
+				{
+					check(d->a);
+					t = decay(d->a->type);
+					if (t == nullptr || t->kind == Type::Kind::Null || t->kind == Type::Kind::Void)
+						error(d->pos, "cannot tell the type of '" + d->name + "' (write var " + d->name + ": <type>)");
+					if (t->isInteger() && d->a->kind == NodeKind::IntLit)
+						t = m_types.i32();
+				}
+				if (t->kind == Type::Kind::Void)
+					error(d->pos, "variables cannot be void");
+				if (t->kind == Type::Kind::Struct)
+					resolveStruct(t->structInfo, d->pos);
+				v->type = t;
+			});
+			if (!ok)
+				m_globals[d->name]->type = m_types.i32();
 		}
 		// Values: constants go in the data, the rest is done by __ds_init (which has locals
 		// when an initializer calls an inline sub).
@@ -2654,183 +2804,443 @@ namespace dscript
 		m_localMin = 4;
 		for (Node* d : m_globalDecls)
 		{
-			VarInfo* v = m_globals[d->name];
-			Type* t = v->type;
-			std::vector<uint8_t> bytes(t->size(), 0);
-			struct Pending { uint32_t offset; Type* type; Node* init; const StructField* field; };
-			std::vector<Pending> pending;
-			// Pointers to string literals: stored as the literal's address ($symbol in the data).
-			std::map<uint32_t, std::string> refs;
-			std::vector<std::pair<int32_t, const StructField*>> defaults;
-			collectDefaults(t, 0, defaults);
-			for (const auto& def : defaults)
-			{
-				if (def.second->init->kind == NodeKind::StrLit)
-					refs[(uint32_t)def.first] = stringLiteral(def.second->init->text);
-				else
-					putBytes(bytes, def.first, def.second->type->size(), def.second->init->constValue);
-			}
-			// Walk the initializer.
-			std::vector<Pending> work;
-			if (d->a)
-				work.push_back({ 0, t, d->a, nullptr });
-			while (!work.empty())
-			{
-				Pending p = work.back();
-				work.pop_back();
-				Node* init = p.init;
-				foldStringConst(init);
-				if (init->kind == NodeKind::InitList)
+			attempt([&] {
+				VarInfo* v = m_globals[d->name];
+				Type* t = v->type;
+				std::vector<uint8_t> bytes(t->size(), 0);
+				struct Pending { uint32_t offset; Type* type; Node* init; const StructField* field; };
+				std::vector<Pending> pending;
+				// Pointers to string literals: stored as the literal's address ($symbol in the data).
+				std::map<uint32_t, std::string> refs;
+				std::vector<std::pair<int32_t, const StructField*>> defaults;
+				collectDefaults(t, 0, defaults);
+				for (const auto& def : defaults)
 				{
-					if (p.type->kind == Type::Kind::Array)
-					{
-						if (init->list.size() > p.type->count)
-							error(init->pos, "too many values for " + p.type->name());
-						for (size_t i = 0; i < init->list.size(); i++)
-							work.push_back({ p.offset + (uint32_t)i * p.type->base->size(), p.type->base, init->list[i], nullptr });
-					}
-					else if (p.type->kind == Type::Kind::Struct)
-					{
-						const auto& fields = p.type->structInfo->fields;
-						if (init->list.size() > fields.size())
-							error(init->pos, "too many values for struct " + p.type->name());
-						for (size_t i = 0; i < init->list.size(); i++)
-							work.push_back({ p.offset + fields[i].offset, fields[i].type, init->list[i], nullptr });
-					}
+					if (def.second->init->kind == NodeKind::StrLit)
+						refs[(uint32_t)def.first] = stringLiteral(def.second->init->text);
 					else
-						error(init->pos, "{ ... } initializes arrays and structs, not " + p.type->name());
-					continue;
+						putBytes(bytes, def.first, def.second->type->size(), def.second->init->constValue);
 				}
-				if (p.type->kind == Type::Kind::Array && init->kind == NodeKind::StrLit)
+				// Walk the initializer.
+				std::vector<Pending> work;
+				if (d->a)
+					work.push_back({ 0, t, d->a, nullptr });
+				while (!work.empty())
 				{
-					if (p.type->base->size() != 1)
-						error(init->pos, "strings can only initialize u8 / i8 arrays");
-					if (init->text.size() > p.type->count)
-						error(init->pos, "the string is longer than the array (" + std::to_string(p.type->count) + " bytes)");
-					for (size_t i = 0; i < init->text.size(); i++)
-						bytes[p.offset + i] = (uint8_t)init->text[i];
-					continue;
-				}
-				check(init, p.type);
-				requireConvertible(init, p.type, "in the initialization of '" + d->name + "'");
-				if (p.type->kind == Type::Kind::Struct || p.type->kind == Type::Kind::Array)
-					error(init->pos, "global structs and arrays are initialized with { ... }");
-				if (init->kind == NodeKind::StrLit)
-				{
-					refs[p.offset] = stringLiteral(init->text);
-					continue;
-				}
-				refs.erase(p.offset);	// replaces a default
-				if (init->isConst || init->constPtr)
-					putBytes(bytes, p.offset, p.type->size(), init->isConst ? wrapTo(init->constValue, p.type) : init->constValue);
-				else
-				{
-					if (v->readOnly)
-						error(init->pos, "the values of a constant array must be constants or strings ('" + d->name + "' is stored in the program)");
-					pending.push_back(p);
-				}
-			}
-			// The data line.
-			bool allZero = refs.empty();
-			for (uint8_t b : bytes)
-				allZero = allZero && b == 0;
-			std::string line = "\t$" + v->symbol;
-			if (allZero && bytes.size() > 1)
-				line += ":" + std::to_string(bytes.size());
-			else
-			{
-				line += " ";
-				for (size_t i = 0; i < bytes.size(); i++)
-				{
-					if (i > 0)
-						line += ", ";
-					auto ref = refs.find((uint32_t)i);
-					if (ref != refs.end())
+					Pending p = work.back();
+					work.pop_back();
+					Node* init = p.init;
+					foldStringConst(init);
+					if (init->kind == NodeKind::InitList)
 					{
-						line += "$" + ref->second;
-						i += 3;
+						if (p.type->kind == Type::Kind::Array)
+						{
+							if (init->list.size() > p.type->count)
+								error(init->pos, "too many values for " + p.type->name());
+							for (size_t i = 0; i < init->list.size(); i++)
+								work.push_back({ p.offset + (uint32_t)i * p.type->base->size(), p.type->base, init->list[i], nullptr });
+						}
+						else if (p.type->kind == Type::Kind::Struct)
+						{
+							const auto& fields = p.type->structInfo->fields;
+							if (init->list.size() > fields.size())
+								error(init->pos, "too many values for struct " + p.type->name());
+							for (size_t i = 0; i < init->list.size(); i++)
+								work.push_back({ p.offset + fields[i].offset, fields[i].type, init->list[i], nullptr });
+						}
+						else
+							error(init->pos, "{ ... } initializes arrays and structs, not " + p.type->name());
 						continue;
 					}
-					char buf[8];
-					std::snprintf(buf, sizeof(buf), "0x%02X", bytes[i]);
-					line += buf;
+					if (p.type->kind == Type::Kind::Array && init->kind == NodeKind::StrLit)
+					{
+						if (p.type->base->size() != 1)
+							error(init->pos, "strings can only initialize u8 / i8 arrays");
+						if (init->text.size() > p.type->count)
+							error(init->pos, "the string is longer than the array (" + std::to_string(p.type->count) + " bytes)");
+						for (size_t i = 0; i < init->text.size(); i++)
+							bytes[p.offset + i] = (uint8_t)init->text[i];
+						continue;
+					}
+					check(init, p.type);
+					requireConvertible(init, p.type, "in the initialization of '" + d->name + "'");
+					if (p.type->kind == Type::Kind::Struct || p.type->kind == Type::Kind::Array)
+						error(init->pos, "global structs and arrays are initialized with { ... }");
+					if (init->kind == NodeKind::StrLit)
+					{
+						refs[p.offset] = stringLiteral(init->text);
+						continue;
+					}
+					refs.erase(p.offset);	// replaces a default
+					if (init->isConst || init->constPtr)
+						putBytes(bytes, p.offset, p.type->size(), init->isConst ? wrapTo(init->constValue, p.type) : init->constValue);
+					else
+					{
+						if (v->readOnly)
+							error(init->pos, "the values of a constant array must be constants or strings ('" + d->name + "' is stored in the program)");
+						pending.push_back(p);
+					}
 				}
-			}
-			m_data.push_back(line);
-			// Run time initializations.
-			for (const auto& p : pending)
-			{
-				Reg val = alloc(p.init->pos);
-				if (p.init->kind == NodeKind::StrLit)
-					emit("mov " + val + ", $" + stringLiteral(p.init->text));
+				// The data line.
+				bool allZero = refs.empty();
+				for (uint8_t b : bytes)
+					allZero = allZero && b == 0;
+				std::string line = "\t$" + v->symbol;
+				if (allZero && bytes.size() > 1)
+					line += ":" + std::to_string(bytes.size());
 				else
 				{
-					release(val);
-					val = gen(p.init);
-					convert(val, decay(p.init->type), p.type);
+					line += " ";
+					for (size_t i = 0; i < bytes.size(); i++)
+					{
+						if (i > 0)
+							line += ", ";
+						auto ref = refs.find((uint32_t)i);
+						if (ref != refs.end())
+						{
+							line += "$" + ref->second;
+							i += 3;
+							continue;
+						}
+						char buf[8];
+						std::snprintf(buf, sizeof(buf), "0x%02X", bytes[i]);
+						line += buf;
+					}
 				}
-				Reg addr = alloc(p.init->pos);
-				emit("mov " + addr + ", $" + v->symbol);
-				addImmediate(addr, p.offset);
-				store(addr, val, p.type);
-				release(addr);
-				release(val);
+				m_data.push_back(line);
+				// Run time initializations.
+				for (const auto& p : pending)
+				{
+					Reg val = alloc(p.init->pos);
+					if (p.init->kind == NodeKind::StrLit)
+						emit("mov " + val + ", $" + stringLiteral(p.init->text));
+					else
+					{
+						release(val);
+						val = gen(p.init);
+						convert(val, decay(p.init->type), p.type);
+					}
+					Reg addr = alloc(p.init->pos);
+					emit("mov " + addr + ", $" + v->symbol);
+					addImmediate(addr, p.offset);
+					store(addr, val, p.type);
+					release(addr);
+					release(val);
+				}
+			});
+		}
+	}
+
+	// ===================================== Analysis =====================================
+	// Runs fn; in analysis mode an error is recorded (false is returned) and the generator is
+	// reset, so the next declaration or sub can be checked.
+	bool CodeGen::attempt(const std::function<void()>& fn)
+	{
+		if (!m_options.analysis)
+		{
+			fn();
+			return true;
+		}
+		try
+		{
+			fn();
+			return true;
+		}
+		catch (const CompileError& e)
+		{
+			m_errors.push_back(e);
+			m_out = &m_code;
+			m_scopes.clear();
+			m_func = nullptr;
+			m_inline.clear();
+			m_discarding = false;
+			m_regDepth = 0;
+			m_stmtDepth = 0;
+			m_loops.clear();
+			return false;
+		}
+	}
+
+	void CodeGen::indexName(const SourcePos& pos, const std::string& written, const SourcePos& def, const std::string& hover)
+	{
+		if (m_options.index != nullptr)
+			m_options.index->add(pos, (int)written.size(), def, hover);
+	}
+
+	std::string CodeGen::hoverVar(VarInfo* v)
+	{
+		const std::string type = v->type ? v->type->name(true) : "?";
+		const bool hidden = v->name.find("::") != std::string::npos;
+		std::string where;
+		if (v->param)
+			where = "parameter";
+		else if (v->storage == VarInfo::Storage::Local)
+			where = "local";
+		else if (hidden)
+			where = (v->readOnly ? "" : "static, ") + ownerOf(v->name);
+		else
+			where = v->readOnly ? "constant array" : "global";
+		const std::string size = (v->type && !v->type->isScalar()) ? bytes(v->type->size()) : "";
+		const std::string keyword = v->readOnly ? "const " : (hidden ? "static var " : "var ");
+		return keyword + shownName(v->name) + ": " + type + comment({ where, size });
+	}
+
+	std::string CodeGen::hoverFunc(FuncInfo* f)
+	{
+		const bool lambda = f->decl->name.rfind("__lambda_", 0) == 0;
+		std::string s;
+		if (f->interrupt)
+			s += "interrupt ";
+		if (f->isInline)
+			s += "inline ";
+		s += lambda ? "sub(" : "sub " + f->decl->name + "(";
+		if (f->type != nullptr)
+		{
+			for (size_t i = 0; i < f->type->params.size() && i < f->paramNames.size(); i++)
+			{
+				s += (i > 0 ? ", " : "") + std::string("var ") + f->paramNames[i] + ": " + f->type->params[i]->name(true);
+				const Node* d = i < f->defaults.size() ? f->defaults[i] : nullptr;
+				if (d != nullptr)
+				{
+					const bool isBool = f->type->params[i]->kind == Type::Kind::Bool;
+					s += " = " + (d->kind == NodeKind::StrLit ? quoted(d->text) : !d->isConst ? std::string("...")
+						: isBool ? std::string(d->constValue ? "true" : "false") : std::to_string(d->constValue));
+				}
 			}
 		}
+		s += ")";
+		if (f->type != nullptr && f->type->base->kind != Type::Kind::Void)
+			s += " -> " + f->type->base->name(true);
+		return s + comment({ lambda ? "lambda" : "" });
+	}
+
+	std::string CodeGen::hoverConst(const std::string& name)
+	{
+		const ConstInfo& c = m_consts[name];
+		const std::string head = "const " + shownName(name);
+		const std::string note = comment({ ownerOf(name) });
+		if (!c.resolved || c.type == nullptr)
+			return head + note;
+		if (c.isString)
+			return head + " = " + quoted(c.text) + note;
+		if (c.type->kind == Type::Kind::Struct)
+		{
+			// One field per line (in their order), addresses and other big values in hex.
+			std::function<std::string(StructInfo*, const std::string&, const std::string&)> l_fields =
+				[&](StructInfo* info, const std::string& prefix, const std::string& indent) {
+				std::string s = "{\n";
+				for (size_t i = 0; i < info->fields.size(); i++)
+				{
+					const StructField& f = info->fields[i];
+					s += indent + "\t" + f.name + " = ";
+					if (f.type->kind == Type::Kind::Struct)
+						s += l_fields(f.type->structInfo, prefix + f.name + ".", indent + "\t");
+					else
+					{
+						auto it = c.fields.find(prefix + f.name);
+						if (it == c.fields.end())
+							s += "?";
+						else if (it->second < 0 || it->second > 0xFFFF)
+						{
+							char buf[16];
+							std::snprintf(buf, sizeof(buf), "0x%08X", (uint32_t)it->second);
+							s += buf;
+						}
+						else
+							s += std::to_string(it->second);
+					}
+					s += (i + 1 < info->fields.size() ? ",\n" : "\n");
+				}
+				return s + indent + "}";
+			};
+			return head + ": " + c.type->name(true) + note + " = " + l_fields(c.type->structInfo, "", "");
+		}
+		return head + ": " + c.type->name(true) + " = " + number(c.value) + note;
+	}
+
+	std::string CodeGen::hoverStruct(StructInfo* info)
+	{
+		std::string s = info->anonymous ? "struct" : "struct " + info->name;
+		if (!info->complete)
+			return s;
+		s += " {  // " + bytes(info->size) + "\n";
+		for (const StructField& f : info->fields)
+			s += "\tvar " + f.name + ": " + (f.type ? f.type->name(true) : "?") + ";  // +" + std::to_string(f.offset) + "\n";
+		return s + "}";
+	}
+
+	std::string CodeGen::hoverField(StructInfo* info, const StructField& f)
+	{
+		const std::string owner = info->anonymous ? "struct { ... }" : info->name;
+		return "var " + f.name + ": " + (f.type ? f.type->name(true) : "?") + comment({ "field of " + owner + " at +" + std::to_string(f.offset),
+			f.type ? bytes(f.type->size()) : "" });
+	}
+
+	std::string CodeGen::hoverEnum(const std::string& name)
+	{
+		const EnumInfo& info = m_enums[name];
+		std::string s = "enum " + name + " {\n";
+		for (size_t i = 0; i < info.decl->list.size(); i++)
+		{
+			const std::string& member = info.decl->list[i]->name;
+			auto it = info.values.find(member);
+			s += "\t" + member + " = " + (it != info.values.end() ? std::to_string(it->second) : "?") + (i + 1 < info.decl->list.size() ? ",\n" : "\n");
+		}
+		return s + "}";
+	}
+
+	std::string CodeGen::hoverAlias(const std::string& name)
+	{
+		const AliasInfo& a = m_aliases[name];
+		return "alias " + name + " = " + (a.type ? a.type->name(true) : "?");
+	}
+
+	// $name in a low block (pos: where the name is).
+	void CodeGen::indexLow(const SourcePos& pos, const std::string& name)
+	{
+		if (VarInfo* v = lookupVar(name))
+			indexName(pos, shownName(name), v->defPos, hoverVar(v));
+		else if (m_consts.count(name) > 0)
+			indexName(pos, shownName(name), m_consts[name].decl->namePos, hoverConst(name));
+		else if (m_enums.count(name) > 0)
+			indexName(pos, name, m_enums[name].decl->namePos, hoverEnum(name));
+		else if (m_funcs.count(name) > 0 && !m_funcs[name].empty())
+			indexName(pos, name, m_funcs[name][0]->decl->namePos, hoverFunc(m_funcs[name][0]));
+	}
+
+	// The declarations themselves (hovering their names), and the final description of
+	// everything that was used before it was fully resolved.
+	void CodeGen::indexDeclarations(void)
+	{
+		std::map<Index::Key, std::string> hovers;
+		auto l_decl = [&](const SourcePos& pos, const std::string& written, const std::string& hover) {
+			indexName(pos, written, pos, hover);
+			hovers[Index::Key(pos.file, pos.line, pos.column)] = hover;
+		};
+		for (auto& s : m_structs)
+		{
+			StructInfo* info = s.second;
+			l_decl(info->decl->namePos, info->anonymous ? "struct" : info->name, hoverStruct(info));
+			for (const StructField& f : info->fields)
+				l_decl(f.namePos, f.name, hoverField(info, f));
+		}
+		for (auto& e : m_enums)
+		{
+			l_decl(e.second.decl->namePos, e.first, hoverEnum(e.first));
+			for (const Node* m : e.second.decl->list)
+			{
+				auto it = e.second.values.find(m->name);
+				l_decl(m->namePos, m->name, e.first + "." + m->name + " = " + (it != e.second.values.end() ? number(it->second) : "?"));
+			}
+		}
+		for (auto& c : m_consts)
+			l_decl(c.second.decl->namePos, shownName(c.first), hoverConst(c.first));
+		for (auto& a : m_aliases)
+			l_decl(a.second.decl->namePos, a.first, hoverAlias(a.first));
+		for (auto& g : m_globals)
+		{
+			if (g.second->type != nullptr)
+				l_decl(g.second->defPos, shownName(g.first), hoverVar(g.second));
+		}
+		for (FuncInfo* f : m_funcList)
+		{
+			const bool lambda = f->decl->name.rfind("__lambda_", 0) == 0;
+			l_decl(f->decl->namePos, lambda ? "sub" : f->decl->name, hoverFunc(f));
+		}
+		m_options.index->rehover(hovers);
 	}
 
 	std::vector<std::string> CodeGen::generate(Node* program)
 	{
 		collect(program);
-		// Resolve the declarations (in any order: they can refer to each other).
+		// Resolve the declarations (in any order: they can refer to each other). In analysis
+		// mode, what fails gets a placeholder so the rest can still be checked.
 		m_inDeclarations = true;
 		for (auto& s : m_structs)
-			resolveStruct(s.second, s.second->decl->pos);
+		{
+			if (!attempt([&] { resolveStruct(s.second, s.second->decl->pos); }))
+			{
+				s.second->resolving = false;
+				s.second->complete = true;
+			}
+		}
 		for (auto& e : m_enums)
-			resolveEnum(e.second);
+		{
+			if (!attempt([&] { resolveEnum(e.second); }))
+			{
+				e.second.resolving = false;
+				e.second.resolved = true;
+			}
+		}
 		for (auto& c : m_consts)
-			resolveConst(c.first, c.second.decl->pos);
+		{
+			if (!attempt([&] { resolveConst(c.first, c.second.decl->pos); }))
+			{
+				c.second.resolving = false;
+				c.second.resolved = true;
+				if (c.second.type == nullptr)
+					c.second.type = m_types.i32();
+			}
+		}
 		for (auto& a : m_aliases)
 		{
-			TypeSyntax ts;
-			ts.name = a.first;
-			ts.pos = a.second.decl->pos;
-			resolveType(&ts);
+			if (!attempt([&] {
+				TypeSyntax ts;
+				ts.name = a.first;
+				ts.pos = a.second.decl->pos;
+				resolveType(&ts);
+			}))
+			{
+				a.second.resolving = false;
+				if (a.second.type == nullptr)
+					a.second.type = m_types.i32();
+			}
 		}
 		for (FuncInfo* f : m_funcList)
-			resolveFunction(f);
+		{
+			if (!attempt([&] { resolveFunction(f); }))
+			{
+				// As a sub without parameters (calls to it will report the arguments).
+				f->paramNames.clear();
+				f->defaults.clear();
+				f->requiredParams = 0;
+				f->type = m_types.function({}, m_types.voidType());
+			}
+		}
 		m_inDeclarations = false;
 		// Overloads: merge declarations with their definition; labels.
 		for (auto& entry : m_funcs)
 		{
 			auto& funcs = entry.second;
-			for (size_t i = 0; i < funcs.size(); i++)
-			{
-				for (size_t j = i + 1; j < funcs.size(); )
+			attempt([&] {
+				for (size_t i = 0; i < funcs.size(); i++)
 				{
-					if (funcs[i]->type->params != funcs[j]->type->params)
+					for (size_t j = i + 1; j < funcs.size(); )
 					{
-						j++;
-						continue;
+						if (funcs[i]->type->params != funcs[j]->type->params)
+						{
+							j++;
+							continue;
+						}
+						if (funcs[i]->type != funcs[j]->type)
+							error(funcs[j]->decl->pos, "'" + entry.first + "' is already declared with the same parameters but another return type");
+						if (funcs[i]->defined && funcs[j]->defined)
+							error(funcs[j]->decl->pos, "'" + entry.first + "' is already defined with the same parameters (" + posString(funcs[i]->decl->pos) + ")");
+						FuncInfo* keep = funcs[i]->defined ? funcs[i] : funcs[j];
+						FuncInfo* drop = (keep == funcs[i]) ? funcs[j] : funcs[i];
+						for (size_t k = 0; k < keep->defaults.size(); k++)
+						{
+							if (keep->defaults[k] == nullptr)
+								keep->defaults[k] = drop->defaults[k];
+						}
+						keep->requiredParams = std::min(keep->requiredParams, drop->requiredParams);
+						keep->isInline = keep->isInline || drop->isInline;
+						funcs[i] = keep;
+						funcs.erase(funcs.begin() + j);
+						m_funcList.erase(std::find(m_funcList.begin(), m_funcList.end(), drop));
 					}
-					if (funcs[i]->type != funcs[j]->type)
-						error(funcs[j]->decl->pos, "'" + entry.first + "' is already declared with the same parameters but another return type");
-					if (funcs[i]->defined && funcs[j]->defined)
-						error(funcs[j]->decl->pos, "'" + entry.first + "' is already defined with the same parameters (" + posString(funcs[i]->decl->pos) + ")");
-					FuncInfo* keep = funcs[i]->defined ? funcs[i] : funcs[j];
-					FuncInfo* drop = (keep == funcs[i]) ? funcs[j] : funcs[i];
-					for (size_t k = 0; k < keep->defaults.size(); k++)
-					{
-						if (keep->defaults[k] == nullptr)
-							keep->defaults[k] = drop->defaults[k];
-					}
-					keep->requiredParams = std::min(keep->requiredParams, drop->requiredParams);
-					keep->isInline = keep->isInline || drop->isInline;
-					funcs[i] = keep;
-					funcs.erase(funcs.begin() + j);
-					m_funcList.erase(std::find(m_funcList.begin(), m_funcList.end(), drop));
 				}
-			}
+			});
 			for (FuncInfo* f : funcs)
 			{
 				f->label = entry.first;
@@ -2844,11 +3254,21 @@ namespace dscript
 				}
 			}
 		}
+		// Analysis: a file without main is fine (it is included by others).
+		FuncInfo* mainFunc = nullptr;
 		if (m_funcs.count("main") == 0)
-			error({ program->pos.file, 1, 1 }, "no 'main' sub");
-		FuncInfo* mainFunc = m_funcs["main"][0];
-		if (m_funcs["main"].size() > 1 || !mainFunc->type->params.empty())
-			error(mainFunc->decl->pos, "main takes no parameters (sub main() -> i32 or -> void)");
+		{
+			if (!m_options.analysis)
+				error({ program->pos.file, 1, 1 }, "no 'main' sub");
+		}
+		else
+		{
+			mainFunc = m_funcs["main"][0];
+			attempt([&] {
+				if (m_funcs["main"].size() > 1 || !mainFunc->type->params.empty())
+					error(mainFunc->decl->pos, "main takes no parameters (sub main() -> i32 or -> void)");
+			});
+		}
 
 		genGlobals();
 		const int32_t initLocalMin = m_localMin;
@@ -2857,16 +3277,18 @@ namespace dscript
 			std::vector<std::string> lowCode;
 			m_out = &lowCode;
 			m_scopes.clear();
-			genLow(low, true);
+			attempt([&] { genLow(low, true); });
 			m_code.push_back("");
 			m_code.insert(m_code.end(), lowCode.begin(), lowCode.end());
 		}
 		for (FuncInfo* f : m_funcList)
 		{
-			if (!f->defined)
-				error(f->decl->pos, "sub '" + f->name + "' is declared but not defined");
-			if (!f->isInline)
-				genFunction(f);
+			attempt([&] {
+				if (!f->defined)
+					error(f->decl->pos, "sub '" + f->name + "' is declared but not defined");
+				if (!f->isInline)
+					genFunction(f);
+			});
 		}
 		// Inline subs get real code only if they are used as sub pointers (which the generated
 		// code can make true for more of them); the others are only checked.
@@ -2876,27 +3298,32 @@ namespace dscript
 			more = false;
 			for (FuncInfo* f : m_funcList)
 			{
-				if (f->isInline && f->addressTaken && kept.insert(f).second)
+				if (f->isInline && f->addressTaken && f->defined && kept.insert(f).second)
 				{
-					genFunction(f);
+					attempt([&] { genFunction(f); });
 					more = true;
 				}
 			}
 		}
 		for (FuncInfo* f : m_funcList)
 		{
-			if (!f->isInline || kept.count(f))
+			if (!f->isInline || kept.count(f) || !f->defined)
 				continue;
 			const size_t codeSize = m_code.size();
 			const auto strings = m_strings;
 			const auto helpers = m_helpers;
 			m_discarding = true;
-			genFunction(f);
+			attempt([&] { genFunction(f); });
 			m_discarding = false;
 			m_code.resize(codeSize);
 			m_strings = strings;
 			m_helpers = helpers;
 		}
+
+		if (m_options.index != nullptr)
+			indexDeclarations();
+		if (m_options.analysis)
+			return {};
 
 		// Assemble the dasm source.
 		std::vector<std::string> out;

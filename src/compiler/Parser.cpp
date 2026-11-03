@@ -108,6 +108,11 @@ namespace dscript
 		return next().text;
 	}
 
+	const SourcePos& Parser::lastPos(void) const
+	{
+		return m_tokens[m_pos - 1].pos;
+	}
+
 	Node* Parser::make(NodeKind kind, const SourcePos& pos)
 	{
 		Node* n = new Node();
@@ -174,6 +179,7 @@ namespace dscript
 	{
 		Node* n = make(NodeKind::StructDecl, next().pos);
 		n->name = expectIdentifier("after 'struct'");
+		n->namePos = lastPos();
 		parseStructFields(n);
 		acceptPunct(";");
 		return n;
@@ -196,11 +202,13 @@ namespace dscript
 	{
 		Node* n = make(NodeKind::EnumDecl, next().pos);
 		n->name = expectIdentifier("after 'enum'");
+		n->namePos = lastPos();
 		expectPunct("{", "to start the enum");
 		while (!acceptPunct("}"))
 		{
 			Node* m = make(NodeKind::EnumMember, peek().pos);
 			m->name = expectIdentifier("(enum member)");
+			m->namePos = lastPos();
 			if (acceptPunct("="))
 				m->a = parseTernary();
 			n->list.push_back(m);
@@ -218,6 +226,7 @@ namespace dscript
 	{
 		Node* n = make(NodeKind::ConstDecl, next().pos);
 		n->name = expectIdentifier("after 'const'");
+		n->namePos = lastPos();
 		if (acceptPunct(":"))
 			n->typeSyntax = parseType();
 		// Struct constants can omit the value (the fields' defaults) or use { ... }.
@@ -236,6 +245,7 @@ namespace dscript
 	{
 		Node* n = make(NodeKind::AliasDecl, next().pos);
 		n->name = expectIdentifier("after 'alias'");
+		n->namePos = lastPos();
 		expectPunct("=", "in the alias");
 		n->typeSyntax = parseType();
 		expectPunct(";", "after the alias");
@@ -247,6 +257,7 @@ namespace dscript
 		Node* n = make(NodeKind::VarDecl, peek().pos);
 		expectKeyword("var", "");
 		n->name = expectIdentifier("after 'var'");
+		n->namePos = lastPos();
 		if (acceptPunct(":"))
 			n->typeSyntax = parseType();
 		if (acceptPunct("="))
@@ -279,6 +290,7 @@ namespace dscript
 		Node* n = make(NodeKind::FuncDecl, next().pos);
 		n->value = flags;
 		n->name = expectIdentifier("after 'sub'");
+		n->namePos = lastPos();
 		expectPunct("(", "after the sub name");
 		parseParams(n);
 		if (acceptPunct("->"))
@@ -306,6 +318,7 @@ namespace dscript
 			acceptKeyword("var");
 			p->pos = peek().pos;
 			p->name = expectIdentifier("(parameter name)");
+			p->namePos = lastPos();
 			expectPunct(":", "after the parameter name (parameters need a type)");
 			p->typeSyntax = parseType();
 			if (acceptPunct("="))
@@ -328,6 +341,7 @@ namespace dscript
 		Node* n = make(NodeKind::FuncDecl, next().pos);
 		n->value = interrupt ? 1 : 0;
 		n->name = "__lambda_" + std::to_string(m_lambdaCount++);
+		n->namePos = n->pos;	// 'sub'
 		expectPunct("(", "after 'sub' (a lambda: sub(var x: i32) -> i32 { ... })");
 		parseParams(n);
 		if (acceptPunct("->"))
@@ -410,6 +424,7 @@ namespace dscript
 			// struct { fields }: a nameless struct, declared at the top level under a hidden name.
 			Node* decl = make(NodeKind::StructDecl, next().pos);
 			decl->name = "__anon_struct_" + std::to_string(++m_anonCount);
+			decl->namePos = decl->pos;	// 'struct'
 			decl->value = 1;
 			if (!isPunct("{"))
 				error(peek().pos, "'{' expected after 'struct' in a type (struct { fields }), found " + describe(peek()));
@@ -840,6 +855,7 @@ namespace dscript
 				n->value = (next().text == "->") ? 1 : 0;
 				n->a = expr;
 				n->name = expectIdentifier("(member name)");
+				n->namePos = lastPos();
 				expr = n;
 			}
 			else if (acceptPunct("++"))
@@ -884,6 +900,8 @@ namespace dscript
 		{
 			Node* n = make(NodeKind::Ident, t.pos);
 			n->name = localName(t.text, t.pos);
+			if (n->name != t.text)
+				n->text = t.text;
 			next();
 			return n;
 		}

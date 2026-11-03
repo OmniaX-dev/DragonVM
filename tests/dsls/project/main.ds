@@ -1,0 +1,22 @@
+#include(<shapes.ds>)
+
+var g_count: u32 = 3;
+
+sub describe(var p: Point*) -> i32 {
+	const units: string[] = { "B", "KiB" };
+	static var calls: u32 = 0;
+	calls++;
+	var total: i32 = p->x + p->y;
+	low {
+		mov R1, $total
+		mov $total, R1
+	}
+	return total + area(p->x) + Color.Blue + ORIGIN_X + units[0][0] + GREETING[0];
+}
+
+sub main() -> i32 {
+	var pt: Point;
+	pt.x = 1;
+	g_count++;
+	return describe(&pt);
+}
