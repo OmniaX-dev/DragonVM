@@ -1,3 +1,5 @@
+#include(bios.ds)
+
 struct DPTBlock {
 	var ID: u16;
 	var versionMaj: u8;
@@ -38,3 +40,12 @@ const DPTBootPartStructure: struct {
 
 	var ID: u32								= 0xF1C4;
 };
+
+sub dpt_load_block(var ddd: DiskDriverData*, var outBlock: DPTBlock*) {
+	ddd->mode = DiskMode.Read;
+	ddd->disk = get_boot_disk();
+	ddd->address = DPTStructure.DiskAddress;
+	ddd->dataSize = sizeof(DPTBlock);
+	ddd->memoryAddress = cast<u32>(outBlock);
+	raise_interrupt(0x20, 0x12, cast<u32>(ddd)); // INT20_LOAD_FROM_DDD_BLOCKING
+}

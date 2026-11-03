@@ -21,7 +21,7 @@ sub main() {
 }
 
 sub __load_mbr_data_block() {
-	var disk: u8 = *cast<u8*>(CMOSRegisters.BootDisk);
+	var disk: u8 = get_boot_disk();
 	var ddd: DiskDriverData;
 	ddd.mode = DiskMode.Read;
 	ddd.disk = disk;

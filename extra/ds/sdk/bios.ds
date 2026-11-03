@@ -80,6 +80,10 @@ sub itoa(var value: i32, var result: u8*, var base: i32 = 10) -> string
     return result;
 }
 
+inline sub get_boot_disk() -> u8 {
+	return *cast<u8*>(CMOSRegisters.BootDisk);
+}
+
 
 
 struct VGAText16Cell {
