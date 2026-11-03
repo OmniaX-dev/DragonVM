@@ -1,0 +1,69 @@
+// expect-rv: 0
+// Constants declared in a sub (or a block): stored like top-level constants, visible only there.
+
+struct Cfg { var w: u32; var h: u32; };
+
+const units = 1000;		// a global with the same name: hidden by the local ones
+
+sub unit_name(var i: u32) -> string {
+	const units: string[] = { "B", "KiB", "MiB", "GiB" };
+	return units[i];
+}
+
+sub same_name_elsewhere() -> u32 {
+	const units = 7;		// another sub: its own constant
+	return units;
+}
+
+sub shadowing() -> u32 {
+	const n = 1;
+	var r: u32 = n;			// 1
+	{
+		const n = 10;
+		r += n;				// + 10
+		{
+			var n: u32 = 100;	// a local variable hides the constant
+			r += n;			// + 100
+		}
+		r += n;				// + 10
+	}
+	for (var n: u32 = 0; n < 2; n++)
+		r += 1000;			// + 2000
+	return r + n;			// + 1
+}
+
+sub kinds() -> u32 {
+	const size: Cfg = { 3, 4 };
+	const greeting = "hi";
+	const table: u32[] = { 5, 6, 7 };
+	const area = 12;
+	const twice = area * 2;			// uses another local constant
+	var buf: u8[size.w];			// in a type
+	if (sizeof(table) != 12 or sizeof(buf) != 3) return 1;
+	if (size.w * size.h != area or twice != 24) return 2;
+	if (greeting[1] != 'i') return 3;
+	if (table[2] != 7) return 4;
+	var v: u32;
+	var w: u32;
+	low {
+		mov R1, $area
+		mov $v, R1
+		mov R2, $table
+		mov $w, R2
+	}
+	if (v != 12 or w != cast<u32>(&table[0])) return 5;
+	var f = sub() -> u32 { return area + 1; };	// lambdas see the constants of the sub around them
+	if (f() != 13) return 6;
+	return 0;
+}
+
+sub main() -> i32 {
+	var s: string = unit_name(2);
+	if (s[0] != 'M' or s[1] != 'i' or s[2] != 'B' or s[3] != 0) return 1;
+	if (same_name_elsewhere() != 7) return 2;
+	if (shadowing() != 2122) return 3;
+	if (units != 1000) return 4;
+	var k: u32 = kinds();
+	if (k != 0) return 10 + k;
+	return 0;
+}

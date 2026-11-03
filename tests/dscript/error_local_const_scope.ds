@@ -1,0 +1,7 @@
+// expect-error: unknown name: inner
+sub main() -> u32 {
+	{
+		const inner = 3;
+	}
+	return inner;
+}

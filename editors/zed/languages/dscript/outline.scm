@@ -15,9 +15,10 @@
 	"enum" @context
 	name: (type_identifier) @name) @item
 
-(const_declaration
-	"const" @context
-	name: (identifier) @name) @item
+(source_file
+	(const_declaration
+		"const" @context
+		name: (identifier) @name) @item)
 
 (alias_declaration
 	"alias" @context

@@ -733,6 +733,41 @@
       "type": "STRING",
       "value": "interrupt"
     },
+    "static_modifier": {
+      "type": "STRING",
+      "value": "static"
+    },
+    "static_declaration": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "static_modifier"
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SEQ",
+              "members": [
+                {
+                  "type": "SYMBOL",
+                  "name": "variable_declaration"
+                },
+                {
+                  "type": "STRING",
+                  "value": ";"
+                }
+              ]
+            },
+            {
+              "type": "SYMBOL",
+              "name": "const_declaration"
+            }
+          ]
+        }
+      ]
+    },
     "inline_modifier": {
       "type": "STRING",
       "value": "inline"
@@ -1244,6 +1279,14 @@
               "value": ";"
             }
           ]
+        },
+        {
+          "type": "SYMBOL",
+          "name": "const_declaration"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "static_declaration"
         },
         {
           "type": "SYMBOL",

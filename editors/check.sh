@@ -26,7 +26,7 @@ for g in dscript dasm; do
 	files=()
 	if [ $g = dscript ]; then
 		for f in "$ROOT"/tests/dscript/*.ds "$ROOT"/extra/ds/sdk/*.ds "$ROOT"/other/*.ds; do
-			case "$(basename "$f")" in error_syntax.ds) continue;; esac
+			case "$(basename "$f")" in error_syntax.ds|error_static_toplevel.ds) continue;; esac
 			files+=("$f")
 		done
 	else

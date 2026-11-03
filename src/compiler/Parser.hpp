@@ -2,6 +2,7 @@
 
 #include "Lexer.hpp"
 #include "AST.hpp"
+#include <map>
 
 namespace dscript
 {
@@ -40,6 +41,14 @@ namespace dscript
 
 			Node* parseStatement(void);
 			Node* parseBlock(void);
+			Node* parseLocalStatic(const SourcePos& pos);
+
+			// Local scopes (inside subs): what each name means there.
+			void pushScope(void);
+			void popScope(void);
+			void declareLocal(const std::string& name, const std::string& hidden = "");
+			std::string localName(const std::string& name, const SourcePos& pos);
+			std::string renameLow(const std::string& text);
 
 			Node* parseExpression(void);
 			Node* parseAssignment(void);
@@ -59,5 +68,12 @@ namespace dscript
 			std::vector<Node*> m_lambdas;
 			int m_lambdaCount { 0 };
 			Node* m_currentFunc { nullptr };	// the sub being parsed (for lambdas)
+			// Local constants and static variables: hidden top-level declarations named
+			// <sub>::<name> (added before the declaration they are in); the scopes map a local name
+			// to that hidden name ("": a local variable or parameter, which hides outer names).
+			std::vector<Node*> m_hoisted;
+			std::map<std::string, int> m_hoistedCount;
+			std::vector<std::map<std::string, std::string>> m_scopes;
+			int m_hoistScope { -1 };	// in the value of a local const / static: the scopes below this one are not usable
 	};
 }

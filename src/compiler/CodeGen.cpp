@@ -40,6 +40,33 @@ namespace dscript
 		return nullptr;
 	}
 
+	// The dasm symbol of a global: local constants and statics are named <sub>::<name>.
+	static std::string dataSymbol(const std::string& name)
+	{
+		if (name.find(':') == std::string::npos)
+			return name;
+		std::string s = "__static_";
+		for (char c : name)
+			s += (c == ':' ? '_' : c);
+		return s;
+	}
+
+	// An identifier in a low block ($name): letters, digits, _ and the :: of local constants /
+	// statics (<sub>::<name>).
+	static size_t lowNameEnd(const std::string& line, size_t j)
+	{
+		while (j < line.size())
+		{
+			if (std::isalnum((unsigned char)line[j]) || line[j] == '_')
+				j++;
+			else if (line[j] == ':' && j + 2 < line.size() && line[j + 1] == ':' && (std::isalnum((unsigned char)line[j + 2]) || line[j + 2] == '_'))
+				j += 2;
+			else
+				break;
+		}
+		return j;
+	}
+
 	// Does the sub (FuncDecl) have a parameter or a local variable with this name?
 	static bool declaresName(const Node* n, const std::string& name, bool top = true)
 	{
@@ -148,7 +175,7 @@ namespace dscript
 						VarInfo* v = new VarInfo();
 						v->name = d->name;
 						v->storage = VarInfo::Storage::Global;
-						v->symbol = d->name;
+						v->symbol = dataSymbol(d->name);
 						v->pos = d->pos;
 						v->readOnly = true;
 						m_globals[d->name] = v;
@@ -164,7 +191,7 @@ namespace dscript
 					VarInfo* v = new VarInfo();
 					v->name = d->name;
 					v->storage = VarInfo::Storage::Global;
-					v->symbol = d->name;
+					v->symbol = dataSymbol(d->name);
 					v->pos = d->pos;
 					m_globals[d->name] = v;
 					m_globalDecls.push_back(d);
@@ -2411,9 +2438,7 @@ namespace dscript
 					out += line[i++];
 					continue;
 				}
-				size_t j = i + 1;
-				while (j < line.size() && (std::isalnum((unsigned char)line[j]) || line[j] == '_'))
-					j++;
+				size_t j = lowNameEnd(line, i + 1);
 				std::string name = line.substr(i + 1, j - i - 1);
 				std::string member;
 				if (j < line.size() && line[j] == '.' && m_enums.count(name) > 0)
@@ -2597,6 +2622,9 @@ namespace dscript
 		for (Node* d : m_globalDecls)
 		{
 			VarInfo* v = m_globals[d->name];
+			if (m_options.rom && !v->readOnly && d->name.find("::") != std::string::npos)
+				error(d->pos, "--rom: '" + d->text + "' is a static variable (stored in the program, like a global), but the program is in ROM, "
+					"where nothing can change: use const for read-only values, and keep what changes in RAM (locals, or a pointer to a RAM address)");
 			if (m_options.rom && !v->readOnly)
 				error(d->pos, "--rom: '" + d->name + "' is a global variable, but the program (and its data) is in ROM, "
 					"where nothing can change: use const for read-only values, and keep what changes in RAM (locals, or a pointer to a RAM address)");

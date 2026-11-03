@@ -1,0 +1,13 @@
+// expect-rom-rv: 0
+// Local constants in a ROM program: in the program's data, like top-level ones.
+
+sub unit(var i: u32) -> u8 {
+	const units: string[] = { "B", "KiB", "MiB", "GiB" };
+	const offset = 1;
+	return units[i][offset];
+}
+
+sub main() -> i32 {
+	if (unit(1) != 'i' or unit(3) != 'i' or unit(0) != 0) return 1;
+	return 0;
+}

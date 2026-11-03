@@ -1,0 +1,6 @@
+// expect-error: 'x' is a local variable: the value of a local constant or static variable is set once
+sub f(var x: u32) -> u32 {
+	static var y: u32 = x;
+	return y;
+}
+sub main() { f(1); }

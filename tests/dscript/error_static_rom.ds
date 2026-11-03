@@ -1,0 +1,8 @@
+// expect-error: --rom: 'count' is a static variable
+// dsc-flags: --rom
+sub f() -> u32 {
+	static var count: u32;
+	count++;
+	return count;
+}
+sub main() { f(); }

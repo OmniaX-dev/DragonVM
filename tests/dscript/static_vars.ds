@@ -1,0 +1,72 @@
+// expect-rv: 0
+// static var: a global visible only in its sub, set once (before main, like globals).
+
+var g_calls: u32 = 0;
+
+sub counter() -> u32 {
+	static var count: u32 = 0;
+	count++;
+	return count;
+}
+
+sub other() -> u32 {
+	static var count: u32 = 100;	// another sub: its own variable
+	count += 10;
+	return count;
+}
+
+sub expensive() -> u32 {
+	g_calls++;
+	return 42;
+}
+
+sub once() -> u32 {
+	static var v: u32 = expensive();	// not a constant: runs once, before main
+	return v;
+}
+
+sub history(var x: u8) -> u8 {
+	static var last: u8[4] = { 1, 2, 3, 4 };
+	static var pos: u32;
+	const size = 4;
+	var old: u8 = last[pos % size];
+	last[pos % size] = x;
+	pos++;
+	return old;
+}
+
+inline sub ticks() -> u32 {
+	static var t: u32;		// one variable, even if the sub is expanded at every call
+	t++;
+	return t;
+}
+
+sub low_access() -> u32 {
+	static var hits: u32 = 5;
+	low {
+		mov R1, $hits
+		inc R1
+		mov $hits, R1
+	}
+	return hits;
+}
+
+sub main() -> i32 {
+	counter();
+	counter();
+	if (counter() != 3) return 1;
+	if (other() != 110 or other() != 120) return 2;
+	if (once() != 42 or once() != 42 or g_calls != 1) return 3;
+	if (history(9) != 1 or history(8) != 2) return 4;
+	history(7);
+	history(6);
+	if (history(5) != 9) return 5;		// the ring wrapped around
+	ticks();
+	ticks();
+	if (ticks() != 3) return 6;
+	if (low_access() != 6 or low_access() != 7) return 7;
+	var f = sub() -> u32 { static var n: u32; n += 2; return n; };
+	f();
+	if (f() != 4) return 8;
+	return 0;
+}

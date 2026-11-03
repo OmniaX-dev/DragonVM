@@ -126,6 +126,12 @@ module.exports = grammar({
 			choice(field('body', $.block), ';'),
 		),
 		interrupt_modifier: _ => 'interrupt',
+		static_modifier: _ => 'static',
+		// static var x: T = value;  static const X = value;  (in a sub)
+		static_declaration: $ => seq(
+			$.static_modifier,
+			choice(seq($.variable_declaration, ';'), $.const_declaration),
+		),
 		inline_modifier: _ => 'inline',
 		parameter_list: $ => seq('(', choice(alias('void', $.primitive_type), commaSep($.parameter)), ')'),
 		parameter: $ => seq(
@@ -174,6 +180,9 @@ module.exports = grammar({
 		_statement: $ => choice(
 			$.block,
 			seq($.variable_declaration, ';'),
+			// Local constants and static variables: set once, visible in the block.
+			$.const_declaration,
+			$.static_declaration,
 			$.if_statement,
 			$.while_statement,
 			$.do_statement,

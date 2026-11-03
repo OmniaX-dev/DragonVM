@@ -21,6 +21,10 @@
 //   Index:       a[b]                        Member: a.name / a->name (value = 1)
 //   Cast:        typeSyntax, a               SizeofType: typeSyntax    SizeofExpr: a
 //   Pre/PostInc/Dec: a                       InitList: list
+//
+// Local constants (const in a sub) and static variables (static var): hidden top-level
+// ConstDecl / VarDecl named <sub>::<name> (text = the name as written), added before the
+// declaration they are in; in their scope, the name (also $name in low blocks) is renamed.
 
 namespace dscript
 {
@@ -117,7 +121,13 @@ namespace dscript
 	{
 		Node* program = make(NodeKind::Program, peek().pos);
 		while (peek().kind != TokenKind::End)
-			program->list.push_back(parseDeclaration());
+		{
+			Node* d = parseDeclaration();
+			for (Node* h : m_hoisted)
+				program->list.push_back(h);
+			m_hoisted.clear();
+			program->list.push_back(d);
+		}
 		for (Node* s : m_anonStructs)
 			program->list.push_back(s);
 		m_anonStructs.clear();
@@ -141,6 +151,8 @@ namespace dscript
 			return v;
 		}
 		if (isKeyword("sub")) return parseFunction(0);
+		if (isKeyword("static"))
+			error(peek().pos, "'static' is for the local variables and constants of a sub (a global already exists for the whole program)");
 		if (acceptKeyword("interrupt"))
 		{
 			if (!isKeyword("sub"))
@@ -275,7 +287,11 @@ namespace dscript
 			return n;
 		Node* outer = m_currentFunc;
 		m_currentFunc = n;
+		pushScope();
+		for (Node* p : n->list)
+			declareLocal(p->name);
 		n->a = parseBlock();
+		popScope();
 		m_currentFunc = outer;
 		return n;
 	}
@@ -321,7 +337,11 @@ namespace dscript
 		n->d = m_currentFunc;
 		Node* outer = m_currentFunc;
 		m_currentFunc = n;
+		pushScope();
+		for (Node* p : n->list)
+			declareLocal(p->name);
 		n->a = parseBlock();
+		popScope();
 		m_currentFunc = outer;
 		m_lambdas.push_back(n);
 		Node* id = make(NodeKind::Ident, n->pos);
@@ -335,7 +355,7 @@ namespace dscript
 		if (peek().kind != TokenKind::LowBlock)
 			error(peek().pos, "'{' expected after 'low'");
 		const Token& t = next();
-		n->text = t.text;
+		n->text = renameLow(t.text);
 		n->pos = t.pos;
 		return n;
 	}
@@ -435,13 +455,110 @@ namespace dscript
 	{
 		Node* n = make(NodeKind::Block, peek().pos);
 		expectPunct("{", "to start the block");
+		pushScope();
 		while (!acceptPunct("}"))
 		{
 			if (peek().kind == TokenKind::End)
 				error(n->pos, "'}' missing at the end of this block");
 			n->list.push_back(parseStatement());
 		}
+		popScope();
 		return n;
+	}
+
+	void Parser::pushScope(void)
+	{
+		m_scopes.emplace_back();
+	}
+
+	void Parser::popScope(void)
+	{
+		m_scopes.pop_back();
+	}
+
+	void Parser::declareLocal(const std::string& name, const std::string& hidden)
+	{
+		if (!m_scopes.empty())
+			m_scopes.back()[name] = hidden;
+	}
+
+	// The name an identifier refers to in the current scopes (a local constant / static: its
+	// hidden name).
+	std::string Parser::localName(const std::string& name, const SourcePos& pos)
+	{
+		for (int i = (int)m_scopes.size() - 1; i >= 0; i--)
+		{
+			auto it = m_scopes[i].find(name);
+			if (it == m_scopes[i].end())
+				continue;
+			if (!it->second.empty())
+				return it->second;
+			if (i < m_hoistScope)
+				error(pos, "'" + name + "' is a local variable: the value of a local constant or static variable is set once "
+					"(not at every call), so it cannot use the sub's locals or parameters");
+			return name;
+		}
+		return name;
+	}
+
+	// $name in a low block, for a local constant / static: its hidden name.
+	std::string Parser::renameLow(const std::string& text)
+	{
+		if (m_scopes.empty())
+			return text;
+		std::string out;
+		size_t i = 0;
+		while (i < text.size())
+		{
+			if (text[i] != '$')
+			{
+				out += text[i++];
+				continue;
+			}
+			size_t j = i + 1;
+			while (j < text.size() && (std::isalnum((unsigned char)text[j]) || text[j] == '_'))
+				j++;
+			const std::string name = text.substr(i + 1, j - i - 1);
+			std::string renamed = name;
+			for (int k = (int)m_scopes.size() - 1; k >= 0; k--)
+			{
+				auto it = m_scopes[k].find(name);
+				if (it != m_scopes[k].end())
+				{
+					if (!it->second.empty())
+						renamed = it->second;
+					break;
+				}
+			}
+			out += "$" + renamed;
+			i = j;
+		}
+		return out;
+	}
+
+	// const NAME ... ; / static var NAME ... ; / static const NAME ... ; in a sub: a hidden
+	// top-level declaration, and an empty statement in its place.
+	Node* Parser::parseLocalStatic(const SourcePos& pos)
+	{
+		const int outerHoist = m_hoistScope;
+		m_hoistScope = (int)m_scopes.size();
+		Node* d = nullptr;
+		if (isKeyword("const"))
+			d = parseConst();
+		else
+		{
+			d = parseVarDecl();
+			expectPunct(";", "after the variable declaration");
+		}
+		m_hoistScope = outerHoist;
+		const std::string base = m_currentFunc->name + "::" + d->name;
+		const int n = ++m_hoistedCount[base];
+		d->text = d->name;
+		const std::string hidden = (n == 1 ? base : base + "::" + std::to_string(n));
+		declareLocal(d->name, hidden);
+		d->name = hidden;
+		m_hoisted.push_back(d);
+		return make(NodeKind::Block, pos);
 	}
 
 	Node* Parser::parseStatement(void)
@@ -455,7 +572,16 @@ namespace dscript
 		{
 			Node* v = parseVarDecl();
 			expectPunct(";", "after the variable declaration");
+			declareLocal(v->name);
 			return v;
+		}
+		if (isKeyword("const"))
+			return parseLocalStatic(pos);
+		if (acceptKeyword("static"))
+		{
+			if (!isKeyword("var") && !isKeyword("const"))
+				error(peek().pos, "'var' or 'const' expected after 'static', found " + describe(peek()));
+			return parseLocalStatic(pos);
 		}
 		if (isKeyword("low"))
 			return parseLow();
@@ -494,8 +620,12 @@ namespace dscript
 		{
 			Node* n = make(NodeKind::For, pos);
 			expectPunct("(", "after 'for'");
+			pushScope();
 			if (isKeyword("var"))
+			{
 				n->a = parseVarDecl();
+				declareLocal(n->a->name);
+			}
 			else if (!isPunct(";"))
 			{
 				n->a = make(NodeKind::ExprStmt, peek().pos);
@@ -509,6 +639,7 @@ namespace dscript
 				n->c = parseExpression();
 			expectPunct(")", "after the for step");
 			n->d = parseStatement();
+			popScope();
 			return n;
 		}
 		if (acceptKeyword("return"))
@@ -752,7 +883,7 @@ namespace dscript
 		if (t.kind == TokenKind::Identifier)
 		{
 			Node* n = make(NodeKind::Ident, t.pos);
-			n->name = t.text;
+			n->name = localName(t.text, t.pos);
 			next();
 			return n;
 		}

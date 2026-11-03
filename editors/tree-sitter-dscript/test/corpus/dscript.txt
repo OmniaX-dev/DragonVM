@@ -394,3 +394,47 @@ sub main() {
                 (expression_statement
                   (update_expression
                     (identifier)))))))))))
+
+================================================================================
+Local constants and static variables
+================================================================================
+
+sub f() -> u32 {
+	const units: string[] = { "B", "KiB" };
+	static var count: u32 = 0;
+	static const N = 2;
+	count++;
+	return count;
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    (identifier)
+    (parameter_list)
+    (primitive_type)
+    (block
+      (const_declaration
+        (identifier)
+        (array_type
+          (primitive_type))
+        (initializer_list
+          (string_literal)
+          (string_literal)))
+      (static_declaration
+        (static_modifier)
+        (variable_declaration
+          (identifier)
+          (primitive_type)
+          (number_literal)))
+      (static_declaration
+        (static_modifier)
+        (const_declaration
+          (identifier)
+          (number_literal)))
+      (expression_statement
+        (update_expression
+          (identifier)))
+      (return_statement
+        (identifier)))))

@@ -49,6 +49,7 @@ const NAME = 5;  const MASK: u32 = 0xFF;    // integer constants
 const Origin: Point = { 3, 4 };         // struct constants (see below)
 const VERSION = "DragonBIOS 0.5";       // string constants
 const Primes: u16[] = { 2, 3, 5, 7 };   // constant arrays: read-only data in the program
+                                        // (all constants can also be declared in a sub, see below)
 enum Color { Red, Green = 5, Blue }     // Color.Blue == 6
 alias Handler = sub(i32) -> void;       // a name for a type
 struct Point { var x: i32; var y: i32 = 7; }    // fields can have constant default values
@@ -60,6 +61,29 @@ inline sub sq(var x: i32) -> i32 { ... }    // the body is generated at every ca
 low { ... }                             // raw dasm (e.g. helper routines with labels)
 ```
 Everything can be used before it is declared. `main` (no parameters) is the program's entry.
+
+### Local constants and static variables
+In a sub (or any block), `const` declares any kind of constant (integer, struct, string,
+array) visible only there; `static var` is a variable that lives for the whole program, like a
+global, but is only visible there:
+```
+sub size_text(var bytes: u32, var buff: u8*) -> string {
+    const units: string[] = { "B", "KiB", "MiB", "GiB" };     // stored once, in the data
+    static var calls: u32 = 0;                                // keeps its value between calls
+    calls++;
+    ...
+}
+```
+- They are stored exactly like the top-level ones (a hidden declaration named `<sub>::<name>`,
+  which is also what error messages show), so local constants are safe in ROM.
+- A static variable is set once, before `main` (like a global, in the order of the source),
+  not at its first use; its value can be any expression that does not use the sub's locals or
+  parameters (it can use constants, globals and other subs).
+- `static const` is the same as `const`. `static` is an error at the top level.
+- Each sub (and each lambda) has its own; an inline sub's static variable is shared by all the
+  places it is expanded. Lambdas can use the constants and statics of the sub around them.
+- Inner declarations hide outer ones (a local `var` hides a constant of the same name, and the
+  other way around), `$name` in low blocks included. `--rom`: static variables are errors.
 
 ### Nameless structs
 `struct { fields }` is a type: it can be used for variables (global and local), fields, arrays,
