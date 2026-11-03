@@ -10,7 +10,9 @@
 //   AliasDecl:   name, typeSyntax
 //   VarDecl:     name, typeSyntax (optional if initialized), a = initializer (expression / InitList)
 //   FuncDecl:    name, list = params (VarDecl, a = default value), typeSyntax = return type
-//                (nullptr: void), a = body (nullptr: declaration only), value = 1 if interrupt
+//                (nullptr: void), a = body (nullptr: declaration only), value = flags: 1 interrupt,
+//                2 inline, 4 method (sub in a struct: named <Struct>::<name>, added at the end of
+//                the program, with a first parameter this: <Struct>*)
 //   Block:       list = statements
 //   If:          a = condition, b = then, c = else
 //   While:       a = condition, b = body       DoWhile: a = condition, b = body
@@ -190,8 +192,26 @@ namespace dscript
 		expectPunct("{", "to start the struct");
 		while (!acceptPunct("}"))
 		{
+			if (isKeyword("sub") || isKeyword("inline"))
+			{
+				// A method: a hidden top-level sub (added at the end of the program).
+				if (decl->value != 0)
+					error(peek().pos, "methods need a named struct (struct Name { ... }), not a nameless one");
+				const int flags = acceptKeyword("inline") ? 2 : 0;
+				if (!isKeyword("sub"))
+					error(peek().pos, "'sub' expected after 'inline'");
+				Node* outerFunc = m_currentFunc;
+				auto outerScopes = std::move(m_scopes);
+				m_scopes.clear();
+				m_lambdas.push_back(parseFunction(flags, decl));
+				m_scopes = std::move(outerScopes);
+				m_currentFunc = outerFunc;
+				continue;
+			}
+			if (isKeyword("interrupt"))
+				error(peek().pos, "interrupt subs cannot be methods (they take no parameters)");
 			if (!isKeyword("var"))
-				error(peek().pos, "struct fields are declared with 'var', found " + describe(peek()));
+				error(peek().pos, "struct fields are declared with 'var' (methods with 'sub'), found " + describe(peek()));
 			Node* field = parseVarDecl(false);
 			expectPunct(";", "after the struct field");
 			decl->list.push_back(field);
@@ -285,16 +305,35 @@ namespace dscript
 	}
 
 	// FuncDecl flags (value): 1 interrupt, 2 inline.
-	Node* Parser::parseFunction(int flags)
+	// FuncDecl flags (value): 1 interrupt, 2 inline, 4 method. owner: the struct of a method.
+	Node* Parser::parseFunction(int flags, const Node* owner)
 	{
 		Node* n = make(NodeKind::FuncDecl, next().pos);
-		n->value = flags;
+		n->value = flags | (owner != nullptr ? 4 : 0);
 		n->name = expectIdentifier("after 'sub'");
 		n->namePos = lastPos();
 		expectPunct("(", "after the sub name");
 		parseParams(n);
+		if (owner != nullptr)
+		{
+			// The hidden first parameter: this: <Struct>*.
+			Node* self = make(NodeKind::VarDecl, n->namePos);
+			self->name = "this";
+			self->namePos = n->namePos;
+			TypeSyntax* named = new TypeSyntax();
+			named->pos = n->namePos;
+			named->name = owner->name;
+			self->typeSyntax = new TypeSyntax();
+			self->typeSyntax->kind = TypeSyntax::Kind::Pointer;
+			self->typeSyntax->pos = n->namePos;
+			self->typeSyntax->base = named;
+			n->list.insert(n->list.begin(), self);
+			n->name = owner->name + "::" + n->name;
+		}
 		if (acceptPunct("->"))
 			n->typeSyntax = parseType();
+		if (owner != nullptr && !isPunct("{"))
+			error(peek().pos, "a method needs its body here, in the struct ('{' expected)");
 		if (acceptPunct(";"))
 			return n;
 		Node* outer = m_currentFunc;
@@ -899,6 +938,14 @@ namespace dscript
 		if (t.kind == TokenKind::Identifier)
 		{
 			Node* n = make(NodeKind::Ident, t.pos);
+			if (isPunct("::", 1))
+			{
+				// Struct::method: the method as a value (a sub pointer) or called directly.
+				n->name = next().text;
+				next();
+				n->name += "::" + expectIdentifier("after '::' (Struct::method)");
+				return n;
+			}
 			n->name = localName(t.text, t.pos);
 			if (n->name != t.text)
 				n->text = t.text;

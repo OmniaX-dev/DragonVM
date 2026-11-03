@@ -1,0 +1,76 @@
+// expect-rv: 0
+// Methods: subs in a struct, called on a struct (x.m()) or a pointer (p->m()), with this.
+
+struct Counter {
+	var value: i32;
+	var step: i32 = 1;
+
+	sub add(var n: i32) -> i32 {
+		this->value += n;
+		return this->value;
+	}
+	sub add() -> i32 {					// overloaded
+		return this->add(this->step);	// a method calling a method
+	}
+	sub reset(var to: i32 = 0) {		// default values
+		this->value = to;
+	}
+	inline sub twice() -> i32 {
+		return this->value * 2;
+	}
+	sub calls() -> u32 {
+		static var n: u32 = 0;			// statics and constants work in methods too
+		const STEP = 1;
+		n += STEP;
+		return n;
+	}
+};
+
+struct Shape {
+	var sides: u32;
+	var area: sub(Shape*) -> u32 = square_area;		// a sub as a field's default value
+	sub describe() -> u32 { return this->area(this) + this->sides; }
+};
+
+sub square_area(var s: Shape*) -> u32 { return 16; }
+sub triangle_area(var s: Shape*) -> u32 { return 6; }
+
+var g_counter: Counter;		// a global: the default (step = 1) is in the data
+
+sub main() -> i32 {
+	var c: Counter;
+	if (c.step != 1) return 1;
+	c.add(5);
+	if (c.add() != 6) return 2;
+	var p: Counter* = &c;
+	if (p->add(4) != 10 or p->twice() != 20) return 3;
+	p->reset();
+	if (c.value != 0) return 4;
+	c.reset(7);
+	if (c.value != 7) return 5;
+
+	// Struct::method is a sub taking the struct first.
+	var f: sub(Counter*, i32) -> i32 = Counter::add;
+	if (f(&c, 1) != 8) return 6;
+	if (Counter::add(&c, 2) != 10) return 7;
+
+	// Arrays of structs, globals.
+	var cs: Counter[3];
+	cs[1].add(3);
+	if (cs[1].value != 3 or cs[0].value != 0) return 8;
+	g_counter.add(2);
+	if (g_counter.add() != 3) return 9;
+
+	// One static for all the calls.
+	c.calls();
+	if (cs[2].calls() != 2) return 10;
+
+	// Sub pointer fields (dynamic dispatch): default, or set by hand.
+	var sq: Shape;
+	sq.sides = 4;
+	var tri: Shape;
+	tri.sides = 3;
+	tri.area = triangle_area;
+	if (sq.describe() != 20 or tri.describe() != 9) return 11;
+	return 0;
+}

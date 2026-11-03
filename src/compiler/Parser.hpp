@@ -32,7 +32,7 @@ namespace dscript
 			Node* parseConst(void);
 			Node* parseAlias(void);
 			Node* parseVarDecl(bool allowNoType = true);
-			Node* parseFunction(int flags);
+			Node* parseFunction(int flags, const Node* owner = nullptr);
 			void parseParams(Node* fn);
 			Node* parseLambda(void);
 			Node* parseLow(void);

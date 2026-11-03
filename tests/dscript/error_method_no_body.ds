@@ -1,0 +1,6 @@
+// expect-error: a method needs its body here, in the struct
+struct Box {
+	var size: u32;
+	sub get() -> u32;
+};
+sub main() { }

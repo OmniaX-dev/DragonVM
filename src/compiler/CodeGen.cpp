@@ -68,23 +68,51 @@ namespace dscript
 	}
 
 	// The name of a local constant / static as written (hidden name: <sub>::<name>[::<n>]).
+	// Hidden names: <sub>::<name>[::<n>] (local constants and statics; <sub> can be a method,
+	// <Struct>::<method>) and <Struct>::<method>. The parts, and the name without the <n>.
+	static std::vector<std::string> nameParts(const std::string& name)
+	{
+		std::vector<std::string> parts;
+		size_t start = 0;
+		while (true)
+		{
+			size_t p = name.find("::", start);
+			parts.push_back(name.substr(start, p == std::string::npos ? std::string::npos : p - start));
+			if (p == std::string::npos)
+				break;
+			start = p + 2;
+		}
+		if (parts.size() > 2 && !parts.back().empty() && std::all_of(parts.back().begin(), parts.back().end(), ::isdigit))
+			parts.pop_back();
+		return parts;
+	}
+
 	static std::string shownName(const std::string& name)
 	{
-		size_t p = name.find("::");
-		if (p == std::string::npos)
-			return name;
-		size_t q = name.find("::", p + 2);
-		return name.substr(p + 2, q == std::string::npos ? std::string::npos : q - p - 2);
+		return nameParts(name).back();
 	}
 
 	// "in sub X" for local constants / statics ("" otherwise).
 	static std::string ownerOf(const std::string& name)
 	{
-		size_t p = name.find("::");
-		if (p == std::string::npos)
+		std::vector<std::string> parts = nameParts(name);
+		if (parts.size() < 2)
 			return "";
-		const std::string owner = name.substr(0, p);
-		return owner.rfind("__lambda_", 0) == 0 ? "in a lambda" : "in sub " + owner;
+		parts.pop_back();
+		if (parts[0].rfind("__lambda_", 0) == 0)
+			return "in a lambda";
+		return parts.size() == 2 ? "in method " + parts[0] + "." + parts[1] : "in sub " + parts[0];
+	}
+
+	// The dasm label of a sub (methods: <Struct>::<name>).
+	static std::string codeLabel(const std::string& name)
+	{
+		if (name.find(':') == std::string::npos)
+			return name;
+		std::string s = "__method_";
+		for (char c : name)
+			s += (c == ':' ? '_' : c);
+		return s;
 	}
 
 	static std::string comment(const std::vector<std::string>& notes)
@@ -391,6 +419,8 @@ namespace dscript
 		{
 			if (info->field(f->name) != nullptr)
 				error(f->pos, "duplicate field '" + f->name + "' in " + (info->anonymous ? info->displayName() : "struct " + info->name));
+			if (m_funcs.count(info->name + "::" + f->name) > 0)
+				error(f->namePos, "struct " + info->name + " has a field and a method named '" + f->name + "'");
 			StructField field;
 			field.name = f->name;
 			field.pos = f->pos;
@@ -416,6 +446,12 @@ namespace dscript
 			foldStringConst(field.init);
 			if (!field.type->isScalar())
 				error(field.pos, "only integer and pointer fields can have a default value");
+			if (field.type->isFunction() && field.init->kind == NodeKind::Ident && m_funcs.count(field.init->name) > 0)
+			{
+				// A sub: checked once the subs have their types (resolveSubDefaults).
+				m_subDefaults.push_back(&field);
+				continue;
+			}
 			if (field.init->kind == NodeKind::StrLit && field.type->isPointer())
 				continue;	// set at run time
 			check(field.init, field.type);
@@ -1087,7 +1123,7 @@ namespace dscript
 					if (e->func == nullptr || e->func == f)
 						hover += (hover.empty() ? "" : "\n") + hoverFunc(f);
 				}
-				indexName(e->pos, e->name, (e->func ? e->func : funcs[0])->decl->namePos, hover);
+				indexName(e->pos, e->text.empty() ? e->name : e->text, (e->func ? e->func : funcs[0])->decl->namePos, hover);
 			}
 			return;
 		}
@@ -1280,8 +1316,71 @@ namespace dscript
 		e->type = t;
 	}
 
+	// Fields whose default value is a sub (var f: sub(i32) -> i32 = twice;): stored as its
+	// address (the label), so they are checked after the subs (and their overloads) are known.
+	void CodeGen::resolveSubDefaults(void)
+	{
+		for (const StructField* f : m_subDefaults)
+		{
+			attempt([&] {
+				check(f->init, f->type);
+				requireConvertible(f->init, f->type, "for the default value of field '" + f->name + "'");
+				if (f->init->func == nullptr)
+					error(f->init->pos, "which '" + f->init->name + "' (it is overloaded)?");
+			});
+		}
+	}
+
+	// x.method(args) / p->method(args): Struct::method(&x / p, args) (the call is rewritten).
+	void CodeGen::rewriteMethodCall(Node* e)
+	{
+		Node* callee = e->a;
+		Node* obj = callee->a;
+		// Enum.Member and Constant.field are not methods.
+		if (obj->kind == NodeKind::Ident && lookupVar(obj->name) == nullptr && (m_enums.count(obj->name) > 0 || m_consts.count(obj->name) > 0))
+			return;
+		check(obj);
+		Type* t = obj->type;
+		if (t == nullptr)
+			return;
+		if (callee->value == 1)
+		{
+			t = decay(t);
+			if (t->kind != Type::Kind::Pointer || t->base->kind != Type::Kind::Struct)
+				return;
+			t = t->base;
+		}
+		else if (t->kind != Type::Kind::Struct)
+			return;
+		StructInfo* info = t->structInfo;
+		resolveStruct(info, callee->pos);
+		if (info->field(callee->name) != nullptr)
+			return;		// a sub pointer field
+		const std::string method = info->name + "::" + callee->name;
+		if (m_funcs.count(method) == 0)
+			error(callee->namePos, (info->anonymous ? info->displayName() : "struct " + info->name) + " has no field or method '" + callee->name + "'");
+		Node* self = obj;
+		if (callee->value == 0)
+		{
+			self = new Node();
+			self->kind = NodeKind::Unary;
+			self->name = "&";
+			self->pos = obj->pos;
+			self->a = obj;
+		}
+		Node* id = new Node();
+		id->kind = NodeKind::Ident;
+		id->name = method;
+		id->text = callee->name;
+		id->pos = callee->namePos;
+		e->a = id;
+		e->list.insert(e->list.begin(), self);
+	}
+
 	void CodeGen::checkCall(Node* e)
 	{
+		if (e->a->kind == NodeKind::Member)
+			rewriteMethodCall(e);
 		Node* callee = e->a;
 		e->func = nullptr;
 		if (callee->kind == NodeKind::Ident && lookupVar(callee->name) == nullptr && m_funcs.count(callee->name) > 0)
@@ -1306,7 +1405,7 @@ namespace dscript
 			e->func = f;
 			e->type = f->type->base;
 			if (m_options.index != nullptr)
-				indexName(callee->pos, callee->name, f->decl->namePos, hoverFunc(f));
+				indexName(callee->pos, callee->text.empty() ? callee->name : callee->text, f->decl->namePos, hoverFunc(f));
 			return;
 		}
 		check(callee);
@@ -2346,6 +2445,8 @@ namespace dscript
 					Reg val = alloc(s->pos);
 					if (d.second->init->kind == NodeKind::StrLit)
 						emit("mov " + val + ", $" + stringLiteral(d.second->init->text));
+					else if (d.second->init->kind == NodeKind::Ident && d.second->init->func != nullptr)
+						emit("mov " + val + ", $" + d.second->init->func->label);
 					else
 						emit("mov " + val + ", " + imm(wrapTo(d.second->init->constValue, d.second->type)));
 					Reg p = alloc(s->pos);
@@ -2818,6 +2919,8 @@ namespace dscript
 				{
 					if (def.second->init->kind == NodeKind::StrLit)
 						refs[(uint32_t)def.first] = stringLiteral(def.second->init->text);
+					else if (def.second->init->kind == NodeKind::Ident && def.second->init->func != nullptr)
+						refs[(uint32_t)def.first] = def.second->init->func->label;
 					else
 						putBytes(bytes, def.first, def.second->type->size(), def.second->init->constValue);
 				}
@@ -2993,12 +3096,14 @@ namespace dscript
 			s += "interrupt ";
 		if (f->isInline)
 			s += "inline ";
-		s += lambda ? "sub(" : "sub " + f->decl->name + "(";
+		const bool method = (f->decl->value & 4) != 0;
+		const std::vector<std::string> parts = nameParts(f->decl->name);
+		s += lambda ? "sub(" : "sub " + (method ? parts[0] + "." + parts[1] : f->decl->name) + "(";
 		if (f->type != nullptr)
 		{
-			for (size_t i = 0; i < f->type->params.size() && i < f->paramNames.size(); i++)
+			for (size_t i = method ? 1 : 0; i < f->type->params.size() && i < f->paramNames.size(); i++)
 			{
-				s += (i > 0 ? ", " : "") + std::string("var ") + f->paramNames[i] + ": " + f->type->params[i]->name(true);
+				s += (i > (method ? 1u : 0u) ? ", " : "") + std::string("var ") + f->paramNames[i] + ": " + f->type->params[i]->name(true);
 				const Node* d = i < f->defaults.size() ? f->defaults[i] : nullptr;
 				if (d != nullptr)
 				{
@@ -3011,7 +3116,7 @@ namespace dscript
 		s += ")";
 		if (f->type != nullptr && f->type->base->kind != Type::Kind::Void)
 			s += " -> " + f->type->base->name(true);
-		return s + comment({ lambda ? "lambda" : "" });
+		return s + comment({ lambda ? "lambda" : method ? "method of " + parts[0] : "" });
 	}
 
 	std::string CodeGen::hoverConst(const std::string& name)
@@ -3145,7 +3250,7 @@ namespace dscript
 		for (FuncInfo* f : m_funcList)
 		{
 			const bool lambda = f->decl->name.rfind("__lambda_", 0) == 0;
-			l_decl(f->decl->namePos, lambda ? "sub" : f->decl->name, hoverFunc(f));
+			l_decl(f->decl->namePos, lambda ? "sub" : shownName(f->decl->name), hoverFunc(f));
 		}
 		m_options.index->rehover(hovers);
 	}
@@ -3243,7 +3348,7 @@ namespace dscript
 			});
 			for (FuncInfo* f : funcs)
 			{
-				f->label = entry.first;
+				f->label = codeLabel(entry.first);
 				if (funcs.size() > 1)
 				{
 					f->label += "__";
@@ -3254,6 +3359,7 @@ namespace dscript
 				}
 			}
 		}
+		resolveSubDefaults();
 		// Analysis: a file without main is fine (it is included by others).
 		FuncInfo* mainFunc = nullptr;
 		if (m_funcs.count("main") == 0)

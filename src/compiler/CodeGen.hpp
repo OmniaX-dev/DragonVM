@@ -110,6 +110,8 @@ namespace dscript
 			void checkBinary(Node* e);
 			void checkAssign(Node* e);
 			void checkCall(Node* e);
+			void rewriteMethodCall(Node* e);
+			void resolveSubDefaults(void);
 			void checkMember(Node* e);
 			Type* decay(Type* t);
 			Type* promote(Type* t);
@@ -191,5 +193,6 @@ namespace dscript
 			std::set<std::string> m_helpers;
 			int m_labelCounter { 0 };
 			std::vector<CompileError> m_errors;
+			std::vector<const StructField*> m_subDefaults;	// struct fields with a sub as default value
 	};
 }

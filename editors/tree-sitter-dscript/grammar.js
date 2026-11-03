@@ -64,7 +64,8 @@ module.exports = grammar({
 			field('body', $.field_list),
 			optional(';'),
 		),
-		field_list: $ => seq('{', repeat($.field_declaration), '}'),
+		// Fields and methods (subs in a struct, called as x.m() / p->m(), with this).
+		field_list: $ => seq('{', repeat(choice($.field_declaration, $.function_declaration)), '}'),
 		field_declaration: $ => seq(
 			'var',
 			field('name', alias($.identifier, $.field_identifier)),
@@ -230,6 +231,7 @@ module.exports = grammar({
 			$.index_expression,
 			$.member_expression,
 			$.parenthesized_expression,
+			$.scoped_identifier,
 			$.identifier,
 			$.number_literal,
 			$.char_literal,
@@ -312,6 +314,13 @@ module.exports = grammar({
 		)),
 
 		parenthesized_expression: $ => seq('(', $._expression, ')'),
+
+		// Struct::method: a method as a sub (its first parameter is the struct pointer).
+		scoped_identifier: $ => seq(
+			field('scope', alias($.identifier, $.type_identifier)),
+			'::',
+			field('name', $.identifier),
+		),
 
 		// ===== Literals and names =====
 		number_literal: _ => token(choice(

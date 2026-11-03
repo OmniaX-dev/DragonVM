@@ -58,6 +58,7 @@ const Primes: u16[] = { 2, 3, 5, 7 };   // constant arrays: read-only data in th
 enum Color { Red, Green = 5, Blue }     // Color.Blue == 6
 alias Handler = sub(i32) -> void;       // a name for a type
 struct Point { var x: i32; var y: i32 = 7; }    // fields can have constant default values
+struct Box { var w: u32; sub area() -> u32 { return this->w * this->w; } }   // methods (see below)
 sub name(var a: i32, b: u8 = 0) -> i32 { ... }  // 'var' is optional; default values are constants
 sub name(var a: string) -> void { ... } // overloads: same name, other parameter types
 sub later(var x: i32) -> i32;           // a declaration (the definition can come later)
@@ -89,6 +90,30 @@ sub size_text(var bytes: u32, var buff: u8*) -> string {
   places it is expanded. Lambdas can use the constants and statics of the sub around them.
 - Inner declarations hide outer ones (a local `var` hides a constant of the same name, and the
   other way around), `$name` in low blocks included. `--rom`: static variables are errors.
+
+### Methods
+Subs written in a struct are its methods: they are called on a struct (`x.m()`) or a pointer to
+one (`p->m()`), and get it as `this` (a `Struct*`). They are not stored in the struct (its size
+and layout stay the same).
+```
+struct Counter {
+    var value: i32;
+    var step: i32 = 1;
+    sub add(var n: i32) -> i32 { this->value += n; return this->value; }
+    sub add() -> i32 { return this->add(this->step); }     // overloads, default values, inline sub
+};
+
+var c: Counter;
+c.add(5);                                        // Counter::add(&c, 5)
+var p: Counter* = &c;
+p->add();
+var f: sub(Counter*, i32) -> i32 = Counter::add; // the method as a sub: this comes first
+```
+- The fields are used through `this->` (`this->value`); the struct's fields and methods cannot
+  have the same name. A method is defined in the struct (no declaration without a body), and
+  only named structs have methods.
+- For dynamic dispatch, use sub pointer fields; their default value can be a sub:
+  `var area: sub(Shape*) -> u32 = square_area;` (called as `s->area(s)`).
 
 ### Nameless structs
 `struct { fields }` is a type: it can be used for variables (global and local), fields, arrays,

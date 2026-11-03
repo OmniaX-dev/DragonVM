@@ -148,7 +148,7 @@ namespace
 	}
 
 	// LSP symbol kinds
-	enum { KindField = 8, KindEnum = 10, KindFunction = 12, KindVariable = 13, KindConstant = 14, KindEnumMember = 22, KindStruct = 23, KindTypeParameter = 26 };
+	enum { KindMethod = 6, KindField = 8, KindEnum = 10, KindFunction = 12, KindVariable = 13, KindConstant = 14, KindEnumMember = 22, KindStruct = 23, KindTypeParameter = 26 };
 
 	json analyzeInProcess(const std::string& root, const Options& o, const std::map<std::string, std::string>& docs)
 	{
@@ -222,6 +222,13 @@ namespace
 			for (const Node* d : program->list)
 			{
 				const std::string& name = d->name;
+				if (d->kind == NodeKind::FuncDecl && (d->value & 4) != 0)
+				{
+					// A method: <Struct>::<name>.
+					const size_t sep = name.find("::");
+					l_symbol(name.substr(sep + 2), KindMethod, d->namePos, name.substr(0, sep));
+					continue;
+				}
 				if (name.find("::") != std::string::npos || name.rfind("__lambda_", 0) == 0)
 					continue;
 				switch (d->kind)

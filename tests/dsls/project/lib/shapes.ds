@@ -3,6 +3,7 @@
 struct Point {
 	var x: i32;
 	var y: i32 = 7;
+	sub sum(var extra: i32) -> i32 { return this->x + this->y + extra; }
 };
 
 enum Color { Red, Green = 5, Blue }

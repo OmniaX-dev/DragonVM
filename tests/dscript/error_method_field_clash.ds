@@ -1,0 +1,6 @@
+// expect-error: struct Box has a field and a method named 'size'
+struct Box {
+	var size: u32;
+	sub size() -> u32 { return this->size; }
+};
+sub main() { var b: Box; }

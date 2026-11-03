@@ -1,0 +1,3 @@
+// expect-error: methods need a named struct
+var p: struct { var x: u32; sub get() -> u32 { return 0; } };
+sub main() { }

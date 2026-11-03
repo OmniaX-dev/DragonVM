@@ -55,6 +55,16 @@
 (call_expression
 	function: (identifier) @function)
 
+(call_expression
+	function: (member_expression
+		member: (field_identifier) @function.method))
+
+(scoped_identifier
+	name: (identifier) @function)
+
+((identifier) @variable.special
+	(#eq? @variable.special "this"))
+
 (parameter
 	name: (identifier) @variable.parameter)
 
@@ -111,6 +121,7 @@
 	"--"
 	"->"
 	"."
+	"::"
 	"?"
 ] @operator
 

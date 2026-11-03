@@ -438,3 +438,82 @@ sub f() -> u32 {
           (identifier)))
       (return_statement
         (identifier)))))
+
+================================================================================
+Methods
+================================================================================
+
+struct Counter {
+	var value: i32;
+	sub add(var n: i32) -> i32 { this->value += n; return this->value; }
+	inline sub get() -> i32 { return this->value; }
+};
+
+sub f(var c: Counter*) -> i32 {
+	var g: sub(Counter*, i32) -> i32 = Counter::add;
+	return c->add(1);
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (struct_declaration
+    (type_identifier)
+    (field_list
+      (field_declaration
+        (field_identifier)
+        (primitive_type))
+      (function_declaration
+        (identifier)
+        (parameter_list
+          (parameter
+            (identifier)
+            (primitive_type)))
+        (primitive_type)
+        (block
+          (expression_statement
+            (assignment_expression
+              (member_expression
+                (identifier)
+                (field_identifier))
+              (identifier)))
+          (return_statement
+            (member_expression
+              (identifier)
+              (field_identifier)))))
+      (function_declaration
+        (inline_modifier)
+        (identifier)
+        (parameter_list)
+        (primitive_type)
+        (block
+          (return_statement
+            (member_expression
+              (identifier)
+              (field_identifier)))))))
+  (function_declaration
+    (identifier)
+    (parameter_list
+      (parameter
+        (identifier)
+        (pointer_type
+          (type_identifier))))
+    (primitive_type)
+    (block
+      (variable_declaration
+        (identifier)
+        (function_type
+          (pointer_type
+            (type_identifier))
+          (primitive_type)
+          (primitive_type))
+        (scoped_identifier
+          (type_identifier)
+          (identifier)))
+      (return_statement
+        (call_expression
+          (member_expression
+            (identifier)
+            (field_identifier))
+          (argument_list
+            (number_literal)))))))
