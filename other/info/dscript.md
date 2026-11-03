@@ -8,8 +8,17 @@ binary (`--raw`).
 dsc program.ds -I extra/ds/sdk                    -> program.drx (relocatable)
 dsc kernel.ds --raw --load 0x01012000 --fixed 1024,0xFF --header KERNEL0_BOOT
 dsc program.ds --emit-dasm program.dasm           (also writes the generated dasm)
+dsc bios.ds --rom --fixed 16777216,0xFF -Wa,-D    (dasm options: here its debug mode)
 drun config/testMachine.dvm program.drx --boot    (runs it without a window)
 ```
+
+`-Wa,<option>[,<option>...]` hands options to the assembler, as `dasm` takes them: `-D` /
+`--debug` (debug mode: keeps the `debug_*` instructions, prints the program info and saves the
+disassembly as `disassembly/<md5 of the output path>.dds`, like dasm does),
+`--save-disassembly,<file>`, `--save-final-stage,<file>`, `--verbose`, `--verbose-2`,
+`--verbose-full`, `-I,<dir>` (for `@include` in low blocks). `-o` and `--disable-ext*` are not
+allowed. dsc's own `-D NAME=value` is a define, not dasm's `-D`. For a DRX, the disassembly and
+symbols are at offset 0 (add the load address).
 
 Pipeline: lexer -> preprocessor (on tokens) -> parser (AST) -> checking + code generation
 (dasm text) -> assembler -> DRX / raw binary. Sources: `src/compiler/`.

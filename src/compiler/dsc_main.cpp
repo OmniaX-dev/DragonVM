@@ -8,6 +8,7 @@
 #include <iostream>
 #include <fstream>
 #include <filesystem>
+#include <algorithm>
 
 using namespace dscript;
 
@@ -26,6 +27,7 @@ struct Options
 	bool debug { false };
 	std::string disassemblyDir;
 	bool verbose { false };
+	std::vector<std::string> dasmArgs;	// -Wa,<options>: handed to the assembler
 };
 
 static void printHelp(void)
@@ -38,7 +40,10 @@ static void printHelp(void)
 		"  -D <NAME>[=<value>]       Defines NAME (like #define)\n"
 		"  --emit-dasm <file>        Also writes the generated dasm source\n"
 		"  --debug, -g               Keeps debug_break / debug_* instructions of low blocks\n"
-		"  --verbose                 Prints the program size and relocations\n\n"
+		"  --verbose                 Prints the program size and relocations\n"
+		"  -Wa,<option>[,<option>...]  Passes options to the assembler (see dasm --help), e.g. -Wa,-D for dasm's\n"
+		"                            debug mode, -Wa,--save-disassembly,<file>, -Wa,--verbose-2. Not allowed: -o and\n"
+		"                            --disable-extmov / --disable-extalu (the generated code needs both)\n\n"
 		"Output formats:\n"
 		"  (default)                 DRX: relocatable executable, loaded anywhere by a loader (an OS):\n"
 		"                            the program is called and returns when main returns (RV = main's value)\n"
@@ -87,6 +92,20 @@ static int parseArgs(int argc, char** argv, Options& o)
 		else if (a == "--fixed") o.fixed = l_value(a);
 		else if (a == "--header") o.header = l_value(a);
 		else if (a == "--save-disassembly") o.disassemblyDir = l_value(a);
+		else if (a.rfind("-Wa,", 0) == 0)
+		{
+			std::string rest = a.substr(4);
+			size_t start = 0;
+			while (start <= rest.size())
+			{
+				size_t comma = rest.find(',', start);
+				if (comma == std::string::npos)
+					comma = rest.size();
+				if (comma > start)
+					o.dasmArgs.push_back(rest.substr(start, comma - start));
+				start = comma + 1;
+			}
+		}
 		else if (!a.empty() && a[0] == '-')
 		{
 			std::cerr << "dsc: unknown option: " << a << " (see --help)\n";
@@ -113,6 +132,81 @@ static int parseArgs(int argc, char** argv, Options& o)
 	if (o.output.empty())
 		o.output = std::filesystem::path(o.input).replace_extension(o.raw ? ".bin" : ".drx").string();
 	return 0;
+}
+
+// Checks the -Wa options and loads them with dasm's own argument parser (it ignores unknown
+// options, so they are checked here first).
+static bool loadDasmArgs(const Options& o)
+{
+	if (o.dasmArgs.empty())
+		return true;
+	static const std::vector<std::string> flags = { "-D", "--debug", "--verbose", "--verbose-2", "--verbose-full" };
+	static const std::vector<std::string> withValue = { "--save-disassembly", "--save-final-stage", "-I", "--include-path" };
+	auto l_has = [](const std::vector<std::string>& v, const std::string& s) { return std::find(v.begin(), v.end(), s) != v.end(); };
+	for (size_t i = 0; i < o.dasmArgs.size(); i++)
+	{
+		const std::string& a = o.dasmArgs[i];
+		if (l_has(withValue, a))
+		{
+			if (i + 1 >= o.dasmArgs.size())
+			{
+				std::cerr << "dsc: -Wa: missing value for " << a << " (-Wa," << a << ",<value>)\n";
+				return false;
+			}
+			i++;
+		}
+		else if (a == "-o")
+		{
+			std::cerr << "dsc: -Wa: use dsc's own -o\n";
+			return false;
+		}
+		else if (a == "--disable-extmov" || a == "--disable-extalu")
+		{
+			std::cerr << "dsc: -Wa: " << a << " is not allowed (the generated code needs extmov and extalu)\n";
+			return false;
+		}
+		else if (!l_has(flags, a))
+		{
+			std::cerr << "dsc: -Wa: unknown or unsupported assembler option: " << a << "\n";
+			return false;
+		}
+	}
+	// dasm's parser: dasm <source> -o <output> <options...> (the output names the default disassembly file).
+	std::vector<std::string> argvStrings = { "dasm", o.input, "-o", o.output };
+	argvStrings.insert(argvStrings.end(), o.dasmArgs.begin(), o.dasmArgs.end());
+	std::vector<char*> argv;
+	for (auto& s : argvStrings)
+		argv.push_back(s.data());
+	const i32 r = dragon::code::Assembler::Application::loadArguments((int)argv.size(), argv.data());
+	if (r == dragon::code::Assembler::Application::RETURN_VAL_INVALID_PARAM)
+	{
+		std::cerr << "dsc: -Wa: invalid value (an include directory that does not exist, or a file that cannot be created)\n";
+		return false;
+	}
+	if (r != dragon::code::Assembler::Application::RETURN_VAL_EXIT_SUCCESS)
+	{
+		std::cerr << "dsc: -Wa: the assembler rejected the options (code " << r << ")\n";
+		return false;
+	}
+	return true;
+}
+
+// After the program is assembled (at the address it runs at): what the -Wa options ask for.
+static void dasmAfterAssembly(const Options& o)
+{
+	auto& args = dragon::code::Assembler::Application::args;
+	if (o.dasmArgs.empty())
+		return;
+	if (args.verbose_level != -1)
+		dragon::code::Assembler::printProgramInfo(args.verbose_level);
+	if (args.save_disassembly)
+	{
+		std::filesystem::path file(args.disassembly_file_path.cpp_str());
+		if (file.has_parent_path())
+			std::filesystem::create_directories(file.parent_path());
+		if (!dragon::code::Assembler::saveDisassemblyToFile(args.disassembly_file_path, std::filesystem::path(o.output).filename().string()))
+			std::cerr << "dsc: cannot save the disassembly to " << args.disassembly_file_path.cpp_str() << "\n";
+	}
 }
 
 static bool writeFile(const std::string& path, const std::vector<uint8_t>& data)
@@ -187,8 +281,10 @@ int main(int argc, char** argv)
 	std::vector<String> lines;
 	for (const auto& line : dasm)
 		lines.push_back(String(line));
+	if (!loadDasmArgs(o))
+		return 2;
 	dragon::code::Assembler::cpuExtensions = { "extmov", "extalu" };
-	dragon::code::Assembler::debugMode = o.debug;
+	dragon::code::Assembler::debugMode = o.debug || dragon::code::Assembler::Application::args.debug_mode;
 	dragon::code::Assembler::saveExports = false;
 	const std::string directory = std::filesystem::path(o.input).parent_path().string();
 
@@ -207,6 +303,7 @@ int main(int argc, char** argv)
 		}
 		if (!o.disassemblyDir.empty())
 			dragon::code::Assembler::saveDisassemblyToFile(o.disassemblyDir, std::filesystem::path(o.output).filename().string());
+		dasmAfterAssembly(o);
 		if (o.verbose)
 			std::cout << o.output << ": " << bin.size() << " bytes (raw)\n";
 		return 0;
@@ -216,6 +313,7 @@ int main(int argc, char** argv)
 	// difference are addresses.
 	const uint32_t delta = 0x01000000;
 	std::vector<uint8_t> a = assemble(lines, directory, 0);
+	dasmAfterAssembly(o);	// (a DRX's disassembly and symbols are at offset 0: add the load address)
 	std::vector<uint8_t> b = assemble(lines, directory, delta);
 	if (a.empty() || a.size() != b.size())
 	{

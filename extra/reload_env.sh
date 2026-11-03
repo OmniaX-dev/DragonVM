@@ -6,7 +6,7 @@ green='\033[0;32m'
 clear='\033[0m'
 
 printf "${green}Flashing BIOS...\n${clear}"
-./dasm dss/bios/entry.dss -o dragon/bios.bin -I dss $1
+./dsc ./ds/bios/entry.ds -I ds/sdk/ --verbose -o ./dragon/bios.bin --raw --load 0x0 --fixed 16777216,0xFF --rom -Wa,$1
 
 printf "\n${green}Compiling Drake...\n${clear}"
 printf "\n${green}1) loader.dss\n${clear}"
