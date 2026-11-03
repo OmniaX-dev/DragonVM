@@ -100,7 +100,8 @@ namespace dragon
 				case data::OpCodes::Ret: return "Ret";
 				case data::OpCodes::ArgReg: return "ArgReg";
 				case data::OpCodes::RetInt: return "RetInt";
-				case data::OpCodes::Int: return "Int";
+				case data::OpCodes::IntImm: return "IntImm";
+				case data::OpCodes::IntReg: return "IntReg";
 				case data::OpCodes::ZeroFlag: return "ZeroFlag";
 				case data::OpCodes::SetFlag: return "SetFlag";
 				case data::OpCodes::ToggleFlag: return "ToggleFlag";
@@ -219,7 +220,8 @@ namespace dragon
 				case data::OpCodes::Ret: return 1;
 				case data::OpCodes::ArgReg: return 2;
 				case data::OpCodes::RetInt: return 1;
-				case data::OpCodes::Int: return 2;
+				case data::OpCodes::IntImm: return 2;
+				case data::OpCodes::IntReg: return 2;
 				case data::OpCodes::ZeroFlag: return 2;
 				case data::OpCodes::SetFlag: return 2;
 				case data::OpCodes::ToggleFlag: return 2;

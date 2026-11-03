@@ -1,0 +1,46 @@
+#once
+
+#include(bios.ds)
+
+struct IntVectorEntry { var enabled: u8; var handler: u32; };
+sub set_interrupt_vector_entry(var code: u8, var handler_addr: sub()) {
+        var entry: IntVectorEntry* = cast<IntVectorEntry*>(MemoryLayout.InterruptVector) + code;
+        var handler: u32 = cast<u32>(handler_addr);
+        entry->enabled = handler != 0 ? 0xFF : 0x00;
+        entry->handler = handler;
+}
+
+inline sub clear_interrupt_vector_entry(var code: u8) {
+	set_interrupt_vector_entry(code, 0x0000);
+}
+
+sub set_interrupts_enabled(var enable: bool) {
+	if (enable)
+		low { sflg $CPUFlags.InterruptsEnabled }
+	else
+		low { zflg $CPUFlags.InterruptsEnabled }
+}
+
+sub raise_interrupt(var code: u8, var func: u8) {
+	low {
+		mov R10, $func
+		int $code
+	}
+}
+
+sub raise_interrupt(var code: u8, var func: u8, var __r9: u32) {
+	low {
+		mov R10, $func
+		mov R9, $__r9
+		int $code
+	}
+}
+
+sub raise_interrupt(var code: u8, var func: u8, var __r9: u32, var __r8: u32) {
+	low {
+		mov R10, $func
+		mov R9, $__r9
+		mov R8, $__r8
+		int $code
+	}
+}

@@ -175,11 +175,13 @@ namespace dragon
 			writeRegister32(data::Registers::FL, cast<i32>(m_tempFlags.value));
 		}
 
-		void VirtualCPU::handleInterrupt(u8 intValue, bool hardware)
+		bool VirtualCPU::handleInterrupt(u8 intValue, bool hardware)
 		{
+			if (!readFlag(data::Flags::InterruptsEnabled))
+				return false;
 			u32 entryPointer = data::MemoryMapAddresses::IntVector_Start + (intValue * data::MemoryMapAddresses::IntVector_EntrySize);
 			u8 interruptStatus = cast<u8>(m_memory.read8(entryPointer));
-			if (interruptStatus != 0xFF) return;
+			if (interruptStatus != 0xFF) return false;
 			u32 handlerAddress = cast<u32>(m_memory.read32(entryPointer + 1));
 			pushToStack(0);
 			pushStackFrame();
@@ -188,6 +190,7 @@ namespace dragon
 			writeRegister32(data::Registers::IP, cast<i32>(handlerAddress));
 			if (m_interruptListener)
 				m_interruptListener(intValue, hardware, handlerAddress);
+			return true;
 		}
 
 		bool VirtualCPU::check_divisor(i32 divisor)
@@ -984,12 +987,16 @@ namespace dragon
 					m_subroutineCounter--;
 				}
 				break;
-				case data::OpCodes::Int:
+				case data::OpCodes::IntImm:
 				{
 					u8 intValue = fetch8();
-					if (!readFlag(data::Flags::InterruptsEnabled))
-						return true;
-					// handleInterrupt() counts the subroutine.
+					handleInterrupt(intValue, false);
+				}
+				break;
+				case data::OpCodes::IntReg:
+				{
+					u8 regAddr = fetch8();
+					u32 intValue = readRegister(regAddr);
 					handleInterrupt(intValue, false);
 				}
 				break;

@@ -1,3 +1,5 @@
+#once
+
 #include(<bios.ds>)
 #include(<mem.ds>)
 
@@ -195,29 +197,29 @@ sub __int30_print_string_text16(var buff: u8*, var cell: VGAText16Cell*) {
 }
 
 sub __ensure_cell_coords_text16(var cell: VGAText16Cell*, var allow_x_wrap: bool = true, var allow_scroll: bool = true) -> bool {
-        var scrx: u32 = *cast<u32*>(CMOSRegisters.ScreenColumns);
-        var scry: u32 = *cast<u32*>(CMOSRegisters.ScreenRows);
-        var old_cell: VGAText16Cell = *cell;
+	var scrx: u32 = *cast<u32*>(CMOSRegisters.ScreenColumns);
+    var scry: u32 = *cast<u32*>(CMOSRegisters.ScreenRows);
+    var old_cell: VGAText16Cell = *cell;
 
-        if (cell->x >= scrx)
+    if (cell->x >= scrx)
+    {
+        if (!allow_x_wrap)
+            return false;
+        while (cell->x >= scrx)
         {
-            if (!allow_x_wrap)
-                return false;
-            while (cell->x >= scrx)
-            {
-                cell->x -= scrx;
-                cell->y++;
-            }
+            cell->x -= scrx;
+            cell->y++;
         }
-        while (cell->y >= scry)
+    }
+    while (cell->y >= scry)
+    {
+        if (!allow_scroll)
         {
-            if (!allow_scroll)
-            {
-                *cell = old_cell;
-                return false;
-            }
-            cast<VGARegs*>(MemoryLayout.VGA)->signal = VGAText16ColorSignals.Scroll;
-            cell->y--;
+            *cell = old_cell;
+            return false;
         }
-        return true;
+        cast<VGARegs*>(MemoryLayout.VGA)->signal = VGAText16ColorSignals.Scroll;
+        cell->y--;
+    }
+    return true;
 }

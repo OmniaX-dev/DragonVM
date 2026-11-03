@@ -13,7 +13,7 @@ namespace dragon
 	namespace data
 	{
 		inline static constexpr u32 AddressBits = 28;
-		inline static constexpr u32 AddressMask = (1u << AddressBits) - 1;	// 0x0FFFFFFF
+		inline static constexpr u32 AddressMask = (1u << AddressBits) - 1;    // 0x0FFFFFFF
 		inline static constexpr u32 WordSize = 4;
 		typedef u32 VDiskID;
 
@@ -216,12 +216,12 @@ namespace dragon
 				inline static constexpr u8 IndexMask = 0x3F;
 				inline static constexpr u8 ViewMask = 0xC0;
 				inline static constexpr u8 ViewFull = 0x00;
-				inline static constexpr u8 ViewLow = 0x40;		// RxL: bits 0-15
-				inline static constexpr u8 ViewHigh = 0x80;		// RxH: bits 16-31
+				inline static constexpr u8 ViewLow = 0x40;        // RxL: bits 0-15
+				inline static constexpr u8 ViewHigh = 0x80;        // RxH: bits 16-31
 
 				inline static constexpr u8 low(u8 reg) { return cast<u8>((reg & IndexMask) | ViewLow); }
 				inline static constexpr u8 high(u8 reg) { return cast<u8>((reg & IndexMask) | ViewHigh); }
-				inline static constexpr u8 general(u8 n) { return cast<u8>(FirstGeneral + n - 1); }	// R<n>, n in 1..20
+				inline static constexpr u8 general(u8 n) { return cast<u8>(FirstGeneral + n - 1); }    // R<n>, n in 1..20
 				inline static constexpr bool isValid(u8 reg) { return (reg & IndexMask) < Last && (reg & ViewMask) != ViewMask; }
 		};
 
@@ -235,9 +235,9 @@ namespace dragon
 				inline static constexpr u32 SavedIP = 3;
 				inline static constexpr u32 SavedACC = 4;
 				inline static constexpr u32 SavedPP = 5;
-				inline static constexpr u32 ArgCount = 6 + Registers::GeneralCount;			// 26
-				inline static constexpr u32 savedGeneral(u32 n) { return ArgCount - n; }	// R<n>
-				inline static constexpr u32 argument(u32 i, u32 count) { return ArgCount + count - i; }	// i-th (0-based) pushed argument
+				inline static constexpr u32 ArgCount = 6 + Registers::GeneralCount;            // 26
+				inline static constexpr u32 savedGeneral(u32 n) { return ArgCount - n; }    // R<n>
+				inline static constexpr u32 argument(u32 i, u32 count) { return ArgCount + count - i; }    // i-th (0-based) pushed argument
 				// The saved words (frame size .. R1), without the arguments count.
 				inline static constexpr u32 SavedWords = ArgCount - 1;
 		};
@@ -300,15 +300,15 @@ namespace dragon
 					const char* description;
 				};
 				inline static constexpr tRegisterInfo List[] = {
-					{ MemoryStart,		4, "MemoryStart",		true,	"First address of the RAM" },
-					{ MemorySize,		4, "MemorySize",		true,	"Last address of the RAM" },
-					{ ClockSpeed,		4, "ClockSpeed",		true,	"Clock rate (Hz)" },
-					{ ScreenWidth,		4, "ScreenWidth",		true,	"Text columns" },
-					{ ScreenHeight,		4, "ScreenHeight",		true,	"Text rows" },
-					{ StackSize,		4, "StackSize",			true,	"Stack size (bytes)" },
-					{ ScreenRedrawRate,	1, "ScreenRedrawRate",	true,	"Screen redraws per second" },
-					{ BootDisk,			1, "BootDisk",			false,	"Disk the BIOS boots from" },
-					{ DiskList,			4, "DiskList",			true,	"Connected disks (bit n: disk n)" }
+					{ MemoryStart,        4, "MemoryStart",        true,    "First address of the RAM" },
+					{ MemorySize,        4, "MemorySize",        true,    "Last address of the RAM" },
+					{ ClockSpeed,        4, "ClockSpeed",        true,    "Clock rate (Hz)" },
+					{ ScreenWidth,        4, "ScreenWidth",        true,    "Text columns" },
+					{ ScreenHeight,        4, "ScreenHeight",        true,    "Text rows" },
+					{ StackSize,        4, "StackSize",            true,    "Stack size (bytes)" },
+					{ ScreenRedrawRate,    1, "ScreenRedrawRate",    true,    "Screen redraws per second" },
+					{ BootDisk,            1, "BootDisk",            false,    "Disk the BIOS boots from" },
+					{ DiskList,            4, "DiskList",            true,    "Connected disks (bit n: disk n)" }
 				};
 		};
 
@@ -483,8 +483,9 @@ namespace dragon
 				inline static constexpr u8 ZeroFlag = 0xF0;
 				inline static constexpr u8 SetFlag = 0xF1;
 				inline static constexpr u8 ToggleFlag = 0xF2;
-				inline static constexpr u8 RetInt = 0xFD;
-				inline static constexpr u8 Int = 0xFE;
+				inline static constexpr u8 RetInt = 0xFC;
+				inline static constexpr u8 IntImm = 0xFD;
+				inline static constexpr u8 IntReg = 0xFE;
 				inline static constexpr u8 Halt = 0xFF;
 
 				// For the instruction being executed: if it's an extension instruction, these

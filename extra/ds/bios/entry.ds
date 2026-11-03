@@ -6,9 +6,9 @@
 
 sub main() {
 	*cast<u8*>(VGARegisters.VideoMode) = VGAVideoModes.TextSingleColor;
-	low { sflg $CPUFlags.InterruptsEnabled }
-	__int20_set_interrupt_vector_entry(0x20, cast<u32>(&__int_20_handler));
-	__int20_set_interrupt_vector_entry(0x30, cast<u32>(&__int_30_handler));
+	set_interrupts_enabled(true);
+	set_interrupt_vector_entry(0x20, &__int_20_handler);
+	set_interrupt_vector_entry(0x30, &__int_30_handler);
 
 	__print_machine_info();
 	__load_mbr_data_block();
@@ -28,11 +28,7 @@ sub __load_mbr_data_block() {
 	ddd.address = 0x00000000;
 	ddd.dataSize = 512;
 	ddd.memoryAddress = MemoryLayout.MBR;
-	low {
-		mov R10, $INT20_LOAD_FROM_DDD_BLOCKING
-		mov R9, $ddd
-		int 0x20
-	}
+	raise_interrupt(0x20, INT20_LOAD_FROM_DDD_BLOCKING, cast<u32>(&ddd));
 }
 
 sub __print_machine_info() {

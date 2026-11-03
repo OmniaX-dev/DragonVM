@@ -1471,15 +1471,24 @@ namespace dragon
 			}
 			else if (instEdit == "int")
 			{
+				m_code.push_back(0x00);
 				eOperandType opType = parseOperand(opEdit, word);
-				if (opType != eOperandType::Immediate)
+				if (opType == eOperandType::Immediate)
 				{
-					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Immediate required\n";
+					m_code[m_code.size() - 1] = data::OpCodes::IntImm;
+					m_code.push_back((u8)word);
+				}
+				else if (opType == eOperandType::Register)
+				{
+					m_code[m_code.size() - 1] = data::OpCodes::IntReg;
+					m_code.push_back((u8)word);
+				}
+				else
+				{
+					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Register or Immediate required\n";
 					exit(1);
 					return;
 				}
-				m_code.push_back(data::OpCodes::Int);
-				m_code.push_back((u8)word);
 				return;
 			}
 			else if (instEdit == "zflg")

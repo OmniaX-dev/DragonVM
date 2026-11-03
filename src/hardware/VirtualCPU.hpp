@@ -29,7 +29,7 @@ namespace dragon
 				i32 subroutineCounter;
 				u8 currentInst;
 				u8 currentExtInst;
-				i8 currentExtension;	// index in the extension table, -1 = none
+				i8 currentExtension;    // index in the extension table, -1 = none
 				bool halt;
 				bool biosMode;
 				bool isDebugBreakPoint;
@@ -66,7 +66,7 @@ namespace dragon
 				bool readFlag(u8 flg);
 				void setFlag(u8 flg, bool val = true);
 
-				void handleInterrupt(u8 intValue, bool hardware);
+				bool handleInterrupt(u8 intValue, bool hardware);
 
 				bool loadExtension(void);
 				bool execute(void);

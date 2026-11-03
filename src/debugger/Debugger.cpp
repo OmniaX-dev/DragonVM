@@ -763,7 +763,7 @@ namespace dragon
 			return;
 		const u32 ip = cast<u32>(DragonRuntime::cpu.readRegister(data::Registers::IP));
 		const u8 inst = DragonRuntime::memMap.peek8(ip);
-		if (inst != data::OpCodes::CallImm && inst != data::OpCodes::CallReg && inst != data::OpCodes::Int)
+		if (inst != data::OpCodes::CallImm && inst != data::OpCodes::CallReg && inst != data::OpCodes::IntImm && inst != data::OpCodes::IntReg)
 		{
 			stepInto(1);
 			return;
@@ -1303,7 +1303,7 @@ namespace dragon
 		const u8 TYPE_WORD = 2;
 		const u8 TYPE_DWORD = 4;
 		const u8 TYPE_QWORD = 8;
-		u8 type = TYPE_DWORD;	// the machine's registers / addresses
+		u8 type = TYPE_DWORD;    // the machine's registers / addresses
 		if (command.contains(" "))
 		{
 			String size_str = command.new_substr(0, command.indexOf(" ")).trim().toLower();

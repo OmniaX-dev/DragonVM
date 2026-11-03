@@ -1,4 +1,7 @@
+#once
+
 #include(<bios.ds>)
+#include(<int.ds>)
 
 const INT20_START_DISK_CONTROLLER = 0x10;
 const INT20_GET_DISK_LIST = 0x11;
@@ -33,13 +36,13 @@ interrupt sub __int_20_handler() {
 	{
 		if (param2 > 0xFF)
 			return; // TODO: Eventually this should probably raise some kind of error/warning
-		__int20_set_interrupt_vector_entry(param2, param1);
+		set_interrupt_vector_entry(param2, cast<sub()>(param1));
 	}
 	else if (code == INT20_CLEAR_INT_HANDLER)
 	{
 		if (param1 > 0xFF)
 			return; // TODO: Eventually this should probably raise some kind of error/warning
-		__int20_set_interrupt_vector_entry(param1, 0x0000);
+		clear_interrupt_vector_entry(param1);
 	}
 	else
 	{
@@ -64,11 +67,4 @@ sub __int20_load_from_ddd(var ddd: DiskDriverData*, var blocking: bool = false) 
         regs->signal = DiskSignals.Start;
         while (regs->status != DiskStatus.Free) {}
         low { sflg $CPUFlags.InterruptsEnabled }
-}
-
-struct IntVectorEntry { var enabled: u8; var handler: u32; };
-sub __int20_set_interrupt_vector_entry(var code: u8, var handler_addr: u32) {
-        var entry: IntVectorEntry* = cast<IntVectorEntry*>(MemoryLayout.InterruptVector) + code;
-        entry->enabled = handler_addr != 0 ? 0xFF : 0x00;
-        entry->handler = handler_addr;
 }
