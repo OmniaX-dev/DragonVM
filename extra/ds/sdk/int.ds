@@ -2,6 +2,34 @@
 
 #include(bios.ds)
 
+const INT20_START_DISK_CONTROLLER: u8 				= 0x10;
+const INT20_GET_DISK_LIST: u8 						= 0x11;
+const INT20_LOAD_FROM_DDD_BLOCKING: u8 				= 0x12;
+const INT20_SET_NEW_INT_HANDLER: u8 				= 0x00;
+const INT20_CLEAR_INT_HANDLER: u8 					= 0x01;
+
+const INT30_DIRECT_PRINT_CHAR_TEXT_SINGLE: u8 		= 0x01;
+const INT30_DIRECT_NEW_LINE_TEXT_SINGLE: u8 		= 0x02;
+const INT30_DIRECT_PRINT_STRING_TEXT_SINGLE: u8 	= 0x03;
+const INT30_DIRECT_PRINT_INTEGER_TEXT_SINGLE: u8 	= 0x04;
+const INT30_STORE_INTEGER_TEXT_SINGLE: u8 			= 0x05;
+const INT30_STORE_CHAR_TEXT_SINGLE: u8 				= 0x06;
+const INT30_PRINT_BUFFER_NO_FLUSH_TEXT_SINGLE: u8 	= 0x07;
+const INT30_PRINT_BUFFER_AND_FLUSH_TEXT_SINGLE: u8 	= 0x08;
+const INT30_FLUSH_BUFFER_TEXT_SINGLE: u8 			= 0x09;
+const INT30_STORE_STRING_TEXT_SINGLE: u8 			= 0x0A;
+const INT30_INVERT_COLORS_TEXT_SINGLE: u8 			= 0x0B;
+const INT30_PRINT_STRING_BUFFERED: u8 				= 0x0C;
+
+const INT30_WRITE_VRAM_TEXT16: u8 					= 0x21;
+const INT30_PRINT_STRING_TEXT16: u8 				= 0x22;
+const INT30_PRINT_INTEGER_TEXT16: u8 				= 0x23;
+const INT30_CLEAR_SCREEN_TEXT16: u8 				= 0x24;
+const INT30_SCROLL_TEXT16: u8 						= 0x25;
+
+const INT30_CLEAR_SCREEN: u8 						= 0xE0;
+const INT30_REFRESH_SCREEN: u8 						= 0xE1;
+
 struct IntVectorEntry { var enabled: u8; var handler: u32; };
 sub set_interrupt_vector_entry(var code: u8, var handler_addr: sub()) {
         var entry: IntVectorEntry* = cast<IntVectorEntry*>(MemoryLayout.InterruptVector) + code;
@@ -41,6 +69,16 @@ sub raise_interrupt(var code: u8, var func: u8, var __r9: u32, var __r8: u32) {
 		mov R10, $func
 		mov R9, $__r9
 		mov R8, $__r8
+		int $code
+	}
+}
+
+sub raise_interrupt(var code: u8, var func: u8, var __r9: u32, var __r8: u32, var __r11: u32) {
+	low {
+		mov R10, $func
+		mov R9, $__r9
+		mov R8, $__r8
+		mov R11, $__r11
 		int $code
 	}
 }

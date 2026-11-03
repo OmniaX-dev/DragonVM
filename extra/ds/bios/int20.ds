@@ -3,12 +3,6 @@
 #include(<bios.ds>)
 #include(<int.ds>)
 
-const INT20_START_DISK_CONTROLLER = 0x10;
-const INT20_GET_DISK_LIST = 0x11;
-const INT20_LOAD_FROM_DDD_BLOCKING = 0x12;
-const INT20_SET_NEW_INT_HANDLER = 0x00;
-const INT20_CLEAR_INT_HANDLER = 0x01;
-
 interrupt sub __int_20_handler() {
 	var code: u32;
 	var param1: u32;

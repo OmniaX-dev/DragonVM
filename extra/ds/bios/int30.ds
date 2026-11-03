@@ -3,28 +3,6 @@
 #include(<bios.ds>)
 #include(<mem.ds>)
 
-const INT30_DIRECT_PRINT_CHAR_TEXT_SINGLE 		= 0x0001;
-const INT30_DIRECT_NEW_LINE_TEXT_SINGLE 		= 0x0002;
-const INT30_DIRECT_PRINT_STRING_TEXT_SINGLE 	= 0x0003;
-const INT30_DIRECT_PRINT_INTEGER_TEXT_SINGLE 	= 0x0004;
-const INT30_STORE_INTEGER_TEXT_SINGLE 			= 0x0005;
-const INT30_STORE_CHAR_TEXT_SINGLE 				= 0x0006;
-const INT30_PRINT_BUFFER_NO_FLUSH_TEXT_SINGLE 	= 0x0007;
-const INT30_PRINT_BUFFER_AND_FLUSH_TEXT_SINGLE 	= 0x0008;
-const INT30_FLUSH_BUFFER_TEXT_SINGLE 			= 0x0009;
-const INT30_STORE_STRING_TEXT_SINGLE 			= 0x000A;
-const INT30_INVERT_COLORS_TEXT_SINGLE 			= 0x000B;
-const INT30_PRINT_STRING_BUFFERED 				= 0x000C;
-
-const INT30_WRITE_VRAM_TEXT16 					= 0x0021;
-const INT30_PRINT_STRING_TEXT16 				= 0x0022;
-const INT30_PRINT_INTEGER_TEXT16 				= 0x0023;
-const INT30_CLEAR_SCREEN_TEXT16 				= 0x0024;
-const INT30_SCROLL_TEXT16 						= 0x0025;
-
-const INT30_CLEAR_SCREEN 						= 0x00E0;
-const INT30_REFRESH_SCREEN 						= 0x00E1;
-
 struct VGARegs {
 	var mode: u8;
 	var clearColor: u8;
@@ -49,10 +27,12 @@ interrupt sub __int_30_handler() {
 	var code: u32;
 	var param1: u32;
 	var param2: u32;
+	var param3: u32;
 	low {
 		mov $code, R10
 		mov $param1, R9
 		mov $param2, R8
+		mov $param3, R11
 	}
 	var device: VGARegs* = cast<VGARegs*>(MemoryLayout.VGA);
 	var l_textSingleStr = sub(var param: u32, var device: VGARegs*, var store: bool) {
@@ -127,8 +107,11 @@ interrupt sub __int_30_handler() {
 	}
 	else if (code == INT30_WRITE_VRAM_TEXT16)
 	{
+		var flags: BitField32 = *cast<BitField32*>(&param3);
+		var allow_x_wrap: bool = flags.get(Text16Flags.AllowXWrap);
+		var allow_scroll: bool = flags.get(Text16Flags.AllowScroll);
 		var cell: VGAText16Cell* = cast<VGAText16Cell*>(param1);
-		if (__ensure_cell_coords_text16(cell))
+		if (__ensure_cell_coords_text16(cell, allow_x_wrap, allow_scroll))
 		{
 			device->text16MemoryController.character = cell->character;
 			device->text16MemoryController.background = cell->background;
@@ -140,14 +123,20 @@ interrupt sub __int_30_handler() {
 	}
 	else if (code == INT30_PRINT_STRING_TEXT16)
 	{
+		var flags: BitField32 = *cast<BitField32*>(&param3);
+		var allow_x_wrap: bool = flags.get(Text16Flags.AllowXWrap);
+		var allow_scroll: bool = flags.get(Text16Flags.AllowScroll);
 		var cell: VGAText16Cell* = cast<VGAText16Cell*>(param1);
 		var str: u8* = cast<u8*>(param2);
-		__int30_print_string_text16(str, cell);
+		__int30_print_string_text16(str, cell, allow_x_wrap, allow_scroll);
 	}
 	else if (code == INT30_PRINT_INTEGER_TEXT16)
 	{
+		var flags: BitField32 = *cast<BitField32*>(&param3);
+		var allow_x_wrap: bool = flags.get(Text16Flags.AllowXWrap);
+		var allow_scroll: bool = flags.get(Text16Flags.AllowScroll);
 		var cell: VGAText16Cell* = cast<VGAText16Cell*>(param1);
-		__int30_print_integer_text16(param2, cell);
+		__int30_print_integer_text16(param2, cell, allow_x_wrap, allow_scroll);
 	}
 	else if (code == INT30_CLEAR_SCREEN_TEXT16)
 	{
@@ -175,15 +164,15 @@ interrupt sub __int_30_handler() {
 	}
 }
 
-sub __int30_print_integer_text16(var num: i32, var cell: VGAText16Cell*) {
+sub __int30_print_integer_text16(var num: i32, var cell: VGAText16Cell*, var allow_x_wrap: bool = true, var allow_scroll: bool = true) {
 	var buff: u8[12];
 	itoa(num, buff);
-	__int30_print_string_text16(buff, cell);
+	__int30_print_string_text16(buff, cell, allow_x_wrap, allow_scroll);
 }
 
-sub __int30_print_string_text16(var buff: u8*, var cell: VGAText16Cell*) {
+sub __int30_print_string_text16(var buff: u8*, var cell: VGAText16Cell*, var allow_x_wrap: bool = true, var allow_scroll: bool = true) {
 	var device: VGARegs* = cast<VGARegs*>(MemoryLayout.VGA);
-	while (*buff and __ensure_cell_coords_text16(cell))
+	while (*buff and __ensure_cell_coords_text16(cell, allow_x_wrap, allow_scroll))
 	{
 		cell->character = *buff++;
 		device->text16MemoryController.character = cell->character;

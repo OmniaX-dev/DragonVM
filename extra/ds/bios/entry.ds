@@ -13,9 +13,9 @@ sub main() {
 	__print_machine_info();
 	__load_mbr_data_block();
 
-	var dpt_block: DPTBlock;
-	dpt_load_block(&dpt_block);
-	var buff: u8[12];
+	// var dpt_block: DPTBlock;
+	// dpt_load_block(&dpt_block);
+	// var buff: u8[12];
 	// for (var i: i8 = 0; i < dpt_block.partitionCount; i++)
 	// {
 	// 	if (dpt_is_partition_bootable(&dpt_block.entries[i]))
@@ -23,7 +23,7 @@ sub main() {
 	// 	else
 	// 		println("false");
 	// }
-	low { hlt }
+	// low { hlt }
 
 	// Exit BIOS mode
 	low {
@@ -45,21 +45,21 @@ sub __load_mbr_data_block() {
 
 sub __print_machine_info() {
 	for (var i: u32 = 0; i < sizeof(BiosLogo) / sizeof(BiosLogo[0]); i++) {
-		print(BiosLogo[i]);
+		TextSingle::print(BiosLogo[i]);
 		if (i == 1)
 		{
-			print(' ');
+			TextSingle::print(' ');
 			raise_interrupt(0x30, INT30_INVERT_COLORS_TEXT_SINGLE);
-			print(BiosName);
-			print(' ');
-			print(cast<u16>(BiosVersion >> 16));
-			print('.');
-			print(cast<u16>(BiosVersion & 0xFFFF));
+			TextSingle::print(BiosName);
+			TextSingle::print(' ');
+			TextSingle::print(cast<u16>(BiosVersion >> 16));
+			TextSingle::print('.');
+			TextSingle::print(cast<u16>(BiosVersion & 0xFFFF));
 			raise_interrupt(0x30, INT30_INVERT_COLORS_TEXT_SINGLE);
 		}
 		else if (i == 2)
 		{
-			print(" Clock: ");
+			TextSingle::print(" Clock: ");
 			var speed: u32 = *cast<u32*>(CMOSRegisters.ClockSpeed);
 			var dec: u32 = 0;
 			var unit: string = "    ";
@@ -76,26 +76,26 @@ sub __print_machine_info() {
 					unit = "MHz";
 				}
 			}
-			print(speed);
-			print(".");
-			print(dec);
-			print(" ");
-			print(unit);
+			TextSingle::print(speed);
+			TextSingle::print(".");
+			TextSingle::print(dec);
+			TextSingle::print(" ");
+			TextSingle::print(unit);
 		}
 		else if (i == 3)
 		{
-			print(" Memory: ");
+			TextSingle::print(" Memory: ");
 			var memStart: u32 = *cast<u32*>(CMOSRegisters.MemoryStart);
 			var memSize: u32 = *cast<u32*>(CMOSRegisters.MemorySize);
 			var mem: u32 = memSize - memStart;
 			var buff: u8[10];
 			format_size(mem, buff, true, 2);
-			print(buff);
-			print("/");
+			TextSingle::print(buff);
+			TextSingle::print("/");
 			format_size(memSize, buff);
-			print(buff);
+			TextSingle::print(buff);
 		}
-		new_line();
+		TextSingle::new_line();
 	}
 	// TODO: Add back the info
 }

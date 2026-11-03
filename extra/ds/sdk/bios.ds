@@ -4,16 +4,21 @@
 
 #include(utils.ds)
 #include(print.ds)
+#include(hardware.ds)
 
-inline sub get_boot_disk() -> u8 {
-	return *cast<u8*>(CMOSRegisters.BootDisk);
-}
+struct BitField32 {
+	priv var m_value: u32 = 0;
 
-sub cpu_halt() {
-	low { hlt }
-}
-
-
+	inline sub set(var mask: u32) {
+		this->m_value |= mask;
+	}
+	inline sub unset(var mask: u32) {
+		this->m_value &= ~mask;
+	}
+	inline sub get(var mask: u32) -> bool {
+		return (this->m_value & mask) == mask;
+	}
+};
 
 struct VGAText16Cell {
 	var character: u8;

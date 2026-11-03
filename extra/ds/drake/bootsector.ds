@@ -1,0 +1,55 @@
+#once
+
+#include(<bios.ds>)
+#include(<dpt.ds>)
+
+sub main() {
+	TextSingle::clear_screen();
+	vga_set_video_mode(VGAVideoModes.Text16Color);
+
+	var dpt_block: DPTBlock;
+	if (not dpt_load_block(&dpt_block))
+	{
+		Text16::print("No valid DPT block found.", 0, 0, DefaultPaletteText16.Red, DefaultPaletteText16.Black);
+		return;
+	}
+	var boot_part: DPTPartitionBlock* = get_boot_partition(&dpt_block);
+	if (not boot_part)
+	{
+		Text16::print("No bootable partition found.", 0, 0, DefaultPaletteText16.Red, DefaultPaletteText16.Black);
+		return;
+	}
+
+	Text16::clear_screen(DefaultPaletteText16.Black);
+	print_system_info(dpt_block.versionMaj, dpt_block.versionMin);
+
+	load_kernel0_block(boot_part);
+	low { jmp $DPTBootPartStructure.CodeLoadAddr }
+}
+
+sub load_kernel0_block(var part: DPTPartitionBlock*) {
+	var ddd: DiskDriverData;
+	ddd.mode = DiskMode.Read;
+	ddd.disk = get_boot_disk();
+	ddd.address = part->startAddress + DPTBootPartStructure.CodeStart;
+	ddd.dataSize = DPTBootPartStructure.CodeSize;
+	ddd.memoryAddress = DPTBootPartStructure.CodeLoadAddr;
+	raise_interrupt(0x20, INT20_LOAD_FROM_DDD_BLOCKING, cast<u32>(&ddd));
+}
+
+sub get_boot_partition(var dpt_block: DPTBlock*) -> DPTPartitionBlock* {
+	for (var i: i8 = 0; i < dpt_block->partitionCount; i++)
+	{
+		if (dpt_is_partition_bootable(&dpt_block->entries[i]))
+			return &dpt_block->entries[i];
+	}
+	return null;
+}
+
+sub print_system_info(var dpt_ver_maj: u8, var dpt_ver_min: u8) {
+	Text16::print("Drake 0.2 -- ", 0, 0, DefaultPaletteText16.Green, DefaultPaletteText16.Black);
+	Text16::print("DPT Version ", 13, 0, DefaultPaletteText16.Green, DefaultPaletteText16.Black);
+	Text16::print(cast<u32>(dpt_ver_maj), 26, 0, DefaultPaletteText16.Green, DefaultPaletteText16.Black);
+	Text16::print('.', 27, 0, DefaultPaletteText16.Green, DefaultPaletteText16.Black);
+	Text16::print(cast<u32>(dpt_ver_min), 28, 0, DefaultPaletteText16.Green, DefaultPaletteText16.Black);
+}

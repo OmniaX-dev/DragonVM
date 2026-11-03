@@ -1,50 +1,175 @@
 #once
 
-// Prints a null-terminated string.
-sub print(var text: string) -> void {
-    low {
-        mov R9, $text
-        mov R10, 0x0C
-        int 0x30
-    }
-}
+#include(bios.ds)
+#include(int.ds)
 
-// Prints one character.
-sub print(var c: u8) -> void {
-    low {
-        mov R9, $c
-        mov R10, 0x01
-        int 0x30
-    }
-}
+struct TextSingle {
+	// Prints a null-terminated string.
+	static sub print(var text: string) -> void {
+		if (!vga_is_textSingle())
+			return;
+		raise_interrupt(0x30, INT30_PRINT_STRING_BUFFERED, cast<u32>(text));
+	}
 
-// Prints an unsigned integer (decimal).
-sub print(var n: u32) -> void {
-    low {
-        mov R9, $n
-        mov R10, 0x04
-        int 0x30
-    }
-}
+	// Prints one character.
+	static sub print(var c: u8) -> void {
+		if (!vga_is_textSingle())
+			return;
+		raise_interrupt(0x30, INT30_DIRECT_PRINT_CHAR_TEXT_SINGLE, cast<u32>(c));
+	}
 
-// Prints a signed integer (decimal).
-sub print(var n: i32) -> void {
-    if (n < 0) {
-        print('-');
-        print(cast<u32>(-n));
-        return;
-    }
-    print(cast<u32>(n));
-}
+	// Prints an unsigned integer (decimal).
+	static sub print(var n: u32) -> void {
+		if (!vga_is_textSingle())
+			return;
+		raise_interrupt(0x30, INT30_DIRECT_PRINT_INTEGER_TEXT_SINGLE, n);
+	}
 
-sub new_line() -> void {
-    low {
-        mov R10, 0x02
-        int 0x30
-    }
-}
+	// Prints a signed integer (decimal).
+	static sub print(var n: i32) -> void {
+		if (!vga_is_textSingle())
+			return;
+		if (n < 0) {
+			TextSingle::print('-');
+			TextSingle::print(cast<u32>(-n));
+			return;
+		}
+		TextSingle::print(cast<u32>(n));
+	}
 
-sub println(var text: string) -> void {
-    print(text);
-    new_line();
-}
+	static sub new_line() -> void {
+		if (!vga_is_textSingle())
+			return;
+		raise_interrupt(0x30, INT30_DIRECT_NEW_LINE_TEXT_SINGLE);
+	}
+
+	static sub clear_screen() -> void {
+		if (!vga_is_textSingle())
+			return;
+		raise_interrupt(0x30, INT30_CLEAR_SCREEN);
+	}
+
+	static sub println(var text: string) -> void {
+		TextSingle::print(text);
+		TextSingle::new_line();
+	}
+};
+
+const DefaultPaletteText16: struct {
+	var Black: u8					= 0x00;
+	var Gray: u8					= 0x01;
+	var White: u8					= 0x02;
+	var Red: u8						= 0x03;
+	var Pink: u8					= 0x04;
+	var Brown: u8					= 0x05;
+	var DarkOrange: u8				= 0x06;
+	var Orange: u8					= 0x07;
+	var Yellow: u8					= 0x08;
+	var DarkGreen: u8				= 0x09;
+	var Green: u8					= 0x0A;
+	var Lime: u8					= 0x0B;
+	var DarkBlue: u8				= 0x0C;
+	var Blue: u8					= 0x0D;
+	var LightBlue: u8				= 0x0E;
+	var Sky: u8						= 0x0F;
+};
+
+const Text16Flags: struct {
+	var AllowXWrap: u32 			= 0b00000000_00000000_00000000_00000001;
+	var AllowScroll: u32 			= 0b00000000_00000000_00000000_00000010;
+};
+
+struct Text16 {
+	// Prints a null-terminated string.
+	static sub print(var text: string, var x: u8, var y: u8, var fg: u8, var bg: u8) -> void {
+		if (!vga_is_text16())
+			return;
+		var cell: VGAText16Cell;
+		cell.foreground = fg;
+		cell.background = bg;
+		cell.x = x;
+		cell.y = y;
+		var flags: BitField32;
+		flags.set(Text16Flags.AllowXWrap | Text16Flags.AllowScroll);
+		raise_interrupt(0x30, INT30_PRINT_STRING_TEXT16, cast<u32>(&cell), cast<u32>(text), *cast<u32*>(&flags));
+	}
+
+	// Prints one character.
+	static sub print(var c: u8, var x: u8, var y: u8, var fg: u8, var bg: u8) -> void {
+		if (!vga_is_text16())
+			return;
+		var buff: u8[2] = " \0";
+		buff[0] = c;
+		Text16::print(buff, x, y, fg, bg);
+	}
+
+	// Prints an unsigned integer (decimal).
+	static sub print(var n: u32, var x: u8, var y: u8, var fg: u8, var bg: u8) -> void {
+		if (!vga_is_text16())
+			return;
+		var buff: u8[12];
+		itoa(n, buff);
+		Text16::print(buff, x, y, fg, bg);
+	}
+
+	// Prints a signed integer (decimal).
+	static sub print(var n: i32, var x: u8, var y: u8, var fg: u8, var bg: u8) -> void {
+		if (!vga_is_text16())
+			return;
+		if (n < 0) {
+			Text16::print('-', x, y, fg, bg);
+			Text16::print(cast<u32>(-n), x, y, fg, bg);
+			return;
+		}
+		Text16::print(cast<u32>(n), x, y, fg, bg);
+	}
+
+	static sub clear_screen(var color: u8) -> void {
+		if (!vga_is_text16())
+			return;
+		var cell: VGAText16Cell;
+		cell.character = ' ';
+		cell.foreground = color;
+		cell.background = color;
+		raise_interrupt(0x30, INT30_CLEAR_SCREEN_TEXT16, cast<u32>(&cell));
+	}
+};
+
+struct Text16Console {
+	priv var cursor_x: u16 = 0;
+	priv var cursor_y: u16 = 0;
+
+	// Prints a null-terminated string.
+	sub print(var text: string, var x: u16, var y: u16, var fg: u8, var bg: u8 = 0xFF) -> void {
+		if (!vga_is_text16())
+			return;
+	}
+
+	// Prints one character.
+	sub print(var c: u8) -> void {
+		if (!vga_is_text16())
+			return;
+	}
+
+	// Prints an unsigned integer (decimal).
+	sub print(var n: u32) -> void {
+		if (!vga_is_text16())
+			return;
+	}
+
+	// Prints a signed integer (decimal).
+	sub print(var n: i32) -> void {
+		if (!vga_is_text16())
+			return;
+	}
+
+	sub new_line() -> void {
+		if (!vga_is_text16())
+			return;
+	}
+
+	sub println(var text: string) -> void {
+		TextSingle::print(text);
+		TextSingle::new_line();
+	}
+};

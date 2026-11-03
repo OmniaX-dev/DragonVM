@@ -1,4 +1,5 @@
 #include(bios.ds)
+#include(mem.ds)
 
 struct DPTBlock {
 	var ID: u16;
@@ -34,7 +35,7 @@ const DPTBootPartStructure: struct {
 	var IDAddr: u32 						= 0x0000;
 	var CodeStart: u32			 			= 0x0020;
 
-	var CodeSize: u32  						= 1024;
+	var CodeSize: u32  						= 131072;
 	var HeaderSize: u32						= 32;
 	var CodeLoadAddr: u32					= 0x01012000;
 
@@ -45,17 +46,21 @@ const DPTPartFlags: struct {
 	var Boot: u16 = 0b00000000_00000001;
 };
 
-sub dpt_load_block(var outBlock: DPTBlock*) {
-	if (not outBlock) return; //TODO: Error
+sub dpt_load_block(var outBlock: DPTBlock*) -> bool {
+	if (not outBlock) return false;
 	var ddd: DiskDriverData;
 	ddd.mode = DiskMode.Read;
 	ddd.disk = get_boot_disk();
 	ddd.address = DPTStructure.DiskAddress;
 	ddd.dataSize = sizeof(DPTBlock);
 	ddd.memoryAddress = cast<u32>(outBlock);
-	raise_interrupt(0x20, 0x12, cast<u32>(&ddd)); // INT20_LOAD_FROM_DDD_BLOCKING
+	raise_interrupt(0x20, INT20_LOAD_FROM_DDD_BLOCKING, cast<u32>(&ddd));
 	if (outBlock->ID != DPTStructure.ID)
-		memset(outBlock, 0, sizeof(DPTBlock)); //TODO: Error
+	{
+		memset(outBlock, 0, sizeof(DPTBlock));
+		return false;
+	}
+	return true;
 }
 
 sub dpt_is_partition_bootable(var part: DPTPartitionBlock*) -> bool {

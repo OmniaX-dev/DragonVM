@@ -1,12 +1,11 @@
 .load 0x01012000				## DPTBootPartStructure.CODE_LOAD_ADDR
-.fixed 1024, 0xFF
+.fixed 131072, 0xFF
 .entry _kernel0_main
 .header KERNEL0_BOOT
 
-@include <../drivers/display_driver.dss>
-@include <../drivers/keyboard_driver.dss>
+@include <display_driver.dss>
 @include <../../sdk/bios_api.dss>
-@include <memory.dss>
+@include <../../sdk/keycodes.dss>
 
 
 ## =========================================================================================================================
@@ -34,10 +33,6 @@ _infinite_loop_0:
 
 	mov [$cursor_x], 0
 
-	## Init Memory Handler
-	push 0
-	call $_init_memory_handler
-
 	## Init Display driver
 	push 0
 	call $_init_display_driver
@@ -53,6 +48,14 @@ _infinite_loop:
 	hlt
 ## =========================================================================================================================
 
+
+
+_init_keyboard_driver:  ## _init_keyboard_driver(func_ptr* key_pressed_handler)
+	arg R9		 ## @Param: key_pressed_handler
+	mov R10, 0x00									## int 0x20 param for set_interrupt_handler
+	mov R8, 0xA0									## 0xA0 is the hardware interrupt for KeyPressed
+	int 0x20
+	ret
 
 
 
