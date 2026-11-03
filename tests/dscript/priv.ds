@@ -1,0 +1,43 @@
+// expect-rv: 0
+// priv: fields and subs only the struct's own subs can use.
+
+struct Account {
+	var id: u32;
+	priv var balance: i32;
+	priv var history: u32 = 0;
+
+	sub deposit(var n: i32) { this->add(n); }
+	sub balance_of() -> i32 { return this->balance; }
+	sub take_from(var other: Account*, var n: i32) {	// another instance's private fields
+		other->balance -= n;
+		this->balance += n;
+	}
+	priv sub add(var n: i32) {
+		this->balance += n;
+		this->history++;
+	}
+	sub moves() -> u32 {
+		var f = sub(var a: Account*) -> u32 { return a->history; };	// a lambda in a sub of the struct
+		return f(this);
+	}
+	inline sub doubled() -> i32 { return this->balance * 2; }	// expanded in main: still the struct's code
+	static sub make(var a: Account*, var start: i32) { a->id = 1; a->balance = start; }
+	priv static sub check(var a: Account*) -> bool { return a->balance >= 0; }
+	sub valid() -> bool { return Account.check(this) and Account::check(this); }
+};
+
+sub main() -> i32 {
+	var a: Account;
+	Account.make(&a, 10);
+	a.deposit(5);
+	if (a.balance_of() != 15 or a.doubled() != 30) return 1;
+	var b: Account;
+	Account.make(&b, 0);
+	b.take_from(&a, 4);
+	if (a.balance_of() != 11 or b.balance_of() != 4) return 2;
+	if (a.moves() != 1 or !a.valid()) return 3;
+	a.id = 2;				// public fields stay public
+	var c: Account = { 3 };	// { ... } can set the public fields before the private ones
+	if (c.id != 3) return 4;
+	return 0;
+}

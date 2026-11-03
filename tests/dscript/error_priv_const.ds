@@ -1,0 +1,7 @@
+// expect-error: 'secret' is private to Config (priv)
+struct Config {
+	var size: u32;
+	priv var secret: u32 = 7;
+};
+const CFG: Config = { 4 };
+sub main() -> u32 { return CFG.secret; }

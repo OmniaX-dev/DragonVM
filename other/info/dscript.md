@@ -114,6 +114,11 @@ var f: sub(Counter*, i32) -> i32 = Counter::add; // the method as a sub: this co
   only named structs have methods.
 - For dynamic dispatch, use sub pointer fields; their default value can be a sub:
   `var area: sub(Shape*) -> u32 = square_area;` (called as `s->area(s)`).
+- `priv` before a field or a sub (`priv var balance: i32;`, `priv sub add(...)`, `priv static
+  sub ...`) makes it private: only the struct's own subs (methods and static subs, the lambdas
+  written in them) can use it, on any instance of the struct. Everything else is public. Outside
+  the struct, `{ ... }` can only set the fields before the first private one (the private ones
+  get their default values), and the private fields of struct constants are read only inside.
 - `static sub` in a struct has no `this`: it is a sub grouped under the struct's name, called as
   `Struct.name(...)` or `Struct::name(...)` (also from the struct's other subs). A struct can
   have only static subs (and no fields): a namespace.

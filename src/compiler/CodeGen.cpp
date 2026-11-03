@@ -425,6 +425,7 @@ namespace dscript
 			field.name = f->name;
 			field.pos = f->pos;
 			field.namePos = f->namePos;
+			field.isPrivate = f->isPrivate;
 			field.type = resolveType(f->typeSyntax);
 			if (field.type->kind == Type::Kind::Void)
 				error(f->pos, "fields cannot be void");
@@ -531,6 +532,8 @@ namespace dscript
 			const StructField& field = info->fields[i];
 			const std::string path = prefix + field.name;
 			Node* v = (init != nullptr && i < init->list.size()) ? init->list[i] : nullptr;
+			if (v != nullptr)
+				checkFieldAccess(info, &field, v->pos);
 			if (field.type->kind == Type::Kind::Struct)
 			{
 				resolveStruct(field.type->structInfo, field.pos);
@@ -638,6 +641,7 @@ namespace dscript
 				return nullptr;
 			if (m_options.index != nullptr)
 				indexName(e->namePos, e->name, f->namePos, hoverField(structType->structInfo, *f));
+			checkFieldAccess(structType->structInfo, f, e->namePos);
 			structType = f->type;
 			path += e->name + ".";
 			return c;
@@ -1112,6 +1116,8 @@ namespace dscript
 			else if (expected && expected->isFunction())
 				e->func = functionForType(funcs, expected);
 			e->type = e->func ? e->func->type : nullptr;
+			if (e->func)
+				checkSubAccess(e->func, e->pos);
 			if (e->func && !m_discarding)
 				e->func->addressTaken = true;
 			if (m_options.index != nullptr)
@@ -1316,6 +1322,36 @@ namespace dscript
 		e->type = t;
 	}
 
+	// ===== priv =====
+	// Is the code being checked part of the struct: one of its subs (methods, static subs), a
+	// lambda written in one, or an inline sub of it being expanded?
+	bool CodeGen::insideStruct(const StructInfo* info)
+	{
+		FuncInfo* f = m_inline.empty() ? m_func : m_inline.back().func;
+		for (const Node* d = f ? f->decl : nullptr; d != nullptr; d = d->d)
+		{
+			if ((d->value & 4) != 0 && nameParts(d->name)[0] == info->name)
+				return true;
+		}
+		return false;
+	}
+
+	void CodeGen::checkFieldAccess(const StructInfo* info, const StructField* f, const SourcePos& pos)
+	{
+		if (f->isPrivate && !insideStruct(info))
+			error(pos, "'" + f->name + "' is private to " + info->name + " (priv): only the subs of " + info->name + " can use it");
+	}
+
+	void CodeGen::checkSubAccess(FuncInfo* f, const SourcePos& pos)
+	{
+		if ((f->decl->value & 16) == 0)
+			return;
+		const std::vector<std::string> parts = nameParts(f->decl->name);
+		auto it = m_structs.find(parts[0]);
+		if (it != m_structs.end() && !insideStruct(it->second))
+			error(pos, "'" + parts[1] + "' is private to " + parts[0] + " (priv): only the subs of " + parts[0] + " can use it");
+	}
+
 	// Fields whose default value is a sub (var f: sub(i32) -> i32 = twice;): stored as its
 	// address (the label), so they are checked after the subs (and their overloads) are known.
 	void CodeGen::resolveSubDefaults(void)
@@ -1426,6 +1462,7 @@ namespace dscript
 			for (Node* arg : e->list)
 				check(arg);
 			FuncInfo* f = resolveOverload(callee->name, e->list, e->pos);
+			checkSubAccess(f, callee->pos);
 			if (f->interrupt)
 				error(e->pos, "interrupt subs cannot be called (they end with rti)");
 			for (size_t i = 0; i < e->list.size(); i++)
@@ -1491,6 +1528,7 @@ namespace dscript
 					error(e->namePos, (st->structInfo->anonymous ? st->structInfo->displayName() : "struct " + st->structInfo->name) + " has no field '" + e->name + "'");
 				if (m_options.index != nullptr)
 					indexName(e->namePos, e->name, f->namePos, hoverField(st->structInfo, *f));
+				checkFieldAccess(st->structInfo, f, e->namePos);
 				if (f->type->kind == Type::Kind::Struct)
 					error(e->pos, "'" + e->name + "' is a struct field of a constant: it has no address, use its fields");
 				e->type = f->type;
@@ -1525,6 +1563,7 @@ namespace dscript
 			error(e->namePos, (t->structInfo->anonymous ? t->structInfo->displayName() : "struct " + t->structInfo->name) + " has no field '" + e->name + "'");
 		if (m_options.index != nullptr && !m_discarding)
 			indexName(e->namePos, e->name, f->namePos, hoverField(t->structInfo, *f));
+		checkFieldAccess(t->structInfo, f, e->namePos);
 		e->type = f->type;
 		e->lvalue = (e->value == 1) || e->a->lvalue;
 		e->readOnly = (e->value == 0) && e->a->readOnly;
@@ -2378,7 +2417,10 @@ namespace dscript
 				if (init->list.size() > fields.size())
 					error(init->pos, "too many values for struct " + type->name());
 				for (size_t i = 0; i < init->list.size(); i++)
+				{
+					checkFieldAccess(type->structInfo, &fields[i], init->list[i]->pos);
 					genInit(addr, fields[i].type, init->list[i], offset + (int32_t)fields[i].offset);
+				}
 				return;
 			}
 			error(init->pos, "{ ... } initializes arrays and structs, not " + type->name());
@@ -2740,6 +2782,7 @@ namespace dscript
 						const StructField* f = st->structInfo->field(fieldName);
 						if (f == nullptr)
 							error(pos, "$" + name + ": " + (st->structInfo->anonymous ? st->structInfo->displayName() : "struct " + st->structInfo->name) + " has no field '" + fieldName + "'");
+						checkFieldAccess(st->structInfo, f, pos);
 						path += (path.empty() ? "" : ".") + fieldName;
 						st = f->type;
 						j = k;
@@ -2980,7 +3023,10 @@ namespace dscript
 							if (init->list.size() > fields.size())
 								error(init->pos, "too many values for struct " + p.type->name());
 							for (size_t i = 0; i < init->list.size(); i++)
+							{
+								checkFieldAccess(p.type->structInfo, &fields[i], init->list[i]->pos);
 								work.push_back({ p.offset + fields[i].offset, fields[i].type, init->list[i], nullptr });
+							}
 						}
 						else
 							error(init->pos, "{ ... } initializes arrays and structs, not " + p.type->name());
@@ -3129,10 +3175,9 @@ namespace dscript
 			s += "inline ";
 		const bool method = (f->decl->value & 4) != 0;
 		const bool isStatic = (f->decl->value & 8) != 0;
+		s = std::string((f->decl->value & 16) != 0 ? "priv " : "") + (isStatic ? "static " : "") + s;
 		const size_t first = (method && !isStatic) ? 1 : 0;	// this is not shown
 		const std::vector<std::string> parts = nameParts(f->decl->name);
-		if (isStatic)
-			s = "static " + s;
 		s += lambda ? "sub(" : "sub " + (method ? parts[0] + "." + parts[1] : f->decl->name) + "(";
 		if (f->type != nullptr)
 		{
@@ -3205,7 +3250,7 @@ namespace dscript
 			return s;
 		s += " {  // " + bytes(info->size) + "\n";
 		for (const StructField& f : info->fields)
-			s += "\tvar " + f.name + ": " + (f.type ? f.type->name(true) : "?") + ";  // +" + std::to_string(f.offset) + "\n";
+			s += std::string("\t") + (f.isPrivate ? "priv " : "") + "var " + f.name + ": " + (f.type ? f.type->name(true) : "?") + ";  // +" + std::to_string(f.offset) + "\n";
 		// Its methods and static subs (the signature, without the comment).
 		for (FuncInfo* f : m_funcList)
 		{
@@ -3224,7 +3269,7 @@ namespace dscript
 	std::string CodeGen::hoverField(StructInfo* info, const StructField& f)
 	{
 		const std::string owner = info->anonymous ? "struct { ... }" : info->name;
-		return "var " + f.name + ": " + (f.type ? f.type->name(true) : "?") + comment({ "field of " + owner + " at +" + std::to_string(f.offset),
+		return std::string(f.isPrivate ? "priv " : "") + "var " + f.name + ": " + (f.type ? f.type->name(true) : "?") + comment({ "field of " + owner + " at +" + std::to_string(f.offset),
 			f.type ? bytes(f.type->size()) : "" });
 	}
 

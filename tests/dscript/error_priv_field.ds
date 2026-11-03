@@ -1,0 +1,6 @@
+// expect-error: 'balance' is private to Account (priv): only the subs of Account can use it
+struct Account {
+	priv var balance: i32;
+	sub get() -> i32 { return this->balance; }
+};
+sub main() -> i32 { var a: Account; return a.balance; }

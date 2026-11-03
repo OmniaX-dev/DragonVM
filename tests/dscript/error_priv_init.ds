@@ -1,0 +1,6 @@
+// expect-error: 'balance' is private to Account (priv)
+struct Account {
+	var id: u32;
+	priv var balance: i32;
+};
+sub main() { var a: Account = { 1, 100 }; }

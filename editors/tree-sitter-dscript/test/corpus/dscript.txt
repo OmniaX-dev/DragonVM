@@ -575,3 +575,36 @@ sub main() { Out.str("x"); Out::str("y"); }
             (identifier))
           (argument_list
             (string_literal)))))))
+
+================================================================================
+priv fields and subs
+================================================================================
+
+struct Account {
+	var id: u32;
+	priv var balance: i32;
+	priv static sub check() -> bool { return true; }
+};
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (struct_declaration
+    (type_identifier)
+    (field_list
+      (field_declaration
+        (field_identifier)
+        (primitive_type))
+      (field_declaration
+        (priv_modifier)
+        (field_identifier)
+        (primitive_type))
+      (function_declaration
+        (priv_modifier)
+        (static_modifier)
+        (identifier)
+        (parameter_list)
+        (primitive_type)
+        (block
+          (return_statement
+            (boolean_literal)))))))

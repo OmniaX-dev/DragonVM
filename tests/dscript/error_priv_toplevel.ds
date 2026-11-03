@@ -1,0 +1,3 @@
+// expect-error: 'priv' is for the fields and subs of a struct
+priv var x: u32;
+sub main() { }

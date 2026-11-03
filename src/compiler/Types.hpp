@@ -36,6 +36,7 @@ namespace dscript
 		Node* init { nullptr };		// default value (constant expression), or nullptr
 		SourcePos pos;
 		SourcePos namePos;
+		bool isPrivate { false };	// priv var: only the struct's own subs can use it
 	};
 
 	struct StructInfo

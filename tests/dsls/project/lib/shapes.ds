@@ -17,4 +17,6 @@ sub area(var w: i32, var h: i32 = 2) -> i32 {
 
 struct Geo {
 	static sub twice(var v: i32) -> i32 { return v * 2; }
+	priv var cache: i32;
+	priv sub reset() { this->cache = 0; }
 };

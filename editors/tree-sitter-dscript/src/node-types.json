@@ -1769,6 +1769,16 @@
           }
         ]
       }
+    },
+    "children": {
+      "multiple": false,
+      "required": false,
+      "types": [
+        {
+          "type": "priv_modifier",
+          "named": true
+        }
+      ]
     }
   },
   {
@@ -2203,6 +2213,10 @@
         },
         {
           "type": "interrupt_modifier",
+          "named": true
+        },
+        {
+          "type": "priv_modifier",
           "named": true
         },
         {
@@ -4808,6 +4822,10 @@
     "type": "preproc_directive",
     "named": true,
     "extra": true
+  },
+  {
+    "type": "priv_modifier",
+    "named": true
   },
   {
     "type": "return",

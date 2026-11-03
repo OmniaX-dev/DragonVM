@@ -47,6 +47,7 @@ namespace dscript
 		Node* c { nullptr };
 		Node* d { nullptr };
 		std::vector<Node*> list;		// Program / Block / struct fields / params / call arguments / ...
+		bool isPrivate { false };		// a struct field declared priv (methods: FuncDecl flag 16)
 
 		// Filled in by the code generator.
 		Type* type { nullptr };

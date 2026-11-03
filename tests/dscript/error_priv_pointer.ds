@@ -1,0 +1,6 @@
+// expect-error: 'add' is private to Account (priv)
+struct Account {
+	priv var balance: i32;
+	priv sub add(var n: i32) { this->balance += n; }
+};
+sub main() { var f: sub(Account*, i32) = Account::add; }

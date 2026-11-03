@@ -111,6 +111,9 @@ namespace dscript
 			void checkAssign(Node* e);
 			void checkCall(Node* e);
 			void rewriteMethodCall(Node* e);
+			bool insideStruct(const StructInfo* info);
+			void checkFieldAccess(const StructInfo* info, const StructField* f, const SourcePos& pos);
+			void checkSubAccess(FuncInfo* f, const SourcePos& pos);
 			void resolveSubDefaults(void);
 			void checkMember(Node* e);
 			Type* decay(Type* t);

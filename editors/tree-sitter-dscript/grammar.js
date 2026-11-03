@@ -67,6 +67,7 @@ module.exports = grammar({
 		// Fields and methods (subs in a struct, called as x.m() / p->m(), with this).
 		field_list: $ => seq('{', repeat(choice($.field_declaration, $.function_declaration)), '}'),
 		field_declaration: $ => seq(
+			optional($.priv_modifier),
 			'var',
 			field('name', alias($.identifier, $.field_identifier)),
 			':',
@@ -120,7 +121,7 @@ module.exports = grammar({
 
 		function_declaration: $ => seq(
 			// static: in a struct, a sub without this (static inline / inline static)
-			repeat(choice($.interrupt_modifier, $.inline_modifier, $.static_modifier)),
+			repeat(choice($.interrupt_modifier, $.inline_modifier, $.static_modifier, $.priv_modifier)),
 			'sub',
 			field('name', $.identifier),
 			field('parameters', $.parameter_list),
@@ -129,6 +130,8 @@ module.exports = grammar({
 		),
 		interrupt_modifier: _ => 'interrupt',
 		static_modifier: _ => 'static',
+		// priv: a struct field or sub only the struct's own subs can use
+		priv_modifier: _ => 'priv',
 		// static var x: T = value;  static const X = value;  (in a sub)
 		static_declaration: $ => seq(
 			$.static_modifier,

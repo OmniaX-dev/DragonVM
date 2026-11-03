@@ -183,6 +183,18 @@
       "type": "SEQ",
       "members": [
         {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SYMBOL",
+              "name": "priv_modifier"
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
+        },
+        {
           "type": "STRING",
           "value": "var"
         },
@@ -669,6 +681,10 @@
               {
                 "type": "SYMBOL",
                 "name": "static_modifier"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "priv_modifier"
               }
             ]
           }
@@ -744,6 +760,10 @@
     "static_modifier": {
       "type": "STRING",
       "value": "static"
+    },
+    "priv_modifier": {
+      "type": "STRING",
+      "value": "priv"
     },
     "static_declaration": {
       "type": "SEQ",
