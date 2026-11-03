@@ -119,7 +119,8 @@ module.exports = grammar({
 		),
 
 		function_declaration: $ => seq(
-			optional(choice($.interrupt_modifier, $.inline_modifier)),
+			// static: in a struct, a sub without this (static inline / inline static)
+			repeat(choice($.interrupt_modifier, $.inline_modifier, $.static_modifier)),
 			'sub',
 			field('name', $.identifier),
 			field('parameters', $.parameter_list),

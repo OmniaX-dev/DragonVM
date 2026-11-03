@@ -114,6 +114,16 @@ var f: sub(Counter*, i32) -> i32 = Counter::add; // the method as a sub: this co
   only named structs have methods.
 - For dynamic dispatch, use sub pointer fields; their default value can be a sub:
   `var area: sub(Shape*) -> u32 = square_area;` (called as `s->area(s)`).
+- `static sub` in a struct has no `this`: it is a sub grouped under the struct's name, called as
+  `Struct.name(...)` or `Struct::name(...)` (also from the struct's other subs). A struct can
+  have only static subs (and no fields): a namespace.
+```
+struct Print {
+    static sub str(var s: string) { ... }
+    static sub line(var s: string) { Print.str(s); Print.str("\n"); }
+};
+Print.line("hello");
+```
 
 ### Nameless structs
 `struct { fields }` is a type: it can be used for variables (global and local), fields, arrays,

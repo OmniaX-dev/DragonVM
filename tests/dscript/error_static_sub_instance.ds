@@ -1,0 +1,6 @@
+// expect-error: 'make' is a static sub of Counter (it has no this): call it as Counter.make(...)
+struct Counter {
+	var value: u32;
+	static sub make() -> u32 { return 1; }
+};
+sub main() { var c: Counter; c.make(); }

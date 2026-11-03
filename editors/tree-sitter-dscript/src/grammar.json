@@ -654,25 +654,24 @@
       "type": "SEQ",
       "members": [
         {
-          "type": "CHOICE",
-          "members": [
-            {
-              "type": "CHOICE",
-              "members": [
-                {
-                  "type": "SYMBOL",
-                  "name": "interrupt_modifier"
-                },
-                {
-                  "type": "SYMBOL",
-                  "name": "inline_modifier"
-                }
-              ]
-            },
-            {
-              "type": "BLANK"
-            }
-          ]
+          "type": "REPEAT",
+          "content": {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "SYMBOL",
+                "name": "interrupt_modifier"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "inline_modifier"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "static_modifier"
+              }
+            ]
+          }
         },
         {
           "type": "STRING",

@@ -1339,6 +1339,34 @@ namespace dscript
 		// Enum.Member and Constant.field are not methods.
 		if (obj->kind == NodeKind::Ident && lookupVar(obj->name) == nullptr && (m_enums.count(obj->name) > 0 || m_consts.count(obj->name) > 0))
 			return;
+		auto l_isStatic = [&](const std::string& method) {
+			for (FuncInfo* f : m_funcs[method])
+			{
+				if ((f->decl->value & 8) != 0)
+					return true;
+			}
+			return false;
+		};
+		// Struct.name(args): a static sub of the struct (as Struct::name(args)).
+		if (obj->kind == NodeKind::Ident && callee->value == 0 && lookupVar(obj->name) == nullptr && m_structs.count(obj->name) > 0)
+		{
+			StructInfo* info = m_structs[obj->name];
+			const std::string method = obj->name + "::" + callee->name;
+			if (m_funcs.count(method) == 0)
+				error(callee->namePos, "struct " + obj->name + " has no static sub '" + callee->name + "'");
+			if (!l_isStatic(method))
+				error(callee->namePos, "'" + callee->name + "' is a method of " + obj->name + ", not a static sub: call it on a struct (x." +
+					callee->name + "(...)), or as " + method + "(&x, ...)");
+			if (m_options.index != nullptr)
+				indexName(obj->pos, obj->name, info->decl->namePos, hoverStruct(info));
+			Node* id = new Node();
+			id->kind = NodeKind::Ident;
+			id->name = method;
+			id->text = callee->name;
+			id->pos = callee->namePos;
+			e->a = id;
+			return;
+		}
 		check(obj);
 		Type* t = obj->type;
 		if (t == nullptr)
@@ -1359,6 +1387,9 @@ namespace dscript
 		const std::string method = info->name + "::" + callee->name;
 		if (m_funcs.count(method) == 0)
 			error(callee->namePos, (info->anonymous ? info->displayName() : "struct " + info->name) + " has no field or method '" + callee->name + "'");
+		if (l_isStatic(method))
+			error(callee->namePos, "'" + callee->name + "' is a static sub of " + info->name + " (it has no this): call it as " +
+				info->name + "." + callee->name + "(...)");
 		Node* self = obj;
 		if (callee->value == 0)
 		{
@@ -3097,13 +3128,17 @@ namespace dscript
 		if (f->isInline)
 			s += "inline ";
 		const bool method = (f->decl->value & 4) != 0;
+		const bool isStatic = (f->decl->value & 8) != 0;
+		const size_t first = (method && !isStatic) ? 1 : 0;	// this is not shown
 		const std::vector<std::string> parts = nameParts(f->decl->name);
+		if (isStatic)
+			s = "static " + s;
 		s += lambda ? "sub(" : "sub " + (method ? parts[0] + "." + parts[1] : f->decl->name) + "(";
 		if (f->type != nullptr)
 		{
-			for (size_t i = method ? 1 : 0; i < f->type->params.size() && i < f->paramNames.size(); i++)
+			for (size_t i = first; i < f->type->params.size() && i < f->paramNames.size(); i++)
 			{
-				s += (i > (method ? 1u : 0u) ? ", " : "") + std::string("var ") + f->paramNames[i] + ": " + f->type->params[i]->name(true);
+				s += (i > first ? ", " : "") + std::string("var ") + f->paramNames[i] + ": " + f->type->params[i]->name(true);
 				const Node* d = i < f->defaults.size() ? f->defaults[i] : nullptr;
 				if (d != nullptr)
 				{
@@ -3116,7 +3151,7 @@ namespace dscript
 		s += ")";
 		if (f->type != nullptr && f->type->base->kind != Type::Kind::Void)
 			s += " -> " + f->type->base->name(true);
-		return s + comment({ lambda ? "lambda" : method ? "method of " + parts[0] : "" });
+		return s + comment({ lambda ? "lambda" : isStatic ? "static sub of " + parts[0] : method ? "method of " + parts[0] : "" });
 	}
 
 	std::string CodeGen::hoverConst(const std::string& name)
@@ -3171,6 +3206,18 @@ namespace dscript
 		s += " {  // " + bytes(info->size) + "\n";
 		for (const StructField& f : info->fields)
 			s += "\tvar " + f.name + ": " + (f.type ? f.type->name(true) : "?") + ";  // +" + std::to_string(f.offset) + "\n";
+		// Its methods and static subs (the signature, without the comment).
+		for (FuncInfo* f : m_funcList)
+		{
+			if ((f->decl->value & 4) == 0 || nameParts(f->decl->name)[0] != info->name)
+				continue;
+			std::string sig = hoverFunc(f);
+			const size_t dot = sig.find(" " + info->name + ".");	// sub Name.m(...) -> sub m(...)
+			if (dot != std::string::npos)
+				sig.erase(dot + 1, info->name.size() + 1);
+			const size_t c = sig.find("  //");
+			s += "\t" + (c == std::string::npos ? sig : sig.substr(0, c)) + ";\n";
+		}
 		return s + "}";
 	}
 

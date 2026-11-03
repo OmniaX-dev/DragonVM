@@ -2194,7 +2194,7 @@
       }
     },
     "children": {
-      "multiple": false,
+      "multiple": true,
       "required": false,
       "types": [
         {
@@ -2203,6 +2203,10 @@
         },
         {
           "type": "interrupt_modifier",
+          "named": true
+        },
+        {
+          "type": "static_modifier",
           "named": true
         }
       ]

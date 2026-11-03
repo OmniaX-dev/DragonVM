@@ -17,7 +17,7 @@ sub describe(var p: Point*) -> i32 {
 sub main() -> i32 {
 	var pt: Point;
 	pt.x = 1;
-	pt.sum(2);
+	pt.sum(Geo.twice(1));
 	g_count++;
 	return describe(&pt);
 }

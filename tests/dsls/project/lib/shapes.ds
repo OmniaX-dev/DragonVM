@@ -14,3 +14,7 @@ const GREETING = "hello";
 sub area(var w: i32, var h: i32 = 2) -> i32 {
 	return w * h;
 }
+
+struct Geo {
+	static sub twice(var v: i32) -> i32 { return v * 2; }
+};

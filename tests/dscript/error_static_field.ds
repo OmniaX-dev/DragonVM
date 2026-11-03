@@ -1,0 +1,5 @@
+// expect-error: structs have no static fields
+struct Counter {
+	static var count: u32;
+};
+sub main() { }

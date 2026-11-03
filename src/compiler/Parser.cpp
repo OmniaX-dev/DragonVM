@@ -12,7 +12,7 @@
 //   FuncDecl:    name, list = params (VarDecl, a = default value), typeSyntax = return type
 //                (nullptr: void), a = body (nullptr: declaration only), value = flags: 1 interrupt,
 //                2 inline, 4 method (sub in a struct: named <Struct>::<name>, added at the end of
-//                the program, with a first parameter this: <Struct>*)
+//                the program, with a first parameter this: <Struct>*), 8 static method (no this)
 //   Block:       list = statements
 //   If:          a = condition, b = then, c = else
 //   While:       a = condition, b = body       DoWhile: a = condition, b = body
@@ -192,14 +192,27 @@ namespace dscript
 		expectPunct("{", "to start the struct");
 		while (!acceptPunct("}"))
 		{
-			if (isKeyword("sub") || isKeyword("inline"))
+			if (isKeyword("static") && isKeyword("var", 1))
+				error(peek(1).pos, "structs have no static fields: use a global (or a constant) next to the struct");
+			if (isKeyword("sub") || isKeyword("inline") || isKeyword("static"))
 			{
-				// A method: a hidden top-level sub (added at the end of the program).
+				// A method: a hidden top-level sub (added at the end of the program). static: no
+				// this, called as Struct::name(...) / Struct.name(...).
 				if (decl->value != 0)
 					error(peek().pos, "methods need a named struct (struct Name { ... }), not a nameless one");
-				const int flags = acceptKeyword("inline") ? 2 : 0;
+				// static and inline, in any order
+				int flags = 0;
+				while (true)
+				{
+					if ((flags & 8) == 0 && acceptKeyword("static"))
+						flags |= 8;
+					else if ((flags & 2) == 0 && acceptKeyword("inline"))
+						flags |= 2;
+					else
+						break;
+				}
 				if (!isKeyword("sub"))
-					error(peek().pos, "'sub' expected after 'inline'");
+					error(peek().pos, "'sub' expected after '" + std::string((flags & 2) ? "inline" : "static") + "', found " + describe(peek()));
 				Node* outerFunc = m_currentFunc;
 				auto outerScopes = std::move(m_scopes);
 				m_scopes.clear();
@@ -305,7 +318,8 @@ namespace dscript
 	}
 
 	// FuncDecl flags (value): 1 interrupt, 2 inline.
-	// FuncDecl flags (value): 1 interrupt, 2 inline, 4 method. owner: the struct of a method.
+	// FuncDecl flags (value): 1 interrupt, 2 inline, 4 method, 8 static method. owner: the struct
+	// of a method.
 	Node* Parser::parseFunction(int flags, const Node* owner)
 	{
 		Node* n = make(NodeKind::FuncDecl, next().pos);
@@ -314,7 +328,7 @@ namespace dscript
 		n->namePos = lastPos();
 		expectPunct("(", "after the sub name");
 		parseParams(n);
-		if (owner != nullptr)
+		if (owner != nullptr && (flags & 8) == 0)
 		{
 			// The hidden first parameter: this: <Struct>*.
 			Node* self = make(NodeKind::VarDecl, n->namePos);
@@ -328,8 +342,9 @@ namespace dscript
 			self->typeSyntax->pos = n->namePos;
 			self->typeSyntax->base = named;
 			n->list.insert(n->list.begin(), self);
-			n->name = owner->name + "::" + n->name;
 		}
+		if (owner != nullptr)
+			n->name = owner->name + "::" + n->name;
 		if (acceptPunct("->"))
 			n->typeSyntax = parseType();
 		if (owner != nullptr && !isPunct("{"))

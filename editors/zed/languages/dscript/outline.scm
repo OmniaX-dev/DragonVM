@@ -1,5 +1,5 @@
 (function_declaration
-	[(interrupt_modifier) (inline_modifier)]? @context
+	[(interrupt_modifier) (inline_modifier) (static_modifier)]* @context
 	"sub" @context
 	name: (identifier) @name
 	parameters: (parameter_list) @context) @item

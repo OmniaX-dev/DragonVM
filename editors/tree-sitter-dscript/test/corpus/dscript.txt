@@ -517,3 +517,61 @@ sub f(var c: Counter*) -> i32 {
             (field_identifier))
           (argument_list
             (number_literal)))))))
+
+================================================================================
+Static subs
+================================================================================
+
+struct Out {
+	static sub str(var s: string) { }
+	inline static sub twice(var n: u32) -> u32 { return n * 2; }
+};
+
+sub main() { Out.str("x"); Out::str("y"); }
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (struct_declaration
+    (type_identifier)
+    (field_list
+      (function_declaration
+        (static_modifier)
+        (identifier)
+        (parameter_list
+          (parameter
+            (identifier)
+            (primitive_type)))
+        (block))
+      (function_declaration
+        (inline_modifier)
+        (static_modifier)
+        (identifier)
+        (parameter_list
+          (parameter
+            (identifier)
+            (primitive_type)))
+        (primitive_type)
+        (block
+          (return_statement
+            (binary_expression
+              (identifier)
+              (number_literal)))))))
+  (function_declaration
+    (identifier)
+    (parameter_list)
+    (block
+      (expression_statement
+        (call_expression
+          (member_expression
+            (identifier)
+            (field_identifier))
+          (argument_list
+            (string_literal))))
+      (expression_statement
+        (call_expression
+          (scoped_identifier
+            (type_identifier)
+            (identifier))
+          (argument_list
+            (string_literal)))))))

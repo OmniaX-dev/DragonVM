@@ -1,0 +1,35 @@
+// expect-rv: 0
+// Static subs: grouped under a struct's name, no this.
+
+var g_log: u32 = 0;
+
+struct Out {
+	static sub str(var s: string) { g_log = g_log * 10 + s[0] - '0'; }
+	static sub num(var n: u32) { g_log = g_log * 10 + n; }
+	static sub tagged(var s: string, var n: u32 = 4) {
+		Out::str("1");				// the others, through the struct's name
+		Out.str(s);
+		Out::num(n);
+	}
+	inline static sub twice(var n: u32) -> u32 { return n * 2; }
+};
+
+struct Counter {
+	var value: u32;
+	static sub make(var c: Counter*, var start: u32) { c->value = start; }	// with methods
+	sub get() -> u32 { return this->value; }
+};
+
+sub main() -> i32 {
+	Out.tagged("2");
+	if (g_log != 124) return 1;
+	var f: sub(string, u32) = Out::tagged;		// a static sub as a sub pointer
+	g_log = 0;
+	f("3", 5);
+	if (g_log != 135) return 2;
+	if (Out.twice(21) != 42) return 3;
+	var c: Counter;
+	Counter.make(&c, 5);
+	if (c.get() != 5) return 4;
+	return 0;
+}

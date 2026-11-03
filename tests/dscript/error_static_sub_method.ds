@@ -1,0 +1,6 @@
+// expect-error: 'get' is a method of Counter, not a static sub
+struct Counter {
+	var value: u32;
+	sub get() -> u32 { return this->value; }
+};
+sub main() { Counter.get(); }
