@@ -7,7 +7,7 @@ fixed_clock = true
 clock_rate_sec = 12000
 ram_size_kb = 65536
 
-screen_redraw_rate_per_second = 60
+screen_redraw_rate_per_second = 30
 
 SingleColor_foreground = #009900FF
 SingleColor_background = #111111FF

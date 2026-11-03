@@ -28,3 +28,4 @@ const BiosLogo: u8[54][] = {
     "|===================================================|"
 };
 const BiosName = "DragonBIOS";
+const BiosVersion = 0x00000006;

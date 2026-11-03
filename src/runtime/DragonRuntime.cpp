@@ -272,7 +272,7 @@ namespace dragon
 		}
 
 		vCMOS.write32(data::CMOSRegisters::MemoryStart, cast<i32>(data::MemoryMapAddresses::Memory_Start));
-		vCMOS.write32(data::CMOSRegisters::MemorySize, cast<i32>(ram_end));
+		vCMOS.write32(data::CMOSRegisters::MemorySize, cast<i32>(ram_size));
 		vCMOS.write32(data::CMOSRegisters::ClockSpeed, machine_config.clock_rate_sec);
 		vCMOS.write8(data::CMOSRegisters::ScreenRedrawRate, machine_config.screen_redraw_rate_per_second);
 		vCMOS.write32(data::CMOSRegisters::ScreenWidth, static_cast<i32>(hw::VirtualDisplay::Columns));

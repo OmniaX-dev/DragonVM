@@ -13,6 +13,18 @@ sub main() {
 	__print_machine_info();
 	__load_mbr_data_block();
 
+	var dpt_block: DPTBlock;
+	dpt_load_block(&dpt_block);
+	var buff: u8[12];
+	// for (var i: i8 = 0; i < dpt_block.partitionCount; i++)
+	// {
+	// 	if (dpt_is_partition_bootable(&dpt_block.entries[i]))
+	// 		println(dpt_block.entries[i].label);
+	// 	else
+	// 		println("false");
+	// }
+	low { hlt }
+
 	// Exit BIOS mode
 	low {
 		%low $INST_BIOS_NODE_TOGGLE 0x00
@@ -33,8 +45,57 @@ sub __load_mbr_data_block() {
 
 sub __print_machine_info() {
 	for (var i: u32 = 0; i < sizeof(BiosLogo) / sizeof(BiosLogo[0]); i++) {
-	    print(BiosLogo[i]);
-	    new_line();
+		print(BiosLogo[i]);
+		if (i == 1)
+		{
+			print(' ');
+			raise_interrupt(0x30, INT30_INVERT_COLORS_TEXT_SINGLE);
+			print(BiosName);
+			print(' ');
+			print(cast<u16>(BiosVersion >> 16));
+			print('.');
+			print(cast<u16>(BiosVersion & 0xFFFF));
+			raise_interrupt(0x30, INT30_INVERT_COLORS_TEXT_SINGLE);
+		}
+		else if (i == 2)
+		{
+			print(" Clock: ");
+			var speed: u32 = *cast<u32*>(CMOSRegisters.ClockSpeed);
+			var dec: u32 = 0;
+			var unit: string = "    ";
+			unit = "Hz";
+			if (speed > 1000)
+			{
+				dec = speed % 1000;
+				speed /= 1000;
+				unit = "KHz";
+				if (speed > 1000)
+				{
+					dec = speed % 1000;
+					speed /= 1000;
+					unit = "MHz";
+				}
+			}
+			print(speed);
+			print(".");
+			print(dec);
+			print(" ");
+			print(unit);
+		}
+		else if (i == 3)
+		{
+			print(" Memory: ");
+			var memStart: u32 = *cast<u32*>(CMOSRegisters.MemoryStart);
+			var memSize: u32 = *cast<u32*>(CMOSRegisters.MemorySize);
+			var mem: u32 = memSize - memStart;
+			var buff: u8[10];
+			format_size(mem, buff, true, 2);
+			print(buff);
+			print("/");
+			format_size(memSize, buff);
+			print(buff);
+		}
+		new_line();
 	}
 	// TODO: Add back the info
 }
