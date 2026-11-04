@@ -12,7 +12,10 @@ struct VGARegs {
 	var textSingleColorInverted: u8;
     var __padding0: u8[2];
     var textSingleColorBufferStringAddr: u32;
-    var __padding1: u8[112];
+    var __padding1: u8[36];
+    var text16ColorBufferStringAddr: u32;
+    var text16ColorBufferStringCellAddr: u32;
+    var __padding2: u8[68];
     var flags: u32;
     var text16MemoryController: struct {
             var x: u32;
@@ -172,17 +175,11 @@ sub __int30_print_integer_text16(var num: i32, var cell: VGAText16Cell*, var all
 
 sub __int30_print_string_text16(var buff: u8*, var cell: VGAText16Cell*, var allow_x_wrap: bool = true, var allow_scroll: bool = true) {
 	var device: VGARegs* = cast<VGARegs*>(MemoryLayout.VGA);
-	while (*buff and __ensure_cell_coords_text16(cell, allow_x_wrap, allow_scroll))
-	{
-		cell->character = *buff++;
-		device->text16MemoryController.character = cell->character;
-		device->text16MemoryController.background = cell->background;
-		device->text16MemoryController.foreground = cell->foreground;
-		device->text16MemoryController.x = cell->x;
-		device->text16MemoryController.y = cell->y;
-		device->signal = VGAText16ColorSignals.WriteVRAM;
-		cell->x++;
-	}
+	if (not buff) return;
+	//TODO: Add back __ensure_cell_coords_text16
+	device->text16ColorBufferStringAddr = cast<u32>(buff);
+	device->text16ColorBufferStringCellAddr = cast<u32>(cell);
+	device->signal = VGAText16ColorSignals.PrintString;
 }
 
 sub __ensure_cell_coords_text16(var cell: VGAText16Cell*, var allow_x_wrap: bool = true, var allow_scroll: bool = true) -> bool {

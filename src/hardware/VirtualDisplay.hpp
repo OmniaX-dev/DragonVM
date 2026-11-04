@@ -34,12 +34,15 @@ namespace dragon
 				inline static constexpr u8 Signal = 0x03;
 				inline static constexpr u8 TextSingleCharacter = 0x04;
 				inline static constexpr u8 TextSingleInvertColors = 0x05;
-				inline static constexpr u8 TextSingleString = 0x08;		// 4 bytes (address)
+				inline static constexpr u8 TextSingleString = 0x08;        // 4 bytes (address)
 
-				inline static constexpr u8 Flags = 0x7C;					// 4 bytes
+				inline static constexpr u8 Text16String = 0x30;        // 4 bytes (address)
+				inline static constexpr u8 Text16StringCell = 0x34;        // 4 bytes (address)
 
-				inline static constexpr u8 MemControllerX = 0x80;			// 4 bytes
-				inline static constexpr u8 MemControllerY = 0x84;			// 4 bytes
+				inline static constexpr u8 Flags = 0x7C;                    // 4 bytes
+
+				inline static constexpr u8 MemControllerX = 0x80;            // 4 bytes
+				inline static constexpr u8 MemControllerY = 0x84;            // 4 bytes
 				inline static constexpr u8 MemControllerChar = 0x88;
 				inline static constexpr u8 MemControllerBGCol = 0x89;
 				inline static constexpr u8 MemControllerFGCol = 0x8A;
@@ -63,6 +66,7 @@ namespace dragon
 				inline static constexpr u8 Text16Color_SwapBuffers = 0x10;
 				inline static constexpr u8 Text16Color_WriteMemory = 0x11;
 				inline static constexpr u8 Text16Color_Scroll = 0x12;
+				inline static constexpr u8 Text16Color_PrintString = 0x13;
 
 				inline static constexpr u8 RefreshScreen = 0xE0;
 				inline static constexpr u8 ClearSCreen = 0xE1;

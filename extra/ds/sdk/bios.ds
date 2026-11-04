@@ -90,6 +90,8 @@ const VGARegisters: struct {
 	var TextSingleChar: u32					= MemoryLayout.VGA + 0x0004;
 	var TextSingleInvert: u32				= MemoryLayout.VGA + 0x0005;
 	var TextSingleStr: u32					= MemoryLayout.VGA + 0x0008;
+	var Text16Str: u32						= MemoryLayout.VGA + 0x0030;
+	var Text16Cell: u32						= MemoryLayout.VGA + 0x0034;
 	var Flags: u32							= MemoryLayout.VGA + 0x007C;
 	var MemoryControllerX: u32				= MemoryLayout.VGA + 0x0080;
 	var MemoryControllerXByte: u32			= MemoryLayout.VGA + 0x0080 + 3;
@@ -125,6 +127,7 @@ const VGAText16ColorSignals: struct {
 	var SwapBuffer: u8						= 0x10;
 	var WriteVRAM: u8						= 0x11;
 	var Scroll: u8							= 0x12;
+	var PrintString: u8						= 0x13;
 	var ForceRefreshScreen: u8				= 0xE0;
 	var ForceClearScreen: u8				= 0xE1;
 	var ForceRedrawScreen: u8				= 0xE2;

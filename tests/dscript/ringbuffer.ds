@@ -1,0 +1,54 @@
+// expect-rv: 0
+// dsc-flags: -I extra/ds/sdk
+
+#include(<ringbuffer.ds>)
+
+struct Event { var note: u8; var velocity: u8; var time: u32; }
+
+sub push_note(var rb: RingBuffer*, var note: u8) -> bool {
+    var e: Event = { note, 100, cast<u32>(note) * 10 };
+    return rb->push(&e);
+}
+
+sub main() -> i32 {
+    var storage: Event[4];
+    var rb: RingBuffer;
+    var e: Event;
+
+    if (rb.init(&storage[0], sizeof(Event), 3)) { return 1; }      // 3: not a power of two
+    if (!rb.init(&storage[0], sizeof(Event), 4)) { return 2; }
+    if (!rb.is_empty() || rb.capacity() != 4) { return 3; }
+    if (rb.pop(&e)) { return 4; }                                   // empty
+
+    push_note(&rb, 60);  push_note(&rb, 62);  push_note(&rb, 64);
+    if (rb.size() != 3) { return 5; }
+
+    if (!rb.peek(&e) || e.note != 60) { return 6; }
+    if (!rb.pop(&e) || e.note != 60 || e.time != 600) { return 7; }
+
+    // 62 64 in the buffer; two more fit, the third does not (head wraps past the end here)
+    if (!push_note(&rb, 65) || !push_note(&rb, 67)) { return 8; }
+    if (push_note(&rb, 69)) { return 9; }
+    if (!rb.is_full()) { return 10; }
+
+    // overwrite: 62 is dropped -> 64 65 67 71
+    var n71: Event = { 71, 90, 710 };
+    if (!rb.push_overwrite(&n71)) { return 11; }
+    if (rb.size() != 4) { return 12; }
+
+    var third: Event* = rb.at(2);
+    if (third == null || third->note != 67) { return 13; }
+    if (rb.at(4) != null) { return 14; }
+
+    var sum: u32 = 0;
+    while (rb.pop(&e)) { sum += e.note; }
+    if (sum != 64 + 65 + 67 + 71) { return 15; }
+    if (!rb.is_empty() || rb.size() != 0) { return 16; }
+
+    // skip
+    push_note(&rb, 1);  push_note(&rb, 2);  push_note(&rb, 3);
+    if (rb.skip(2) != 2 || !rb.pop(&e) || e.note != 3) { return 17; }
+    if (rb.skip(5) != 0) { return 18; }
+
+    return 0;
+}
