@@ -97,6 +97,7 @@
             0x14 CurrentDiskAddress: 4 Bytes
             0x18 RestDataSize: 4 Bytes
             0x1C CurrentMemoryAddress: 4 Bytes
+            0x50 BlockSize: 4 Bytes
     0x010008FF
     -------
     0x01000900 VIDEO CARD INTERFACE (256 Bytes)

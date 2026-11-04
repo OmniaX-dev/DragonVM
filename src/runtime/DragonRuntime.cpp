@@ -281,6 +281,7 @@ namespace dragon
 		vCMOS.write32(data::CMOSRegisters::ScreenWidth, static_cast<i32>(hw::VirtualDisplay::Columns));
 		vCMOS.write32(data::CMOSRegisters::ScreenHeight, static_cast<i32>(hw::VirtualDisplay::Rows));
 		vCMOS.write32(data::CMOSRegisters::StackSize, cast<i32>(std::min<u32>(data::DefaultValues::DefaultStackSize, ram_size / 2)));
+		vDiskInterface.writeBlockSize();
 		ostd::BitField_32 disk_list_bitfield;
 		disk_list_bitfield.value = 0;
 		for (i32 i = 0; i < 32; i++)

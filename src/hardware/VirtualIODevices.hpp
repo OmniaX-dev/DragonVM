@@ -50,158 +50,158 @@ namespace dragon
 		{
 			public: enum class eKeys
 			{
-				Delete								= (i16)'\x7F',
-				Return								= (i16)'\r',
-				Escape								= (i16)'\x1B',
-				Backspace							= (i16)'\b',
-				Tab									= (i16)'\t',
-				Spacebar							= (i16)' ',
-				ExclamationMark						= (i16)'!',
-				DoubleQuote							= (i16)'"',
-				Hash								= (i16)'#',
-				Percent								= (i16)'%',
-				DollarSign							= (i16)'$',
-				Ampersand							= (i16)'&',
-				SingleQuote							= (i16)'\'',
-				LeftParenthesis						= (i16)'(',
-				RightParenthesis					= (i16)')',
-				Asterisk							= (i16)'*',
-				Plus								= (i16)'+',
-				Comma								= (i16)',',
-				Minus								= (i16)'-',
-				Period								= (i16)'.',
-				ForwardSlash						= (i16)'/',
-				Num0								= (i16)'0',
-				Num1								= (i16)'1',
-				Num2								= (i16)'2',
-				Num3								= (i16)'3',
-				Num4								= (i16)'4',
-				Num5								= (i16)'5',
-				Num6								= (i16)'6',
-				Num7								= (i16)'7',
-				Num8								= (i16)'8',
-				Num9								= (i16)'9',
-				Colon								= (i16)':',
-				Semicolon							= (i16)';',
-				LessThan							= (i16)'<',
-				Equals								= (i16)'=',
-				GreaterThan							= (i16)'>',
-				QuestionMark						= (i16)'?',
-				AtSign								= (i16)'@',
+				Delete                                = (i16)'\x7F',
+				Return                                = (i16)'\r',
+				Escape                                = (i16)'\x1B',
+				Backspace                            = (i16)'\b',
+				Tab                                    = (i16)'\t',
+				Spacebar                            = (i16)' ',
+				ExclamationMark                        = (i16)'!',
+				DoubleQuote                            = (i16)'"',
+				Hash                                = (i16)'#',
+				Percent                                = (i16)'%',
+				DollarSign                            = (i16)'$',
+				Ampersand                            = (i16)'&',
+				SingleQuote                            = (i16)'\'',
+				LeftParenthesis                        = (i16)'(',
+				RightParenthesis                    = (i16)')',
+				Asterisk                            = (i16)'*',
+				Plus                                = (i16)'+',
+				Comma                                = (i16)',',
+				Minus                                = (i16)'-',
+				Period                                = (i16)'.',
+				ForwardSlash                        = (i16)'/',
+				Num0                                = (i16)'0',
+				Num1                                = (i16)'1',
+				Num2                                = (i16)'2',
+				Num3                                = (i16)'3',
+				Num4                                = (i16)'4',
+				Num5                                = (i16)'5',
+				Num6                                = (i16)'6',
+				Num7                                = (i16)'7',
+				Num8                                = (i16)'8',
+				Num9                                = (i16)'9',
+				Colon                                = (i16)':',
+				Semicolon                            = (i16)';',
+				LessThan                            = (i16)'<',
+				Equals                                = (i16)'=',
+				GreaterThan                            = (i16)'>',
+				QuestionMark                        = (i16)'?',
+				AtSign                                = (i16)'@',
 
-				UpperCase_A							= (i16)'A',
-				UpperCase_B							= (i16)'B',
-				UpperCase_C							= (i16)'C',
-				UpperCase_D							= (i16)'D',
-				UpperCase_E							= (i16)'E',
-				UpperCase_F							= (i16)'F',
-				UpperCase_G							= (i16)'G',
-				UpperCase_H							= (i16)'H',
-				UpperCase_I							= (i16)'I',
-				UpperCase_J							= (i16)'J',
-				UpperCase_K							= (i16)'K',
-				UpperCase_L							= (i16)'L',
-				UpperCase_M							= (i16)'M',
-				UpperCase_N							= (i16)'N',
-				UpperCase_O							= (i16)'O',
-				UpperCase_P							= (i16)'P',
-				UpperCase_Q							= (i16)'Q',
-				UpperCase_R							= (i16)'R',
-				UpperCase_S							= (i16)'S',
-				UpperCase_T							= (i16)'T',
-				UpperCase_U							= (i16)'U',
-				UpperCase_V							= (i16)'V',
-				UpperCase_W							= (i16)'W',
-				UpperCase_X							= (i16)'X',
-				UpperCase_Y							= (i16)'Y',
-				UpperCase_Z							= (i16)'Z',
+				UpperCase_A                            = (i16)'A',
+				UpperCase_B                            = (i16)'B',
+				UpperCase_C                            = (i16)'C',
+				UpperCase_D                            = (i16)'D',
+				UpperCase_E                            = (i16)'E',
+				UpperCase_F                            = (i16)'F',
+				UpperCase_G                            = (i16)'G',
+				UpperCase_H                            = (i16)'H',
+				UpperCase_I                            = (i16)'I',
+				UpperCase_J                            = (i16)'J',
+				UpperCase_K                            = (i16)'K',
+				UpperCase_L                            = (i16)'L',
+				UpperCase_M                            = (i16)'M',
+				UpperCase_N                            = (i16)'N',
+				UpperCase_O                            = (i16)'O',
+				UpperCase_P                            = (i16)'P',
+				UpperCase_Q                            = (i16)'Q',
+				UpperCase_R                            = (i16)'R',
+				UpperCase_S                            = (i16)'S',
+				UpperCase_T                            = (i16)'T',
+				UpperCase_U                            = (i16)'U',
+				UpperCase_V                            = (i16)'V',
+				UpperCase_W                            = (i16)'W',
+				UpperCase_X                            = (i16)'X',
+				UpperCase_Y                            = (i16)'Y',
+				UpperCase_Z                            = (i16)'Z',
 
-				LeftBracket							= (i16)'[',
-				BackSlash							= (i16)'\\',
-				RightBracket						= (i16)']',
-				Caret								= (i16)'^',
-				Underscore							= (i16)'_',
-				BackQuote							= (i16)'`',
-				LowerCase_a							= (i16)'a',
-				LowerCase_b							= (i16)'b',
-				LowerCase_c							= (i16)'c',
-				LowerCase_d							= (i16)'d',
-				LowerCase_e							= (i16)'e',
-				LowerCase_f							= (i16)'f',
-				LowerCase_g							= (i16)'g',
-				LowerCase_h							= (i16)'h',
-				LowerCase_i							= (i16)'i',
-				LowerCase_j							= (i16)'j',
-				LowerCase_k							= (i16)'k',
-				LowerCase_l							= (i16)'l',
-				LowerCase_m							= (i16)'m',
-				LowerCase_n							= (i16)'n',
-				LowerCase_o							= (i16)'o',
-				LowerCase_p							= (i16)'p',
-				LowerCase_q							= (i16)'q',
-				LowerCase_r							= (i16)'r',
-				LowerCase_s							= (i16)'s',
-				LowerCase_t							= (i16)'t',
-				LowerCase_u							= (i16)'u',
-				LowerCase_v							= (i16)'v',
-				LowerCase_w							= (i16)'w',
-				LowerCase_x							= (i16)'x',
-				LowerCase_y							= (i16)'y',
-				LowerCase_z							= (i16)'z',
+				LeftBracket                            = (i16)'[',
+				BackSlash                            = (i16)'\\',
+				RightBracket                        = (i16)']',
+				Caret                                = (i16)'^',
+				Underscore                            = (i16)'_',
+				BackQuote                            = (i16)'`',
+				LowerCase_a                            = (i16)'a',
+				LowerCase_b                            = (i16)'b',
+				LowerCase_c                            = (i16)'c',
+				LowerCase_d                            = (i16)'d',
+				LowerCase_e                            = (i16)'e',
+				LowerCase_f                            = (i16)'f',
+				LowerCase_g                            = (i16)'g',
+				LowerCase_h                            = (i16)'h',
+				LowerCase_i                            = (i16)'i',
+				LowerCase_j                            = (i16)'j',
+				LowerCase_k                            = (i16)'k',
+				LowerCase_l                            = (i16)'l',
+				LowerCase_m                            = (i16)'m',
+				LowerCase_n                            = (i16)'n',
+				LowerCase_o                            = (i16)'o',
+				LowerCase_p                            = (i16)'p',
+				LowerCase_q                            = (i16)'q',
+				LowerCase_r                            = (i16)'r',
+				LowerCase_s                            = (i16)'s',
+				LowerCase_t                            = (i16)'t',
+				LowerCase_u                            = (i16)'u',
+				LowerCase_v                            = (i16)'v',
+				LowerCase_w                            = (i16)'w',
+				LowerCase_x                            = (i16)'x',
+				LowerCase_y                            = (i16)'y',
+				LowerCase_z                            = (i16)'z',
 
-				LeftCTRL 							= (i16)0x0100,
-				RightCTRL 							= (i16)0x0101,
-				LeftALT 							= (i16)0x0102,
-				RightALT 							= (i16)0x0103,
-				LeftShift 							= (i16)0x0104,
-				RightShift 							= (i16)0x0105,
+				LeftCTRL                             = (i16)0x0100,
+				RightCTRL                             = (i16)0x0101,
+				LeftALT                             = (i16)0x0102,
+				RightALT                             = (i16)0x0103,
+				LeftShift                             = (i16)0x0104,
+				RightShift                             = (i16)0x0105,
 
-				KeyPadDivide						= (i16)0x0106,
-				KeyPadMultiply						= (i16)0x0107,
-				KeyPadMinus							= (i16)0x0108,
-				KeyPadPlus							= (i16)0x0109,
-				KeyPadEnter							= (i16)0x010A,
-				KeyPad1								= (i16)0x010B,
-				KeyPad2								= (i16)0x010C,
-				KeyPad3								= (i16)0x010D,
-				KeyPad4								= (i16)0x010E,
-				KeyPad5								= (i16)0x010F,
-				KeyPad6								= (i16)0x0110,
-				KeyPad7								= (i16)0x0111,
-				KeyPad8								= (i16)0x0112,
-				KeyPad9								= (i16)0x0113,
-				KeyPad0								= (i16)0x0114,
-				KeyPadPeriod						= (i16)0x0115,
+				KeyPadDivide                        = (i16)0x0106,
+				KeyPadMultiply                        = (i16)0x0107,
+				KeyPadMinus                            = (i16)0x0108,
+				KeyPadPlus                            = (i16)0x0109,
+				KeyPadEnter                            = (i16)0x010A,
+				KeyPad1                                = (i16)0x010B,
+				KeyPad2                                = (i16)0x010C,
+				KeyPad3                                = (i16)0x010D,
+				KeyPad4                                = (i16)0x010E,
+				KeyPad5                                = (i16)0x010F,
+				KeyPad6                                = (i16)0x0110,
+				KeyPad7                                = (i16)0x0111,
+				KeyPad8                                = (i16)0x0112,
+				KeyPad9                                = (i16)0x0113,
+				KeyPad0                                = (i16)0x0114,
+				KeyPadPeriod                        = (i16)0x0115,
 
-				PrintScreen							= (i16)0x0116,
-				Insert								= (i16)0x0117,
-				Home								= (i16)0x0118,
-				PageUp								= (i16)0x0119,
-				End									= (i16)0x011A,
-				PageDown							= (i16)0x011B,
-				RightArrow							= (i16)0x011C,
-				LeftArrow							= (i16)0x011D,
-				DownArrow							= (i16)0x011E,
-				UpArrow								= (i16)0x011F,
-				CapsLock							= (i16)0x0120,
-				NumLock								= (i16)0x0121,
-				ScrollLock							= (i16)0x0122,
+				PrintScreen                            = (i16)0x0116,
+				Insert                                = (i16)0x0117,
+				Home                                = (i16)0x0118,
+				PageUp                                = (i16)0x0119,
+				End                                    = (i16)0x011A,
+				PageDown                            = (i16)0x011B,
+				RightArrow                            = (i16)0x011C,
+				LeftArrow                            = (i16)0x011D,
+				DownArrow                            = (i16)0x011E,
+				UpArrow                                = (i16)0x011F,
+				CapsLock                            = (i16)0x0120,
+				NumLock                                = (i16)0x0121,
+				ScrollLock                            = (i16)0x0122,
 
-				F1									= (i16)0x0123,
-				F2									= (i16)0x0124,
-				F3									= (i16)0x0125,
-				F4									= (i16)0x0126,
-				F5									= (i16)0x0127,
-				F6									= (i16)0x0128,
-				F7									= (i16)0x0129,
-				F8									= (i16)0x012A,
-				F9									= (i16)0x012B,
-				F10									= (i16)0x012C,
-				F11									= (i16)0x012D,
-				F12									= (i16)0x012E,
+				F1                                    = (i16)0x0123,
+				F2                                    = (i16)0x0124,
+				F3                                    = (i16)0x0125,
+				F4                                    = (i16)0x0126,
+				F5                                    = (i16)0x0127,
+				F6                                    = (i16)0x0128,
+				F7                                    = (i16)0x0129,
+				F8                                    = (i16)0x012A,
+				F9                                    = (i16)0x012B,
+				F10                                    = (i16)0x012C,
+				F11                                    = (i16)0x012D,
+				F12                                    = (i16)0x012E,
 
-				LeftSuper 							= (i16)0x012F,
-				RightSuper 							= (i16)0x0130,
+				LeftSuper                             = (i16)0x012F,
+				RightSuper                             = (i16)0x0130,
 			};
 			public: struct tModifierBits
 			{
@@ -219,8 +219,8 @@ namespace dragon
 			};
 			public: struct tRegisters
 			{
-				inline static constexpr u32 Modifiers = 0x00;	// 4 bytes
-				inline static constexpr u32 KeyCode = 0x04;		// 4 bytes
+				inline static constexpr u32 Modifiers = 0x00;    // 4 bytes
+				inline static constexpr u32 KeyCode = 0x04;        // 4 bytes
 			};
 
 			public:
@@ -286,21 +286,22 @@ namespace dragon
 				// getBlockSize() bytes, machine config: disk_block_size) per cycle.
 				public: struct tRegisters
 				{
-					inline static constexpr u32 Signal = 0x00;				// 1 byte
-					inline static constexpr u32 ModeSelector = 0x01;		// 1 byte
-					inline static constexpr u32 DiskSelector = 0x02;		// 1 byte
-					inline static constexpr u32 DiskAddress = 0x04;			// 4 bytes
-					inline static constexpr u32 DataSize = 0x08;			// 4 bytes
-					inline static constexpr u32 MemoryAddress = 0x0C;		// 4 bytes
+					inline static constexpr u32 Signal = 0x00;                // 1 byte
+					inline static constexpr u32 ModeSelector = 0x01;        // 1 byte
+					inline static constexpr u32 DiskSelector = 0x02;        // 1 byte
+					inline static constexpr u32 DiskAddress = 0x04;            // 4 bytes
+					inline static constexpr u32 DataSize = 0x08;            // 4 bytes
+					inline static constexpr u32 MemoryAddress = 0x0C;        // 4 bytes
 
 					inline static constexpr u32 FirstReadOnly = 0x10;
 
-					inline static constexpr u32 Status = 0x10;				// 1 byte
-					inline static constexpr u32 CurrentDisk = 0x11;			// 1 byte
-					inline static constexpr u32 CurrentDiskAddress = 0x14;	// 4 bytes
-					inline static constexpr u32 RestDataSize = 0x18;		// 4 bytes
-					inline static constexpr u32 CurrentMemoryAddress = 0x1C;	// 4 bytes
+					inline static constexpr u32 Status = 0x10;                // 1 byte
+					inline static constexpr u32 CurrentDisk = 0x11;            // 1 byte
+					inline static constexpr u32 CurrentDiskAddress = 0x14;    // 4 bytes
+					inline static constexpr u32 RestDataSize = 0x18;        // 4 bytes
+					inline static constexpr u32 CurrentMemoryAddress = 0x1C;    // 4 bytes
 
+					inline static constexpr u32 BlockSize = 0x50;    // 4 bytes
 				};
 
 				public: struct tSignalValues
@@ -342,6 +343,7 @@ namespace dragon
 					inline void setBusy(bool busy) { m_busy = busy; }
 					inline u32 getBlockSize(void) const { return m_blockSize; }
 					inline void setBlockSize(u32 size) { m_blockSize = std::max<u32>(size, 1); }
+					void writeBlockSize(void);
 
 				private:
 					ostd::serial::SerialIO m_data { data::MemoryMapAddresses::DiskInterface_End - data::MemoryMapAddresses::DiskInterface_Start + 1 };
@@ -350,7 +352,7 @@ namespace dragon
 					MemoryMapper& m_memory;
 					VirtualCPU& m_cpu;
 					u32 m_blockSize { data::DefaultValues::DefaultDiskBlockSize };
-					stdvec<u8> m_block;	// the block being copied
+					stdvec<u8> m_block;    // the block being copied
 
 					// inline static data::VDiskID s_nextDiskID = 0;
 
@@ -365,15 +367,15 @@ namespace dragon
 				};
 				public: struct tText16_CellStructure
 				{
-					inline static constexpr u8 character	=			0x00;
-					inline static constexpr u8 foreground	=			0x01;
-					inline static constexpr u8 background	=			0x02;
-					inline static constexpr u8 reserved	=			0x03;
+					inline static constexpr u8 character    =            0x00;
+					inline static constexpr u8 foreground    =            0x01;
+					inline static constexpr u8 background    =            0x02;
+					inline static constexpr u8 reserved    =            0x03;
 				};
 				public: struct tFlags
 				{
-					inline static constexpr u8 DoubleBufferingEnabled 	=		0;
-					inline static constexpr u8 ScreenRedrawDisabled 	=		1;
+					inline static constexpr u8 DoubleBufferingEnabled     =        0;
+					inline static constexpr u8 ScreenRedrawDisabled     =        1;
 				};
 				// The card's state beside its memory (for the debugger).
 				public: struct tState

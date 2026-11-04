@@ -158,5 +158,6 @@ const DiskRegisters: struct {
 	var CurrentDiskAddress: u32				= MemoryLayout.DiskInterface + 0x0014;
 	var RemainingDataSize: u32				= MemoryLayout.DiskInterface + 0x0018;
 	var CurrentMemoryAddress: u32			= MemoryLayout.DiskInterface + 0x001C;
+	var BlockSize: u32						= MemoryLayout.DiskInterface + 0x0050;
 };
 // ===============================================================================================

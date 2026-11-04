@@ -20,7 +20,7 @@ sub main() {
 	ddd.mode = DISK_MODE_READ;
 	ddd.disk = *cast<u8*>(CMOS_BOOT_DISK_ADDR);
 	ddd.address = 0x00000400;
-	ddd.dataSize = 32768;
+	ddd.dataSize = 524288;
 	ddd.memoryAddress = RAM_START;
 	low {
 		mov R9, $ddd

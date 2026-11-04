@@ -653,6 +653,11 @@ namespace dragon
 				return true;
 			}
 
+			void Disk::writeBlockSize(void)
+			{
+				m_data.w_DWord(tRegisters::BlockSize, m_blockSize);
+			}
+
 
 
 
