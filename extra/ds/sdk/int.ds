@@ -26,6 +26,7 @@ const INT30_PRINT_STRING_TEXT16: u8 				= 0x22;
 const INT30_PRINT_INTEGER_TEXT16: u8 				= 0x23;
 const INT30_CLEAR_SCREEN_TEXT16: u8 				= 0x24;
 const INT30_SCROLL_TEXT16: u8 						= 0x25;
+const INT30_SWAP_BUFFERS_TEXT16: u8 				= 0x26;
 
 const INT30_CLEAR_SCREEN: u8 						= 0xE0;
 const INT30_REFRESH_SCREEN: u8 						= 0xE1;

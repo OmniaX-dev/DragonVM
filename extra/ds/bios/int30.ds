@@ -149,6 +149,10 @@ interrupt sub __int_30_handler() {
 		device->text16MemoryController.foreground = cell->foreground;
 		device->signal = VGAText16ColorSignals.ForceClearScreen;
 	}
+	else if (code == INT30_SWAP_BUFFERS_TEXT16)
+	{
+		device->signal = VGAText16ColorSignals.SwapBuffers;
+	}
 	else if (code == INT30_SCROLL_TEXT16)
 	{
 		device->signal = VGAText16ColorSignals.Scroll;

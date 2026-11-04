@@ -714,7 +714,10 @@ namespace dragon
 			bool Graphics::readVRAM_16Colors(u8 x, u8 y, Graphics::tText16_Cell& outTextCell)
 			{
 				u32 cellOffset = static_cast<u32>(CONVERT_2D_1D(x, y, VirtualDisplay::Columns)) * 4;
-				cellOffset += m_16Color_currentFrameAddr;
+				if (!readFlag(tFlags::DoubleBufferingEnabled))
+					cellOffset += m_16Color_currentFrameAddr;
+				else
+					cellOffset += m_16Color_secondFrameAddr;
 				i8 outVal = 0;
 				if (!m_videoMemory.r_Byte(cellOffset + tText16_CellStructure::character, outVal))
 					return false; //TODO: Error

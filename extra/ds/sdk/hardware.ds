@@ -35,3 +35,10 @@ inline sub vga_is_text16() -> bool {
 inline sub vga_is_textSingle() -> bool {
 	return vga_get_video_mode() == VGAVideoModes.TextSingleColor;
 }
+
+inline sub vga_enable_double_buffering(var enable: bool = true) {
+	if (not vga_is_text16())
+		return;
+	var flags: BitField32 = *cast<BitField32*>(VGARegisters.Flags);
+	flags.val(VGAFlags.DoubleBufferingEnabled, enable);
+}

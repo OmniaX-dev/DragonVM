@@ -73,7 +73,7 @@ sub dpt_is_partition_bootable(var part: DPTPartitionBlock*) -> bool {
 	ddd.address = part->startAddress;
 	ddd.dataSize = DPTBootPartStructure.HeaderSize;
 	ddd.memoryAddress = cast<u32>(header);
-	raise_interrupt(0x20, 0x12, cast<u32>(&ddd)); // INT20_LOAD_FROM_DDD_BLOCKING
+	raise_interrupt(0x20, INT20_LOAD_FROM_DDD_BLOCKING, cast<u32>(&ddd));
 	if (*cast<u16*>(header) != DPTBootPartStructure.ID)
 		return false;
 	return true;

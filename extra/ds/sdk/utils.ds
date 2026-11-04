@@ -29,6 +29,10 @@ sub itoa(var value: i32, var result: u8*, var base: i32 = 10) -> string
     return result;
 }
 
+inline sub isprint(var c: u8) -> bool {
+	return c >= 0x20 && c <= 0x7E;
+}
+
 sub format_size(var bytes: u32, var out: u8*, var skipUnit: bool = false, var forceUnit: i32 = -1) -> i32 {
 	const __units: string[] = { "B", "KiB", "MiB", "GiB" };
 	var write_u32 = sub(var p: u8*, var n: u32) -> u8* {

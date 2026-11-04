@@ -9,6 +9,9 @@
 var keyBuff: u32[KEY_BUFF_SIZE];
 var keyRingBuff: RingBuffer;
 
+var scrx: u32 = *cast<u32*>(CMOSRegisters.ScreenColumns);
+var scry: u32 = *cast<u32*>(CMOSRegisters.ScreenRows);
+
 sub main() {
 	TextSingle::clear_screen();
 	vga_set_video_mode(VGAVideoModes.Text16Color);
@@ -28,31 +31,38 @@ sub main() {
 
 	keyRingBuff.init(keyBuff, sizeof(u32), KEY_BUFF_SIZE);
 
-	set_interrupt_vector_entry(0xA0, &on_key_pressed);
+	vga_enable_double_buffering();
+	set_interrupt_vector_entry(0xA0, &key_pressed_handler);
 
 	var i: u32 = 0;
 	while(true) {
 		var key: u32 = 0;
-		while(keyRingBuff.pop(&key)) {
-			Text16::print("Iteration: ", 0, 0, DefaultPaletteText16.Yellow, DefaultPaletteText16.Black);
-			Text16::print(++i, 11, 0, DefaultPaletteText16.Yellow, DefaultPaletteText16.Black);
+		if (keyRingBuff.pop(&key)) {
+			on_key_pressed(key);
 		}
+		Text16::clear_screen(DefaultPaletteText16.Black);
+
+		raise_interrupt(0x30, INT30_SWAP_BUFFERS_TEXT16);
 	}
 
-	Text16::clear_screen(DefaultPaletteText16.Black);
 	print_system_info(dpt_block.versionMaj, dpt_block.versionMin);
 
 	load_kernel0_block(boot_part);
 	low { jmp $DPTBootPartStructure.CodeLoadAddr }
 }
 
-interrupt sub on_key_pressed() {
+sub on_key_pressed(var key: u32) {
+	if (isprint(cast<u8>(key))) {
+
+	}
+}
+
+interrupt sub key_pressed_handler() {
 	static var i: u32 = 0;
 	var key: u32 = *cast<u32*>(KeyboardRegisters.KeyCode);
 	if (not keyRingBuff.push(cast<void*>(key)))
 	{
-		Text16::print("Missed Keys: ", 0, 12, DefaultPaletteText16.Red, DefaultPaletteText16.Black);
-		Text16::print(++i, 13, 12, DefaultPaletteText16.Red, DefaultPaletteText16.Black);
+		//TODO: Handle missed key presses
 	}
 }
 
