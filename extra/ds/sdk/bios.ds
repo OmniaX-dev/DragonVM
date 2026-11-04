@@ -49,7 +49,6 @@ const DebugProfilerTIme: struct {
 
 // ============================= Memory Mapped Devices and Registers =============================
 const MemoryLayout: struct {
-	var MBR: u32 							= 0x01000680;
 	var InterruptVector: u32 				= 0x01000080;
 	var DiskInterface: u32					= 0x01000880;
 	var RAM: u32							= 0x01010000;

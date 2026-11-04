@@ -5,7 +5,7 @@
 // Without a program the machine boots normally. With a program (a DRX, relocated to its load
 // address, or a raw binary loaded at --at), the program is called (push 0; call entry) from a
 // small trampoline that halts when it returns; with --boot the BIOS runs first (until it jumps
-// to the MBR), so its interrupts (int 0x20 / 0x30) work. Text printed in the single color text
+// to the boot code it loaded at the RAM start), so its interrupts (int 0x20 / 0x30) work. Text printed in the single color text
 // mode goes to stdout.
 
 #include "DragonRuntime.hpp"
@@ -156,7 +156,7 @@ int main(int argc, char** argv)
 		if (boot)
 		{
 			s_echo = false;
-			while (cast<u32>(cpu.readRegister(data::Registers::IP)) != data::MemoryMapAddresses::MBR_Start && cycles < maxCycles && !cpu.isHalted())
+			while (cast<u32>(cpu.readRegister(data::Registers::IP)) != data::MemoryMapAddresses::Memory_Start && cycles < maxCycles && !cpu.isHalted())
 			{
 				if (!step(cycles))
 					return 1;

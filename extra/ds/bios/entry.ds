@@ -28,7 +28,7 @@ sub main() {
 	// Exit BIOS mode
 	low {
 		%low $INST_BIOS_NODE_TOGGLE 0x00
-		jmp $MemoryLayout.MBR
+		jmp $MemoryLayout.RAM
 	}
 }
 
@@ -38,8 +38,8 @@ sub __load_mbr_data_block() {
 	ddd.mode = DiskMode.Read;
 	ddd.disk = disk;
 	ddd.address = 0x00000000;
-	ddd.dataSize = 512;
-	ddd.memoryAddress = MemoryLayout.MBR;
+	ddd.dataSize = 4194304;
+	ddd.memoryAddress = MemoryLayout.RAM;
 	raise_interrupt(0x20, INT20_LOAD_FROM_DDD_BLOCKING, cast<u32>(&ddd));
 }
 

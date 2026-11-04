@@ -262,20 +262,6 @@ namespace dragon
 
 			private:
 		};
-		class VirtualBootloader : public IMemoryDevice
-		{
-			public:
-				VirtualBootloader(void);
-				i8 read8(u32 addr) override;
-				i32 read32(u32 addr) override;
-				i8 write8(u32 addr, i8 value) override;
-				i32 write32(u32 addr, i32 value) override;
-
-				ostd::ByteStream* getByteStream(void) override;
-
-			private:
-				ostd::ByteStream m_mbr;
-		};
 
 		namespace interface
 		{

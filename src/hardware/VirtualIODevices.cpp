@@ -402,35 +402,6 @@ namespace dragon
 
 
 
-		VirtualBootloader::VirtualBootloader(void)
-		{
-			m_mbr.assign(data::MemoryMapAddresses::MBR_End - data::MemoryMapAddresses::MBR_Start + 1, 0);
-		}
-
-		i8 VirtualBootloader::read8(u32 addr)
-		{
-			return stream_read8(m_mbr, addr, data::ErrorCodes::BIOS_InvalidAddress, "MBR");
-		}
-
-		i32 VirtualBootloader::read32(u32 addr)
-		{
-			return stream_read32(m_mbr, addr, data::ErrorCodes::BIOS_InvalidAddress, "MBR");
-		}
-
-		i8 VirtualBootloader::write8(u32 addr, i8 value)
-		{
-			return stream_write8(m_mbr, addr, value, data::ErrorCodes::BIOS_InvalidAddress, "MBR");
-		}
-
-		i32 VirtualBootloader::write32(u32 addr, i32 value)
-		{
-			return stream_write32(m_mbr, addr, value, data::ErrorCodes::BIOS_InvalidAddress, "MBR");
-		}
-
-		ostd::ByteStream* VirtualBootloader::getByteStream(void)
-		{
-			return &m_mbr;
-		}
 
 
 

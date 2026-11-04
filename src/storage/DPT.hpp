@@ -9,13 +9,14 @@ namespace dragon
 		// ============================================================================
 		// DPT — the Dragon Partition Table (layout in data::DPTStructure).
 		//
-		//   0x000 - 0x1FF   boot code (the first stage of the boot loader)
-		//   0x200 - 0x3FF   the DPT block:
+		//   0x000000 - 0x3FFFFF   boot area (4 MiB): the BIOS loads it at the RAM start
+		//                         and jumps to it (the boot loader)
+		//   0x400000 - 0x4001FF   the DPT block:
 		//       header (12 bytes): ID 0xF1CA, version (major, minor), partition
 		//                          count (max 5), 7 reserved bytes
 		//       5 entries (100 bytes each): start (4), size (4), flags (2),
 		//                          26 reserved bytes, label (64, null terminated)
-		//   0x400 -         the partitions
+		//   0x400200 -            the partitions
 		//
 		// Everything is big endian.
 		// ============================================================================

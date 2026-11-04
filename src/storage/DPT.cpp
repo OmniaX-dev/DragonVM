@@ -132,7 +132,7 @@ namespace dragon
 		stdvec<tReservedArea> DPTScheme::getReservedAreas(u64 diskSize) const
 		{
 			return {
-				{ 0, DPT::DiskAddress, "boot code" },
+				{ 0, DPT::BootAreaSize, "boot code" },
 				{ DPT::DiskAddress, DPT::DPTBlockSizeBytes, "DPT" }
 			};
 		}

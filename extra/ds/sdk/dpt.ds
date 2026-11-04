@@ -19,7 +19,7 @@ struct DPTPartitionBlock {
 };
 
 const DPTStructure: struct {
-	var DiskAddress: u32 					= 0x0200;
+	var DiskAddress: u32 					= 0x400000;	// after the 4 MiB boot area
 	var EntriesStart: u32			 		= 0x000C;
 
 	var EntryStart: u32  					= 0x0000;
@@ -37,7 +37,7 @@ const DPTBootPartStructure: struct {
 
 	var CodeSize: u32  						= 131072;
 	var HeaderSize: u32						= 32;
-	var CodeLoadAddr: u32					= 0x01012000;
+	var CodeLoadAddr: u32					= 0x01410000;
 
 	var ID: u16								= 0xF1C4;
 };

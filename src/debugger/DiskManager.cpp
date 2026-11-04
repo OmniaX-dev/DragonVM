@@ -514,7 +514,7 @@ namespace dragon
 			input.setCommitCallback([this](FieldInput& field) { commit_field(field); });
 		};
 		l_field(m_labelTitle, "Label", m_labelInput, 8, 64, 250, "The partition's label (Return applies it)");
-		l_field(m_startTitle, "Start", m_startInput, 334, 60, 130, "Start address: 0x400, 1024, 1K... (Return applies it)");
+		l_field(m_startTitle, "Start", m_startInput, 334, 60, 130, "Start address: 0x400200, 4M, 4096K... (Return applies it)");
 		l_field(m_sizeTitle, "Size", m_sizeInput, 532, 54, 130, "Size: 0x1400, 5120, 5K, 1.5M... (Return applies it)");
 		addWidget(m_growButton);
 		place(m_growButton, 0, 1, 0, 1, 724, -168, 796, -140);
@@ -993,7 +993,7 @@ namespace dragon
 		place(m_newSizeInput, 1, 0, 1, 0, -252, 6, -168, 34);
 		m_newSizeInput.setFontSize(14);
 		m_newSizeInput.setText("4M");
-		m_newSizeInput.setTooltipText("Size of a new disk: 4M, 512K, 0x400000, 4194304...");
+		m_newSizeInput.setTooltipText("Size of a new disk: 32M, 8192K, 0x2000000, 33554432...");
 		m_newSizeInput.enableTooltip();
 		m_newSizeInput.setCommitCallback([](FieldInput&) {  });
 		addWidget(m_newButton);
@@ -1230,7 +1230,7 @@ namespace dragon
 		u64 size = 0;
 		if (!storage::parseSize(m_newSizeInput.getText(), size) || size == 0)
 		{
-			set_status(String("Invalid size: '").add(m_newSizeInput.getText()).add("' (4M, 512K, 0x400000, 4194304...)."), ErrorColor);
+			set_status(String("Invalid size: '").add(m_newSizeInput.getText()).add("' (32M, 8192K, 0x2000000, 33554432...)."), ErrorColor);
 			return;
 		}
 		if (size > 0x100000000ull)

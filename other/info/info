@@ -72,7 +72,7 @@
     0x01000660 MOUSE MAPPING (32 Bytes)
     0x0100067F
     -------
-    0x01000680 BOOTLOADER (512 Bytes)
+    0x01000680 (unused, was the MBR)
     0x0100087F
     -------
     0x01000880 DISK INTERFACE (128 Bytes)
@@ -154,7 +154,7 @@
     0x01000A40 (unmapped)
     0x0100FFFF
     -------
-    0x01010000 RAM (machine config: ram_size_kb, default 4096 KiB)
+    0x01010000 RAM (machine config: ram_size_kb, default 8192 KiB, at least 4160 KiB: the boot area + a 64 KiB stack)
     0x01010000 + RAM size - 1 (at most 0x0FFFFFFF)
 
 
@@ -208,13 +208,14 @@
 # DPT - Partition Table
 #==========================================================================================================================================
 
-    Disk Address: 0x200 - 0x400 (512 bytes)
-    Header: (0x200 - 0x20B) (12 bytes)
+    Disk Address: 0x400000 - 0x4001FF (512 bytes), right after the 4 MiB boot area (0x000000 - 0x3FFFFF)
+    Partitions start at 0x400200.
+    Header: (+0x000 - +0x00B) (12 bytes)
         0x000: (2 bytes) - 0xF1CA - This number identifies this block as a DPT partition table
         0x002: (2 bytes) - DPT version
         0x004: (1 byte)  - Partition count (max 5)
         0x005: (7 bytes) - Reserved
-    Partition Table: (0x20C - 0x3FF) (500 bytes)
+    Partition Table: (+0x00C - +0x1FF) (500 bytes)
         Entry: (100 bytes) (x5)
             0x00: (4 bytes) - Start Address
             0x04: (4 bytes) - Size
@@ -294,5 +295,5 @@
     Kernel first stage block must start at PART_ADDR + 32 and must be 1024 bytes in size.
     Drake loads it at 0x01012000 (DPTBootPartStructure.CODE_LOAD_ADDR).
 
-    Boot sequence: BIOS (0x00000000) -> Drake loader (disk 0x0000, 512 bytes, at 0x01000680)
-        -> Drake bootsector (disk 0x0400, 5120 bytes, at 0x01010000) -> kernel first stage (0x01012000)
+    Boot sequence: BIOS (0x00000000) -> Drake (the disk's boot area: 0x000000 - 0x3FFFFF, 4 MiB, loaded at
+        the RAM start 0x01010000) -> kernel first stage (0x01012000)

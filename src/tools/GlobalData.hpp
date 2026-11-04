@@ -112,8 +112,8 @@ namespace dragon
 				inline static constexpr u32 Mouse_Start = 0x01000660;
 				inline static constexpr u32 Mouse_End   = 0x0100067F;
 
-				inline static constexpr u32 MBR_Start = 0x01000680;
-				inline static constexpr u32 MBR_End   = 0x0100087F;
+				// 0x01000680 - 0x0100087F: unused (the old MBR zone; the BIOS now loads the boot
+				// area of the disk at Memory_Start, see DPTStructure::BootAreaSize).
 
 				inline static constexpr u32 DiskInterface_Start = 0x01000880;
 				inline static constexpr u32 DiskInterface_End   = 0x010008FF;
@@ -334,7 +334,10 @@ namespace dragon
 
 
 				inline static constexpr u16 HeaderReservedSizeBytes            = 7;
-				inline static constexpr u16 DiskAddress                        = 0x200;
+				// Disk layout: the boot area (loaded at the RAM start by the BIOS), the DPT
+				// block, then the partitions.
+				inline static constexpr u32 BootAreaSize                        = 0x400000;	// 4 MiB
+				inline static constexpr u32 DiskAddress                        = BootAreaSize;
 				inline static constexpr u16 DPT_ID_CODE                        = 0xF1CA;
 				inline static constexpr u16 EntrySizeBytes                        = 100;
 				inline static constexpr u16 EntryLabelSizeBytes                = 64;
@@ -343,7 +346,7 @@ namespace dragon
 				inline static constexpr u16 DPTBlockSizeBytes                    = 512;
 				inline static constexpr u8 CurrentDPTVersionMaj                 = 0x00;
 				inline static constexpr u8 CurrentDPTVersionMin                 = 0x02;
-				inline static constexpr u32 DiskStartAddr                         = 0x00000400;
+				inline static constexpr u32 DiskStartAddr                         = DiskAddress + DPTBlockSizeBytes;
 				inline static constexpr u8 MaxPartCount                        = 5;
 
 
@@ -500,9 +503,10 @@ namespace dragon
 		class DefaultValues
 		{
 			public:
-				// RAM size (machine config: ram_size_kb), in KiB.
-				inline static constexpr u32 DefaultRAMSizeKB = 4096;
-				inline static constexpr u32 MinRAMSizeKB = 64;
+				// RAM size (machine config: ram_size_kb), in KiB. At least the disk's boot area
+				// (the BIOS loads it at the RAM start) and a 64 KiB stack (at the end of the RAM).
+				inline static constexpr u32 DefaultRAMSizeKB = 8192;
+				inline static constexpr u32 MinRAMSizeKB = DPTStructure::BootAreaSize / 1024 + 64;
 				inline static constexpr u32 MaxRAMSizeKB = (MemoryMapAddresses::Memory_Max - MemoryMapAddresses::Memory_Start + 1) / 1024;
 				inline static constexpr u32 DefaultStackSize = 0x10000;
 				// Bytes the disk interface copies per cycle (machine config: disk_block_size).

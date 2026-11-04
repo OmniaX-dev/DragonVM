@@ -183,16 +183,6 @@ namespace dragon
 		memMap.mapDevice(vMouse, dragon::data::MemoryMapAddresses::Mouse_Start, dragon::data::MemoryMapAddresses::Mouse_End, false, "Mouse");
 		if (info.verboseLoad)
 		{
-			out.fg(ostd::ConsoleColors::Magenta).p("    vMBR: ");
-			out.fg(ostd::ConsoleColors::BrightYellow);
-			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::MBR_Start, true, 4).cpp_str());
-			out.p(" to ");
-			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::MBR_End, true, 4).cpp_str());
-			out.p(" (remap=true)").nl();
-		}
-		memMap.mapDevice(vMBR, dragon::data::MemoryMapAddresses::MBR_Start, dragon::data::MemoryMapAddresses::MBR_End, true, "MBR");
-		if (info.verboseLoad)
-		{
 			out.fg(ostd::ConsoleColors::Magenta).p("    vDiskInterface: ");
 			out.fg(ostd::ConsoleColors::BrightYellow);
 			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::DiskInterface_Start, true, 4).cpp_str());
