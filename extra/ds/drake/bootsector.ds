@@ -20,11 +20,21 @@ sub main() {
 		return;
 	}
 
+	set_interrupt_vector_entry(0xA0, &on_key_pressed);
+
+	while(true);
+
 	Text16::clear_screen(DefaultPaletteText16.Black);
 	print_system_info(dpt_block.versionMaj, dpt_block.versionMin);
 
 	load_kernel0_block(boot_part);
 	low { jmp $DPTBootPartStructure.CodeLoadAddr }
+}
+
+interrupt sub on_key_pressed() {
+	static var i: u32 = 0;
+	Text16::print("Iteration: ", 0, 0, DefaultPaletteText16.Yellow, DefaultPaletteText16.Black);
+	Text16::print(++i, 11, 0, DefaultPaletteText16.Yellow, DefaultPaletteText16.Black);
 }
 
 sub load_kernel0_block(var part: DPTPartitionBlock*) {
