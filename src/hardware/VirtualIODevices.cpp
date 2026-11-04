@@ -551,30 +551,38 @@ namespace dragon
 						m_busy = false;
 						return;
 					}
+					// One block per cycle: at most m_blockSize bytes, and never past the end of the
+					// disk or of the memory (the next cycle then stops with the error, as it would
+					// one byte at a time).
+					u32 count = std::min(m_blockSize, restDataSize);
+					count = cast<u32>(std::min<u64>(count, disk.getSize() - diskAddress));
+					count = cast<u32>(std::min<u64>(count, cast<u64>(data::AddressMask) - memoryAddress + 1));
+					m_block.resize(count);
 					if (status == tStatusValues::Reading)
 					{
-						ostd::ByteStream _data;
-						if (!disk.read(diskAddress, 1, _data))
+						if (!disk.readBlock(diskAddress, count, m_block.data()))
 						{
 							data::ErrorHandler::pushError(data::ErrorCodes::HardDrive_ReadFailed, "HardDrive Error: Failed to read data.");
 							m_busy = false;
 							return;
 						}
-						m_memory.write8(memoryAddress, _data[0]);
+						for (u32 i = 0; i < count; i++)
+							m_memory.write8(memoryAddress + i, cast<i8>(m_block[i]));
 					}
 					else if (status == tStatusValues::Writing)
 					{
-						i8 dataRead = m_memory.read8(memoryAddress);
-						if (!disk.write(diskAddress, dataRead))
+						for (u32 i = 0; i < count; i++)
+							m_block[i] = cast<u8>(m_memory.read8(memoryAddress + i));
+						if (!disk.writeBlock(diskAddress, count, m_block.data()))
 						{
 							data::ErrorHandler::pushError(data::ErrorCodes::HardDrive_WriteFailed, "HardDrive Error: Failed to write data.");
 							m_busy = false;
 							return;
 						}
 					}
-					memoryAddress++;
-					diskAddress++;
-					restDataSize--;
+					memoryAddress += count;
+					diskAddress += count;
+					restDataSize -= count;
 					m_data.w_DWord(tRegisters::CurrentDiskAddress, cast<i32>(diskAddress));
 					m_data.w_DWord(tRegisters::RestDataSize, cast<i32>(restDataSize));
 					m_data.w_DWord(tRegisters::CurrentMemoryAddress, cast<i32>(memoryAddress));

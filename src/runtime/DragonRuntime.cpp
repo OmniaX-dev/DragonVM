@@ -104,6 +104,7 @@ namespace dragon
 		if (machine_config.vdisk_paths.size() == 0) return RETURN_VAL_NO_DISK; //TODO: Error
 		if (info.verboseLoad)
 			out.fg(ostd::ConsoleColors::Magenta).p("  Initializing virtual disks:").nl();
+		vDiskInterface.setBlockSize(machine_config.disk_block_size);
 		for (auto const& disk_path : machine_config.vdisk_paths)
 		{
 			vDisks[disk_path.first] = dragon::hw::VirtualHardDrive(disk_path.second);
@@ -111,6 +112,8 @@ namespace dragon
 			if (info.verboseLoad)
 				out.fg(ostd::ConsoleColors::BrightYellow).p("    Disk").p(disk_path.first).p(" connected: ").p(disk_path.second.cpp_str()).nl();
 		}
+		if (info.verboseLoad)
+			out.fg(ostd::ConsoleColors::BrightYellow).p("    Disk block size: ").p(vDiskInterface.getBlockSize()).p(" bytes per cycle").nl();
 
 		if (info.verboseLoad)
 			out.fg(ostd::ConsoleColors::Magenta).p("  Loading vBIOS file: ").fg(ostd::ConsoleColors::BrightYellow).p(machine_config.bios_path.cpp_str()).nl();

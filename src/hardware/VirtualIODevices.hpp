@@ -282,7 +282,8 @@ namespace dragon
 			class Disk : public IMemoryDevice
 			{
 				// The controller's registers. An operation copies DataSize bytes between the
-				// disk (from DiskAddress) and the memory (from MemoryAddress), one byte per cycle.
+				// disk (from DiskAddress) and the memory (from MemoryAddress), one block (at most
+				// getBlockSize() bytes, machine config: disk_block_size) per cycle.
 				public: struct tRegisters
 				{
 					inline static constexpr u32 Signal = 0x00;				// 1 byte
@@ -339,6 +340,8 @@ namespace dragon
 					inline bool isBusy(void) const { return m_busy; }
 					// The controller's state beside its registers (for the debugger).
 					inline void setBusy(bool busy) { m_busy = busy; }
+					inline u32 getBlockSize(void) const { return m_blockSize; }
+					inline void setBlockSize(u32 size) { m_blockSize = std::max<u32>(size, 1); }
 
 				private:
 					ostd::serial::SerialIO m_data { data::MemoryMapAddresses::DiskInterface_End - data::MemoryMapAddresses::DiskInterface_Start + 1 };
@@ -346,6 +349,8 @@ namespace dragon
 					std::unordered_map<data::VDiskID, VirtualHardDrive*> m_connectedDisks;
 					MemoryMapper& m_memory;
 					VirtualCPU& m_cpu;
+					u32 m_blockSize { data::DefaultValues::DefaultDiskBlockSize };
+					stdvec<u8> m_block;	// the block being copied
 
 					// inline static data::VDiskID s_nextDiskID = 0;
 

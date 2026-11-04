@@ -505,6 +505,10 @@ namespace dragon
 				inline static constexpr u32 MinRAMSizeKB = 64;
 				inline static constexpr u32 MaxRAMSizeKB = (MemoryMapAddresses::Memory_Max - MemoryMapAddresses::Memory_Start + 1) / 1024;
 				inline static constexpr u32 DefaultStackSize = 0x10000;
+				// Bytes the disk interface copies per cycle (machine config: disk_block_size).
+				inline static constexpr u32 DefaultDiskBlockSize = 1024;
+				inline static constexpr u32 MinDiskBlockSize = 1;
+				inline static constexpr u32 MaxDiskBlockSize = 1024 * 1024;
 		};
 	}
 }

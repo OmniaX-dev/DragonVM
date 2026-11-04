@@ -100,6 +100,17 @@ namespace dragon
 				size = std::clamp<i64>(size, data::DefaultValues::MinRAMSizeKB, data::DefaultValues::MaxRAMSizeKB);
 				config.ram_size_kb = cast<u32>(size);
 			}
+			else if (lineEdit == "disk_block_size")
+			{
+				lineEdit = tokens.next();
+				lineEdit.trim().toLower();
+				if (!lineEdit.isNumeric()) continue; //TODO: Error
+				i64 size = lineEdit.toInt();
+
+				//TODO: Warnings
+				size = std::clamp<i64>(size, data::DefaultValues::MinDiskBlockSize, data::DefaultValues::MaxDiskBlockSize);
+				config.disk_block_size = cast<u32>(size);
+			}
 			else if (lineEdit == "16color_palette")
 			{
 				lineEdit = tokens.next();
