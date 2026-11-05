@@ -25,7 +25,7 @@ sub main() {
 	var boot_part: DPTPartitionBlock* = get_boot_partition(&dpt_block);
 	halt_on_condition(not boot_part, "No bootable partition found.");
 
-	raise_interrupt(0x20, INT20_ALLOC_HEAP, screenBufferSize, cast<u32>(&screenBuffer));
+	screenBuffer = malloc(screenBufferSize);
 	halt_on_condition(not screenBuffer, "Screen buffer allocation failed.");
 	Text16::print(screenBufferSize, 0, 0, DefaultPaletteText16.Blue, DefaultPaletteText16.Yellow);
 
@@ -47,7 +47,7 @@ sub main() {
 	print_system_info(dpt_block.versionMaj, dpt_block.versionMin);
 
 	load_kernel0_block(boot_part);
-	raise_interrupt(0x20, INT20_FREE_HEAP, cast<u32>(screenBuffer));
+	free(screenBuffer);
 	low { jmp $DPTBootPartStructure.CodeLoadAddr }
 }
 

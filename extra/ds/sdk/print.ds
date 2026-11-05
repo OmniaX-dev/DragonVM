@@ -135,41 +135,80 @@ struct Text16 {
 	}
 };
 
+const Text16ConsoleErrors: struct {
+	var NoError: u8 				= 0x00;
+	var ScreenBufferAllocFail: u8	= 0x01;
+	var Uninitialized: u8			= 0x02;
+	var WrongVideoMode: u8			= 0x03;
+};
+
 struct Text16Console {
-	priv var cursor_x: u16 = 0;
-	priv var cursor_y: u16 = 0;
+	priv var m_cursor_x: u16 = 0;
+	priv var m_cursor_y: u16 = 0;
+	priv var m_bg_col: u8 = DefaultPaletteText16.Black;
+	priv var m_fg_col: u8 = DefaultPaletteText16.Green;
 
-	// Prints a null-terminated string.
+	priv var m_screen_x: u32 = 0;
+	priv var m_screen_y: u32 = 0;
+	priv var m_screenBufferSize: u32 = 0;
+	priv var m_screenBuffer: u8* = null;
+	priv var m_initialized: bool = false;
+
+	priv var m_error: u8 = 0;
+
+	sub init() -> bool {
+		this->m_initialized = false;
+		this->m_screen_x = *cast<u32*>(CMOSRegisters.ScreenColumns);
+		this->m_screen_y = *cast<u32*>(CMOSRegisters.ScreenRows);
+		this->m_screenBufferSize = this->m_screen_x * this->m_screen_y * 4;
+		if (this->m_screenBuffer)
+			free(&this->m_screenBuffer);
+		this->m_screenBuffer = malloc(this->m_screenBufferSize);
+		if (not this->m_screenBuffer)
+			return this->set_error(Text16ConsoleErrors.ScreenBufferAllocFail, false);
+		this->m_initialized = true;
+		return this->set_error(Text16ConsoleErrors.NoError, true);
+	}
+
+	sub is_valid() -> bool {
+		if (not this->m_initialized)
+			return this->set_error(Text16ConsoleErrors.Uninitialized, false);
+		if (not vga_is_text16())
+			return this->set_error(Text16ConsoleErrors.WrongVideoMode, false);
+		return true;
+	}
+
 	sub print(var text: string, var x: u16, var y: u16, var fg: u8, var bg: u8 = 0xFF) -> void {
-		if (!vga_is_text16())
+		if (not this->is_valid())
 			return;
 	}
-
-	// Prints one character.
 	sub print(var c: u8) -> void {
-		if (!vga_is_text16())
+		if (not this->is_valid())
 			return;
 	}
-
-	// Prints an unsigned integer (decimal).
 	sub print(var n: u32) -> void {
-		if (!vga_is_text16())
+		if (not this->is_valid())
 			return;
 	}
-
-	// Prints a signed integer (decimal).
 	sub print(var n: i32) -> void {
-		if (!vga_is_text16())
+		if (not this->is_valid())
 			return;
 	}
-
 	sub new_line() -> void {
-		if (!vga_is_text16())
+		if (not this->is_valid())
 			return;
 	}
-
+	sub scroll() -> void {
+		if (not this->is_valid())
+			return;
+	}
 	sub println(var text: string) -> void {
 		TextSingle::print(text);
 		TextSingle::new_line();
+	}
+
+	priv inline sub set_error(var err: u8, var passthrough: bool) -> bool {
+		this->m_error = err;
+		return passthrough;
 	}
 };

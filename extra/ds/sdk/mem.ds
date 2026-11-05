@@ -58,3 +58,13 @@ sub strcpy(var dst: string, var src: string) -> string {
     *d = 0;
     return dst;
 }
+
+inline sub malloc(var size: u32) -> void* {
+	var ptr: void* = null;
+	raise_interrupt(0x20, INT20_ALLOC_HEAP, size, cast<u32>(&ptr));
+	return ptr;
+}
+
+inline sub free(var ptr: void*) {
+	raise_interrupt(0x20, INT20_FREE_HEAP, cast<u32>(&ptr));
+}
