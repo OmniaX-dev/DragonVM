@@ -38,6 +38,21 @@ interrupt sub __int_20_handler() {
 			return; // TODO: Eventually this should probably raise some kind of error/warning
 		clear_interrupt_vector_entry(param1);
 	}
+	else if (code == INT20_ALLOC_HEAP)
+	{
+		if (not param2) return;
+		set_interrupts_enabled(false);
+		*cast<u32*>(param2) = cast<u32>(Allocator::alloc(param1));
+		set_interrupts_enabled(true);
+	}
+	else if (code == INT20_FREE_HEAP)
+	{
+		if (not param1) return;
+		set_interrupts_enabled(false);
+		var result: u32 = Allocator::free(cast<void*>(param1)) ? 1 : 0;
+		low { mov RV, $result }
+		set_interrupts_enabled(true);
+	}
 	else
 	{
 		// TODO: Eventually this should probably raise some kind of error/warning

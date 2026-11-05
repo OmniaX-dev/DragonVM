@@ -39,6 +39,9 @@ namespace dragon
 				inline static constexpr u8 Text16String = 0x30;        // 4 bytes (address)
 				inline static constexpr u8 Text16StringCell = 0x34;        // 4 bytes (address)
 
+				inline static constexpr u8 Text16FrameAddr = 0x38;        // 4 bytes (address)
+				inline static constexpr u8 Text16FrameSize = 0x3C;        // 4 bytes (address)
+
 				inline static constexpr u8 Flags = 0x7C;                    // 4 bytes
 
 				inline static constexpr u8 MemControllerX = 0x80;            // 4 bytes
@@ -67,6 +70,7 @@ namespace dragon
 				inline static constexpr u8 Text16Color_WriteMemory = 0x11;
 				inline static constexpr u8 Text16Color_Scroll = 0x12;
 				inline static constexpr u8 Text16Color_PrintString = 0x13;
+				inline static constexpr u8 Text16Color_CopyFrame = 0x14;
 
 				inline static constexpr u8 RefreshScreen = 0xE0;
 				inline static constexpr u8 ClearSCreen = 0xE1;

@@ -7,6 +7,8 @@ const INT20_GET_DISK_LIST: u8 						= 0x11;
 const INT20_LOAD_FROM_DDD_BLOCKING: u8 				= 0x12;
 const INT20_SET_NEW_INT_HANDLER: u8 				= 0x00;
 const INT20_CLEAR_INT_HANDLER: u8 					= 0x01;
+const INT20_ALLOC_HEAP: u8							= 0x20;
+const INT20_FREE_HEAP: u8 							= 0x21;
 
 const INT30_DIRECT_PRINT_CHAR_TEXT_SINGLE: u8 		= 0x01;
 const INT30_DIRECT_NEW_LINE_TEXT_SINGLE: u8 		= 0x02;
@@ -27,6 +29,7 @@ const INT30_PRINT_INTEGER_TEXT16: u8 				= 0x23;
 const INT30_CLEAR_SCREEN_TEXT16: u8 				= 0x24;
 const INT30_SCROLL_TEXT16: u8 						= 0x25;
 const INT30_SWAP_BUFFERS_TEXT16: u8 				= 0x26;
+const INT30_COPY_FRAME_TEXT16: u8 					= 0x27;
 
 const INT30_CLEAR_SCREEN: u8 						= 0xE0;
 const INT30_REFRESH_SCREEN: u8 						= 0xE1;

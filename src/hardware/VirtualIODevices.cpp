@@ -722,12 +722,12 @@ namespace dragon
 				if (!m_videoMemory.r_Byte(cellOffset + tText16_CellStructure::character, outVal))
 					return false; //TODO: Error
 				outTextCell.character = outVal;
-				if (!m_videoMemory.r_Byte(cellOffset + tText16_CellStructure::background, outVal))
-					return false; //TODO: Error
-				outTextCell.backgroundColor = outVal;
 				if (!m_videoMemory.r_Byte(cellOffset + tText16_CellStructure::foreground, outVal))
 					return false; //TODO: Error
 				outTextCell.foregroundColor = outVal;
+				if (!m_videoMemory.r_Byte(cellOffset + tText16_CellStructure::background, outVal))
+					return false; //TODO: Error
+				outTextCell.backgroundColor = outVal;
 				return true;
 			}
 
@@ -740,20 +740,44 @@ namespace dragon
 					cellOffset += m_16Color_secondFrameAddr;
 				if (!m_videoMemory.w_Byte(cellOffset + tText16_CellStructure::character, character))
 					return false; //TODO: Error
-				if (!m_videoMemory.w_Byte(cellOffset + tText16_CellStructure::background, background))
-					return false; //TODO: Error
 				if (!m_videoMemory.w_Byte(cellOffset + tText16_CellStructure::foreground, foreground))
 					return false; //TODO: Error
+				if (!m_videoMemory.w_Byte(cellOffset + tText16_CellStructure::background, background))
+					return false; //TODO: Error
+				return true;
+			}
+
+			bool Graphics::writeVRAMFrame_16Colors(u32 newFrameAddr, u32 size)
+			{
+				auto& mem = DragonRuntime::memMap;
+				if (size > m_16Color_frameSize)
+					return false;
+				u32 frame_addr = m_16Color_currentFrameAddr;
+				if (readFlag(tFlags::DoubleBufferingEnabled))
+					frame_addr = m_16Color_secondFrameAddr;
+				for (i64 i = frame_addr; i < frame_addr + size; i += m_16Color_cellSize)
+				{
+					if (!m_videoMemory.w_Byte(i + tText16_CellStructure::character, mem.read8(newFrameAddr++)))
+						return false; //TODO: Error
+					if (!m_videoMemory.w_Byte(i + tText16_CellStructure::foreground, mem.read8(newFrameAddr++)))
+						return false; //TODO: Error
+					if (!m_videoMemory.w_Byte(i + tText16_CellStructure::background, mem.read8(newFrameAddr++)))
+						return false; //TODO: Error
+					newFrameAddr++; // 1 reserved byte
+				}
 				return true;
 			}
 
 			bool Graphics::clearVRAM_16Colors(u8 character, u8 background, u8 foreground)
 			{
-				for (i32 i = m_16Color_currentFrameAddr; i < m_16Color_currentFrameAddr + m_16Color_frameSize; i += 4)
+				u32 frame_addr = m_16Color_currentFrameAddr;
+				if (readFlag(tFlags::DoubleBufferingEnabled))
+					frame_addr = m_16Color_secondFrameAddr;
+				for (i32 i = frame_addr; i < frame_addr + m_16Color_frameSize; i += 4)
 				{
 					m_videoMemory.w_Byte(i + tText16_CellStructure::character, character);
-					m_videoMemory.w_Byte(i + tText16_CellStructure::background, background);
 					m_videoMemory.w_Byte(i + tText16_CellStructure::foreground, foreground);
+					m_videoMemory.w_Byte(i + tText16_CellStructure::background, background);
 				}
 				return true;
 			}
@@ -768,9 +792,9 @@ namespace dragon
 					m_videoMemory.r_Byte(m_16Color_secondFrameAddr + j, outByte);
 					m_videoMemory.w_Byte(i + tText16_CellStructure::character, outByte);
 					m_videoMemory.r_Byte(m_16Color_secondFrameAddr + j + 1, outByte);
-					m_videoMemory.w_Byte(i + tText16_CellStructure::background, outByte);
-					m_videoMemory.r_Byte(m_16Color_secondFrameAddr + j + 2, outByte);
 					m_videoMemory.w_Byte(i + tText16_CellStructure::foreground, outByte);
+					m_videoMemory.r_Byte(m_16Color_secondFrameAddr + j + 2, outByte);
+					m_videoMemory.w_Byte(i + tText16_CellStructure::background, outByte);
 				}
 				u32 tmp = m_16Color_currentFrameAddr;
 				m_16Color_currentFrameAddr = m_16Color_secondFrameAddr;

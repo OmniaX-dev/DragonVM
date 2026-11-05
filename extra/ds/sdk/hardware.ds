@@ -39,6 +39,14 @@ inline sub vga_is_textSingle() -> bool {
 inline sub vga_enable_double_buffering(var enable: bool = true) {
 	if (not vga_is_text16())
 		return;
-	var flags: BitField32 = *cast<BitField32*>(VGARegisters.Flags);
-	flags.val(VGAFlags.DoubleBufferingEnabled, enable);
+	var flags: BitField32* = cast<BitField32*>(VGARegisters.Flags);
+	flags->val(VGAFlags.DoubleBufferingEnabled, enable);
+}
+
+inline sub read_cmos(var addr: u32) -> u32 {
+	return *cast<u32*>(addr);
+}
+
+inline sub write_cmos(var addr: u32, var value: u32) {
+	*cast<u32*>(addr) = value;
 }

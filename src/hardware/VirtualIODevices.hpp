@@ -384,6 +384,7 @@ namespace dragon
 					inline u32 getVRAMStart(void) { return m_vramStart; }
 					bool readVRAM_16Colors(u8 x, u8 y, tText16_Cell& outTextCell);
 					bool writeVRAM_16Colors(u8 x, u8 y, u8 character = 0, u8 background = 0xFF, u8 foreground = 0xFF);
+					bool writeVRAMFrame_16Colors(u32 newFrameAddr, u32 size);
 					bool clearVRAM_16Colors(u8 character = 0, u8 background = 0x00, u8 foreground = 0xFF);
 					void swapBuffers_16Colors(void);
 					void scroll_16Colors(void);

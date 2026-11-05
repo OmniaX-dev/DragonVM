@@ -3,6 +3,7 @@
 #include(<dpt.ds>)
 #include(int20.ds)
 #include(int30.ds)
+#include(allocator.ds)
 
 sub main() {
 	*cast<u8*>(VGARegisters.VideoMode) = VGAVideoModes.TextSingleColor;
@@ -10,7 +11,12 @@ sub main() {
 	set_interrupt_vector_entry(0x20, &__int_20_handler);
 	set_interrupt_vector_entry(0x30, &__int_30_handler);
 
-	__print_machine_info();
+	var stack_size: u32 = read_cmos(CMOSRegisters.StackSize);
+	var heap_size: u32 = 4*1024*1024;
+	var heap_addr: u32 = read_cmos(CMOSRegisters.MemoryStart) + read_cmos(CMOSRegisters.MemorySize) - stack_size - heap_size;
+	Allocator::init(cast<u8*>(heap_addr), heap_size);
+
+	__print_machine_info(stack_size + heap_size);
 	__load_mbr_data_block();
 
 	// var dpt_block: DPTBlock;
@@ -43,7 +49,7 @@ sub __load_mbr_data_block() {
 	raise_interrupt(0x20, INT20_LOAD_FROM_DDD_BLOCKING, cast<u32>(&ddd));
 }
 
-sub __print_machine_info() {
+sub __print_machine_info(var reserved_ram: u32) {
 	for (var i: u32 = 0; i < sizeof(BiosLogo) / sizeof(BiosLogo[0]); i++) {
 		TextSingle::print(BiosLogo[i]);
 		if (i == 1)
@@ -87,7 +93,7 @@ sub __print_machine_info() {
 			TextSingle::print(" Memory: ");
 			var memStart: u32 = *cast<u32*>(CMOSRegisters.MemoryStart);
 			var memSize: u32 = *cast<u32*>(CMOSRegisters.MemorySize);
-			var mem: u32 = memSize - memStart;
+			var mem: u32 = memSize - reserved_ram;
 			var buff: u8[10];
 			format_size(mem, buff, true, 2);
 			TextSingle::print(buff);

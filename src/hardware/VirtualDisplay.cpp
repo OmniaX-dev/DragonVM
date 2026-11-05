@@ -217,6 +217,13 @@ namespace dragon
 								graphics.writeVRAM_16Colors(x++, y, c, bg, fg);
 						break;
 					}
+					case tSignalValues::Text16Color_CopyFrame:
+					{
+						u32 frame_addr = cast<u32>(mem.read32(vga_addr + tRegisters::Text16FrameAddr));
+						u32 frame_size = cast<u32>(mem.read32(vga_addr + tRegisters::Text16FrameSize));
+						graphics.writeVRAMFrame_16Colors(frame_addr, frame_size);
+						break;
+					}
 					case tSignalValues::ClearSCreen:
 					{
 						const u8 fg = mem.read8(vga_addr + tRegisters::MemControllerFGCol);

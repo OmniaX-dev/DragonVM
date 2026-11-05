@@ -285,6 +285,8 @@ namespace dragon
 				inline static constexpr u8 StackSize              = 0x14;
 				inline static constexpr u8 ScreenRedrawRate       = 0x18;
 				inline static constexpr u8 BootDisk               = 0x19;
+				inline static constexpr u8 HeapStart              = 0x74;
+				inline static constexpr u8 HeapEnd                = 0x78;
 
 				inline static constexpr u8 DiskList               = 0x7C;
 
@@ -336,7 +338,7 @@ namespace dragon
 				inline static constexpr u16 HeaderReservedSizeBytes            = 7;
 				// Disk layout: the boot area (loaded at the RAM start by the BIOS), the DPT
 				// block, then the partitions.
-				inline static constexpr u32 BootAreaSize                        = 0x400000;	// 4 MiB
+				inline static constexpr u32 BootAreaSize                        = 0x400000;    // 4 MiB
 				inline static constexpr u32 DiskAddress                        = BootAreaSize;
 				inline static constexpr u16 DPT_ID_CODE                        = 0xF1CA;
 				inline static constexpr u16 EntrySizeBytes                        = 100;
@@ -505,10 +507,10 @@ namespace dragon
 			public:
 				// RAM size (machine config: ram_size_kb), in KiB. At least the disk's boot area
 				// (the BIOS loads it at the RAM start) and a 64 KiB stack (at the end of the RAM).
-				inline static constexpr u32 DefaultRAMSizeKB = 8192;
+				inline static constexpr u32 DefaultRAMSizeKB = 16384;
 				inline static constexpr u32 MinRAMSizeKB = DPTStructure::BootAreaSize / 1024 + 64;
 				inline static constexpr u32 MaxRAMSizeKB = (MemoryMapAddresses::Memory_Max - MemoryMapAddresses::Memory_Start + 1) / 1024;
-				inline static constexpr u32 DefaultStackSize = 0x10000;
+				inline static constexpr u32 DefaultStackSize = 0x200000;
 				// Bytes the disk interface copies per cycle (machine config: disk_block_size).
 				inline static constexpr u32 DefaultDiskBlockSize = 1024;
 				inline static constexpr u32 MinDiskBlockSize = 1;

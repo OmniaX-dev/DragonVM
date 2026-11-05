@@ -42,6 +42,9 @@
         DisplayRedrawRate: (1 byte) 0x18
         BootDisk: (1 byte) 0x19
 
+        HeapStart: (4 bytes) 0x74
+        HeapEnd: (4 bytes) 0x78
+
         DiskList: (4 bytes) 0x7C
     0x0100007F
     -------
@@ -134,6 +137,8 @@
 
         0x30: (4 bytes) Text 16 Colors Buffered String Address
         0x34: (4 bytes) Text 16 Colors Buffered String Cell Address
+        0x38: (4 bytes) Text 16 Colors Copy Frame Address
+        0x42: (4 bytes) Text 16 Colors Copy Frame Size
 
         0x7C: Flags (4 Bytes)
             0b00000000.00000001: Double Buffering Enabled
@@ -170,6 +175,8 @@
         0x10: Disk Interface
         0x11: Disk Interface - Get disk list
         0x12: Disk Interface - Load from DDD - BLOCKING
+        0x20: Allocate heap (Uses R9 for size, R8 for the out address to store the heap block addr)
+        0x21: Free heap (Uses R9 for heap block addr, stores 1 or 0 as result in RV)
     0x30: BIOS Video Interrupt (Uses R10 register for specific functionality)
         0x01: Print Char in Text Single Mode (char stored in R9 register)
         0x02: New Line in Text Single Mode

@@ -11,23 +11,23 @@ var keyRingBuff: RingBuffer;
 
 var scrx: u32 = *cast<u32*>(CMOSRegisters.ScreenColumns);
 var scry: u32 = *cast<u32*>(CMOSRegisters.ScreenRows);
+var screenBufferSize: u32 = scrx * scry * 4;
+var screenBuffer: u8* = null;
+var pressedKey: u32 = 0;
 
 sub main() {
 	TextSingle::clear_screen();
 	vga_set_video_mode(VGAVideoModes.Text16Color);
 
 	var dpt_block: DPTBlock;
-	if (not dpt_load_block(&dpt_block))
-	{
-		Text16::print("No valid DPT block found.", 0, 0, DefaultPaletteText16.Red, DefaultPaletteText16.Black);
-		return;
-	}
+	halt_on_condition(not dpt_load_block(&dpt_block), "No valid DPT block found.");
+
 	var boot_part: DPTPartitionBlock* = get_boot_partition(&dpt_block);
-	if (not boot_part)
-	{
-		Text16::print("No bootable partition found.", 0, 0, DefaultPaletteText16.Red, DefaultPaletteText16.Black);
-		return;
-	}
+	halt_on_condition(not boot_part, "No bootable partition found.");
+
+	raise_interrupt(0x20, INT20_ALLOC_HEAP, screenBufferSize, cast<u32>(&screenBuffer));
+	halt_on_condition(not screenBuffer, "Screen buffer allocation failed.");
+	Text16::print(screenBufferSize, 0, 0, DefaultPaletteText16.Blue, DefaultPaletteText16.Yellow);
 
 	keyRingBuff.init(keyBuff, sizeof(u32), KEY_BUFF_SIZE);
 
@@ -40,27 +40,30 @@ sub main() {
 		if (keyRingBuff.pop(&key)) {
 			on_key_pressed(key);
 		}
-		Text16::clear_screen(DefaultPaletteText16.Black);
-
+		raise_interrupt(0x30, INT30_COPY_FRAME_TEXT16, cast<u32>(screenBuffer), screenBufferSize);
 		raise_interrupt(0x30, INT30_SWAP_BUFFERS_TEXT16);
 	}
 
 	print_system_info(dpt_block.versionMaj, dpt_block.versionMin);
 
 	load_kernel0_block(boot_part);
+	raise_interrupt(0x20, INT20_FREE_HEAP, cast<u32>(screenBuffer));
 	low { jmp $DPTBootPartStructure.CodeLoadAddr }
 }
 
 sub on_key_pressed(var key: u32) {
-	if (isprint(cast<u8>(key))) {
-
+	static var i: u32 = 0; // THis will eventually overflow, but it's just for testing
+	if (isprint(key)) {
+		screenBuffer[i++] = cast<u8>(key);
+		screenBuffer[i++] = DefaultPaletteText16.Green;
+		screenBuffer[i++] = DefaultPaletteText16.Black;
+		i++; // 1 Reserved byte
 	}
 }
 
 interrupt sub key_pressed_handler() {
-	static var i: u32 = 0;
-	var key: u32 = *cast<u32*>(KeyboardRegisters.KeyCode);
-	if (not keyRingBuff.push(cast<void*>(key)))
+	pressedKey = *cast<u32*>(KeyboardRegisters.KeyCode);
+	if (not keyRingBuff.push(&pressedKey))
 	{
 		//TODO: Handle missed key presses
 	}
@@ -91,4 +94,12 @@ sub print_system_info(var dpt_ver_maj: u8, var dpt_ver_min: u8) {
 	Text16::print(cast<u32>(dpt_ver_maj), 26, 0, DefaultPaletteText16.Green, DefaultPaletteText16.Black);
 	Text16::print('.', 27, 0, DefaultPaletteText16.Green, DefaultPaletteText16.Black);
 	Text16::print(cast<u32>(dpt_ver_min), 28, 0, DefaultPaletteText16.Green, DefaultPaletteText16.Black);
+}
+
+sub halt_on_condition(var condition: bool, var err_msg: string) {
+	if (condition)
+	{
+		Text16::print(err_msg, 0, 0, DefaultPaletteText16.Red, DefaultPaletteText16.Black);
+		low { hlt };
+	}
 }

@@ -1,0 +1,79 @@
+#once
+
+#include(<bios.ds>)
+
+struct __block {
+    var size: u32;   // total block size including this header, multiple of 8
+    var tag: u32;    // __TAG_FREE or __TAG_USED, doubles as a corruption check
+};
+
+const __HDR: u32       = 8;            // sizeof(__block)
+const __ALIGN: u32     = 8;
+const __MIN_SPLIT: u32 = __HDR + __ALIGN;  // smallest leftover worth splitting off
+const __TAG_FREE: u32  = 0x46524545;   // "FREE"
+const __TAG_USED: u32  = 0x55534544;   // "USED"
+
+struct Allocator {
+	priv inline static sub __heap_start() -> u8* {
+		return cast<u8*>(read_cmos(CMOSRegisters.HeapStart));
+	}
+	priv inline static sub __heap_end() -> u8* {
+		return cast<u8*>(read_cmos(CMOSRegisters.HeapEnd));
+	}
+	priv inline static sub __next_block(var b: __block*) -> __block* {
+		return cast<__block*>(cast<u8*>(b) + b->size);
+	}
+	// Merge every free block that directly follows b into b.
+	priv static sub __coalesce(var b: __block*) {
+		var nx: __block*;
+		while (cast<u8*>(nx = Allocator::__next_block(b)) < Allocator::__heap_end() && nx->tag == __TAG_FREE) {
+			b->size += nx->size;
+	        nx->tag = 0;            // wipe the stale header
+		}
+	}
+	static sub init(var start: u8*, var size: u32) {
+		var pad: u32 = (__ALIGN - (cast<u32>(start) & (__ALIGN - 1))) & (__ALIGN - 1);
+		write_cmos(CMOSRegisters.HeapStart, cast<u32>(start) + pad);
+	    size = (size - pad) & ~(__ALIGN - 1);
+	    write_cmos(CMOSRegisters.HeapEnd, cast<u32>(Allocator::__heap_start()) + size);
+
+	    var b: __block* = cast<__block*>(Allocator::__heap_start());  // one big free block
+	    b->size = size;
+	    b->tag  = __TAG_FREE;
+	}
+	static sub alloc(var n: u32) -> void* {
+	    if (n == 0 || n > cast<u32>(Allocator::__heap_end() - Allocator::__heap_start()))
+	        return null;
+
+	    var need: u32 = (n + __HDR + __ALIGN - 1) & ~(__ALIGN - 1);
+
+	    for (var b: __block* = cast<__block*>(Allocator::__heap_start()); cast<u8*>(b) < Allocator::__heap_end(); b = Allocator::__next_block(b)) {
+	        if (b->tag != __TAG_FREE)
+	            continue;
+	        Allocator::__coalesce(b);                        // pick up neighbours freed earlier
+	        if (b->size < need)
+	            continue;
+
+	        if (b->size - need >= __MIN_SPLIT) {  // split, leftover stays free
+	            var rest: __block* = cast<__block*>(cast<u8*>(b) + need);
+	            rest->size = b->size - need;
+	            rest->tag  = __TAG_FREE;
+	            b->size    = need;
+	        }
+	        b->tag = __TAG_USED;
+	        return cast<u8*>(b) + __HDR;
+	    }
+	    return null;                         // out of memory
+	}
+	// Returns false on a bad pointer or double free.
+	static sub free(var p: void*) -> bool {
+	    if (!p)
+	        return true;
+	    var b: __block* = cast<__block*>(cast<u8*>(p) - __HDR);
+	    if (cast<u8*>(b) < Allocator::__heap_start() || cast<u8*>(b) >= Allocator::__heap_end() || b->tag != __TAG_USED)
+	        return false;
+	    b->tag = __TAG_FREE;
+	    Allocator::__coalesce(b);
+	    return true;
+	}
+};
