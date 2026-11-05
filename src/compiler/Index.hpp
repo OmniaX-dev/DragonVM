@@ -14,6 +14,7 @@ namespace dscript
 		int length { 0 };
 		SourcePos def;			// where it is declared (file empty: builtin, nowhere to go)
 		std::string hover;		// dscript code describing it
+		bool define { false };	// the use of a #define (the names it expands to don't replace it)
 	};
 
 	class Index
@@ -21,11 +22,14 @@ namespace dscript
 		public:
 			typedef std::tuple<std::string, int, int> Key;
 
-			void add(const SourcePos& pos, int length, const SourcePos& def, const std::string& hover)
+			void add(const SourcePos& pos, int length, const SourcePos& def, const std::string& hover, bool define = false)
 			{
 				if (pos.file.empty() || pos.line <= 0 || length <= 0)
 					return;
-				m_entries[Key(pos.file, pos.line, pos.column)] = { pos, length, def, hover };
+				auto it = m_entries.find(Key(pos.file, pos.line, pos.column));
+				if (it != m_entries.end() && it->second.define && !define)
+					return;
+				m_entries[Key(pos.file, pos.line, pos.column)] = { pos, length, def, hover, define };
 			}
 
 			// The entry under file:line:column (1-based), or nullptr.

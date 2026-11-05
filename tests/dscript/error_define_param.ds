@@ -1,0 +1,5 @@
+// expect-error: duplicate parameter 'a' in SUM
+#define(SUM(a, a) = a + a)
+sub main() -> i32 {
+    return 0;
+}

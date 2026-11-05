@@ -1,0 +1,7 @@
+// expect-error: error_define_use_pos.ds:6
+// Errors in a define's tokens point at the use.
+#define(DEREF(p) = *p)
+sub main() -> i32 {
+    var x: i32 = 1;
+    return DEREF(x);
+}

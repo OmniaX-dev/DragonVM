@@ -1,0 +1,5 @@
+// expect-error: ')' expected after the arguments
+#define(TWICE(a) = (a) * 2)
+sub main() -> i32 {
+    return TWICE(1;
+}

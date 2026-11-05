@@ -3,6 +3,7 @@
 #include <sstream>
 #include <filesystem>
 #include <cctype>
+#include <algorithm>
 
 namespace dscript
 {
@@ -54,16 +55,127 @@ namespace dscript
 		return true;
 	}
 
+	// Tokens back to dscript text (for the language server's hover of a define's use).
+	static std::string renderTokens(const std::vector<Token>& tokens, size_t from)
+	{
+		auto escape = [](const std::string& text, char quote) {
+			std::string r;
+			for (char c : text)
+			{
+				switch (c)
+				{
+					case '\n': r += "\\n"; break;
+					case '\t': r += "\\t"; break;
+					case '\r': r += "\\r"; break;
+					case '\0': r += "\\0"; break;
+					case '\\': r += "\\\\"; break;
+					default:
+						if (c == quote)
+							r += '\\';
+						r += c;
+				}
+			}
+			return r;
+		};
+		auto isOperand = [](const Token& t) {
+			return t.kind == TokenKind::Identifier || t.kind == TokenKind::Integer || t.kind == TokenKind::String
+				|| (t.kind == TokenKind::Keyword && t.text != "not" && t.text != "and" && t.text != "or")
+				|| (t.kind == TokenKind::Punct && (t.text == ")" || t.text == "]"));
+		};
+		std::string out;
+		for (size_t i = from; i < tokens.size(); i++)
+		{
+			const Token& t = tokens[i];
+			std::string text = t.text;
+			if (t.kind == TokenKind::Integer)
+				text = t.isChar ? "'" + escape(std::string(1, (char)t.value), '\'') + "'" : std::to_string(t.value);
+			else if (t.kind == TokenKind::String)
+				text = "\"" + escape(t.text, '"') + "\"";
+			else if (t.kind == TokenKind::LowBlock)
+				text = "{ ... }";
+			if (i > from)
+			{
+				const Token& prev = tokens[i - 1];
+				const std::string& pt = prev.text;
+				bool space = true;
+				if (prev.kind == TokenKind::Punct && (pt == "(" || pt == "[" || pt == "." || pt == "->" || pt == "::" || pt == "!" || pt == "~"))
+					space = false;
+				else if (t.kind == TokenKind::Punct && (t.text == ")" || t.text == "]" || t.text == "," || t.text == ";" || t.text == "." || t.text == "->" || t.text == "::"))
+					space = false;
+				else if (t.kind == TokenKind::Punct && (t.text == "(" || t.text == "[") && isOperand(prev))
+					space = false;	// a call, an index
+				else if (prev.kind == TokenKind::Punct && (pt == "-" || pt == "*" || pt == "&" || pt == "+"))
+				{
+					// unary: after an operator, '(' ',' or at the start
+					const bool unary = (i - 1 == from) || !isOperand(tokens[i - 2]);
+					space = !unary;
+				}
+				if (space)
+					out += ' ';
+			}
+			out += text;
+		}
+		return out;
+	}
+
 	Preprocessor::Preprocessor(const std::vector<std::string>& includeDirs) : m_includeDirs(includeDirs)
 	{
 	}
 
 	void Preprocessor::define(const std::string& name, const std::string& value)
 	{
-		Lexer lexer(value, "<command line>");
-		std::vector<Token> tokens = lexer.tokenize();
-		tokens.pop_back();	// End
-		m_defines[name] = tokens;
+		defineFrom({ "<command line>", 0, 0 }, name, value, name + (value.empty() ? "" : " = " + value));
+	}
+
+	// nameSpec: NAME or NAME(a, b, ...).
+	void Preprocessor::defineFrom(const SourcePos& pos, const std::string& nameSpec, const std::string& value, const std::string& text)
+	{
+		Define def;
+		def.pos = (pos.line > 0) ? pos : SourcePos {  };	// nowhere to go for -D
+		def.text = "#define(" + text + ")";
+		std::string defName = nameSpec;
+		const size_t open = nameSpec.find('(');
+		if (open != std::string::npos)
+		{
+			defName = trim(nameSpec.substr(0, open));
+			if (nameSpec.back() != ')')
+				error(pos, "#define: ')' expected after the parameters of " + defName);
+			def.function = true;
+			const std::string list = trim(nameSpec.substr(open + 1, nameSpec.size() - open - 2));
+			if (!list.empty())
+			{
+				size_t start = 0;
+				while (true)
+				{
+					const size_t comma = list.find(',', start);
+					const std::string param = trim(list.substr(start, comma == std::string::npos ? std::string::npos : comma - start));
+					if (!isIdentifier(param) || Lexer::isKeyword(param))
+						error(pos, "invalid #define parameter of " + defName + ": '" + param + "'");
+					for (const auto& p : def.params)
+					{
+						if (p == param)
+							error(pos, "#define: duplicate parameter '" + param + "' in " + defName);
+					}
+					def.params.push_back(param);
+					if (comma == std::string::npos)
+						break;
+					start = comma + 1;
+				}
+			}
+		}
+		if (!isIdentifier(defName))
+			error(pos, "invalid #define name: " + defName);
+		if (Lexer::isKeyword(defName))
+			error(pos, "cannot #define a keyword: " + defName);
+		Lexer lexer(value, pos.file, pos.line > 0 ? pos.line : 1);
+		def.body = lexer.tokenize();
+		def.body.pop_back();	// End
+		for (const Token& t : def.body)
+		{
+			if (t.kind == TokenKind::Directive || t.kind == TokenKind::LowBlock)
+				error(pos, "#define " + defName + ": a directive or a low block can't be in a define");
+		}
+		m_defines[defName] = def;
 	}
 
 	std::vector<Token> Preprocessor::processFile(const std::string& path)
@@ -88,37 +200,140 @@ namespace dscript
 	void Preprocessor::processTokens(const std::vector<Token>& tokens, const std::string& directory, std::vector<Token>& out)
 	{
 		std::vector<Conditional> stack;
+		// The tokens between two directives are expanded together (a call's arguments can be on
+		// several lines), with the defines of that point.
+		std::vector<Token> pending;
+		auto flush = [&](void) {
+			std::vector<std::string> hidden;
+			expand(pending, out, nullptr, hidden, 0);
+			pending.clear();
+		};
 		for (const Token& tok : tokens)
 		{
 			if (tok.kind == TokenKind::End)
 				break;
 			if (tok.kind == TokenKind::Directive)
 			{
+				flush();
 				directive(tok, directory, out, stack);
 				continue;
 			}
 			if (!stack.empty() && !stack.back().active)
 				continue;
-			expand(tok, out, 0);
+			pending.push_back(tok);
 		}
+		flush();
 		if (!stack.empty())
 			error(stack.back().pos, "#if without #endif");
 	}
 
-	void Preprocessor::expand(const Token& tok, std::vector<Token>& out, int depth)
+	void Preprocessor::expand(const std::vector<Token>& in, std::vector<Token>& out, const SourcePos* usePos, std::vector<std::string>& hidden, int depth)
 	{
-		if (tok.kind == TokenKind::Identifier && m_defines.count(tok.text) > 0)
-		{
-			if (depth > 32)
-				error(tok.pos, "#define expansion too deep (recursive definition?): " + tok.text);
-			for (Token t : m_defines[tok.text])
-			{
-				t.pos = tok.pos;	// errors point at the use
-				expand(t, out, depth + 1);
-			}
+		if (in.empty())
 			return;
+		if (depth > 64)
+			error(usePos != nullptr ? *usePos : in.front().pos, "#define expansion too deep");
+		for (size_t i = 0; i < in.size(); i++)
+		{
+			const Token& tok = in[i];
+			auto it = (tok.kind == TokenKind::Identifier) ? m_defines.find(tok.text) : m_defines.end();
+			if (it == m_defines.end() || std::find(hidden.begin(), hidden.end(), tok.text) != hidden.end())
+			{
+				out.push_back(tok);
+				continue;
+			}
+			const Define& def = it->second;
+			const SourcePos pos = (usePos != nullptr) ? *usePos : tok.pos;
+			std::vector<Token> replaced;
+			if (!def.function)
+			{
+				for (Token t : def.body)
+				{
+					t.pos = pos;	// errors point at the use
+					replaced.push_back(t);
+				}
+			}
+			else
+			{
+				// Without '(' after it, the name stays (it isn't a call).
+				if (i + 1 >= in.size() || in[i + 1].kind != TokenKind::Punct || in[i + 1].text != "(")
+				{
+					if (usePos == nullptr && m_index != nullptr)
+						m_index->add(tok.pos, (int)tok.text.size(), def.pos, def.text, true);
+					out.push_back(tok);
+					continue;
+				}
+				// The arguments: split on the commas outside (), [] and {}.
+				std::vector<std::vector<Token>> args(1);
+				int nesting = 0;
+				size_t j = i + 2;
+				for ( ; j < in.size(); j++)
+				{
+					const Token& t = in[j];
+					if (t.kind == TokenKind::Punct)
+					{
+						if (t.text == "(" || t.text == "[" || t.text == "{")
+							nesting++;
+						else if (t.text == ")" || t.text == "]" || t.text == "}")
+						{
+							if (nesting == 0 && t.text == ")")
+								break;
+							nesting--;
+						}
+						else if (t.text == "," && nesting == 0)
+						{
+							args.emplace_back();
+							continue;
+						}
+					}
+					args.back().push_back(t);
+				}
+				if (j >= in.size())
+					error(tok.pos, "#define " + tok.text + ": ')' expected after the arguments (a call can't contain a directive)");
+				if (args.size() == 1 && args[0].empty() && def.params.size() == 0)
+					args.clear();
+				if (args.size() != def.params.size())
+					error(tok.pos, tok.text + " expects " + std::to_string(def.params.size()) + " argument" + (def.params.size() == 1 ? "" : "s") + ", got " + std::to_string(args.size()));
+				for (size_t a = 0; a < args.size(); a++)
+				{
+					if (args[a].empty() && def.params.size() > 1)
+						error(tok.pos, tok.text + ": argument " + std::to_string(a + 1) + " is empty");
+				}
+				// The arguments are expanded first (keeping their own positions), then put in the body.
+				std::vector<std::vector<Token>> expanded(args.size());
+				for (size_t a = 0; a < args.size(); a++)
+					expand(args[a], expanded[a], usePos, hidden, depth + 1);
+				for (Token t : def.body)
+				{
+					if (t.kind == TokenKind::Identifier)
+					{
+						auto p = std::find(def.params.begin(), def.params.end(), t.text);
+						if (p != def.params.end())
+						{
+							const auto& arg = expanded[p - def.params.begin()];
+							replaced.insert(replaced.end(), arg.begin(), arg.end());
+							continue;
+						}
+					}
+					t.pos = pos;
+					replaced.push_back(t);
+				}
+				i = j;	// the ')'
+			}
+			// Rescanned for more defines (not this one).
+			const size_t start = out.size();
+			hidden.push_back(tok.text);
+			expand(replaced, out, &pos, hidden, depth + 1);
+			hidden.pop_back();
+			// The hover of a use (in the source, not in another define): the define and what this
+			// use becomes.
+			if (usePos == nullptr && m_index != nullptr)
+			{
+				std::string hover = def.text + "\n// expands to:\n";
+				hover += (out.size() > start) ? renderTokens(out, start) : "// (nothing)";
+				m_index->add(tok.pos, (int)tok.text.size(), def.pos, hover, true);
+			}
 		}
-		out.push_back(tok);
 	}
 
 	std::string Preprocessor::argument(const Token& tok, const std::string& rest, const std::string& name)
@@ -218,21 +433,14 @@ namespace dscript
 		if (name == "define")
 		{
 			std::string arg = argument(tok, rest, name);
-			std::string defName = arg, value = "";
+			std::string nameSpec = arg, value = "";
 			size_t eq = arg.find('=');
 			if (eq != std::string::npos)
 			{
-				defName = trim(arg.substr(0, eq));
+				nameSpec = trim(arg.substr(0, eq));
 				value = trim(arg.substr(eq + 1));
 			}
-			if (!isIdentifier(defName))
-				error(tok.pos, "invalid #define name: " + defName);
-			if (Lexer::isKeyword(defName))
-				error(tok.pos, "cannot #define a keyword: " + defName);
-			Lexer lexer(value, tok.pos.file, tok.pos.line);
-			std::vector<Token> tokens = lexer.tokenize();
-			tokens.pop_back();
-			m_defines[defName] = tokens;
+			defineFrom(tok.pos, nameSpec, value, arg);
 		}
 		else if (name == "undef")
 			m_defines.erase(argument(tok, rest, name));
@@ -379,7 +587,15 @@ namespace dscript
 	{
 		Lexer lexer(text, tok.pos.file, tok.pos.line);
 		std::vector<Token> raw = lexer.tokenize();
+		// The columns in the line (the expression is in the directive's text, after the '#').
+		const size_t offset = tok.text.find(text);
+		if (offset != std::string::npos)
+		{
+			for (Token& t : raw)
+				t.pos.column += tok.pos.column + (int)offset;
+		}
 		ExprReader r;
+		std::vector<Token> pending;
 		// defined(NAME) / defined NAME first, then the defines are expanded.
 		for (size_t i = 0; i < raw.size(); i++)
 		{
@@ -402,16 +618,16 @@ namespace dscript
 				Token v = t;
 				v.kind = TokenKind::Integer;
 				v.value = m_defines.count(defName) > 0;
-				r.toks.push_back(v);
+				pending.push_back(v);
 				continue;
 			}
 			if (t.kind == TokenKind::End)
-			{
-				r.toks.push_back(t);
 				break;
-			}
-			expand(t, r.toks, 0);
+			pending.push_back(t);
 		}
+		std::vector<std::string> hidden;
+		expand(pending, r.toks, nullptr, hidden, 0);
+		r.toks.push_back(raw.back());	// End
 		int64_t value = parseTernary(r);
 		if (r.peek().kind != TokenKind::End)
 			error(r.peek().pos, "#if: unexpected '" + r.peek().text + "'");

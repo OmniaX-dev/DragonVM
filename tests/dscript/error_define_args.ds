@@ -1,0 +1,5 @@
+// expect-error: MAX expects 2 arguments, got 3
+#define(MAX(a, b) = ((a) > (b) ? (a) : (b)))
+sub main() -> i32 {
+    return MAX(1, 2, 3);
+}

@@ -355,6 +355,7 @@ sub print(var text: string) -> void {
 #include(file.ds)          relative to the file, then the -I directories
 #include(<file.ds>)        the -I directories only
 #define(NAME = tokens)     #define(NAME)     #undef(NAME)
+#define(NAME(a, b) = tokens)                 with parameters
 #if(expr) #ifdef(NAME) #ifndef(NAME) #elif(expr) #else #endif
 #once                      this file is included once
 #error(message)  #warning(message)
@@ -362,6 +363,22 @@ sub print(var text: string) -> void {
 Defined names are replaced (as tokens) everywhere. `#if` expressions use integers, the C
 operators, `and` / `or` / `not` and `defined(NAME)`. Predefined: `__DSCRIPT__`, and `__RAW__`
 with `--raw`; more with `-D NAME=value`.
+
+A define with parameters is replaced only where its name is followed by `(`; elsewhere (`var
+f = NAME;`) the name stays as it is:
+```
+#define(MAX(a, b) = ((a) > (b) ? (a) : (b)))
+#define(ZERO() = 0)
+var m: i32 = MAX(x, y + 1);
+```
+- The arguments are split on the commas outside `()`, `[]` and `{}`; a call can span lines,
+  but not a directive. The count must match (`MAX expects 2 arguments, got 3`).
+- The arguments are expanded first, then put in place of the parameters; the result is
+  scanned again for more defines. A define is never replaced inside its own expansion, so
+  `#define(log(x) = log(x, 0))` calls the sub `log`.
+- Parenthesize the parameters in the tokens, as in C: they are put in as tokens, not values.
+- Errors in a define's tokens point at the use; dsls' hover on a use shows the define and what
+  that use expands to. No stringizing (`#a`) or pasting (`a ## b`).
 
 
 ## Generated code
@@ -412,7 +429,7 @@ machine config (e.g. one with a known-good BIOS).
 ## Limitations (for now)
 
 - One source file (plus includes) per program: no separate compilation / linking.
-- `#define` has no parameters.
+- `#define` has no stringizing or token pasting.
 - No `switch`, `goto`, unions, floating point, variadic subs.
 - Structs are passed and returned through pointers.
 - Lambdas do not capture the variables of the sub around them.

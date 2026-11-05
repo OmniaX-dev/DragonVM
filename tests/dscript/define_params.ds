@@ -1,0 +1,53 @@
+// expect-rv: 0
+#include(check.ds)
+
+sub self(var x: i32) -> i32 {
+    return x * 2;
+}
+
+sub f(var x: i32) -> i32 {
+    return x;
+}
+
+sub pick(var a: i32, var b: i32) -> i32 {
+    return a - b;
+}
+
+#define(MAX(a, b) = ((a) > (b) ? (a) : (b)))
+#define(SQUARE(x) = ((x) * (x)))
+#define(ZERO() = 0)
+#define(ADD3(a, b, c) = a + b + c)
+#define(TEN = 10)
+// A define in a body and in the arguments; a call over several lines.
+#define(CLAMP(v, lo, hi) = MAX(lo, MAX(-(hi), -(v)) * -1))
+// Never expanded inside itself: self(x) becomes a call to the sub self.
+#define(self(x) = self(x + 1))
+// Without '(' the name stays.
+#define(f(x) = 0)
+// A comma inside parentheses doesn't split.
+#define(FIRST(a, b) = a)
+
+#if(MAX(1, 2) == 2 and SQUARE(3) == 9)
+const P = 1;
+#else
+const P = 0;
+#endif
+
+sub main() -> i32 {
+    var a: i32 = 3;
+    var b: i32 = 7;
+    check(1, MAX(a, b) == 7);
+    check(2, MAX(b, a) == 7);
+    check(3, SQUARE(a + 1) == 16);
+    check(4, ZERO() == 0);
+    check(5, ADD3(1, 2,
+                  3) == 6);
+    check(6, MAX(TEN, SQUARE(3)) == 10);
+    check(7, CLAMP(15, 0, 10) == 10 && CLAMP(5, 0, 10) == 5);
+    check(8, self(1) == 4);
+    var g: sub(i32) -> i32 = f;
+    check(9, g(5) == 5 && f(5) == 0);
+    check(10, FIRST(pick(9, 4), 1) == 5);
+    check(11, P == 1);
+    return result();
+}
