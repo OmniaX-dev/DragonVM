@@ -9,6 +9,7 @@
 #include <fstream>
 #include <filesystem>
 #include <algorithm>
+#include <ostd/utils/Hash.hpp>
 
 using namespace dscript;
 
@@ -54,7 +55,8 @@ static void printHelp(void)
 		"    --load <address>        .load: the address the binary runs at (default 0x01010000, the RAM)\n"
 		"    --fixed <size>,<fill>   .fixed: pads the binary to exactly <size> bytes\n"
 		"    --header <name>         .header: adds a header (e.g. KERNEL0_BOOT)\n"
-		"    --save-disassembly <dir>  Saves the debugger disassembly (as dasm does)\n"
+		"    --save-disassembly <dir/file>  Saves the debugger disassembly, with the source lines (in a directory:\n"
+		"                            named like dasm's, for ddb)\n"
 		"  --rom                     A ROM image (e.g. the BIOS): --raw, loaded at 0x00000000 unless --load is\n"
 		"                            given, and everything that would write into the program is an error\n"
 		"                            (global variables: use const and RAM instead). Defines __ROM__\n"
@@ -308,7 +310,17 @@ int main(int argc, char** argv)
 			return 1;
 		}
 		if (!o.disassemblyDir.empty())
-			dragon::code::Assembler::saveDisassemblyToFile(o.disassemblyDir, std::filesystem::path(o.output).filename().string());
+		{
+			// A directory (as for ddb: one file per program, named like dasm's), or a file.
+			std::string file = o.disassemblyDir;
+			if (file.back() == '/' || std::filesystem::is_directory(file))
+			{
+				std::filesystem::create_directories(file);
+				file = (std::filesystem::path(file) / (ostd::Hash::md5(String(o.output)).cpp_str() + ".dds")).string();
+			}
+			if (!dragon::code::Assembler::saveDisassemblyToFile(String(file), std::filesystem::path(o.output).filename().string()))
+				std::cerr << "dsc: cannot save the disassembly to " << file << "\n";
+		}
 		dasmAfterAssembly(o);
 		if (o.verbose)
 			std::cout << o.output << ": " << bin.size() << " bytes (raw)\n";

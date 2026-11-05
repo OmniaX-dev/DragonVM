@@ -9,6 +9,7 @@
 #include "../hardware/VirtualCPU.hpp"
 #include "../hardware/VirtualIODevices.hpp"
 #include "History.hpp"
+#include "DisassemblyLoader.hpp"
 
 namespace dragon
 {
@@ -105,7 +106,17 @@ namespace dragon
 			bool enabled { true };
 			bool debugBreak { false };
 		};
-		public: enum class eMode { Paused = 0, Running, StepOver, StepOut, RunTo, ReverseRunning };
+		// Where an instruction comes from (programs compiled / assembled with source lines).
+		public: struct tSourceLocation
+		{
+			i32 file { -1 };			// index in tDebuggerData::sources; -1: unknown
+			i32 line { 0 };
+			u8 inlineDepth { 0 };		// inside how many inlined subs
+			bool statement { false };	// the first instruction of the line
+			inline bool isValid(void) const { return file >= 0; }
+			inline bool sameLine(const tSourceLocation& other) const { return file == other.file && line == other.line && inlineDepth == other.inlineDepth; }
+		};
+		public: enum class eMode { Paused = 0, Running, StepOver, StepOut, RunTo, ReverseRunning, StepLine };
 		public: enum class eView { Disassembly = 0, Registers, Memory, Stack, CallTrace, Tracker, Breakpoints, History, Console };
 		public: struct tDebuggerData
 		{
@@ -115,6 +126,10 @@ namespace dragon
 			DisassemblyList labels;
 			DisassemblyList data;
 			stdvec<tTrackedData> tracked;
+			// The source files of the programs (code[].srcFile are indices in it).
+			stdvec<tSourceFile> sources;
+			// Instruction address -> index in `code`, for the instructions with a source line.
+			std::unordered_map<u32, size_t> sourceLines;
 			i32 labelLineLength { 40 };
 			String disassemblyDirectory { "disassembly" };
 			std::map<u32, tBreakPoint> breakpoints;
@@ -155,7 +170,9 @@ namespace dragon
 			public:
 				static void colorizeInstructionBody(ostd::OutputHandlerBase& out, const String& instBody, const DisassemblyList& labelList);
 				static void colorCodeInstructions(ostd::OutputHandlerBase& out, const String& inst, const DisassemblyList& labelList);
-				static void printDisassemblyLine(ostd::OutputHandlerBase& out, const Debugger& dbg, const code::Assembler::tDisassemblyLine& line);
+				// `indent`: the columns before the address (-1: the gutter and LabelIndent).
+				// `labels`: the program's own (nullptr: every program's).
+				static void printDisassemblyLine(ostd::OutputHandlerBase& out, const Debugger& dbg, const code::Assembler::tDisassemblyLine& line, i32 indent = -1, const DisassemblyList* labels = nullptr);
 				// A label line, between the instructions (which are LabelIndent columns further right).
 				static void printDisassemblyLabel(ostd::OutputHandlerBase& out, const String& label);
 				inline static constexpr i32 LabelIndent { 8 };
@@ -197,6 +214,10 @@ namespace dragon
 			void stepOver(void);
 			void stepOut(void);
 			void runTo(u32 address);
+			// Runs until another source line: `into` stops in called subs too (with source lines),
+			// otherwise calls, interrupts and inlined subs run whole. Without a source line at the
+			// IP, steps one instruction (into / over).
+			void stepLine(bool into);
 			void stepBack(u32 count = 1);
 			void reverseContinue(void);
 			// Moves to a recorded history position.
@@ -239,6 +260,17 @@ namespace dragon
 			void untrackAll(void);
 			// Makes a tracked item a watch (or not).
 			bool setWatch(u32 address, bool breakOnChange);
+			// Breakpoints on a source line ("file:line", the file name or its end): at the first
+			// instruction of the line (of each copy: inlined subs), or of the next line with code.
+			// Returns the addresses (empty: no code there); outLine: the line used.
+			stdvec<u32> findSourceLine(const String& fileAndLine, i32* outLine = nullptr, String* outError = nullptr) const;
+
+			// ================================ SOURCE LINES ================================
+			tSourceLocation getSourceLocation(u32 address) const;
+			// nullptr if the index is invalid.
+			const tSourceFile* getSourceFile(i32 index) const;
+			// "file.ds:42" ("" without a source line).
+			String describeSourceLocation(u32 address) const;
 			// Writes a register (an edit, recorded in the history).
 			bool setRegister(const String& name, i64 value);
 			// Writes memory (an edit, recorded in the history).
@@ -277,10 +309,13 @@ namespace dragon
 			void exec_track_command(const String& args, bool breakOnChange);
 			void exec_print_command(const String& args);
 			void exec_break_command(const String& args);
+			void exec_list_command(const String& args);
 			void process_errors(void);
 			// Offset in the history state of the byte the CPU sees at a bus address; -1 if none.
 			i64 bus_state_offset(u32 address) const;
 			void notify_state_changed(void);
+			// debug_print's text, in the console (a line at a time; flush: the rest too).
+			void debug_print(const std::string& text, bool flush = false);
 			void show_view(eView view, i64 argument = -1);
 
 		private:
@@ -298,6 +333,10 @@ namespace dragon
 			i32 m_callDepth { 0 };
 			i32 m_targetDepth { 0 };
 			u32 m_runToAddress { 0 };
+			std::string m_debugPrintLine;
+			tSourceLocation m_stepLineFrom;
+			i32 m_stepLineDepth { 0 };
+			bool m_stepLineInto { false };
 			u32 m_stepsLeft { 0 };
 
 			f64 m_clockRate { 2000.0 };

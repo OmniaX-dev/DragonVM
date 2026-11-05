@@ -26,6 +26,7 @@ module.exports = grammar({
 			$.label,
 			$.instruction,
 			$.data_entry,
+			$.source_marker,
 			$.section_directive,
 			$.include_directive,
 			$.define_directive,
@@ -87,6 +88,16 @@ module.exports = grammar({
 			optional(commaSep1(choice($.number, $.identifier))),
 		),
 		section_name: _ => token(seq('.', NAME)),
+
+		// Source markers (dsc's output, for the debugger): .loc <file> <line> <inline depth>
+		// .loc -   .srcfile <index> <path>
+		source_marker: $ => choice(
+			seq(alias($._loc, $.section_name), choice('-', repeat1($.number))),
+			seq(alias($._srcfile, $.section_name), $.number, field('path', $.source_path)),
+		),
+		_loc: _ => token(prec(2, '.loc')),
+		_srcfile: _ => token(prec(2, '.srcfile')),
+		source_path: _ => /[^\s][^\n]*/,
 
 		include_directive: $ => seq(alias('@include', $.directive_name), field('path', $.system_path)),
 		system_path: _ => /<[^>\n]*>/,

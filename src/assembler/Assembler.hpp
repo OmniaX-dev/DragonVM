@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ostd/io/IOHandlers.hpp>
+#include <map>
 #include <unordered_map>
 #include <vector>
 
@@ -19,6 +20,10 @@ namespace dragon
                 static std::vector<String> loadEntryLines(const std::vector<String>& lines, const String& directory);
 
             private:
+                // Splits a file into lines and puts source markers in it (.srcfile once,
+                // .loc before each line that can be an instruction), unless it has its own
+                // (dsc's output).
+                static std::vector<String> __split_with_markers(const String& path, const String& source);
                 static bool __can_file_be_included(std::vector<String>& lines);
                 static bool __include_loop(void);
                 static std::vector<String> __finish(void);
@@ -28,6 +33,7 @@ namespace dragon
                 inline static std::vector<String> m_lines;
                 inline static std::vector<String> m_guards;
                 inline static String m_directory { "" };
+                inline static i32 m_nextSourceIndex { 0 };
         };
 
 		class Assembler
@@ -42,6 +48,13 @@ namespace dragon
 				u32 addr = 0;
 				String code = "";
 				u16 size = 1;
+				// Where the instruction comes from (.loc markers): an index in the source files
+				// (-1: unknown), the line (1-based) and how many inlined subs deep it is.
+				// `statement`: the first instruction of a marker (the start of a statement).
+				i32 srcFile = -1;
+				i32 srcLine = 0;
+				u8 inlineDepth = 0;
+				bool statement = false;
 				inline bool operator<(const tDisassemblyLine& second) const { return addr < second.addr; }
 				inline bool operator>(const tDisassemblyLine& second) const { return addr > second.addr; }
 			};
@@ -73,6 +86,13 @@ namespace dragon
 			{
 				String fileName { "" };
 				std::vector<String> lines;
+			};
+			// A source file of the program (.srcfile <index> <path>), saved in the disassembly.
+			public: struct tSourceFile
+			{
+				String path;
+				String text;
+				bool loaded { false };
 			};
 			public: enum class eOperandType
 			{
@@ -141,6 +161,8 @@ namespace dragon
 				static void saveCurrentStageToFile(void);
 
 				static void parseSections(void);
+				// .srcfile / .loc lines (false if the line is something else).
+				static bool parseSourceMarker(const String& line, bool inCode);
 				static void parseDataSection(void);
 				static void parseCodeSection(void);
 
@@ -182,6 +204,12 @@ namespace dragon
 
 				inline static std::vector<tStructDefinition> m_structDefs;
 				inline static std::vector<tDisassemblyLine> m_disassembly;
+				inline static std::map<i32, tSourceFile> m_sourceFiles;
+				// The location the next instructions get (from the last .loc marker).
+				inline static i32 m_locFile { -1 };
+				inline static i32 m_locLine { 0 };
+				inline static u8 m_locInline { 0 };
+				inline static bool m_locStatement { false };
 
 				inline static std::unordered_map<String, tExportSpec> m_exports;
 
@@ -190,6 +218,8 @@ namespace dragon
 			public:
 				// Every program starts with a jump to its entry point (opcode + 32-bit address).
 				inline static constexpr u32 EntryJumpSize = 5;
+				// The disassembly file's version: 2 adds the source lines and files.
+				inline static constexpr i32 DisassemblyVersion = 2;
 				inline static bool saveExports { false };
 				// The load address of programs without a .load directive.
 				inline static u32 defaultLoadAddress { 0x00000000 };

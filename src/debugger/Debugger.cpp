@@ -3,6 +3,7 @@
 #include "../runtime/DragonRuntime.hpp"
 #include <ostd/io/Memory.hpp>
 #include <ostd/string/String.hpp>
+#include <limits>
 
 namespace dragon
 {
@@ -55,7 +56,7 @@ namespace dragon
 
 	bool Debugger::Utils::isValidLabelNameChar(char c)
 	{
-		return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c == '_');
+		return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || (c == '_');
 	}
 
 	ostd::OutputHandlerBase& Debugger::Utils::printFullLine(ostd::OutputHandlerBase& out, char c, const ostd::ConsoleColors::tConsoleColor& foreground, i32 width)
@@ -266,6 +267,13 @@ namespace dragon
 		m_data.code = dragon::DisassemblyLoader::getCodeTable();
 		m_data.labels = dragon::DisassemblyLoader::getLabelTable();
 		m_data.data = dragon::DisassemblyLoader::getDataTable();
+		m_data.sources = dragon::DisassemblyLoader::getSources();
+		m_data.sourceLines.clear();
+		for (size_t i = 0; i < m_data.code.size(); i++)
+		{
+			if (m_data.code[i].srcFile >= 0)
+				m_data.sourceLines.emplace(cast<u32>(m_data.code[i].addr), i);
+		}
 		register_debug_breaks();
 
 		if (m_data.args.auto_track_all_data_symbols)
@@ -285,6 +293,7 @@ namespace dragon
 		m_cyclesPerRedraw = std::max<u64>(1, cast<u64>(config.clock_rate_sec) / std::max<u64>(1, config.screen_redraw_rate_per_second));
 		display.enableAutoRedraw(false);
 
+		DragonRuntime::cpu.setDebugPrintHandler([this](const std::string& text) { debug_print(text); });
 		DragonRuntime::cpu.setInterruptListener([this](u8 intValue, bool hardware, u32 handlerAddress) {
 			if (!m_data.args.track_call_stack)
 				return;
@@ -607,6 +616,22 @@ namespace dragon
 					return true;
 				}
 				break;
+			case eMode::StepLine:
+			{
+				// An instruction of another line, not deeper than the start unless stepping into
+				// (calls, interrupts, inlined subs); back in a caller: anywhere in its line.
+				const tSourceLocation at = getSourceLocation(ip);
+				if (!at.isValid())
+					break;
+				if (!m_stepLineInto && (m_callDepth > m_stepLineDepth || (m_callDepth == m_stepLineDepth && at.inlineDepth > m_stepLineFrom.inlineDepth)))
+					break;
+				if (m_callDepth < m_stepLineDepth || !at.sameLine(m_stepLineFrom))
+				{
+					stopped("");
+					return true;
+				}
+			}
+			break;
 			case eMode::RunTo:
 				if (ip == m_runToAddress)
 				{
@@ -627,9 +652,27 @@ namespace dragon
 		return false;
 	}
 
+	void Debugger::debug_print(const std::string& text, bool flush)
+	{
+		m_debugPrintLine += text;
+		size_t nl;
+		while ((nl = m_debugPrintLine.find('\n')) != std::string::npos)
+		{
+			console().fg(ostd::ConsoleColors::BrightGreen).p(m_debugPrintLine.substr(0, nl)).reset().nl();
+			m_debugPrintLine.erase(0, nl + 1);
+		}
+		if (flush && !m_debugPrintLine.empty())
+		{
+			console().fg(ostd::ConsoleColors::BrightGreen).p(m_debugPrintLine).reset().nl();
+			m_debugPrintLine.clear();
+		}
+	}
+
 	void Debugger::stopped(const String& reason)
 	{
+		const bool lineStep = (m_mode == eMode::StepLine);
 		m_mode = eMode::Paused;
+		debug_print("", true);	// a debug_print line without its new line yet
 		m_stepsLeft = 0;
 		m_stopReason = reason;
 		DragonRuntime::vKeyboard.enableInput(false);
@@ -651,6 +694,11 @@ namespace dragon
 		m_display->refresh();
 		if (reason != "")
 			console().fg(ostd::ConsoleColors::Yellow).p(reason).reset().nl();
+		// The source line (if the program has them), after a line step or a stop with a reason.
+		const u32 ip = cast<u32>(DragonRuntime::cpu.readRegister(data::Registers::IP));
+		const tSourceLocation loc = getSourceLocation(ip);
+		if (const tSourceFile* file = getSourceFile(loc.file); file != nullptr && (lineStep || reason != ""))
+			console().fg(ostd::ConsoleColors::Magenta).p(file->name).p(":").p(loc.line).p("  ").fg(ostd::ConsoleColors::Cyan).p(file->line(loc.line).new_trim()).reset().nl();
 		notify_state_changed();
 	}
 
@@ -800,6 +848,121 @@ namespace dragon
 		m_runToAddress = address;
 		m_mode = eMode::RunTo;
 		update();
+	}
+
+	void Debugger::stepLine(bool into)
+	{
+		if (m_mode != eMode::Paused)
+			return;
+		const u32 ip = cast<u32>(DragonRuntime::cpu.readRegister(data::Registers::IP));
+		const tSourceLocation from = getSourceLocation(ip);
+		if (!from.isValid())
+		{
+			console().fg(ostd::ConsoleColors::BrightGray).p("No source line here: one instruction.").reset().nl();
+			if (into)
+				stepInto(1);
+			else
+				stepOver();
+			return;
+		}
+		if (DragonRuntime::cpu.isHalted() && m_history.isAtEnd())
+		{
+			console().fg(ostd::ConsoleColors::Red).p("The CPU is halted.").reset().nl();
+			return;
+		}
+		if (m_historyEnabled)
+			m_history.recordIfChanged(m_cycle, History::eEntryKind::External);
+		m_stepLineFrom = from;
+		m_stepLineDepth = m_callDepth;
+		m_stepLineInto = into;
+		m_mode = eMode::StepLine;
+		update();
+	}
+
+	Debugger::tSourceLocation Debugger::getSourceLocation(u32 address) const
+	{
+		tSourceLocation loc;
+		auto it = m_data.sourceLines.find(address);
+		if (it == m_data.sourceLines.end())
+			return loc;
+		const auto& line = m_data.code[it->second];
+		loc.file = line.srcFile;
+		loc.line = line.srcLine;
+		loc.inlineDepth = line.inlineDepth;
+		loc.statement = line.statement;
+		return loc;
+	}
+
+	const tSourceFile* Debugger::getSourceFile(i32 index) const
+	{
+		if (index < 0 || index >= cast<i32>(m_data.sources.size()))
+			return nullptr;
+		return &m_data.sources[index];
+	}
+
+	String Debugger::describeSourceLocation(u32 address) const
+	{
+		const tSourceLocation loc = getSourceLocation(address);
+		const tSourceFile* file = getSourceFile(loc.file);
+		if (file == nullptr)
+			return "";
+		return String(file->name).add(":").add(loc.line);
+	}
+
+	stdvec<u32> Debugger::findSourceLine(const String& fileAndLine, i32* outLine, String* outError) const
+	{
+		auto l_error = [&](const String& message) -> stdvec<u32> {
+			if (outError != nullptr)
+				*outError = message;
+			return {};
+		};
+		const String text = fileAndLine.new_trim();
+		if (!text.contains(":"))
+			return l_error("expected <file>:<line>");
+		const String fileName = text.new_substr(0, text.lastIndexOf(":")).trim();
+		const String lineText = text.new_substr(text.lastIndexOf(":") + 1).trim();
+		if (!lineText.isNumeric() || fileName == "")
+			return l_error("expected <file>:<line>");
+		const i32 wanted = cast<i32>(lineText.toInt());
+		std::set<i32> files;
+		for (i32 i = 0; i < cast<i32>(m_data.sources.size()); i++)
+		{
+			const auto& f = m_data.sources[i];
+			if (f.name == fileName || f.path == fileName || f.path.endsWith(String("/").add(fileName)))
+				files.insert(i);
+		}
+		if (files.empty())
+			return l_error(String("no source file named ").add(fileName).add(" in the loaded programs"));
+		// The line, or the next one with code.
+		i32 line = std::numeric_limits<i32>::max();
+		for (const auto& c : m_data.code)
+		{
+			if (files.count(c.srcFile) && c.srcLine >= wanted && c.srcLine < line)
+				line = c.srcLine;
+		}
+		if (line == std::numeric_limits<i32>::max())
+			return l_error(String("no code at or after line ").add(wanted).add(" of ").add(fileName));
+		// Each place the line starts (inlined subs have a copy per call).
+		stdvec<u32> addresses;
+		for (const auto& c : m_data.code)
+		{
+			if (files.count(c.srcFile) && c.srcLine == line && c.statement)
+				addresses.push_back(cast<u32>(c.addr));
+		}
+		if (addresses.empty())
+		{
+			for (const auto& c : m_data.code)
+			{
+				if (files.count(c.srcFile) && c.srcLine == line)
+				{
+					addresses.push_back(cast<u32>(c.addr));
+					break;
+				}
+			}
+		}
+		if (outLine != nullptr)
+			*outLine = line;
+		return addresses;
 	}
 
 	void Debugger::stepBack(u32 count)
@@ -1135,6 +1298,18 @@ namespace dragon
 			stepInto(l_count(1));
 		else if (name == "n" || name == "next")
 			stepOver();
+		else if (name == "sl" || name == "step-line")
+			stepLine(true);
+		else if (name == "nl" || name == "next-line")
+			stepLine(false);
+		else if (name == "where")
+		{
+			const u32 ip = cast<u32>(DragonRuntime::cpu.readRegister(data::Registers::IP));
+			const String where = describeSourceLocation(ip);
+			out.fg(ostd::ConsoleColors::Yellow).p(String::getHexStr(ip, true, 4)).p(where == "" ? String("  (no source line)") : String("  ").add(where)).reset().nl();
+		}
+		else if (name == "l" || name == "list")
+			exec_list_command(args);
 		else if (name == "finish" || name == "out")
 			stepOut();
 		else if (name == "back" || name == "sb")
@@ -1404,6 +1579,38 @@ namespace dragon
 		u32 addr = 0;
 		bool valid = false;
 		i64 numeric = 0;
+		if (commandArgs.contains(":") && !commandArgs.startsWith("$"))
+		{
+			// A source line: a breakpoint at each place it starts.
+			String error = "";
+			i32 line = 0;
+			const stdvec<u32> addresses = findSourceLine(commandArgs, &line, &error);
+			if (addresses.empty())
+			{
+				out.fg(ostd::ConsoleColors::Red).p("Invalid source line: ").p(error).reset().nl();
+				return;
+			}
+			bool all = true;
+			for (u32 a : addresses)
+			{
+				const tBreakPoint* bp = getBreakPoint(a);
+				all = all && bp != nullptr && !bp->debugBreak;
+			}
+			for (u32 a : addresses)
+			{
+				if (all)
+					removeBreakPoint(a);
+				else if (!isBreakPoint(a))
+					addBreakPoint(a);
+			}
+			const String where = commandArgs.new_substr(0, commandArgs.lastIndexOf(":")).trim().add(":").add(line);
+			out.fg(ostd::ConsoleColors::Yellow).p(all ? "Breakpoint removed at " : "Breakpoint set at ").p(where);
+			for (u32 a : addresses)
+				out.p("  ").p(String::getHexStr(a, true, 4));
+			out.reset().nl();
+			notify_state_changed();
+			return;
+		}
 		if (Utils::parseValue(commandArgs, numeric))
 		{
 			addr = (u32)numeric;
@@ -1432,6 +1639,53 @@ namespace dragon
 			else
 				out.fg(ostd::ConsoleColors::Yellow).p("Breakpoint removed at address: ").p(String::getHexStr(addr, true, 4)).reset().nl();
 			notify_state_changed();
+		}
+	}
+
+	void Debugger::exec_list_command(const String& commandArgs)
+	{
+		// The source around the current line (or around <file>:<line>).
+		auto& out = console();
+		i32 fileIndex = -1;
+		i32 center = 0;
+		i32 current = 0;
+		const u32 ip = cast<u32>(DragonRuntime::cpu.readRegister(data::Registers::IP));
+		const tSourceLocation loc = getSourceLocation(ip);
+		if (commandArgs.new_trim() == "")
+		{
+			fileIndex = loc.file;
+			center = current = loc.line;
+			if (fileIndex < 0)
+			{
+				out.fg(ostd::ConsoleColors::Red).p("No source line at ").p(String::getHexStr(ip, true, 4)).p(": list <file>:<line>").reset().nl();
+				return;
+			}
+		}
+		else
+		{
+			String error = "";
+			const stdvec<u32> addresses = findSourceLine(commandArgs, &center, &error);
+			if (addresses.empty())
+			{
+				out.fg(ostd::ConsoleColors::Red).p("Invalid source line: ").p(error).reset().nl();
+				return;
+			}
+			fileIndex = getSourceLocation(addresses.front()).file;
+			if (fileIndex == loc.file)
+				current = loc.line;
+		}
+		const tSourceFile* file = getSourceFile(fileIndex);
+		if (file == nullptr)
+			return;
+		out.fg(ostd::ConsoleColors::Yellow).p(file->path).reset().nl();
+		const i32 first = std::max(1, center - 5);
+		const i32 last = std::min(cast<i32>(file->lines.size()), center + 5);
+		for (i32 n = first; n <= last; n++)
+		{
+			String number = String("").add(n);
+			number.addLeftPadding(5);
+			out.fg(n == current ? ostd::ConsoleColors::BrightYellow : ostd::ConsoleColors::BrightGray).p(n == current ? "> " : "  ").p(number).p("  ");
+			out.fg(ostd::ConsoleColors::Cyan).p(String(file->line(n)).replaceAll("\t", "    ")).reset().nl();
 		}
 	}
 

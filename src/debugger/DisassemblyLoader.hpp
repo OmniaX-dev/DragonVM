@@ -6,6 +6,16 @@
 
 namespace dragon
 {
+	// A source file of a program (version 2 disassembly files): its lines, without the new lines.
+	struct tSourceFile
+	{
+		String path { "" };
+		String name { "" };		// the file name, without the directories
+		std::vector<String> lines;
+		// Line n (1-based); "" if out of range.
+		inline const String& line(i32 n) const { static const String empty = ""; return (n >= 1 && n <= cast<i32>(lines.size())) ? lines[n - 1] : empty; }
+	};
+
 	class DisassemblyTable
 	{
 		public:
@@ -16,6 +26,9 @@ namespace dragon
 			inline const std::vector<code::Assembler::tDisassemblyLine>& getCodeTable(void) const { return m_code; }
 			inline const std::vector<code::Assembler::tDisassemblyLine>& getDataTable(void) const { return m_data; }
 			inline const std::vector<code::Assembler::tDisassemblyLine>& getLabelTable(void) const { return m_labels; }
+			// The code lines' srcFile are indices in this list (this table's own).
+			inline const std::vector<tSourceFile>& getSources(void) const { return m_sources; }
+			inline i32 getVersion(void) const { return m_version; }
 
 			inline bool isInitialized(void) const { return m_initialized; }
 			inline const String& getFilePath(void) const { return m_filePath; }
@@ -32,6 +45,8 @@ namespace dragon
 			std::vector<code::Assembler::tDisassemblyLine> m_code;
 			std::vector<code::Assembler::tDisassemblyLine> m_labels;
 			std::vector<code::Assembler::tDisassemblyLine> m_data;
+			std::vector<tSourceFile> m_sources;
+			i32 m_version { 1 };
 			bool m_initialized { false };
 			String m_filePath { "" };
 			String m_name { "" };
@@ -46,7 +61,11 @@ namespace dragon
 			static void loadDirectory(const String& directoryPath);
 			static const DisassemblyTable& loadFile(const String& filePath);
 
+			// Every table's code; srcFile is an index in getSources() (all the tables' files).
 			static std::vector<code::Assembler::tDisassemblyLine> getCodeTable(void);
+			static std::vector<tSourceFile> getSources(void);
+			// Where a table's source files start in getSources().
+			static i32 getSourceOffset(const DisassemblyTable& table);
 			static std::vector<code::Assembler::tDisassemblyLine> getDataTable(void);
 			static std::vector<code::Assembler::tDisassemblyLine> getLabelTable(void);
 			// Every loaded table (one per assembled program), in loading order.

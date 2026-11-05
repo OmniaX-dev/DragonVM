@@ -205,3 +205,35 @@ Data symbol addresses
   (data_entry
     (symbol)
     (symbol)))
+
+================================================================================
+Source markers
+================================================================================
+
+.srcfile 0 /home/user/src/main.ds
+.code
+.loc 0 12 0
+    mov R1, 2
+.loc -
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (source_marker
+    (section_name)
+    (number)
+    (source_path))
+  (section_directive
+    (section_name))
+  (source_marker
+    (section_name)
+    (number)
+    (number)
+    (number))
+  (instruction
+    (identifier)
+    (operand_list
+      (identifier)
+      (number)))
+  (source_marker
+    (section_name)))

@@ -65,6 +65,10 @@
         },
         {
           "type": "SYMBOL",
+          "name": "source_marker"
+        },
+        {
+          "type": "SYMBOL",
           "name": "section_directive"
         },
         {
@@ -766,6 +770,93 @@
           }
         ]
       }
+    },
+    "source_marker": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_loc"
+              },
+              "named": true,
+              "value": "section_name"
+            },
+            {
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "STRING",
+                  "value": "-"
+                },
+                {
+                  "type": "REPEAT1",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "number"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_srcfile"
+              },
+              "named": true,
+              "value": "section_name"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "number"
+            },
+            {
+              "type": "FIELD",
+              "name": "path",
+              "content": {
+                "type": "SYMBOL",
+                "name": "source_path"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "_loc": {
+      "type": "TOKEN",
+      "content": {
+        "type": "PREC",
+        "value": 2,
+        "content": {
+          "type": "STRING",
+          "value": ".loc"
+        }
+      }
+    },
+    "_srcfile": {
+      "type": "TOKEN",
+      "content": {
+        "type": "PREC",
+        "value": 2,
+        "content": {
+          "type": "STRING",
+          "value": ".srcfile"
+        }
+      }
+    },
+    "source_path": {
+      "type": "PATTERN",
+      "value": "[^\\s][^\\n]*"
     },
     "include_directive": {
       "type": "SEQ",

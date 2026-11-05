@@ -160,6 +160,13 @@ namespace dscript
 			void release(const Reg& r);
 			void emit(const std::string& line);
 			void label(const std::string& name);
+			// Source markers for the debugger (.loc <file> <line> <inline depth>): the next
+			// instructions come from there. noLoc(): from nowhere (generated code).
+			struct Loc { int file { -1 }; int line { 0 }; int depth { 0 }; };
+			void loc(const SourcePos& pos);
+			void loc(const Loc& l, bool statement = true);
+			void noLoc(void);
+			int sourceIndex(const std::string& file);
 			std::string newLabel(void);
 			std::string stringLiteral(const std::string& text);
 			static std::string imm(int64_t value);
@@ -196,6 +203,9 @@ namespace dscript
 			int m_regDepth { 0 };
 			int m_stmtDepth { 0 };		// m_regDepth at the start of a statement (> 0 in inline subs)
 			std::vector<std::string>* m_out { nullptr };
+			Loc m_loc;
+			std::map<std::string, int> m_sourceIndex;	// source file -> its .srcfile index
+			std::vector<std::string> m_sourcePaths;
 
 			std::vector<std::string> m_data;
 			std::vector<std::string> m_code;

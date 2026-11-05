@@ -194,7 +194,7 @@ namespace dragon
 		public:
 			// Column / rows, as fractions of the window.
 			inline static constexpr f32 Split { 0.47f };
-			inline static constexpr f32 ConsoleTop { 0.66f };
+			inline static constexpr f32 ConsoleTop { 0.83f };
 			inline static constexpr f32 ScreenTop { 0.62f };
 			// The icon buttons (tool bar, detach).
 			inline static constexpr f32 ButtonSize { 28.0f };

@@ -38,6 +38,7 @@ namespace dscript
 		NodeKind kind { NodeKind::Program };
 		SourcePos pos;
 		SourcePos namePos;				// declarations, parameters, enum members, Member: where the name is
+		SourcePos endPos;				// Block: where its '}' is
 		std::string name;				// identifiers, operators, member names
 		std::string text;				// string literals, low block text; Ident of a local const / static: the name as written
 		int64_t value { 0 };			// integer literals; Member: 1 for '->'; FuncDecl: 1 if interrupt

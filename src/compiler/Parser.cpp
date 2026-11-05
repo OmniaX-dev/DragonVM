@@ -539,8 +539,14 @@ namespace dscript
 		Node* n = make(NodeKind::Block, peek().pos);
 		expectPunct("{", "to start the block");
 		pushScope();
-		while (!acceptPunct("}"))
+		while (true)
 		{
+			const SourcePos at = peek().pos;
+			if (acceptPunct("}"))
+			{
+				n->endPos = at;
+				break;
+			}
 			if (peek().kind == TokenKind::End)
 				error(n->pos, "'}' missing at the end of this block");
 			n->list.push_back(parseStatement());

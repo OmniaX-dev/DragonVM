@@ -371,6 +371,7 @@ namespace dragon
 		TableList codeTable;
 		TableList labelTable;
 		TableList dataTable;
+		std::vector<dragon::tSourceFile> sources;
 		if (arg1 == "-d")
 		{
 			if (argc < 4)
@@ -383,6 +384,7 @@ namespace dragon
 			codeTable = dragon::DisassemblyLoader::getCodeTable();
 			labelTable = dragon::DisassemblyLoader::getLabelTable();
 			dataTable = dragon::DisassemblyLoader::getDataTable();
+			sources = dragon::DisassemblyLoader::getSources();
 		}
 		else if (arg1 == "-f")
 		{
@@ -395,6 +397,7 @@ namespace dragon
 			codeTable = table.getCodeTable();
 			labelTable = table.getLabelTable();
 			dataTable = table.getDataTable();
+			sources = table.getSources();
 		}
 		else
 		{
@@ -420,8 +423,22 @@ namespace dragon
 		}
 		out.nl();
 		out.bg(ostd::ConsoleColors::White).fg(ostd::ConsoleColors::Black).p("CODE:").reset().nl();
+		// With source lines (version 2 files): each source line before its first instruction.
+		i32 lastFile = -1, lastLine = 0, lastDepth = 0;
 		for (const auto& line : codeTable)
 		{
+			if (line.srcFile >= 0 && line.srcFile < cast<i32>(sources.size())
+					&& (line.srcFile != lastFile || line.srcLine != lastLine || line.inlineDepth != lastDepth))
+			{
+				const auto& file = sources[line.srcFile];
+				out.fg(ostd::ConsoleColors::Magenta).p(file.name).p(":").p(line.srcLine);
+				if (line.inlineDepth > 0)
+					out.p(" (inline ").p(cast<i32>(line.inlineDepth)).p(")");
+				out.p(line.statement ? " | " : " ~ ").fg(ostd::ConsoleColors::Cyan).p(file.line(line.srcLine).new_trim()).reset().nl();
+			}
+			lastFile = line.srcFile;
+			lastLine = line.srcLine;
+			lastDepth = line.inlineDepth;
 			out.fg(ostd::ConsoleColors::BrightGray).p(String::getHexStr(line.addr, true, 4)).p("\t\t");
 			out.fg(ostd::ConsoleColors::Green).p(line.code).p("\t\t");
 			out.reset().nl();

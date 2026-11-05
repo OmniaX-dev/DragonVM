@@ -593,6 +593,11 @@
     }
   },
   {
+    "type": "section_name",
+    "named": true,
+    "fields": {}
+  },
+  {
     "type": "source_file",
     "named": true,
     "root": true,
@@ -634,7 +639,41 @@
           "named": true
         },
         {
+          "type": "source_marker",
+          "named": true
+        },
+        {
           "type": "struct_block",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "source_marker",
+    "named": true,
+    "fields": {
+      "path": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "source_path",
+            "named": true
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "number",
+          "named": true
+        },
+        {
+          "type": "section_name",
           "named": true
         }
       ]
@@ -731,6 +770,18 @@
     "named": false
   },
   {
+    "type": "-",
+    "named": false
+  },
+  {
+    "type": ".loc",
+    "named": false
+  },
+  {
+    "type": ".srcfile",
+    "named": false
+  },
+  {
     "type": ":",
     "named": false
   },
@@ -788,7 +839,7 @@
     "named": true
   },
   {
-    "type": "section_name",
+    "type": "source_path",
     "named": true
   },
   {

@@ -42,6 +42,7 @@
 (directive_name) @preproc
 (export_name) @preproc
 (system_path) @string.special
+(source_path) @string.special
 
 (define_directive
 	name: (identifier) @constant)

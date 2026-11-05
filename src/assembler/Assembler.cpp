@@ -3,6 +3,10 @@
 #include <iostream>
 #include <cctype>
 #include <fstream>
+#include <algorithm>
+#include <cstdio>
+#include <iterator>
+#include <set>
 #include <ostd/io/FileSystem.hpp>
 #include "../tools/LegacyOstdSerial.hpp"
 #include <ostd/io/IOHandlers.hpp>
@@ -54,6 +58,11 @@ namespace dragon
 			m_symbolTable.clear();
 			m_labelTable.clear();
 			m_disassembly.clear();
+			m_sourceFiles.clear();
+			m_locFile = -1;
+			m_locLine = 0;
+			m_locInline = 0;
+			m_locStatement = false;
 			m_structDefs.clear();
 			m_fixedSize = 0;
 			m_fixedFillValue = 0x00;
@@ -117,29 +126,50 @@ namespace dragon
 
 		bool Assembler::saveDisassemblyToFile(String fileName, String programName)
 		{
+			// The file: a header string, then entries (address: u32, size: u16, a string):
+			//   { NAME } <program>      { VERSION } <n>     (pseudo entries, address 0)
+			//   the instructions; { DATA } then the data symbols; { LABELS } then the labels
+			// Version 2 adds:
+			//   { LINES }    per instruction with a location: address, the source file's index
+			//                (as the size), "<line> <inline depth> <statement: 0/1>"
+			//   { SOURCES }  per source file used by the lines: the index (as the address),
+			//                "<path>\n<the file's text>"
 			if (m_code.size() == 0 || m_disassembly.size() == 0) return false;
-			String header_string = "{ DRAGON_DEBUG_DISASSEMBLY }";
+			const String header_string = "{ DRAGON_DEBUG_DISASSEMBLY }";
+			std::vector<tDisassemblyLine> entries;
 			// The program's name, as the first (pseudo) line: the file itself is named after a hash.
-			const String name_line = String("{ NAME } ").add(programName);
-			u64 da_size = 0;
-			da_size += (header_string.len() + 1) * ostd::tTypeSize::BYTE;
-			da_size += ostd::tTypeSize::DWORD + ostd::tTypeSize::WORD + (name_line.len() + 1) * ostd::tTypeSize::BYTE;
-			da_size += m_disassembly.size() * ostd::tTypeSize::DWORD; //Addresses
-			da_size += m_disassembly.size() * ostd::tTypeSize::WORD; //Data Size
-			da_size += m_disassembly.size() * ostd::tTypeSize::BYTE; //Null Termination
+			entries.push_back({ 0, String("{ NAME } ").add(programName), 0 });
+			entries.push_back({ 0, String("{ VERSION } ").add(DisassemblyVersion), 0 });
+			std::set<i32> usedFiles;
+			std::vector<tDisassemblyLine> lines;
 			for (auto& da : m_disassembly)
-				da_size += da.code.len() * ostd::tTypeSize::BYTE; //Code Strings
+			{
+				entries.push_back(da);
+				if (da.srcFile >= 0 && da.srcLine > 0 && m_sourceFiles.count(da.srcFile))
+				{
+					usedFiles.insert(da.srcFile);
+					lines.push_back({ da.addr, String("").add(da.srcLine).add(" ").add(cast<i32>(da.inlineDepth)).add(da.statement ? " 1" : " 0"), cast<u16>(da.srcFile) });
+				}
+			}
+			if (!lines.empty())
+			{
+				entries.push_back({ 0xFFFFFF02, "{ LINES }" });
+				entries.insert(entries.end(), lines.begin(), lines.end());
+				entries.push_back({ 0xFFFFFF03, "{ SOURCES }" });
+				for (i32 index : usedFiles)
+				{
+					const tSourceFile& file = m_sourceFiles[index];
+					entries.push_back({ cast<u32>(index), String(file.path).add("\n").add(file.text), 0 });
+				}
+			}
+			u64 da_size = (header_string.len() + 1) * ostd::tTypeSize::BYTE;
+			for (auto& da : entries)
+				da_size += ostd::tTypeSize::DWORD + ostd::tTypeSize::WORD + (da.code.len() + 1) * ostd::tTypeSize::BYTE;
 			ostd::serial::SerialIO serializer(da_size, ostd::serial::SerialIO::tEndianness::BigEndian);
 			ostd::StreamIndex stream_addr = 0;
 			serializer.w_String(stream_addr, header_string);
 			stream_addr += (header_string.len() + 1) * ostd::tTypeSize::BYTE;
-			serializer.w_DWord(stream_addr, 0);
-			stream_addr += ostd::tTypeSize::DWORD;
-			serializer.w_Word(stream_addr, 0);
-			stream_addr += ostd::tTypeSize::WORD;
-			serializer.w_String(stream_addr, name_line);
-			stream_addr += (name_line.len() + 1) * ostd::tTypeSize::BYTE;
-			for (auto& da : m_disassembly)
+			for (auto& da : entries)
 			{
 				serializer.w_DWord(stream_addr, da.addr);
 				stream_addr += ostd::tTypeSize::DWORD;
@@ -342,6 +372,8 @@ namespace dragon
 			for (auto& line : newLines)
 			{
 				String lineEdit(line);
+				if (lineEdit.startsWith(".srcfile ") || lineEdit.startsWith(".loc "))
+					continue;	// source markers: paths and numbers, no defines
 				for (i32 i = defines.size() - 1; i >= 0; i--)
 					lineEdit.replaceAll(defines[i].name, defines[i].value.new_trim());
 				line = lineEdit;
@@ -833,6 +865,15 @@ namespace dragon
 			{
 				String lineEdit(line);
 				lineEdit.trim();
+				if (lineEdit.startsWith(".srcfile ") || lineEdit.startsWith(".loc "))
+				{
+					// Source markers: the files are kept, the locations only in the code.
+					if (lineEdit.startsWith(".srcfile "))
+						parseSourceMarker(lineEdit, false);
+					else if (currentSection == CODE_SECTION)
+						m_rawCodeSection.push_back(lineEdit);
+					continue;
+				}
 				if (lineEdit.startsWith(".data"))
 					currentSection = DATA_SECTION;
 				else if (lineEdit.startsWith(".code"))
@@ -937,6 +978,60 @@ namespace dragon
 					}
 				}
 			}
+		}
+
+		bool Assembler::parseSourceMarker(const String& line, bool inCode)
+		{
+			// .srcfile <index> <path>
+			// .loc <index> <line> [<inline depth> [<statement: 1, 0 for a continuation>]]
+			// .loc -   (no location)
+			std::string text = String(line).new_trim().cpp_str();
+			if (text.rfind(".srcfile ", 0) == 0)
+			{
+				text = text.substr(9);
+				const size_t space = text.find(' ');
+				if (space == std::string::npos)
+					return true;
+				const i32 index = std::atoi(text.substr(0, space).c_str());
+				const String path = String(text.substr(space + 1)).trim();
+				if (m_sourceFiles.count(index) == 0)
+				{
+					tSourceFile file;
+					file.path = path;
+					std::ifstream in(path.cpp_str(), std::ios::binary);
+					if (in)
+					{
+						file.text = String(std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>()));
+						file.loaded = true;
+					}
+					m_sourceFiles[index] = file;
+				}
+				return true;
+			}
+			if (text.rfind(".loc ", 0) != 0)
+				return false;
+			if (!inCode)
+				return true;
+			text = text.substr(5);
+			if (text.size() > 0 && text[0] == '-')
+			{
+				m_locFile = -1;
+				m_locLine = 0;
+				m_locInline = 0;
+				m_locStatement = false;
+				return true;
+			}
+			// The 4th number: 0 for a continuation (the rest of a line, e.g. after an inlined
+			// sub): not the start of a statement.
+			i32 file = -1, lineNr = 0, depth = 0, statement = 1;
+			if (std::sscanf(text.c_str(), "%d %d %d %d", &file, &lineNr, &depth, &statement) < 2)
+				return true;
+			if (file != m_locFile || lineNr != m_locLine || depth != m_locInline)
+				m_locStatement = (statement != 0);
+			m_locFile = file;
+			m_locLine = lineNr;
+			m_locInline = cast<u8>(std::clamp(depth, 0, 255));
+			return true;
 		}
 
 		void Assembler::parseDataSection(void)
@@ -1112,16 +1207,30 @@ namespace dragon
 			}
 
 			tDisassemblyLine _disassembly_line;
+			// Every instruction gets the location of the last .loc marker.
+			auto l_push = [](tDisassemblyLine line) {
+				line.srcFile = m_locFile;
+				line.srcLine = m_locLine;
+				line.inlineDepth = m_locInline;
+				line.statement = m_locStatement && m_locFile >= 0;
+				m_locStatement = false;
+				m_disassembly.push_back(line);
+			};
 			for (auto& line : m_rawCodeSection)
 			{
 				String lineEdit(line);
+				if (lineEdit.startsWith(".loc "))
+				{
+					parseSourceMarker(lineEdit, true);
+					continue;
+				}
 				u32 commaCount = lineEdit.count(",");
 				u32 spaceCount = lineEdit.count(" ");
 				if (lineEdit.endsWith(":") && commaCount == 0 && spaceCount == 0) //Labels
 				{
 					// _disassembly_line.addr = m_dataSize + m_loadAddress + m_code.size() + EntryJumpSize;
 					// _disassembly_line.code = lineEdit;
-					// m_disassembly.push_back(_disassembly_line);
+					// l_push(_disassembly_line);
 					lineEdit = lineEdit.substr(0, lineEdit.len() - 1);
 					lineEdit.trim();
 					m_labelTable["$" + lineEdit].address = m_dataSize + m_loadAddress + m_code.size() + EntryJumpSize;
@@ -1143,7 +1252,7 @@ namespace dragon
 					}
 					_disassembly_line.code = lineEdit;
 					_disassembly_line.code.add(" (%low)");
-					m_disassembly.push_back(_disassembly_line);
+					l_push(_disassembly_line);
 					continue;
 				}
 				else if (commaCount == 0 && spaceCount <= 0) //0 Operands
@@ -1155,7 +1264,7 @@ namespace dragon
 					else
 						parse0Operand(lineEdit);
 					_disassembly_line.code = lineEdit;
-					m_disassembly.push_back(_disassembly_line);
+					l_push(_disassembly_line);
 					continue;
 				}
 				else if (commaCount == 0) //1 Operands
@@ -1168,7 +1277,7 @@ namespace dragon
 					else
 						parse1Operand(lineEdit);
 					_disassembly_line.code = lineEdit;
-					m_disassembly.push_back(_disassembly_line);
+					l_push(_disassembly_line);
 					continue;
 				}
 				else if (commaCount == 1) //2 Operands
@@ -1181,7 +1290,7 @@ namespace dragon
 					else
 						parse2Operand(lineEdit);
 					_disassembly_line.code = lineEdit;
-					m_disassembly.push_back(_disassembly_line);
+					l_push(_disassembly_line);
 					continue;
 				}
 				else if (commaCount == 2) // 3 Operands
@@ -1194,7 +1303,7 @@ namespace dragon
 					else
 						parse3Operand(lineEdit);
 					_disassembly_line.code = lineEdit;
-					m_disassembly.push_back(_disassembly_line);
+					l_push(_disassembly_line);
 					continue;
 				}
 				else

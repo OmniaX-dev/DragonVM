@@ -97,6 +97,9 @@ namespace dragon
 				void saveState(tState& outState) const;
 				void loadState(const tState& state);
 				inline void setInterruptListener(InterruptListener listener) { m_interruptListener = std::move(listener); }
+				// Where debug_print's text goes (nullptr: stdout), e.g. the debugger's console.
+				using DebugPrintHandler = std::function<void(const std::string& text)>;
+				inline void setDebugPrintHandler(DebugPrintHandler handler) { m_debugPrintHandler = std::move(handler); }
 
 				// false (and halts, with an error) if divisor is 0.
 				bool check_divisor(i32 divisor);
@@ -118,6 +121,7 @@ namespace dragon
 				bool m_isDebugBreakPoint { false };
 				bool m_ramDumped { false };
 				bool m_debugModeEnabled { false };
+				DebugPrintHandler m_debugPrintHandler { nullptr };
 				i32 m_subroutineCounter { 0 };
 				bool m_debugProfilerStarted { false };
 

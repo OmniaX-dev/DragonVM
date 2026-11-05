@@ -284,7 +284,10 @@ namespace dragon
 				if (c == 0) break;
 				str += c;
 			}
-			std::cout << str << std::flush;
+			if (m_debugPrintHandler)
+				m_debugPrintHandler(str);
+			else
+				std::cout << str << std::flush;
 		}
 
 		bool VirtualCPU::execute(void)

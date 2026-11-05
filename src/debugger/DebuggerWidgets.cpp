@@ -27,7 +27,7 @@ namespace dragon
 		setStylesheetCategoryName("dragonDebugList");
 		enableFocus();
 		disableChildren();
-		setFontSize(14);
+		setFontSize(18);
 		validate();
 	}
 
@@ -946,7 +946,7 @@ namespace dragon
 		const auto& trace = m_debugger.getCallTrace();
 		const size_t count = m_debugger.getVisibleCallTraceSize();
 		m_rows.clear();
-		stdvec<size_t> open;	// rows of the calls that haven't returned yet
+		stdvec<size_t> open;    // rows of the calls that haven't returned yet
 		for (size_t i = 0; i < count; i++)
 		{
 			const auto& call = trace[i];
@@ -1187,6 +1187,9 @@ namespace dragon
 			Row row;
 			row.address = address;
 			row.label = Debugger::Utils::findNearestSymbol(m_debugger.data().labels, address);
+			const String where = m_debugger.describeSourceLocation(address);
+			if (where != "")
+				row.label = (row.label == "" ? where : String(row.label).add("  (").add(where).add(")"));
 			m_rows.push_back(row);
 		}
 		for (const auto& item : m_debugger.data().tracked)
@@ -1211,7 +1214,7 @@ namespace dragon
 
 	String BreakpointView::getEmptyText(void) const
 	{
-		return "No breakpoints: click the left margin of the disassembly, or use 'break <addr|$label>'.";
+		return "No breakpoints: click the left margin of the disassembly, or use 'break <addr|$label|file:line>'.";
 	}
 
 	Color BreakpointView::getRowColor(i32 row) const

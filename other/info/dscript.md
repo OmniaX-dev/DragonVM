@@ -20,6 +20,25 @@ disassembly as `disassembly/<md5 of the output path>.dds`, like dasm does),
 allowed. dsc's own `-D NAME=value` is a define, not dasm's `-D`. For a DRX, the disassembly and
 symbols are at offset 0 (add the load address).
 
+### Source-level debugging
+The disassembly saved by dsc (and by dasm, for `.dss` files) has the source lines: which line
+each instruction comes from, and the text of the source files (disassembly file version 2; ddb
+still reads version 1 files). dsc writes markers in the dasm it generates (`.srcfile <index>
+<path>` for each file, `.loc <file> <line> <inline depth>` before each statement and each low
+block line, `.loc -` before generated code); dasm adds them for its own sources. They are only
+for the debugger: the binary is the same.
+```
+dsc program.ds --raw --save-disassembly disassembly/     (a directory: named for ddb, as dasm does)
+dtools print-disassembly -f disassembly/<file>.dds        (the instructions under their lines)
+```
+In ddb, each source line (highlighted) is shown above its instructions, which are indented under
+it; inlined subs' line numbers are green, each file starts with a header, and the line of the
+current instruction is highlighted. A source line's margin and menu act on its
+first instruction (breakpoints, run to). Commands (and toolbar buttons): `sl` / `step-line` (F7: to the next line,
+into called subs), `nl` / `next-line` (F8: calls, interrupts and inlined subs run whole),
+`break <file>:<line>` (at the line, or the next one with code; every copy of an inlined line),
+`where`, `list [file:line]`. Where the program has no source lines, they step one instruction.
+
 Pipeline: lexer -> preprocessor (on tokens) -> parser (AST) -> checking + code generation
 (dasm text) -> assembler -> DRX / raw binary. Sources: `src/compiler/`.
 

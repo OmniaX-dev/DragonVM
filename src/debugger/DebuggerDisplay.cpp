@@ -3,6 +3,7 @@
 #include <ostd/io/Memory.hpp>
 #include <ostd/string/String.hpp>
 #include <ostd/string/TextStyleParser.hpp>
+#include <set>
 
 namespace dragon
 {
@@ -15,19 +16,26 @@ namespace dragon
 		rgxrstr.fg("(?<!\\w)(r(?:1[0-9]|20|[1-9])[lh]?|fl|pp|rv|fp|sp|ip|acc)(?!\\w)", "BrightGreen", true); //Registers
 		rgxrstr.fg("\\%low", "Magenta");
 		rgxrstr.col("\\$\\w+", "Cyan", "Black"); //Labels
+		// Each label used gets its address after it: whole names only ($__L1 is not in $__L164),
+		// and once (the list can have several programs' labels with the same name: the first one).
 		String instEdit = rgxrstr.getRawString();
+		std::set<std::string> done;
 		for (auto& label : labelList)
 		{
-			i32 index = -1;
 			String labelEdit = label.code;
 			labelEdit.trim();
+			if (labelEdit == "" || !done.insert(labelEdit.cpp_str()).second)
+				continue;
+			i32 index = -1;
 			while ((index = instEdit.indexOf(labelEdit, index + 1)) != -1)
 			{
 				if (index + labelEdit.len() < instEdit.len() && Utils::isValidLabelNameChar(instEdit.at(index + labelEdit.len())))
 					continue;
-				String instStr = instEdit;
-				instStr.cpp_str_ref().replace(index, labelEdit.len(), labelEdit.cpp_str() + "[@@ style foreground:brightgray](" + String::getHexStr(label.addr, true, 4).cpp_str() + ")[@@/]");
-				instEdit = instStr;
+				if (index > 0 && Utils::isValidLabelNameChar(instEdit.at(index - 1)))
+					continue;
+				const std::string inserted = labelEdit.cpp_str() + "[@@ style foreground:brightgray](" + String::getHexStr(label.addr, true, 4).cpp_str() + ")[@@/]";
+				instEdit.cpp_str_ref().replace(index, labelEdit.len(), inserted);
+				index += cast<i32>(inserted.size()) - 1;
 			}
 		}
 		rgxrstr.setRawString(instEdit);
@@ -61,11 +69,14 @@ namespace dragon
 		colorizeInstructionBody(out, instBody, labelList);
 	}
 
-	void Debugger::Display::printDisassemblyLine(ostd::OutputHandlerBase& out, const Debugger& dbg, const code::Assembler::tDisassemblyLine& _da)
+	void Debugger::Display::printDisassemblyLine(ostd::OutputHandlerBase& out, const Debugger& dbg, const code::Assembler::tDisassemblyLine& _da, i32 indent, const DisassemblyList* labels)
 	{
 		// Two columns of gutter (the breakpoint / current line markers), then the indentation
 		// under the labels (printed on their own lines, see printDisassemblyLabel()).
-		out.p("  ").p(String::duplicateChar(' ', LabelIndent));
+		if (indent < 0)
+			out.p("  ").p(String::duplicateChar(' ', LabelIndent));
+		else
+			out.p(String::duplicateChar(' ', indent));
 		bool specialSection = _da.code.startsWith("[") &&_da.code.endsWith("]");
 		if (specialSection)
 			out.fg(ostd::ConsoleColors::Cyan);
@@ -77,7 +88,7 @@ namespace dragon
 		if (specialSection)
 			out.fg(ostd::ConsoleColors::Cyan).p(_da.code.cpp_str());
 		else
-			colorCodeInstructions(out, _da.code, dbg.data().labels);
+			colorCodeInstructions(out, _da.code, labels != nullptr ? *labels : dbg.data().labels);
 		out.reset();
 	}
 
@@ -621,6 +632,10 @@ namespace dragon
 		l_cmd("<Enter> / step [n] / si [n]", "Executes one (or n) instructions. (F10)");
 		l_cmd("(n)ext", "Steps over a call / int instruction. (F11)");
 		l_cmd("finish / out", "Runs until the current subroutine returns. (Shift+F11)");
+		l_cmd("sl / step-line", "Runs to the next source line, into called subs. (F7)");
+		l_cmd("nl / next-line", "Runs to the next source line of this sub: calls / ints / inlined subs run whole. (F8)");
+		l_cmd("where", "Shows the source line of the current instruction.");
+		l_cmd("(l)ist [file:line]", "Shows the source around the current line (or the given one).");
 		l_cmd("(c)ontinue / (r)un", "Resumes the execution. (F5)");
 		l_cmd("pause", "Pauses the execution. (F6)");
 		l_cmd("until <addr/symbol>", "Runs until the instruction at the address.");
@@ -628,7 +643,7 @@ namespace dragon
 		l_cmd("rc / rcontinue", "Runs backwards until a breakpoint / watch. (Shift+F5)");
 		l_cmd("goto <cycle>", "Moves to a cycle of the recorded history.");
 		l_cmd("history [on/off/clear]", "Shows the history, or turns recording on / off.");
-		l_cmd("(b)reak <addr/symbol>", "Toggles a breakpoint (enables / disables a debug_break).");
+		l_cmd("(b)reak <addr/symbol/file:line>", "Toggles a breakpoint (enables / disables a debug_break); file:line: at the line's first instruction.");
 		l_cmd("bl / breakpoints", "Lists the breakpoints and watches.");
 		l_cmd("bc / clear", "Removes every breakpoint (disables the debug_break ones).");
 		l_cmd("(p)rint [word] <addr/symbol>", "Prints values from memory. Valid [size] values are: byte/word (16 bits)/dword (32 bits, the default)/qword/string.");
