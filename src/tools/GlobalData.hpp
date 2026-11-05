@@ -383,6 +383,10 @@ namespace dragon
 				inline static constexpr u8 DEBUG_StartProfile = 0x03;
 				inline static constexpr u8 DEBUG_StopProfile = 0x04;
 				inline static constexpr u8 DEBUG_DumpRAM = 0x05;
+				// debug_print: prints the zero-terminated string at an address to the host's
+				// terminal (stdout). Always assembled and run, debug mode or not.
+				inline static constexpr u8 DEBUG_PrintImm = 0x06;
+				inline static constexpr u8 DEBUG_PrintReg = 0x07;
 
 				inline static constexpr u8 MovImmReg = 0x10;
 				inline static constexpr u8 MovRegReg = 0x11;

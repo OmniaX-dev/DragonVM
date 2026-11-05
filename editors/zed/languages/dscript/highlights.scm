@@ -33,6 +33,7 @@
 	"break"
 	"continue"
 	"assert"
+	"debug_print"
 ] @keyword
 
 [

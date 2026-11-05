@@ -1,6 +1,7 @@
 // A false assert prints where it is and what failed, then stops the machine.
-// expect-output: Assertion failed: x * 2 == 7 (assert_fail.ds:8): math is broken\n
+// expect-output: Assertion failed: x * 2 == 7 (assert_fail.ds:9): math is broken\n
 #include(<assert.ds>)
+#include(<bios.ds>)
 
 sub main() -> i32 {
 	var x: i32 = 3;

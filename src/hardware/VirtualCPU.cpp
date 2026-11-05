@@ -3,6 +3,7 @@
 
 #include <ostd/io/Memory.hpp>
 #include <cstring>
+#include <iostream>
 
 #include "../runtime/DragonRuntime.hpp"
 
@@ -273,6 +274,19 @@ namespace dragon
 			return false;
 		}
 
+		void VirtualCPU::debugPrint(u32 addr)
+		{
+			// The zero-terminated string at addr, to stdout (at most DebugPrintMaxLength bytes).
+			std::string str;
+			for (u32 i = 0; i < DebugPrintMaxLength; i++)
+			{
+				char c = cast<char>(m_memory.read8(addr + i));
+				if (c == 0) break;
+				str += c;
+			}
+			std::cout << str << std::flush;
+		}
+
 		bool VirtualCPU::execute(void)
 		{
 			if (m_halt) return true;
@@ -308,6 +322,13 @@ namespace dragon
 					ostd::Memory::saveByteStreamToFile(*DragonRuntime::ram.getByteStream(), "ram_dump.bin");
 					m_isDebugBreakPoint = true;
 					m_ramDumped = true;
+				}
+				break;
+				case data::OpCodes::DEBUG_PrintImm:
+				case data::OpCodes::DEBUG_PrintReg:
+				{
+					u32 addr = (inst == data::OpCodes::DEBUG_PrintImm) ? cast<u32>(fetch32()) : cast<u32>(readRegister(fetch8()));
+					debugPrint(addr);
 				}
 				break;
 				case data::OpCodes::DEBUG_StartProfile:

@@ -1209,6 +1209,32 @@ namespace dragon
 
 		void Assembler::parseDebugOperands(String line)
 		{
+			if (String(line).toLower().startsWith("debug_print"))
+			{
+				// Always assembled (not only in debug mode): the string goes to the host's terminal.
+				String lineEdit(line);
+				String opEdit(lineEdit.new_substr(lineEdit.indexOf(" ") + 1));
+				opEdit.trim();
+				i32 word = 0x00000000;
+				m_code.push_back(0x00);
+				eOperandType opType = parseOperand(opEdit, word);
+				if (opType == eOperandType::Immediate || opType == eOperandType::Label)
+				{
+					m_code[m_code.size() - 1] = data::OpCodes::DEBUG_PrintImm;
+					pushWord(word);
+				}
+				else if (opType == eOperandType::Register)
+				{
+					m_code[m_code.size() - 1] = data::OpCodes::DEBUG_PrintReg;
+					m_code.push_back((u8)word);
+				}
+				else
+				{
+					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Register or Immediate (Label) required\n";
+					exit(1);
+				}
+				return;
+			}
 			if (!debugMode)
 				return;
 			if (String(line).toLower().startsWith("debug_break"))

@@ -187,11 +187,22 @@ assert(p != null);
 assert(count < MAX, "too many entries");    // an optional message (a string)
 ```
 When the condition is false, the program calls `__assert_fail(file, line, condition, message)`
-(the condition as written, the message or ""). The SDK's (`assert.ds`) prints them in the
-current text mode, then stops the machine (`hlt`; with `dsc -g`, ddb stops first at a
-`debug_break`). A program can write its own `__assert_fail` instead. With `NDEBUG` defined
+(the condition as written, the message or ""). The SDK's (`assert.ds`) prints them to the
+host's terminal with `debug_print` (no VGA needed), then stops the machine (`hlt`; with `dsc -g`,
+ddb stops first at a `debug_break`). A program (an OS, for example) can write its own
+`__assert_fail` instead, to show it on the screen. With `NDEBUG` defined
 (`dsc -D NDEBUG` or `#define(NDEBUG)`), asserts are only checked by the compiler: no code, the
 conditions are not run (so they should not have side effects that matter).
+
+### debug_print
+```
+debug_print("got here\n");
+debug_print(name);                      // any string / u8* (zero-terminated)
+```
+Prints a string to the host's terminal (drun's or ddb's stdout), not to the VM's screen: for
+tracing without the VGA stack. It is the `debug_print` instruction (`debug_print $label` /
+`debug_print R1` in dasm), which is always assembled and run (not only with `-g`, unlike
+`debug_break`). At most 4096 bytes are printed per call.
 
 ### Struct constants
 A `const` with a struct type (named or nameless) is a group of compile-time values: reading a
@@ -256,7 +267,7 @@ Not checked: low blocks (raw dasm), and writes through pointers to the program's
 `var` declarations (locals: scalars are not initialized unless given a value; structs are zeroed
 and get their default values), `if` / `else`, `while`, `do ... while (...);`,
 `for (init; condition; step)`, `break`, `continue`, `return`, blocks, expression statements,
-`low { ... }`, `assert(...)`.
+`low { ... }`, `assert(...)`, `debug_print(...)`.
 
 ### Expressions
 C operators and precedence: `= += -= *= /= %= &= |= ^= <<= >>=`, `?:`, `|| &&` (also `or`

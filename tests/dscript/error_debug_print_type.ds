@@ -1,0 +1,2 @@
+// expect-error: the debug_print argument
+sub main() -> i32 { debug_print(42); return 0; }

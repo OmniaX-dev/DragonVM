@@ -199,6 +199,7 @@ module.exports = grammar({
 			$.continue_statement,
 			$.low_block,
 			$.assert_statement,
+			$.debug_print_statement,
 			$.expression_statement,
 			$.empty_statement,
 		),
@@ -206,6 +207,8 @@ module.exports = grammar({
 			'assert', '(', field('condition', $._expression),
 			optional(seq(',', field('message', $._expression))), ')', ';',
 		),
+
+		debug_print_statement: $ => seq('debug_print', '(', field('value', $._expression), ')', ';'),
 
 		if_statement: $ => prec.right(seq(
 			'if', '(', field('condition', $._expression), ')',

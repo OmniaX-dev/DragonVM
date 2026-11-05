@@ -749,6 +749,15 @@ namespace dscript
 			expectPunct(";", "after assert(...)");
 			return n;
 		}
+		if (acceptKeyword("debug_print"))
+		{
+			Node* n = make(NodeKind::DebugPrint, pos);
+			expectPunct("(", "after 'debug_print'");
+			n->a = parseExpression();
+			expectPunct(")", "after debug_print(string)");
+			expectPunct(";", "after debug_print(...)");
+			return n;
+		}
 		if (acceptKeyword("if"))
 		{
 			Node* n = make(NodeKind::If, pos);

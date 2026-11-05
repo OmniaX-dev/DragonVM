@@ -639,3 +639,22 @@ sub main() { assert(x > 0); assert(p, "no p"); }
       (assert_statement
         (identifier)
         (string_literal)))))
+
+================================================================================
+debug_print
+================================================================================
+
+sub main() { debug_print("hi\n"); debug_print(s); }
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    (identifier)
+    (parameter_list)
+    (block
+      (debug_print_statement
+        (string_literal
+          (escape_sequence)))
+      (debug_print_statement
+        (identifier)))))

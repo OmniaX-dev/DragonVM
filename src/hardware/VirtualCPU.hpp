@@ -57,6 +57,10 @@ namespace dragon
 				i16 fetch16(void);
 				i32 fetch32(void);
 
+				// debug_print: the zero-terminated string at addr, to the host's stdout.
+				void debugPrint(u32 addr);
+				inline static constexpr u32 DebugPrintMaxLength = 4096;
+
 				void pushToStack(i32 value);
 				i32 popFromStack(void);
 

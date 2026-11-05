@@ -26,7 +26,7 @@ namespace dscript
 		// Declarations
 		Program, StructDecl, EnumDecl, EnumMember, ConstDecl, AliasDecl, VarDecl, FuncDecl,
 		// Statements
-		Block, If, While, DoWhile, For, Return, Break, Continue, ExprStmt, LowBlock, Assert,
+		Block, If, While, DoWhile, For, Return, Break, Continue, ExprStmt, LowBlock, Assert, DebugPrint,
 		// Expressions
 		IntLit, StrLit, BoolLit, Null, Ident, Unary, Binary, Assign, Ternary, Call, Index,
 		Member, Cast, SizeofType, SizeofExpr, PreInc, PreDec, PostInc, PostDec, InitList

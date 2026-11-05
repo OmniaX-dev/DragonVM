@@ -2665,6 +2665,16 @@ namespace dscript
 				label(lEnd);
 			}
 			break;
+			case NodeKind::DebugPrint:
+			{
+				// The string goes to the host's terminal (the debug_print instruction).
+				check(s->a);
+				requireConvertible(s->a, m_types.pointer(m_types.u8()), "the debug_print argument");
+				Reg r = gen(s->a);
+				emit("debug_print " + r);
+				release(r);
+			}
+			break;
 			case NodeKind::If:
 			{
 				check(s->a);

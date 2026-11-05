@@ -1,0 +1,15 @@
+// debug_print(string) writes to the host's terminal, without the VGA stack (and without -g).
+// expect-output: hello from debug_print\nvalue: 42\n
+
+const HELLO: string = "hello from debug_print\n";
+
+sub main() -> i32 {
+	var buff: u8[8];
+	buff[0] = '4'; buff[1] = '2'; buff[2] = 0;
+	var p: u8* = buff;
+	debug_print(HELLO);
+	debug_print("value: ");
+	debug_print(p);
+	debug_print("\n");
+	return 0;
+}
