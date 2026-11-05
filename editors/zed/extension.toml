@@ -12,7 +12,7 @@ authors = ["OmniaX-Dev"]
 
 [grammars.dscript]
 repository = "file:///home/sylar/GitRepos/Dragon/DragonVM"
-rev = "b78daea35163af002049ee4a7b90a3909302f7f5"
+rev = "c9c299d261bb6bbbfe81cc53910a21f70924c756"
 path = "editors/tree-sitter-dscript"
 
 [grammars.dasm]
