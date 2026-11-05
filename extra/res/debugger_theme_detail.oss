@@ -42,6 +42,12 @@ const $screenfx_icon_col = 3
 const $cmos_icon_row = 3
 const $cmos_icon_col = 0
 
+const $step_line_icon_row = 3
+const $step_line_icon_col = 1
+
+const $next_line_icon_row = 3
+const $next_line_icon_col = 2
+
 macro set_anim_data(__row_offset, __column_offset) {
 	animation = anim(frameCount: 1, stillFrame: 0, rowOffset: $__row_offset, \
 		 columnOffset: $__column_offset, rows: 3, columns: 4, \
@@ -78,6 +84,12 @@ macro set_anim_data(__row_offset, __column_offset) {
 (@toolbar_cmos button.icon) {
 	set_anim_data($cmos_icon_row, $cmos_icon_col)
 }
+(@toolbar_step_line button.icon) {
+	set_anim_data($step_line_icon_row, $step_line_icon_col)
+}
+(@toolbar_next_line button.icon) {
+	set_anim_data($next_line_icon_row, $next_line_icon_col)
+}
 (@code_program_btn button.icon) {
 	set_anim_data($code_icon_row, $code_icon_col)
 }
@@ -103,4 +115,8 @@ macro set_anim_data(__row_offset, __column_offset) {
 }
 (@toolbar_btn button:hover) {
 	icon.tint = $accentColorLight
+}
+
+(dragonRegisterView) {
+	fontSize = 18
 }

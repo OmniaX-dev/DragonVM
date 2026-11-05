@@ -4,6 +4,7 @@
 #include(int20.ds)
 #include(int30.ds)
 #include(allocator.ds)
+#include(<assert.ds>)
 
 sub main() {
 	*cast<u8*>(VGARegisters.VideoMode) = VGAVideoModes.TextSingleColor;

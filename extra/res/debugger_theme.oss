@@ -160,7 +160,7 @@ macro set_common_values(_borderColor = $borderColor, _fontSize = 18, _showBorder
 	showBackground = true
 	padding = rect(4, 4, 4, 4)
 	set_focus_border($blueAccent)
-	gridFontSize = 16
+	gridFontSize = 18
 	rowSpacing = 4.0
 	groupSpacing = 8.0
 	groupSize = 8
@@ -202,7 +202,7 @@ macro set_common_values(_borderColor = $borderColor, _fontSize = 18, _showBorder
 	}
 }
 (hexWatchList) {
-	fontSize = 16
+	fontSize = 18
 	showBackground = true
 	backgroundColor = rgba(18, 20, 18, 255)
 	showBorder = true
@@ -210,19 +210,19 @@ macro set_common_values(_borderColor = $borderColor, _fontSize = 18, _showBorder
 	borderWidth = 1
 }
 (@hex_bar label) {
-	fontSize = 16
+	fontSize = 18
 	padding = rect(4, 0, 4, 0)
 }
 (@hex_bar button) {
-	fontSize = 16
+	fontSize = 18
 	padding = rect(8, 1, 8, 1)
 }
 (@hex_bar checkbox) {
-	fontSize = 16
+	fontSize = 18
 	padding = rect(2, 1, 2, 1)
 }
 (@hex_bar textEdit) {
-	fontSize = 16
+	fontSize = 18
 	padding = rect(2, 1, 2, 1)
 }
 (@hex_toggle button) {
@@ -696,5 +696,6 @@ macro set_common_values(_borderColor = $borderColor, _fontSize = 18, _showBorder
 	linePadding = 2.0
 	scrollSpeed = 1.2
 	scrollSmoothFactor = 0.7
+	fontSize = 18
 }
 % ==========================
