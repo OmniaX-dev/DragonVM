@@ -18,6 +18,7 @@
 	"struct"
 	"enum"
 	"alias"
+	"namespace"
 	"low"
 	"cast"
 	"sizeof"
@@ -50,6 +51,7 @@
 ; Types
 (primitive_type) @type.builtin
 (type_identifier) @type
+(namespace_identifier) @type
 
 ; Declarations and uses
 (function_declaration
@@ -62,8 +64,19 @@
 	function: (member_expression
 		member: (field_identifier) @function.method))
 
-(scoped_identifier
-	name: (identifier) @function)
+; A::f(), A::B::f(), A::B::C::f(), ::f()
+(call_expression
+	function: (scoped_identifier
+		name: (identifier) @function))
+(call_expression
+	function: (scoped_identifier
+		name: (scoped_identifier
+			name: (identifier) @function)))
+(call_expression
+	function: (scoped_identifier
+		name: (scoped_identifier
+			name: (scoped_identifier
+				name: (identifier) @function))))
 
 ((identifier) @variable.special
 	(#eq? @variable.special "this"))

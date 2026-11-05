@@ -1,0 +1,9 @@
+// expect-error: 'Cursor' is private to List (priv)
+struct List {
+    priv struct Cursor { var at: i32; }
+    var head: i32;
+}
+sub main() -> i32 {
+    var c: List::Cursor;
+    return 0;
+}

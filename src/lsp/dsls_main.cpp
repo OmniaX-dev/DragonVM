@@ -148,7 +148,7 @@ namespace
 	}
 
 	// LSP symbol kinds
-	enum { KindMethod = 6, KindField = 8, KindEnum = 10, KindFunction = 12, KindVariable = 13, KindConstant = 14, KindEnumMember = 22, KindStruct = 23, KindTypeParameter = 26 };
+	enum { KindNamespace = 3, KindMethod = 6, KindField = 8, KindEnum = 10, KindFunction = 12, KindVariable = 13, KindConstant = 14, KindEnumMember = 22, KindStruct = 23, KindTypeParameter = 26 };
 
 	json analyzeInProcess(const std::string& root, const Options& o, const std::map<std::string, std::string>& docs)
 	{
@@ -221,35 +221,37 @@ namespace
 			};
 			for (const Node* d : program->list)
 			{
-				const std::string& name = d->name;
+				// Declared names (shortName) in their namespace / struct (scope).
+				const std::string& name = d->shortName.empty() ? d->name : d->shortName;
+				const std::string container = (d->owner != nullptr && d->kind != NodeKind::FuncDecl) ? d->owner->name : d->scope;
 				if (d->kind == NodeKind::FuncDecl && (d->value & 4) != 0)
 				{
-					// A method: <Struct>::<name>.
-					const size_t sep = name.find("::");
-					l_symbol(name.substr(sep + 2), KindMethod, d->namePos, name.substr(0, sep));
+					l_symbol(name, KindMethod, d->namePos, d->owner != nullptr ? d->owner->name : d->scope);
 					continue;
 				}
-				if (name.find("::") != std::string::npos || name.rfind("__lambda_", 0) == 0)
+				// Hidden: local constants / statics, lambdas.
+				if (!d->text.empty() || d->name.rfind("__lambda_", 0) == 0)
 					continue;
 				switch (d->kind)
 				{
-					case NodeKind::FuncDecl: l_symbol(name, KindFunction, d->namePos, ""); break;
-					case NodeKind::ConstDecl: l_symbol(name, KindConstant, d->namePos, ""); break;
-					case NodeKind::VarDecl: l_symbol(name, KindVariable, d->namePos, ""); break;
-					case NodeKind::AliasDecl: l_symbol(name, KindTypeParameter, d->namePos, ""); break;
+					case NodeKind::NamespaceDecl: l_symbol(name, KindNamespace, d->namePos, container); break;
+					case NodeKind::FuncDecl: l_symbol(name, KindFunction, d->namePos, container); break;
+					case NodeKind::ConstDecl: l_symbol(name, KindConstant, d->namePos, container); break;
+					case NodeKind::VarDecl: l_symbol(name, KindVariable, d->namePos, container); break;
+					case NodeKind::AliasDecl: l_symbol(name, KindTypeParameter, d->namePos, container); break;
 					case NodeKind::StructDecl:
 					{
 						const bool anonymous = d->value != 0;
 						if (!anonymous)
-							l_symbol(name, KindStruct, d->namePos, "");
+							l_symbol(name, KindStruct, d->namePos, container);
 						for (const Node* f : d->list)
-							l_symbol(f->name, KindField, f->namePos, anonymous ? "struct { ... }" : name);
+							l_symbol(f->name, KindField, f->namePos, anonymous ? "struct { ... }" : d->name);
 					}
 					break;
 					case NodeKind::EnumDecl:
-						l_symbol(name, KindEnum, d->namePos, "");
+						l_symbol(name, KindEnum, d->namePos, container);
 						for (const Node* m : d->list)
-							l_symbol(m->name, KindEnumMember, m->namePos, name);
+							l_symbol(m->name, KindEnumMember, m->namePos, d->name);
 					break;
 					default: break;
 				}

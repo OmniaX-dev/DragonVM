@@ -86,8 +86,40 @@ sub later(var x: i32) -> i32;           // a declaration (the definition can com
 interrupt sub handler() { ... }         // ends with rti; no parameters, returns void
 inline sub sq(var x: i32) -> i32 { ... }    // the body is generated at every call (see below)
 low { ... }                             // raw dasm (e.g. helper routines with labels)
+namespace Bios { ... }                  // groups declarations under a name (see below)
 ```
 Everything can be used before it is declared. `main` (no parameters) is the program's entry.
+
+### Namespaces
+```
+namespace Bios {
+    const ROWS = 25;
+    enum Color: u8 { Black, White = 15 }
+    namespace Text16 {                          // nested: Bios::Text16
+        sub print(var s: string) -> void { ... }
+        sub clear(var c: Color = Color.Black) -> void { ... }   // Bios::Color
+    }
+}
+namespace Bios::Text16 {                        // reopened (in any file), named with A::B
+    sub lines() -> i32 { return ROWS; }         // Bios::ROWS
+}
+
+Bios::Text16::print("hi");
+var c: Bios::Color = Bios::Color.White;
+```
+- A namespace holds any top-level declaration (subs, globals, constants, enums, aliases,
+  structs, low blocks, other namespaces). Its names are used from outside as `Namespace::name`
+  (from any depth: `Bios::Text16::print`).
+- A name is looked up from the innermost namespace outwards, then globally: in
+  `Bios::Text16`, `print` finds `Bios::Text16::print`, then `Bios::print`, then `print`.
+  `::name` is the global one (`::print` inside a namespace that has its own `print`).
+- `.` is for values (enum members, the fields of struct constants: `Bios::Color.White`), `::`
+  for scopes (namespaces, a struct's static subs and nested types).
+- `$name` in low blocks follows the same lookup (from the namespace of the sub, or of the low
+  block); `$Bios::ROWS` works too.
+- The labels and data symbols are made from the full name (`__ns_Bios__Text16__print`): names
+  in different namespaces never clash. A namespace and another declaration cannot have the
+  same full name. No `using namespace` (yet).
 
 ### Local constants and static variables
 In a sub (or any block), `const` declares any kind of constant (integer, struct, string,
@@ -141,8 +173,8 @@ var f: sub(Counter*, i32) -> i32 = Counter::add; // the method as a sub: this co
   the struct, `{ ... }` can only set the fields before the first private one (the private ones
   get their default values), and the private fields of struct constants are read only inside.
 - `static sub` in a struct has no `this`: it is a sub grouped under the struct's name, called as
-  `Struct.name(...)` or `Struct::name(...)` (also from the struct's other subs). A struct can
-  have only static subs (and no fields): a namespace.
+  `Struct.name(...)` or `Struct::name(...)` (also from the struct's other subs: a struct's subs
+  are not found by their name alone). A struct can have only static subs (and no fields).
 ```
 struct Print {
     static sub str(var s: string) { ... }
@@ -150,6 +182,24 @@ struct Print {
 };
 Print.line("hello");
 ```
+
+### Nested structs and enums
+A struct can declare structs and enums: they are named `Outer::Inner`, and inside the struct
+(its fields, subs and the types nested in it) also just `Inner`.
+```
+struct List {
+    struct Node { var value: i32; var next: Node*; }   // List::Node
+    enum Kind: u8 { Empty, Some }                       // List::Kind (List::Kind.Some)
+    priv struct Cursor { var at: Node*; }               // only usable in List
+    var head: Node*;
+    sub kind() -> Kind { return this->head == null ? Kind.Empty : Kind.Some; }
+}
+var n: List::Node;
+```
+- A nested struct is a struct of its own (not a field: `List` has only `head`); it can have
+  fields, methods and nested types.
+- `priv struct` / `priv enum`: only the outer struct (and what is nested in it) can use the
+  type. The subs of a nested struct can use the private fields and subs of the structs around it.
 
 ### Nameless structs
 `struct { fields }` is a type: it can be used for variables (global and local), fields, arrays,

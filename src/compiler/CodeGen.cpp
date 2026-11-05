@@ -41,12 +41,13 @@ namespace dscript
 		return nullptr;
 	}
 
-	// The dasm symbol of a global: local constants and statics are named <sub>::<name>.
-	static std::string dataSymbol(const std::string& name)
+	// The dasm symbol of a global: local constants and statics are named <sub>::<name>, the
+	// globals of a namespace <namespace>::<name>.
+	static std::string dataSymbol(const std::string& name, bool isStatic)
 	{
 		if (name.find(':') == std::string::npos)
 			return name;
-		std::string s = "__static_";
+		std::string s = isStatic ? "__static_" : "__ns_";
 		for (char c : name)
 			s += (c == ':' ? '_' : c);
 		return s;
@@ -93,24 +94,37 @@ namespace dscript
 		return nameParts(name).back();
 	}
 
-	// "in sub X" for local constants / statics ("" otherwise).
-	static std::string ownerOf(const std::string& name)
+	// "in sub X" for local constants / statics (their declaration; "" for the others).
+	static std::string ownerOf(const Node* decl)
 	{
-		std::vector<std::string> parts = nameParts(name);
-		if (parts.size() < 2)
+		if (decl == nullptr || decl->text.empty() || decl->owner == nullptr)
 			return "";
-		parts.pop_back();
-		if (parts[0].rfind("__lambda_", 0) == 0)
+		const Node* f = decl->owner;
+		if (f->name.rfind("__lambda_", 0) == 0)
 			return "in a lambda";
-		return parts.size() == 2 ? "in method " + parts[0] + "." + parts[1] : "in sub " + parts[0];
+		if ((f->value & 4) != 0 && f->owner != nullptr)
+			return "in method " + f->owner->name + "." + f->shortName;
+		return "in sub " + f->name;
 	}
 
-	// The dasm label of a sub (methods: <Struct>::<name>).
-	static std::string codeLabel(const std::string& name)
+	// The name of a declaration as declared (without its scopes).
+	static const std::string& declaredName(const Node* decl)
+	{
+		return decl->shortName.empty() ? decl->name : decl->shortName;
+	}
+
+	// An Ident as written.
+	static const std::string& writtenName(const Node* e)
+	{
+		return e->text.empty() ? e->name : e->text;
+	}
+
+	// The dasm label of a sub (methods: <Struct>::<name>; namespaces: <namespace>::<name>).
+	static std::string codeLabel(const std::string& name, bool method)
 	{
 		if (name.find(':') == std::string::npos)
 			return name;
-		std::string s = "__method_";
+		std::string s = method ? "__method_" : "__ns_";
 		for (char c : name)
 			s += (c == ':' ? '_' : c);
 		return s;
@@ -234,11 +248,144 @@ namespace dscript
 	// ===================================== Declarations =====================================
 	void CodeGen::declareName(const std::string& name, const SourcePos& pos, const std::string& what)
 	{
-		if (m_names.count(name) > 0)
-			error(pos, "'" + name + "' is already declared (as " + m_names[name] + ")");
-		if (m_types.builtin(name) != nullptr)
-			error(pos, "'" + name + "' is a builtin type name");
+		auto it = m_names.find(name);
+		if (it != m_names.end())
+		{
+			if (what == "a namespace" && it->second == what)
+				return;		// reopened
+			error(pos, "'" + name + "' is already declared (as " + it->second + ")");
+		}
+		const size_t sep = name.rfind("::");
+		const std::string last = (sep == std::string::npos) ? name : name.substr(sep + 2);
+		if (m_types.builtin(last) != nullptr)
+			error(pos, "'" + last + "' is a builtin type name");
 		m_names[name] = what;
+	}
+
+	// ==================================== Names and scopes ===================================
+	bool CodeGen::isDeclared(const std::string& name)
+	{
+		auto it = m_names.find(name);
+		return it != m_names.end() && it->second != "a namespace";
+	}
+
+	std::string CodeGen::qualify(const std::string& written, const std::string& scope)
+	{
+		std::string s = scope;
+		while (true)
+		{
+			const std::string candidate = s.empty() ? written : s + "::" + written;
+			bool found = isDeclared(candidate);
+			if (found && !s.empty() && m_structs.count(s) > 0)
+			{
+				// In a struct: only its nested types (and what is in them), not its subs.
+				const std::string first = s + "::" + written.substr(0, written.find("::"));
+				found = m_structs.count(first) > 0 || m_enums.count(first) > 0;
+			}
+			if (found)
+				return candidate;
+			if (s.empty())
+				return written;
+			const size_t sep = s.rfind("::");
+			s = (sep == std::string::npos) ? "" : s.substr(0, sep);
+		}
+	}
+
+	void CodeGen::checkTypeAccess(const std::string& full, const std::string& scope, const SourcePos& pos)
+	{
+		if (m_privTypes.empty())
+			return;
+		size_t sep = 0;
+		while (true)
+		{
+			sep = full.find("::", sep);
+			const std::string prefix = full.substr(0, sep);
+			auto it = m_privTypes.find(prefix);
+			if (it != m_privTypes.end())
+			{
+				const std::string& owner = it->second;
+				if (scope != owner && scope.rfind(owner + "::", 0) != 0)
+					error(pos, "'" + prefix.substr(owner.size() + 2) + "' is private to " + owner + " (priv): only " + owner + " can use it");
+			}
+			if (sep == std::string::npos)
+				break;
+			sep += 2;
+		}
+	}
+
+	void CodeGen::resolveNames(Node* program)
+	{
+		for (Node* d : program->list)
+		{
+			attempt([&] {
+				if (d->kind == NodeKind::StructDecl)
+				{
+					// The fields' types are looked up from the struct (its nested types).
+					for (Node* f : d->list)
+						resolveNames(f, f->scope);
+				}
+				else if (d->kind != NodeKind::LowBlock && d->kind != NodeKind::NamespaceDecl)
+					resolveNames(d, d->scope);
+			});
+		}
+	}
+
+	void CodeGen::resolveNames(Node* n, const std::string& scope)
+	{
+		if (n == nullptr)
+			return;
+		if (n->typeSyntax != nullptr)
+			resolveTypeNames(n->typeSyntax, scope);
+		if (n->kind == NodeKind::Ident && !n->resolved)
+		{
+			const std::string full = qualify(n->name, scope);
+			if (full != n->name)
+			{
+				if (n->text.empty())
+					n->text = n->name;
+				n->name = full;
+			}
+			n->resolved = true;
+			checkTypeAccess(n->name, scope, n->pos);
+		}
+		if (n->kind == NodeKind::LowBlock)
+			return;		// ($names: when it is generated)
+		// (a lambda's d is the sub it is written in: not part of it)
+		for (Node* c : { n->a, n->b, n->c, n->kind == NodeKind::FuncDecl ? nullptr : n->d })
+			resolveNames(c, scope);
+		for (Node* c : n->list)
+			resolveNames(c, scope);
+	}
+
+	void CodeGen::resolveTypeNames(TypeSyntax* ts, const std::string& scope)
+	{
+		if (ts == nullptr)
+			return;
+		switch (ts->kind)
+		{
+			case TypeSyntax::Kind::Named:
+				if (!ts->resolved)
+				{
+					if (ts->written.empty())
+						ts->written = ts->name;
+					ts->name = qualify(ts->name, scope);
+					ts->resolved = true;
+					checkTypeAccess(ts->name, scope, ts->pos);
+				}
+			break;
+			case TypeSyntax::Kind::Pointer:
+				resolveTypeNames(ts->base, scope);
+			break;
+			case TypeSyntax::Kind::Array:
+				resolveTypeNames(ts->base, scope);
+				resolveNames(ts->count, scope);
+			break;
+			case TypeSyntax::Kind::Function:
+				for (TypeSyntax* p : ts->params)
+					resolveTypeNames(p, scope);
+				resolveTypeNames(ts->base, scope);
+			break;
+		}
 	}
 
 	void CodeGen::collect(Node* program)
@@ -248,9 +395,14 @@ namespace dscript
 			attempt([&] {
 				switch (d->kind)
 				{
+					case NodeKind::NamespaceDecl:
+						declareName(d->name, d->namePos, "a namespace");
+					break;
 					case NodeKind::StructDecl:
 					{
 						declareName(d->name, d->pos, "a struct");
+						if (d->isPrivate && d->owner != nullptr)
+							m_privTypes[d->name] = d->owner->name;
 						StructInfo* info = new StructInfo();
 						info->name = d->name;
 						info->decl = d;
@@ -261,6 +413,8 @@ namespace dscript
 					break;
 					case NodeKind::EnumDecl:
 						declareName(d->name, d->pos, "an enum");
+						if (d->isPrivate && d->owner != nullptr)
+							m_privTypes[d->name] = d->owner->name;
 						m_enums[d->name].decl = d;
 					break;
 					case NodeKind::AliasDecl:
@@ -275,7 +429,9 @@ namespace dscript
 							VarInfo* v = new VarInfo();
 							v->name = d->name;
 							v->storage = VarInfo::Storage::Global;
-							v->symbol = dataSymbol(d->name);
+							v->isStatic = !d->text.empty();
+							v->decl = d;
+							v->symbol = dataSymbol(d->name, v->isStatic);
 							v->pos = d->pos;
 							v->defPos = d->namePos;
 							v->readOnly = true;
@@ -292,7 +448,9 @@ namespace dscript
 						VarInfo* v = new VarInfo();
 						v->name = d->name;
 						v->storage = VarInfo::Storage::Global;
-						v->symbol = dataSymbol(d->name);
+						v->isStatic = !d->text.empty();
+						v->decl = d;
+						v->symbol = dataSymbol(d->name, v->isStatic);
 						v->pos = d->pos;
 						v->defPos = d->namePos;
 						m_globals[d->name] = v;
@@ -336,6 +494,7 @@ namespace dscript
 		{
 			case TypeSyntax::Kind::Named:
 			{
+				const std::string& written = ts->written.empty() ? ts->name : ts->written;
 				if (Type* t = m_types.builtin(ts->name))
 				{
 					if (m_options.index != nullptr)
@@ -347,19 +506,19 @@ namespace dscript
 				{
 					StructInfo* info = m_structs[ts->name];
 					if (m_options.index != nullptr)
-						indexName(ts->pos, info->anonymous ? "struct" : ts->name, info->decl->namePos, hoverStruct(info));
+						indexName(ts->pos, info->anonymous ? "struct" : written, info->decl->namePos, hoverStruct(info));
 					return m_types.structType(info);
 				}
 				if (m_enums.count(ts->name) > 0)
 				{
 					if (m_options.index != nullptr)
-						indexName(ts->pos, ts->name, m_enums[ts->name].decl->namePos, hoverEnum(ts->name));
+						indexName(ts->pos, written, m_enums[ts->name].decl->namePos, hoverEnum(ts->name));
 					return enumType(m_enums[ts->name]);
 				}
 				if (m_aliases.count(ts->name) > 0)
 				{
 					if (m_options.index != nullptr)
-						indexName(ts->pos, ts->name, m_aliases[ts->name].decl->namePos, "alias " + ts->name);
+						indexName(ts->pos, written, m_aliases[ts->name].decl->namePos, "alias " + ts->name);
 					AliasInfo& a = m_aliases[ts->name];
 					if (a.type == nullptr)
 					{
@@ -371,7 +530,7 @@ namespace dscript
 					}
 					return a.type;
 				}
-				error(ts->pos, "unknown type: " + ts->name);
+				error(ts->pos, "unknown type: " + written);
 			}
 			case TypeSyntax::Kind::Pointer:
 				return m_types.pointer(resolveType(ts->base));
@@ -702,7 +861,14 @@ namespace dscript
 		{
 			case Type::Kind::Pointer: return mangle(t->base) + "p";
 			case Type::Kind::Array: return mangle(t->base) + "a" + std::to_string(t->count);
-			case Type::Kind::Struct: return "S" + t->structInfo->name;
+			case Type::Kind::Struct:
+			{
+				// (A::B -> A__B: labels have no ':')
+				std::string s = "S";
+				for (char c : t->structInfo->name)
+					s += (c == ':' ? '_' : c);
+				return s;
+			}
 			case Type::Kind::Function:
 			{
 				std::string s = "F";
@@ -1064,6 +1230,8 @@ namespace dscript
 				{
 					TypeSyntax ts;
 					ts.name = e->a->name;
+					ts.written = writtenName(e->a);
+					ts.resolved = true;
 					ts.pos = e->a->pos;
 					Type* t = resolveType(&ts);
 					if (t->kind == Type::Kind::Struct)
@@ -1358,8 +1526,14 @@ namespace dscript
 		FuncInfo* f = m_inline.empty() ? m_func : m_inline.back().func;
 		for (const Node* d = f ? f->decl : nullptr; d != nullptr; d = d->d)
 		{
-			if ((d->value & 4) != 0 && nameParts(d->name)[0] == info->name)
-				return true;
+			// (the subs of a nested struct are inside the structs around it too)
+			if ((d->value & 4) == 0)
+				continue;
+			for (const Node* o = d->owner; o != nullptr; o = o->owner)
+			{
+				if (o == info->decl)
+					return true;
+			}
 		}
 		return false;
 	}
@@ -1374,10 +1548,10 @@ namespace dscript
 	{
 		if ((f->decl->value & 16) == 0)
 			return;
-		const std::vector<std::string> parts = nameParts(f->decl->name);
-		auto it = m_structs.find(parts[0]);
+		const Node* owner = f->decl->owner;
+		auto it = owner ? m_structs.find(owner->name) : m_structs.end();
 		if (it != m_structs.end() && !insideStruct(it->second))
-			error(pos, "'" + parts[1] + "' is private to " + parts[0] + " (priv): only the subs of " + parts[0] + " can use it");
+			error(pos, "'" + f->decl->shortName + "' is private to " + owner->name + " (priv): only the subs of " + owner->name + " can use it");
 	}
 
 	// Fields whose default value is a sub (var f: sub(i32) -> i32 = twice;): stored as its
@@ -1422,7 +1596,7 @@ namespace dscript
 				error(callee->namePos, "'" + callee->name + "' is a method of " + obj->name + ", not a static sub: call it on a struct (x." +
 					callee->name + "(...)), or as " + method + "(&x, ...)");
 			if (m_options.index != nullptr)
-				indexName(obj->pos, obj->name, info->decl->namePos, hoverStruct(info));
+				indexName(obj->pos, writtenName(obj), info->decl->namePos, hoverStruct(info));
 			Node* id = new Node();
 			id->kind = NodeKind::Ident;
 			id->name = method;
@@ -1528,7 +1702,7 @@ namespace dscript
 			EnumInfo& info = m_enums[e->a->name];
 			resolveEnum(info);
 			if (m_options.index != nullptr)
-				indexName(e->a->pos, e->a->name, info.decl->namePos, hoverEnum(e->a->name));
+				indexName(e->a->pos, writtenName(e->a), info.decl->namePos, hoverEnum(e->a->name));
 			if (info.values.count(e->name) == 0)
 				error(e->pos, "enum " + e->a->name + " has no member '" + e->name + "'");
 			if (m_options.index != nullptr)
@@ -2907,7 +3081,14 @@ namespace dscript
 					continue;
 				}
 				size_t j = lowNameEnd(line, i + 1);
-				std::string name = line.substr(i + 1, j - i - 1);
+				const std::string written = line.substr(i + 1, j - i - 1);
+				std::string name = written;
+				// Not a local: looked up from the sub's namespace (or the low block's, at the top level).
+				bool local = false;
+				for (const auto& sc : m_scopes)
+					local = local || sc.count(name) > 0;
+				if (!name.empty() && !local)
+					name = qualify(name, topLevel ? low->scope : (m_func != nullptr ? m_func->decl->scope : std::string()));
 				std::string member;
 				if (j < line.size() && line[j] == '.' && m_enums.count(name) > 0)
 				{
@@ -2922,7 +3103,7 @@ namespace dscript
 					// The column of the name in the source (the line was trimmed; the first line of
 					// the block starts after its '{').
 					const int base = (pos.line == low->pos.line ? low->pos.column + 1 : 1) + (int)a;
-					indexLow({ pos.file, pos.line, base + (int)i + 1 }, name);
+					indexLow({ pos.file, pos.line, base + (int)i + 1 }, written, name);
 				}
 				VarInfo* v = name.empty() ? nullptr : lookupVar(name);
 				// $Constant.field.field...: a field of a struct constant (its value).
@@ -3105,7 +3286,7 @@ namespace dscript
 		{
 			const bool ok = attempt([&] {
 				VarInfo* v = m_globals[d->name];
-				if (m_options.rom && !v->readOnly && d->name.find("::") != std::string::npos)
+				if (m_options.rom && !v->readOnly && v->isStatic)
 					error(d->pos, "--rom: '" + d->text + "' is a static variable (stored in the program, like a global), but the program is in ROM, "
 						"where nothing can change: use const for read-only values, and keep what changes in RAM (locals, or a pointer to a RAM address)");
 				if (m_options.rom && !v->readOnly)
@@ -3311,19 +3492,19 @@ namespace dscript
 	std::string CodeGen::hoverVar(VarInfo* v)
 	{
 		const std::string type = v->type ? v->type->name(true) : "?";
-		const bool hidden = v->name.find("::") != std::string::npos;
+		const bool hidden = v->isStatic;
 		std::string where;
 		if (v->param)
 			where = "parameter";
 		else if (v->storage == VarInfo::Storage::Local)
 			where = "local";
 		else if (hidden)
-			where = (v->readOnly ? "" : "static, ") + ownerOf(v->name);
+			where = (v->readOnly ? "" : "static, ") + ownerOf(v->decl);
 		else
 			where = v->readOnly ? "constant array" : "global";
 		const std::string size = (v->type && !v->type->isScalar()) ? bytes(v->type->size()) : "";
 		const std::string keyword = v->readOnly ? "const " : (hidden ? "static var " : "var ");
-		return keyword + shownName(v->name) + ": " + type + comment({ where, size });
+		return keyword + (hidden ? declaredName(v->decl) : v->name) + ": " + type + comment({ where, size });
 	}
 
 	std::string CodeGen::hoverFunc(FuncInfo* f)
@@ -3338,8 +3519,8 @@ namespace dscript
 		const bool isStatic = (f->decl->value & 8) != 0;
 		s = std::string((f->decl->value & 16) != 0 ? "priv " : "") + (isStatic ? "static " : "") + s;
 		const size_t first = (method && !isStatic) ? 1 : 0;	// this is not shown
-		const std::vector<std::string> parts = nameParts(f->decl->name);
-		s += lambda ? "sub(" : "sub " + (method ? parts[0] + "." + parts[1] : f->decl->name) + "(";
+		const std::string owner = (method && f->decl->owner) ? f->decl->owner->name : "";
+		s += lambda ? "sub(" : "sub " + (method ? owner + "." + f->decl->shortName : f->decl->name) + "(";
 		if (f->type != nullptr)
 		{
 			for (size_t i = first; i < f->type->params.size() && i < f->paramNames.size(); i++)
@@ -3357,14 +3538,14 @@ namespace dscript
 		s += ")";
 		if (f->type != nullptr && f->type->base->kind != Type::Kind::Void)
 			s += " -> " + f->type->base->name(true);
-		return s + comment({ lambda ? "lambda" : isStatic ? "static sub of " + parts[0] : method ? "method of " + parts[0] : "" });
+		return s + comment({ lambda ? "lambda" : isStatic ? "static sub of " + owner : method ? "method of " + owner : "" });
 	}
 
 	std::string CodeGen::hoverConst(const std::string& name)
 	{
 		const ConstInfo& c = m_consts[name];
-		const std::string head = "const " + shownName(name);
-		const std::string note = comment({ ownerOf(name) });
+		const std::string head = "const " + (c.decl->text.empty() ? name : c.decl->text);
+		const std::string note = comment({ ownerOf(c.decl) });
 		if (!c.resolved || c.type == nullptr)
 			return head + note;
 		if (c.isString)
@@ -3415,7 +3596,7 @@ namespace dscript
 		// Its methods and static subs (the signature, without the comment).
 		for (FuncInfo* f : m_funcList)
 		{
-			if ((f->decl->value & 4) == 0 || nameParts(f->decl->name)[0] != info->name)
+			if ((f->decl->value & 4) == 0 || f->decl->owner != info->decl)
 				continue;
 			std::string sig = hoverFunc(f);
 			const size_t dot = sig.find(" " + info->name + ".");	// sub Name.m(...) -> sub m(...)
@@ -3454,16 +3635,20 @@ namespace dscript
 	}
 
 	// $name in a low block (pos: where the name is).
-	void CodeGen::indexLow(const SourcePos& pos, const std::string& name)
+	// written: as in the low block (a local constant / static: its hidden name, shown as written).
+	void CodeGen::indexLow(const SourcePos& pos, const std::string& written, const std::string& name)
 	{
+		const std::string shown = (written == name) && name.find("::") != std::string::npos && m_names.count(name) > 0
+			&& ((m_globals.count(name) > 0 && m_globals[name]->isStatic) || (m_consts.count(name) > 0 && !m_consts[name].decl->text.empty()))
+			? shownName(name) : written;
 		if (VarInfo* v = lookupVar(name))
-			indexName(pos, shownName(name), v->defPos, hoverVar(v));
+			indexName(pos, shown, v->defPos, hoverVar(v));
 		else if (m_consts.count(name) > 0)
-			indexName(pos, shownName(name), m_consts[name].decl->namePos, hoverConst(name));
+			indexName(pos, shown, m_consts[name].decl->namePos, hoverConst(name));
 		else if (m_enums.count(name) > 0)
-			indexName(pos, name, m_enums[name].decl->namePos, hoverEnum(name));
+			indexName(pos, shown, m_enums[name].decl->namePos, hoverEnum(name));
 		else if (m_funcs.count(name) > 0 && !m_funcs[name].empty())
-			indexName(pos, name, m_funcs[name][0]->decl->namePos, hoverFunc(m_funcs[name][0]));
+			indexName(pos, shown, m_funcs[name][0]->decl->namePos, hoverFunc(m_funcs[name][0]));
 	}
 
 	// The declarations themselves (hovering their names), and the final description of
@@ -3478,13 +3663,13 @@ namespace dscript
 		for (auto& s : m_structs)
 		{
 			StructInfo* info = s.second;
-			l_decl(info->decl->namePos, info->anonymous ? "struct" : info->name, hoverStruct(info));
+			l_decl(info->decl->namePos, info->anonymous ? "struct" : declaredName(info->decl), hoverStruct(info));
 			for (const StructField& f : info->fields)
 				l_decl(f.namePos, f.name, hoverField(info, f));
 		}
 		for (auto& e : m_enums)
 		{
-			l_decl(e.second.decl->namePos, e.first, hoverEnum(e.first));
+			l_decl(e.second.decl->namePos, declaredName(e.second.decl), hoverEnum(e.first));
 			for (const Node* m : e.second.decl->list)
 			{
 				auto it = e.second.values.find(m->name);
@@ -3492,18 +3677,18 @@ namespace dscript
 			}
 		}
 		for (auto& c : m_consts)
-			l_decl(c.second.decl->namePos, shownName(c.first), hoverConst(c.first));
+			l_decl(c.second.decl->namePos, declaredName(c.second.decl), hoverConst(c.first));
 		for (auto& a : m_aliases)
-			l_decl(a.second.decl->namePos, a.first, hoverAlias(a.first));
+			l_decl(a.second.decl->namePos, declaredName(a.second.decl), hoverAlias(a.first));
 		for (auto& g : m_globals)
 		{
 			if (g.second->type != nullptr)
-				l_decl(g.second->defPos, shownName(g.first), hoverVar(g.second));
+				l_decl(g.second->defPos, g.second->decl ? declaredName(g.second->decl) : shownName(g.first), hoverVar(g.second));
 		}
 		for (FuncInfo* f : m_funcList)
 		{
 			const bool lambda = f->decl->name.rfind("__lambda_", 0) == 0;
-			l_decl(f->decl->namePos, lambda ? "sub" : shownName(f->decl->name), hoverFunc(f));
+			l_decl(f->decl->namePos, lambda ? "sub" : declaredName(f->decl), hoverFunc(f));
 		}
 		m_options.index->rehover(hovers);
 	}
@@ -3511,6 +3696,7 @@ namespace dscript
 	std::vector<std::string> CodeGen::generate(Node* program)
 	{
 		collect(program);
+		resolveNames(program);
 		// Resolve the declarations (in any order: they can refer to each other). In analysis
 		// mode, what fails gets a placeholder so the rest can still be checked.
 		m_inDeclarations = true;
@@ -3545,6 +3731,8 @@ namespace dscript
 			if (!attempt([&] {
 				TypeSyntax ts;
 				ts.name = a.first;
+				ts.written = declaredName(a.second.decl);
+				ts.resolved = true;
 				ts.pos = a.second.decl->pos;
 				resolveType(&ts);
 			}))
@@ -3601,7 +3789,7 @@ namespace dscript
 			});
 			for (FuncInfo* f : funcs)
 			{
-				f->label = codeLabel(entry.first);
+				f->label = codeLabel(entry.first, (f->decl->value & 4) != 0);
 				if (funcs.size() > 1)
 				{
 					f->label += "__";

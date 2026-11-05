@@ -15,7 +15,9 @@ namespace dscript
 		enum class Kind { Named, Pointer, Array, Function };
 		Kind kind { Kind::Named };
 		SourcePos pos;
-		std::string name;					// Named
+		std::string name;					// Named (the full name once the code generator resolved it)
+		std::string written;				// Named: the name as written (empty: name)
+		bool resolved { false };			// Named: name is already the full name
 		TypeSyntax* base { nullptr };		// Pointer / Array; Function: the return type (nullptr: void)
 		struct Node* count { nullptr };		// Array (a constant expression; nullptr: [], the size of the value)
 		std::vector<TypeSyntax*> params;	// Function
@@ -24,7 +26,7 @@ namespace dscript
 	enum class NodeKind
 	{
 		// Declarations
-		Program, StructDecl, EnumDecl, EnumMember, ConstDecl, AliasDecl, VarDecl, FuncDecl,
+		Program, NamespaceDecl, StructDecl, EnumDecl, EnumMember, ConstDecl, AliasDecl, VarDecl, FuncDecl,
 		// Statements
 		Block, If, While, DoWhile, For, Return, Break, Continue, ExprStmt, LowBlock, Assert, DebugPrint,
 		// Expressions
@@ -48,7 +50,20 @@ namespace dscript
 		Node* c { nullptr };
 		Node* d { nullptr };
 		std::vector<Node*> list;		// Program / Block / struct fields / params / call arguments / ...
-		bool isPrivate { false };		// a struct field declared priv (methods: FuncDecl flag 16)
+		bool isPrivate { false };		// a struct field declared priv (methods: FuncDecl flag 16); a priv nested struct / enum
+
+		// Names and scopes (namespaces, structs).
+		// Declarations: name is the full name (Bios::Text16::print), shortName the name as declared
+		// (print), scope where the names in the declaration are looked up (Bios::Text16; for the
+		// methods, fields and nested types of a struct: the struct's full name).
+		std::string shortName;
+		std::string scope;
+		// Methods, nested structs / enums: the StructDecl they are in. Local constants / statics:
+		// the FuncDecl they are in.
+		Node* owner { nullptr };
+		// Ident: name is already final (a local, a parameter, a renamed local constant / static,
+		// ::global); the others are looked up from the scope by the code generator.
+		bool resolved { false };
 
 		// Filled in by the code generator.
 		Type* type { nullptr };

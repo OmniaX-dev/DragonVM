@@ -1,0 +1,60 @@
+// expect-rv: 0
+#include(check.ds)
+
+struct List {
+    struct Node {
+        var value: i32;
+        var next: Node*;			// List::Node
+    }
+    enum Kind: u8 { Empty, Some }
+    priv struct Cursor { var at: Node*; }
+
+    var head: Node*;
+    var count: i32;
+
+    sub push(var n: Node*) -> void {
+        n->next = this->head;
+        this->head = n;
+        this->count += 1;
+    }
+    sub sum() -> i32 {
+        var c: Cursor = { this->head };	// priv, inside List
+        var total: i32 = 0;
+        while (c.at != null) {
+            total += c.at->value;
+            c.at = c.at->next;
+        }
+        return total;
+    }
+    sub kind() -> Kind { return this->count == 0 ? Kind.Empty : Kind.Some; }
+    static sub make(var v: i32, var out: Node*) -> Node* {
+        out->value = v;
+        out->next = null;
+        return out;
+    }
+}
+
+namespace Ds {
+    struct Tree {
+        struct Leaf { var v: i32; }
+        var left: Leaf;
+        var right: Leaf;
+        sub total() -> i32 { return this->left.v + this->right.v; }
+    }
+}
+
+sub main() -> i32 {
+    var l: List = { null, 0 };
+    check(1, l.kind() == List::Kind.Empty);
+    var a: List::Node;
+    var b: List::Node;
+    l.push(List::make(5, &a));
+    l.push(List.make(7, &b));
+    check(2, l.sum() == 12 && l.count == 2);
+    check(3, l.kind() == List::Kind.Some && sizeof(List::Kind) == 1);
+    check(4, sizeof(List::Node) == 8);
+    var t: Ds::Tree = { { 1 }, { 2 } };
+    var leaf: Ds::Tree::Leaf = { 40 };
+    check(5, t.total() == 3 && leaf.v == 40);
+    return result();
+}

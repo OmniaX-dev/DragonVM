@@ -1,0 +1,6 @@
+// expect-error: 'Gfx' is already declared (as a struct)
+struct Gfx { var x: i32; }
+namespace Gfx {
+    var y: i32 = 0;
+}
+sub main() -> i32 { return 0; }

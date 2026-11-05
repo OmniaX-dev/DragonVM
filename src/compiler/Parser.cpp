@@ -29,6 +29,12 @@
 //   Cast:        typeSyntax, a               SizeofType: typeSyntax    SizeofExpr: a
 //   Pre/PostInc/Dec: a                       InitList: list
 //
+// Namespaces: namespace A { ... } (A::B, nested, reopened anywhere) only names its declarations:
+// they are top-level declarations named A::name (shortName: name, scope: A), and a NamespaceDecl
+// (name: the full name) for every namespace opened. A struct's nested structs / enums are hidden
+// top-level declarations named <Struct>::<name> (owner: the struct). Names used in a declaration
+// are looked up from its scope by the code generator (Ident / TypeSyntax not resolved here).
+//
 // Local constants (const in a sub) and static variables (static var): hidden top-level
 // ConstDecl / VarDecl named <sub>::<name> (text = the name as written), added before the
 // declaration they are in; in their scope, the name (also $name in low blocks) is renamed.
@@ -133,33 +139,120 @@ namespace dscript
 	{
 		Node* program = make(NodeKind::Program, peek().pos);
 		while (peek().kind != TokenKind::End)
-		{
-			Node* d = parseDeclaration();
-			for (Node* h : m_hoisted)
-				program->list.push_back(h);
-			m_hoisted.clear();
-			program->list.push_back(d);
-		}
+			parseTopLevel(program->list);
 		for (Node* s : m_anonStructs)
 			program->list.push_back(s);
 		m_anonStructs.clear();
+		for (Node* s : m_nested)
+			program->list.push_back(s);
+		m_nested.clear();
 		for (Node* l : m_lambdas)
 			program->list.push_back(l);
 		m_lambdas.clear();
 		return program;
 	}
 
+	void Parser::parseTopLevel(std::vector<Node*>& out)
+	{
+		if (isKeyword("namespace"))
+		{
+			parseNamespace(out);
+			return;
+		}
+		Node* d = parseDeclaration();
+		for (Node* h : m_hoisted)
+			out.push_back(h);
+		m_hoisted.clear();
+		out.push_back(d);
+	}
+
+	void Parser::parseNamespace(std::vector<Node*>& out)
+	{
+		const SourcePos pos = next().pos;
+		const SourcePos namePos = peek().pos;
+		bool global = false;
+		const std::string name = parseQualifiedName("after 'namespace'", global);
+		if (global)
+			error(namePos, "a namespace is named from where it is (namespace A::B, not ::A)");
+		const std::string outerNamespace = m_namespace;
+		const std::string outerScope = m_scope;
+		// namespace A::B { ... }: opens A, then A::B.
+		size_t start = 0;
+		while (true)
+		{
+			const size_t sep = name.find("::", start);
+			const std::string part = name.substr(start, sep == std::string::npos ? std::string::npos : sep - start);
+			Node* n = make(NodeKind::NamespaceDecl, pos);
+			n->namePos = namePos;
+			n->shortName = part;
+			n->scope = m_namespace;
+			m_namespace = m_namespace.empty() ? part : m_namespace + "::" + part;
+			n->name = m_namespace;
+			out.push_back(n);
+			if (sep == std::string::npos)
+				break;
+			start = sep + 2;
+		}
+		m_scope = m_namespace;
+		expectPunct("{", "to start the namespace");
+		while (!acceptPunct("}"))
+		{
+			if (peek().kind == TokenKind::End)
+				error(pos, "'}' missing at the end of namespace " + m_namespace);
+			parseTopLevel(out);
+		}
+		acceptPunct(";");
+		m_namespace = outerNamespace;
+		m_scope = outerScope;
+	}
+
+	std::string Parser::parseQualifiedName(const std::string& context, bool& global)
+	{
+		global = acceptPunct("::");
+		std::string name = expectIdentifier(context);
+		while (isPunct("::") && peek(1).kind == TokenKind::Identifier)
+		{
+			next();
+			name += "::" + next().text;
+		}
+		return name;
+	}
+
+	void Parser::nameDeclaration(Node* d)
+	{
+		d->shortName = d->name;
+		d->scope = m_scope;
+		if (!m_scope.empty())
+			d->name = m_scope + "::" + d->name;
+	}
+
 	Node* Parser::parseDeclaration(void)
 	{
 		if (isKeyword("struct")) return parseStruct();
 		if (isKeyword("enum")) return parseEnum();
-		if (isKeyword("const")) return parseConst();
-		if (isKeyword("alias")) return parseAlias();
-		if (isKeyword("low")) return parseLow();
+		if (isKeyword("const"))
+		{
+			Node* c = parseConst();
+			nameDeclaration(c);
+			return c;
+		}
+		if (isKeyword("alias"))
+		{
+			Node* a = parseAlias();
+			nameDeclaration(a);
+			return a;
+		}
+		if (isKeyword("low"))
+		{
+			Node* l = parseLow();
+			l->scope = m_scope;
+			return l;
+		}
 		if (isKeyword("var"))
 		{
 			Node* v = parseVarDecl();
 			expectPunct(";", "after the variable declaration");
+			nameDeclaration(v);
 			return v;
 		}
 		if (isKeyword("sub")) return parseFunction(0);
@@ -181,14 +274,16 @@ namespace dscript
 				error(peek().pos, "'sub' expected after 'inline'");
 			return parseFunction(2);
 		}
-		error(peek().pos, "declaration expected (var, sub, inline sub, struct, enum, const, alias or low), found " + describe(peek()));
+		error(peek().pos, "declaration expected (var, sub, inline sub, struct, enum, const, alias, namespace or low), found " + describe(peek()));
 	}
 
-	Node* Parser::parseStruct(void)
+	Node* Parser::parseStruct(const Node* owner)
 	{
 		Node* n = make(NodeKind::StructDecl, next().pos);
 		n->name = expectIdentifier("after 'struct'");
 		n->namePos = lastPos();
+		nameDeclaration(n);
+		n->owner = const_cast<Node*>(owner);
 		parseStructFields(n);
 		acceptPunct(";");
 		return n;
@@ -197,10 +292,26 @@ namespace dscript
 	void Parser::parseStructFields(Node* decl)
 	{
 		expectPunct("{", "to start the struct");
+		// The names in a named struct are looked up from it first (its nested types).
+		const std::string outerScope = m_scope;
+		if (decl->value == 0)
+			m_scope = decl->name;
 		while (!acceptPunct("}"))
 		{
 			// priv var / priv sub: only the struct's own subs can use it.
 			const bool priv = acceptKeyword("priv");
+			if (isKeyword("struct") || isKeyword("enum"))
+			{
+				// A nested struct / enum: <Struct>::<name> (priv: only usable in the struct).
+				if (decl->value != 0)
+					error(peek().pos, "nested types need a named struct (struct Name { ... }), not a nameless one");
+				if (isKeyword("struct") && !(peek(1).kind == TokenKind::Identifier))
+					error(peek(1).pos, "a nested struct needs a name (struct Name { ... }); use struct { ... } as the type of a field for a nameless one");
+				Node* nested = isKeyword("struct") ? parseStruct(decl) : parseEnum(decl);
+				nested->isPrivate = priv;
+				m_nested.push_back(nested);
+				continue;
+			}
 			if (isKeyword("static") && isKeyword("var", 1))
 				error(peek(1).pos, "structs have no static fields: use a global (or a constant) next to the struct");
 			if (isKeyword("sub") || isKeyword("inline") || isKeyword("static") || isKeyword("priv"))
@@ -238,16 +349,21 @@ namespace dscript
 				error(peek().pos, "struct fields are declared with 'var' (methods with 'sub'), found " + describe(peek()));
 			Node* field = parseVarDecl(false);
 			field->isPrivate = priv;
+			field->shortName = field->name;
+			field->scope = m_scope;
 			expectPunct(";", "after the struct field");
 			decl->list.push_back(field);
 		}
+		m_scope = outerScope;
 	}
 
-	Node* Parser::parseEnum(void)
+	Node* Parser::parseEnum(const Node* owner)
 	{
 		Node* n = make(NodeKind::EnumDecl, next().pos);
 		n->name = expectIdentifier("after 'enum'");
 		n->namePos = lastPos();
+		nameDeclaration(n);
+		n->owner = const_cast<Node*>(owner);
 		if (acceptPunct(":"))
 			n->typeSyntax = parseType();
 		expectPunct("{", "to start the enum");
@@ -340,6 +456,9 @@ namespace dscript
 		n->value = flags | (owner != nullptr ? 4 : 0);
 		n->name = expectIdentifier("after 'sub'");
 		n->namePos = lastPos();
+		// Methods: <Struct>::<name> (the scope is the struct's); the others: in the namespace.
+		nameDeclaration(n);
+		n->owner = const_cast<Node*>(owner);
 		expectPunct("(", "after the sub name");
 		parseParams(n);
 		if (owner != nullptr && (flags & 8) == 0)
@@ -351,14 +470,14 @@ namespace dscript
 			TypeSyntax* named = new TypeSyntax();
 			named->pos = n->namePos;
 			named->name = owner->name;
+			named->written = owner->shortName;
+			named->resolved = true;
 			self->typeSyntax = new TypeSyntax();
 			self->typeSyntax->kind = TypeSyntax::Kind::Pointer;
 			self->typeSyntax->pos = n->namePos;
 			self->typeSyntax->base = named;
 			n->list.insert(n->list.begin(), self);
 		}
-		if (owner != nullptr)
-			n->name = owner->name + "::" + n->name;
 		if (acceptPunct("->"))
 			n->typeSyntax = parseType();
 		if (owner != nullptr && !isPunct("{"))
@@ -409,6 +528,8 @@ namespace dscript
 		Node* n = make(NodeKind::FuncDecl, next().pos);
 		n->value = interrupt ? 1 : 0;
 		n->name = "__lambda_" + std::to_string(m_lambdaCount++);
+		n->shortName = n->name;
+		n->scope = m_scope;
 		n->namePos = n->pos;	// 'sub'
 		expectPunct("(", "after 'sub' (a lambda: sub(var x: i32) -> i32 { ... })");
 		parseParams(n);
@@ -428,6 +549,7 @@ namespace dscript
 		m_lambdas.push_back(n);
 		Node* id = make(NodeKind::Ident, n->pos);
 		id->name = n->name;
+		id->resolved = true;
 		return id;
 	}
 
@@ -492,6 +614,8 @@ namespace dscript
 			// struct { fields }: a nameless struct, declared at the top level under a hidden name.
 			Node* decl = make(NodeKind::StructDecl, next().pos);
 			decl->name = "__anon_struct_" + std::to_string(++m_anonCount);
+			decl->shortName = decl->name;
+			decl->scope = m_scope;
 			decl->namePos = decl->pos;	// 'struct'
 			decl->value = 1;
 			if (!isPunct("{"))
@@ -499,11 +623,17 @@ namespace dscript
 			parseStructFields(decl);
 			m_anonStructs.push_back(decl);
 			t->name = decl->name;
+			t->resolved = true;
 		}
 		else if (acceptKeyword("void"))
 			t->name = "void";
 		else
-			t->name = expectIdentifier("(type)");
+		{
+			bool global = false;
+			t->name = parseQualifiedName("(type)", global);
+			t->written = (global ? "::" : "") + t->name;
+			t->resolved = global;
+		}
 		while (true)
 		{
 			if (isPunct("*"))
@@ -573,13 +703,15 @@ namespace dscript
 
 	// The name an identifier refers to in the current scopes (a local constant / static: its
 	// hidden name).
-	std::string Parser::localName(const std::string& name, const SourcePos& pos)
+	std::string Parser::localName(const std::string& name, const SourcePos& pos, bool* found)
 	{
 		for (int i = (int)m_scopes.size() - 1; i >= 0; i--)
 		{
 			auto it = m_scopes[i].find(name);
 			if (it == m_scopes[i].end())
 				continue;
+			if (found != nullptr)
+				*found = true;
 			if (!it->second.empty())
 				return it->second;
 			if (i < m_hoistScope)
@@ -643,6 +775,9 @@ namespace dscript
 		const std::string base = m_currentFunc->name + "::" + d->name;
 		const int n = ++m_hoistedCount[base];
 		d->text = d->name;
+		d->shortName = d->name;
+		d->scope = m_scope;
+		d->owner = m_currentFunc;
 		const std::string hidden = (n == 1 ? base : base + "::" + std::to_string(n));
 		declareLocal(d->name, hidden);
 		d->name = hidden;
@@ -839,7 +974,7 @@ namespace dscript
 			expectPunct(";", "after continue");
 			return make(NodeKind::Continue, pos);
 		}
-		if ((isKeyword("sub") && peek(1).kind == TokenKind::Identifier) || isKeyword("inline") || isKeyword("struct") || isKeyword("enum"))
+		if ((isKeyword("sub") && peek(1).kind == TokenKind::Identifier) || isKeyword("inline") || isKeyword("struct") || isKeyword("enum") || isKeyword("namespace"))
 			error(pos, "'" + peek().text + "' declarations are only allowed at the top level");
 		Node* n = make(NodeKind::ExprStmt, pos);
 		n->a = parseExpression();
@@ -1060,18 +1195,22 @@ namespace dscript
 				n->text += next().text;
 			return n;
 		}
-		if (t.kind == TokenKind::Identifier)
+		if (t.kind == TokenKind::Identifier || (isPunct("::") && peek(1).kind == TokenKind::Identifier))
 		{
 			Node* n = make(NodeKind::Ident, t.pos);
-			if (isPunct("::", 1))
+			if (isPunct("::") || isPunct("::", 1))
 			{
-				// Struct::method: the method as a value (a sub pointer) or called directly.
-				n->name = next().text;
-				next();
-				n->name += "::" + expectIdentifier("after '::' (Struct::method)");
+				// A::B::name (a namespace's, a struct's static sub / nested type), ::name (global).
+				bool global = false;
+				n->name = parseQualifiedName("after '::'", global);
+				n->resolved = global;
+				if (global)
+					n->text = "::" + n->name;
 				return n;
 			}
-			n->name = localName(t.text, t.pos);
+			bool local = false;
+			n->name = localName(t.text, t.pos, &local);
+			n->resolved = local;
 			if (n->name != t.text)
 				n->text = t.text;
 			next();

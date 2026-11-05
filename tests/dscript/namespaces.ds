@@ -1,0 +1,81 @@
+// expect-rv: 0
+#include(check.ds)
+
+var counter: i32 = 100;
+sub value() -> i32 { return 1; }
+
+namespace Gfx {
+    var counter: i32 = 0;
+    const WIDTH = 320;
+    enum Color: u8 { Black, Red = 4, White = 15 }
+    alias Pixel = u8;
+    struct Point { var x: i32; var y: i32; }
+
+    // The namespace's own names first, then the global ones.
+    sub value() -> i32 { return 2; }
+    sub bump() -> i32 {
+        counter += 1;
+        return counter + value() * 10 + ::value() * 100;
+    }
+    sub area(var p: Point*) -> i32 { return p->x * p->y; }
+
+    namespace Text {
+        const HEIGHT = 25;
+        sub cell(var x: i32, var y: i32) -> i32 { return y * WIDTH + x; }	// Gfx::WIDTH
+        sub color() -> Color { return Color.White; }						// Gfx::Color
+    }
+}
+
+// Reopened, and named with A::B.
+namespace Gfx::Text {
+    sub rows() -> i32 { return HEIGHT; }
+}
+
+namespace Gfx {
+    inline sub twice(var x: i32) -> i32 { return x * 2; }
+}
+
+// Low blocks see the namespace's names.
+namespace Gfx {
+    sub low_counter() -> i32 {
+        var r: i32 = 0;
+        low {
+            mov $r, $counter
+        }
+        return r;
+    }
+}
+
+// Overloads on structs of different namespaces; a qualified $name.
+namespace Other { struct Point { var z: i32; } }
+sub pick(var p: Gfx::Point*) -> i32 { return p->x; }
+sub pick(var p: Other::Point*) -> i32 { return p->z * 10; }
+sub low_width() -> i32 {
+    var r: i32 = 0;
+    low {
+        mov $r, $Gfx::WIDTH
+    }
+    return r;
+}
+
+sub main() -> i32 {
+    check(1, Gfx::bump() == 1 + 20 + 100);
+    check(2, counter == 100 && Gfx::counter == 1);
+    check(3, Gfx::WIDTH == 320 && Gfx::Text::HEIGHT == 25);
+    check(4, Gfx::Color.Red == 4 && sizeof(Gfx::Color) == 1);
+    var p: Gfx::Point = { 3, 4 };
+    check(5, Gfx::area(&p) == 12);
+    check(6, Gfx::Text::cell(2, 1) == 322);
+    check(7, Gfx::Text::color() == Gfx::Color.White);
+    check(8, Gfx::Text::rows() == 25);
+    var px: Gfx::Pixel = 255;
+    check(9, px == 255 && sizeof(px) == 1);
+    check(10, Gfx::low_counter() == 1);
+    var f: sub() -> i32 = Gfx::value;
+    check(11, f() == 2 && value() == 1);
+    check(12, Gfx::twice(21) == 42);
+    var o: Other::Point = { 5 };
+    check(13, pick(&p) == 3 && pick(&o) == 50);
+    check(14, low_width() == 320);
+    return result();
+}

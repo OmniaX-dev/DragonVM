@@ -38,6 +38,10 @@
             "named": true
           },
           {
+            "type": "scoped_type_identifier",
+            "named": true
+          },
+          {
             "type": "struct_type",
             "named": true
           },
@@ -166,6 +170,10 @@
           },
           {
             "type": "primitive_type",
+            "named": true
+          },
+          {
+            "type": "scoped_type_identifier",
             "named": true
           },
           {
@@ -1152,6 +1160,10 @@
             "named": true
           },
           {
+            "type": "scoped_type_identifier",
+            "named": true
+          },
+          {
             "type": "struct_type",
             "named": true
           },
@@ -1315,6 +1327,10 @@
           },
           {
             "type": "primitive_type",
+            "named": true
+          },
+          {
+            "type": "scoped_type_identifier",
             "named": true
           },
           {
@@ -1514,6 +1530,49 @@
           }
         ]
       }
+    }
+  },
+  {
+    "type": "declaration_list",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "alias_declaration",
+          "named": true
+        },
+        {
+          "type": "const_declaration",
+          "named": true
+        },
+        {
+          "type": "enum_declaration",
+          "named": true
+        },
+        {
+          "type": "function_declaration",
+          "named": true
+        },
+        {
+          "type": "low_block",
+          "named": true
+        },
+        {
+          "type": "namespace_declaration",
+          "named": true
+        },
+        {
+          "type": "struct_declaration",
+          "named": true
+        },
+        {
+          "type": "variable_declaration",
+          "named": true
+        }
+      ]
     }
   },
   {
@@ -1733,6 +1792,10 @@
           },
           {
             "type": "primitive_type",
+            "named": true
+          },
+          {
+            "type": "scoped_type_identifier",
             "named": true
           },
           {
@@ -1994,6 +2057,10 @@
             "named": true
           },
           {
+            "type": "scoped_type_identifier",
+            "named": true
+          },
+          {
             "type": "struct_type",
             "named": true
           },
@@ -2115,6 +2182,10 @@
         },
         {
           "type": "function_declaration",
+          "named": true
+        },
+        {
+          "type": "nested_type_declaration",
           "named": true
         }
       ]
@@ -2521,6 +2592,10 @@
             "named": true
           },
           {
+            "type": "scoped_type_identifier",
+            "named": true
+          },
+          {
             "type": "struct_type",
             "named": true
           },
@@ -2583,6 +2658,10 @@
             "named": true
           },
           {
+            "type": "scoped_type_identifier",
+            "named": true
+          },
+          {
             "type": "struct_type",
             "named": true
           },
@@ -2615,6 +2694,10 @@
         },
         {
           "type": "primitive_type",
+          "named": true
+        },
+        {
+          "type": "scoped_type_identifier",
           "named": true
         },
         {
@@ -3190,6 +3273,10 @@
             "named": true
           },
           {
+            "type": "scoped_type_identifier",
+            "named": true
+          },
+          {
             "type": "struct_type",
             "named": true
           },
@@ -3358,6 +3445,70 @@
     }
   },
   {
+    "type": "namespace_declaration",
+    "named": true,
+    "fields": {
+      "body": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "declaration_list",
+            "named": true
+          }
+        ]
+      },
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "namespace_name",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "namespace_name",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "namespace_identifier",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "nested_type_declaration",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "enum_declaration",
+          "named": true
+        },
+        {
+          "type": "priv_modifier",
+          "named": true
+        },
+        {
+          "type": "struct_declaration",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "parameter",
     "named": true,
     "fields": {
@@ -3479,6 +3630,10 @@
           },
           {
             "type": "primitive_type",
+            "named": true
+          },
+          {
+            "type": "scoped_type_identifier",
             "named": true
           },
           {
@@ -3632,6 +3787,10 @@
           "named": true
         },
         {
+          "type": "scoped_type_identifier",
+          "named": true
+        },
+        {
           "type": "struct_type",
           "named": true
         },
@@ -3668,6 +3827,10 @@
           },
           {
             "type": "primitive_type",
+            "named": true
+          },
+          {
+            "type": "scoped_type_identifier",
             "named": true
           },
           {
@@ -3789,15 +3952,49 @@
           {
             "type": "identifier",
             "named": true
+          },
+          {
+            "type": "scoped_identifier",
+            "named": true
           }
         ]
       },
       "scope": {
         "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "namespace_identifier",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "scoped_type_identifier",
+    "named": true,
+    "fields": {
+      "name": {
+        "multiple": false,
         "required": true,
         "types": [
           {
+            "type": "scoped_type_identifier",
+            "named": true
+          },
+          {
             "type": "type_identifier",
+            "named": true
+          }
+        ]
+      },
+      "scope": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "namespace_identifier",
             "named": true
           }
         ]
@@ -3830,6 +4027,10 @@
           },
           {
             "type": "primitive_type",
+            "named": true
+          },
+          {
+            "type": "scoped_type_identifier",
             "named": true
           },
           {
@@ -3927,6 +4128,10 @@
             "named": true
           },
           {
+            "type": "scoped_type_identifier",
+            "named": true
+          },
+          {
             "type": "sizeof_expression",
             "named": true
           },
@@ -3985,6 +4190,10 @@
         },
         {
           "type": "low_block",
+          "named": true
+        },
+        {
+          "type": "namespace_declaration",
           "named": true
         },
         {
@@ -4613,6 +4822,10 @@
             "named": true
           },
           {
+            "type": "scoped_type_identifier",
+            "named": true
+          },
+          {
             "type": "struct_type",
             "named": true
           },
@@ -5161,6 +5374,14 @@
   {
     "type": "low",
     "named": false
+  },
+  {
+    "type": "namespace",
+    "named": false
+  },
+  {
+    "type": "namespace_identifier",
+    "named": true
   },
   {
     "type": "not",

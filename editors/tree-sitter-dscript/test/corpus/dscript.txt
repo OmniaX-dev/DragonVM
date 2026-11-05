@@ -508,7 +508,7 @@ sub f(var c: Counter*) -> i32 {
           (primitive_type)
           (primitive_type))
         (scoped_identifier
-          (type_identifier)
+          (namespace_identifier)
           (identifier)))
       (return_statement
         (call_expression
@@ -571,7 +571,7 @@ sub main() { Out.str("x"); Out::str("y"); }
       (expression_statement
         (call_expression
           (scoped_identifier
-            (type_identifier)
+            (namespace_identifier)
             (identifier))
           (argument_list
             (string_literal)))))))
@@ -658,3 +658,78 @@ sub main() { debug_print("hi\n"); debug_print(s); }
           (escape_sequence)))
       (debug_print_statement
         (identifier)))))
+
+================================================================================
+Namespaces and nested types
+================================================================================
+
+namespace Gfx::Text {
+    const HEIGHT = 25;
+    sub rows() -> Gfx::Color { return ::value() + Bios::Text16::print(Color.Red); }
+}
+
+struct List {
+    struct Node { var next: Node*; }
+    priv enum Kind: u8 { Empty }
+    var head: List::Node*;
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (namespace_declaration
+    (namespace_name
+      (namespace_identifier)
+      (namespace_identifier))
+    (declaration_list
+      (const_declaration
+        (identifier)
+        (number_literal))
+      (function_declaration
+        (identifier)
+        (parameter_list)
+        (scoped_type_identifier
+          (namespace_identifier)
+          (type_identifier))
+        (block
+          (return_statement
+            (binary_expression
+              (call_expression
+                (scoped_identifier
+                  (identifier))
+                (argument_list))
+              (call_expression
+                (scoped_identifier
+                  (namespace_identifier)
+                  (scoped_identifier
+                    (namespace_identifier)
+                    (identifier)))
+                (argument_list
+                  (member_expression
+                    (identifier)
+                    (field_identifier))))))))))
+  (struct_declaration
+    (type_identifier)
+    (field_list
+      (nested_type_declaration
+        (struct_declaration
+          (type_identifier)
+          (field_list
+            (field_declaration
+              (field_identifier)
+              (pointer_type
+                (type_identifier))))))
+      (nested_type_declaration
+        (priv_modifier)
+        (enum_declaration
+          (type_identifier)
+          (primitive_type)
+          (enumerator_list
+            (enumerator
+              (identifier)))))
+      (field_declaration
+        (field_identifier)
+        (pointer_type
+          (scoped_type_identifier
+            (namespace_identifier)
+            (type_identifier)))))))

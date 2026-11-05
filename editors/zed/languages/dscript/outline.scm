@@ -1,3 +1,7 @@
+(namespace_declaration
+	"namespace" @context
+	name: (namespace_name) @name) @item
+
 (function_declaration
 	[(interrupt_modifier) (inline_modifier) (static_modifier) (priv_modifier)]* @context
 	"sub" @context
@@ -21,11 +25,21 @@
 		"const" @context
 		name: (identifier) @name) @item)
 
+(declaration_list
+	(const_declaration
+		"const" @context
+		name: (identifier) @name) @item)
+
 (alias_declaration
 	"alias" @context
 	name: (type_identifier) @name) @item
 
 (source_file
+	(variable_declaration
+		"var" @context
+		name: (identifier) @name) @item)
+
+(declaration_list
 	(variable_declaration
 		"var" @context
 		name: (identifier) @name) @item)

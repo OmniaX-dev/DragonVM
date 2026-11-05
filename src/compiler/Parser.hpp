@@ -25,10 +25,17 @@ namespace dscript
 			Node* make(NodeKind kind, const SourcePos& pos);
 			const SourcePos& lastPos(void) const;	// of the token just read
 
+			// One top-level declaration (a namespace: all of its declarations) into `out`.
+			void parseTopLevel(std::vector<Node*>& out);
+			void parseNamespace(std::vector<Node*>& out);
+			// A name with its scopes: A::B::c (leading :: for the global scope: global = true).
+			std::string parseQualifiedName(const std::string& context, bool& global);
+			// The declaration's full name, shortName and scope (in the current scope).
+			void nameDeclaration(Node* d);
 			Node* parseDeclaration(void);
-			Node* parseStruct(void);
+			Node* parseStruct(const Node* owner = nullptr);
 			void parseStructFields(Node* decl);
-			Node* parseEnum(void);
+			Node* parseEnum(const Node* owner = nullptr);
 			Node* parseConst(void);
 			Node* parseAlias(void);
 			Node* parseVarDecl(bool allowNoType = true);
@@ -49,7 +56,7 @@ namespace dscript
 			void pushScope(void);
 			void popScope(void);
 			void declareLocal(const std::string& name, const std::string& hidden = "");
-			std::string localName(const std::string& name, const SourcePos& pos);
+			std::string localName(const std::string& name, const SourcePos& pos, bool* found = nullptr);
 			std::string renameLow(const std::string& text);
 
 			Node* parseExpression(void);
@@ -76,6 +83,12 @@ namespace dscript
 			std::vector<Node*> m_hoisted;
 			std::map<std::string, int> m_hoistedCount;
 			std::vector<std::map<std::string, std::string>> m_scopes;
-			int m_hoistScope { -1 };	// in the value of a local const / static: the scopes below this one are not usable
+			int m_hoistScope { -1 };
+			// The namespace being parsed (Bios::Text16, "" at the global scope), and the scope of the
+			// declarations being parsed (the namespace, or a struct's full name in its body).
+			std::string m_namespace;
+			std::string m_scope;
+			// Nested structs / enums (in a struct): hidden top-level declarations.
+			std::vector<Node*> m_nested;	// in the value of a local const / static: the scopes below this one are not usable
 	};
 }

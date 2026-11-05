@@ -1,0 +1,5 @@
+// expect-error: declarations are only allowed at the top level
+sub main() -> i32 {
+    namespace Inner { }
+    return 0;
+}

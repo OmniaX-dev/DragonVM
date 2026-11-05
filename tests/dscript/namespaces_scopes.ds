@@ -1,0 +1,40 @@
+// expect-rv: 0
+#include(check.ds)
+
+namespace Mem {
+    const BLOCK = 16;
+    var pool: u8[BLOCK * 2];						// array size from the namespace
+    sub next_id(var step: i32 = BLOCK) -> i32 {	// default value from the namespace
+        static var id: i32 = 0;					// a static of a namespace's sub
+        id += step;
+        return id;
+    }
+    sub apply(var f: sub(i32) -> i32, var x: i32) -> i32 { return f(x); }
+    sub triple(var x: i32) -> i32 {
+        return apply(sub(var v: i32) -> i32 { return v * 3 + BLOCK - 16; }, x);	// a lambda in it
+    }
+    struct Block {
+        var size: i32 = BLOCK;						// field default from the namespace
+        priv var secret: i32;
+        struct Header {
+            var tag: i32;
+            // A nested struct's subs can use the priv fields of the struct around it.
+            sub peek(var b: Block*) -> i32 { return b->secret + this->tag; }
+        }
+        sub set(var v: i32) -> void { this->secret = v; }
+        sub grow() -> i32 { return next_id(1) + this->size; }	// Mem::next_id, unqualified
+    }
+}
+
+sub main() -> i32 {
+    check(1, Mem::next_id() == 16 && Mem::next_id(2) == 18);
+    check(2, sizeof(Mem::pool) == 32);
+    check(3, Mem::triple(5) == 15);
+    var b: Mem::Block;
+    b.set(7);
+    check(4, b.size == 16);
+    var h: Mem::Block::Header = { 3 };
+    check(5, h.peek(&b) == 10);
+    check(6, b.grow() == 19 + 16);
+    return result();
+}

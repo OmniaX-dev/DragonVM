@@ -20,6 +20,8 @@ namespace dscript
 		SourcePos pos;
 		SourcePos defPos;			// where the name is declared
 		bool param { false };		// a parameter (also those of an expanded inline sub)
+		bool isStatic { false };	// a static variable / constant array of a sub (<sub>::<name>)
+		const Node* decl { nullptr };	// globals: the declaration
 	};
 
 	struct FuncInfo
@@ -80,7 +82,7 @@ namespace dscript
 			bool attempt(const std::function<void()>& fn);
 			void indexName(const SourcePos& pos, const std::string& written, const SourcePos& def, const std::string& hover);
 			void indexDeclarations(void);
-			void indexLow(const SourcePos& pos, const std::string& name);
+			void indexLow(const SourcePos& pos, const std::string& written, const std::string& name);
 			std::string hoverVar(VarInfo* v);
 			std::string hoverFunc(FuncInfo* f);
 			std::string hoverConst(const std::string& name);
@@ -89,6 +91,18 @@ namespace dscript
 			std::string hoverEnum(const std::string& name);
 			std::string hoverAlias(const std::string& name);
 			std::string hoverType(const std::string& name, const SourcePos& usePos, SourcePos& def);
+
+			// ===== names and scopes =====
+			// The full name `written` refers to from `scope` (the innermost scope first; in a struct,
+			// only its nested types), or `written` if nothing has it.
+			std::string qualify(const std::string& written, const std::string& scope);
+			bool isDeclared(const std::string& name);
+			// priv nested types: only usable in their struct.
+			void checkTypeAccess(const std::string& full, const std::string& scope, const SourcePos& pos);
+			// Every name in the declarations -> its full name (before anything is checked).
+			void resolveNames(Node* program);
+			void resolveNames(Node* n, const std::string& scope);
+			void resolveTypeNames(TypeSyntax* ts, const std::string& scope);
 
 			// ===== declarations =====
 			void collect(Node* program);
@@ -174,7 +188,8 @@ namespace dscript
 		private:
 			CodeGenOptions m_options;
 			TypeTable m_types;
-			std::map<std::string, std::string> m_names;		// every global name -> what it is
+			std::map<std::string, std::string> m_names;		// every global name -> what it is (namespaces too)
+			std::map<std::string, std::string> m_privTypes;	// priv nested struct / enum -> its struct
 			std::map<std::string, StructInfo*> m_structs;
 			std::map<std::string, EnumInfo> m_enums;
 			std::map<std::string, AliasInfo> m_aliases;

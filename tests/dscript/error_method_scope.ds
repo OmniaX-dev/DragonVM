@@ -1,0 +1,7 @@
+// expect-error: unknown name: helper
+// A struct's static subs are not found without the struct's name (only its nested types are).
+struct S {
+    static sub helper() -> i32 { return 1; }
+    sub run() -> i32 { return helper(); }
+}
+sub main() -> i32 { var s: S; return s.run(); }

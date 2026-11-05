@@ -34,12 +34,14 @@ module.exports = grammar({
 
 	conflicts: $ => [
 		[$._expression, $._type],
+		[$.scoped_identifier, $.scoped_type_identifier],
 	],
 
 	rules: {
 		source_file: $ => repeat($._top_level),
 
 		_top_level: $ => choice(
+			$.namespace_declaration,
 			$.struct_declaration,
 			$.enum_declaration,
 			$.const_declaration,
@@ -58,6 +60,19 @@ module.exports = grammar({
 		preproc_directive: _ => token(prec(1, seq(/#[A-Za-z_]+/, /([^\n/]|\/[^\n/*])*/))),
 
 		// ===== Declarations =====
+		// namespace A { ... } / namespace A::B { ... } (nested, reopened anywhere)
+		namespace_declaration: $ => seq(
+			'namespace',
+			field('name', $.namespace_name),
+			field('body', $.declaration_list),
+			optional(';'),
+		),
+		namespace_name: $ => seq(
+			alias($.identifier, $.namespace_identifier),
+			repeat(seq('::', alias($.identifier, $.namespace_identifier))),
+		),
+		declaration_list: $ => seq('{', repeat($._top_level), '}'),
+
 		struct_declaration: $ => seq(
 			'struct',
 			field('name', alias($.identifier, $.type_identifier)),
@@ -65,7 +80,12 @@ module.exports = grammar({
 			optional(';'),
 		),
 		// Fields and methods (subs in a struct, called as x.m() / p->m(), with this).
-		field_list: $ => seq('{', repeat(choice($.field_declaration, $.function_declaration)), '}'),
+		// Nested structs / enums (Outer::Inner; priv: only usable in the struct).
+		field_list: $ => seq('{', repeat(choice($.field_declaration, $.function_declaration, $.nested_type_declaration)), '}'),
+		nested_type_declaration: $ => seq(
+			optional($.priv_modifier),
+			choice($.struct_declaration, $.enum_declaration),
+		),
 		field_declaration: $ => seq(
 			optional($.priv_modifier),
 			'var',
@@ -160,11 +180,18 @@ module.exports = grammar({
 		_type: $ => choice(
 			$.primitive_type,
 			alias($.identifier, $.type_identifier),
+			$.scoped_type_identifier,
 			$.pointer_type,
 			$.array_type,
 			$.function_type,
 			$.parenthesized_type,
 			$.struct_type,
+		),
+		// A::B::Type, ::Type (the global one)
+		scoped_type_identifier: $ => seq(
+			optional(field('scope', alias($.identifier, $.namespace_identifier))),
+			'::',
+			field('name', choice(alias($.identifier, $.type_identifier), $.scoped_type_identifier)),
 		),
 		primitive_type: _ => choice('i8', 'u8', 'i16', 'u16', 'i32', 'u32', 'bool', 'char', 'string', 'int', 'uint', 'void'),
 		pointer_type: $ => prec(2, seq(field('type', $._type), '*')),
@@ -329,11 +356,12 @@ module.exports = grammar({
 
 		parenthesized_expression: $ => seq('(', $._expression, ')'),
 
-		// Struct::method: a method as a sub (its first parameter is the struct pointer).
+		// A::B::name: in a namespace, a struct's static sub / method (Struct::method: a method as
+		// a sub, its first parameter is the struct pointer) or nested type; ::name: the global one.
 		scoped_identifier: $ => seq(
-			field('scope', alias($.identifier, $.type_identifier)),
+			optional(field('scope', alias($.identifier, $.namespace_identifier))),
 			'::',
-			field('name', $.identifier),
+			field('name', choice($.identifier, $.scoped_identifier)),
 		),
 
 		// ===== Literals and names =====
