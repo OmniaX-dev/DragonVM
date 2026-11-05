@@ -17,7 +17,7 @@ path = "editors/tree-sitter-dscript"
 
 [grammars.dasm]
 repository = "file:///home/sylar/GitRepos/Dragon/DragonVM"
-rev = "ed54d2e4782ea534e30d827c4d52859886a0d98b"
+rev = "036d95e320792ccf4ee47405134fcb89e8f6e85b"
 path = "editors/tree-sitter-dasm"
 
 # dsls, the DScript language server (bin/dsls; see src/lib.rs for how it is found): errors as
