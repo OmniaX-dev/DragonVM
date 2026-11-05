@@ -1,0 +1,17 @@
+// assert(condition[, message]): true conditions do nothing (and run once).
+// expect-rv: 0
+#include(<assert.ds>)
+
+var g_calls: u32 = 0;
+sub bump() -> u32 { g_calls++; return g_calls; }
+
+sub main() -> i32 {
+	var p: u32* = &g_calls;
+	assert(p);
+	assert(1 + 1 == 2);
+	assert(bump() == 1, "bump runs once per assert");
+	assert(g_calls == 1 and p != null);
+	var s: string = "a message in a variable";
+	assert(*p > 0, s);
+	return cast<i32>(g_calls) - 1;
+}

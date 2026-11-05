@@ -79,6 +79,8 @@ module.exports = grammar({
 		enum_declaration: $ => seq(
 			'enum',
 			field('name', alias($.identifier, $.type_identifier)),
+			// The integer type of the members (i32 without one).
+			optional(seq(':', field('type', $._type))),
 			field('body', $.enumerator_list),
 			optional(';'),
 		),
@@ -196,8 +198,13 @@ module.exports = grammar({
 			$.break_statement,
 			$.continue_statement,
 			$.low_block,
+			$.assert_statement,
 			$.expression_statement,
 			$.empty_statement,
+		),
+		assert_statement: $ => seq(
+			'assert', '(', field('condition', $._expression),
+			optional(seq(',', field('message', $._expression))), ')', ';',
 		),
 
 		if_statement: $ => prec.right(seq(

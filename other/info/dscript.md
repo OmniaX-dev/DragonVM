@@ -43,7 +43,7 @@ the source refers to (`src/compiler/Index.hpp`).
 | `struct Name` | sum of the fields | packed (no padding) |
 | `struct { fields }` | sum of the fields | a nameless struct, usable wherever a type goes |
 | `sub(T1, T2) -> R` | 4 | sub pointers; `(sub(i32) -> i32)[4]` for an array of them |
-| enums | 4 | their values are `i32` constants: `Color.Red` |
+| enums | 4, or the size of their type | their values are constants of the enum's type (`i32` by default): `Color.Red`; `enum Kind: u8 { ... }` gives them a type (i8, i16, i32, u8, u16, u32) |
 
 There is no floating point (the machine has no FPU).
 
@@ -56,6 +56,8 @@ const VERSION = "DragonBIOS 0.5";       // string constants
 const Primes: u16[] = { 2, 3, 5, 7 };   // constant arrays: read-only data in the program
                                         // (all constants can also be declared in a sub, see below)
 enum Color { Red, Green = 5, Blue }     // Color.Blue == 6
+enum Kind: u8 { Cmd, Data = 0x80 }      // a typed enum: 1 byte (in structs, arrays, sizeof); the
+                                        // values must fit the type (an error otherwise)
 alias Handler = sub(i32) -> void;       // a name for a type
 struct Point { var x: i32; var y: i32 = 7; }    // fields can have constant default values
 struct Box { var w: u32; sub area() -> u32 { return this->w * this->w; } }   // methods (see below)
@@ -174,6 +176,22 @@ var y = square(a + 1);      // the parameter is a copy: a is not changed
   otherwise it has none (but it is still checked).
 - Not allowed: recursion (also through other inline subs), `low` blocks (the code needs a real
   call frame), `inline interrupt sub`, `inline sub main`.
+- `dsc --no-inline` compiles inline subs as normal subs: every call is a real `call` to the sub's
+  label, which is easier to follow in the disassembly and the debugger. The rules above still
+  apply (the program also compiles without the option).
+
+### assert
+```
+#include(<assert.ds>)
+assert(p != null);
+assert(count < MAX, "too many entries");    // an optional message (a string)
+```
+When the condition is false, the program calls `__assert_fail(file, line, condition, message)`
+(the condition as written, the message or ""). The SDK's (`assert.ds`) prints them in the
+current text mode, then stops the machine (`hlt`; with `dsc -g`, ddb stops first at a
+`debug_break`). A program can write its own `__assert_fail` instead. With `NDEBUG` defined
+(`dsc -D NDEBUG` or `#define(NDEBUG)`), asserts are only checked by the compiler: no code, the
+conditions are not run (so they should not have side effects that matter).
 
 ### Struct constants
 A `const` with a struct type (named or nameless) is a group of compile-time values: reading a
@@ -238,7 +256,7 @@ Not checked: low blocks (raw dasm), and writes through pointers to the program's
 `var` declarations (locals: scalars are not initialized unless given a value; structs are zeroed
 and get their default values), `if` / `else`, `while`, `do ... while (...);`,
 `for (init; condition; step)`, `break`, `continue`, `return`, blocks, expression statements,
-`low { ... }`.
+`low { ... }`, `assert(...)`.
 
 ### Expressions
 C operators and precedence: `= += -= *= /= %= &= |= ^= <<= >>=`, `?:`, `|| &&` (also `or`

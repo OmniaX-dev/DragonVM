@@ -1,0 +1,13 @@
+// With NDEBUG, asserts are compiled out: their conditions are not run.
+// dsc-flags: -D NDEBUG
+// expect-rv: 0
+#include(<assert.ds>)
+
+var g_calls: u32 = 0;
+sub bump() -> u32 { g_calls++; return g_calls; }
+
+sub main() -> i32 {
+	assert(bump() == 100, "never checked");
+	assert(false);
+	return cast<i32>(g_calls);
+}

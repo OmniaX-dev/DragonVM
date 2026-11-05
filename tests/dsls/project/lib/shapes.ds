@@ -20,3 +20,4 @@ struct Geo {
 	priv var cache: i32;
 	priv sub reset() { this->cache = 0; }
 };
+enum Level: u8 { Low = 1, High };

@@ -43,6 +43,7 @@ namespace dscript
 			Node* parseStatement(void);
 			Node* parseBlock(void);
 			Node* parseLocalStatic(const SourcePos& pos);
+			std::string tokenText(size_t from, size_t to) const;	// the tokens [from, to) as source text
 
 			// Local scopes (inside subs): what each name means there.
 			void pushScope(void);

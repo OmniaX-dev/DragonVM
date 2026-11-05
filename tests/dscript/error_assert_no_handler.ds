@@ -1,0 +1,2 @@
+// expect-error: assert needs a sub __assert_fail
+sub main() -> i32 { assert(1 == 1); return 0; }

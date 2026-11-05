@@ -608,3 +608,34 @@ struct Account {
         (block
           (return_statement
             (boolean_literal)))))))
+
+================================================================================
+Typed enums and assert
+================================================================================
+
+enum Kind: u8 { A, B = 200 }
+sub main() { assert(x > 0); assert(p, "no p"); }
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (enum_declaration
+    (type_identifier)
+    (primitive_type)
+    (enumerator_list
+      (enumerator
+        (identifier))
+      (enumerator
+        (identifier)
+        (number_literal))))
+  (function_declaration
+    (identifier)
+    (parameter_list)
+    (block
+      (assert_statement
+        (binary_expression
+          (identifier)
+          (number_literal)))
+      (assert_statement
+        (identifier)
+        (string_literal)))))

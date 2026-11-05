@@ -32,6 +32,7 @@
 	"for"
 	"break"
 	"continue"
+	"assert"
 ] @keyword
 
 [

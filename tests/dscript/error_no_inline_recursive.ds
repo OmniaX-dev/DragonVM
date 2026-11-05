@@ -1,0 +1,6 @@
+// With --no-inline, recursion through inline subs is still an error (as it is when inlining).
+// dsc-flags: --no-inline
+// expect-error: inline subs cannot be recursive
+inline sub is_even(var n: u32) -> bool { if (n == 0) return true; return is_odd(n - 1); }
+inline sub is_odd(var n: u32) -> bool { if (n == 0) return false; return is_even(n - 1); }
+sub main() -> i32 { return is_even(4) ? 0 : 1; }

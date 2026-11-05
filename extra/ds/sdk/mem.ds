@@ -1,6 +1,8 @@
 // DScript SDK: memory and string helpers.
 #once
 
+#include(int.ds)
+
 sub memcpy(var dst: void*, var src: void*, var size: u32) -> void* {
     var d: u8* = cast<u8*>(dst);
     var s: u8* = cast<u8*>(src);

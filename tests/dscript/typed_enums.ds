@@ -1,0 +1,47 @@
+// Typed enums: enum Name: <integer type> { ... } (i8, i16, i32, u8, u16, u32; i32 without a type).
+// expect-rv: 0
+enum Small: u8 { A, B = 200, C };
+enum Signed: i8 { Low = -128, Minus = -1, High = 127 };
+enum Wide: i16 { Neg = -30000, Pos = 30000 };
+enum Port: u16 { Http = 80, Max = 0xFFFF };
+enum Big: u32 { Top = 0xFFFFFFFF };
+enum Plain { P0, P1 };
+enum Derived: u16 { First = Small.C + 1, Second };
+
+struct Packet {
+	var tag: u8;
+	var kind: Small;
+	var port: Port;
+};
+
+sub main() -> i32 {
+	if (sizeof(Small) != 1 || sizeof(Signed) != 1 || sizeof(Wide) != 2 || sizeof(Port) != 2) return 1;
+	if (sizeof(Big) != 4 || sizeof(Plain) != 4) return 2;
+	if (sizeof(Packet) != 4) return 3;							// packed: 1 + 1 + 2
+	var kinds: Small[4];
+	if (sizeof(kinds) != 4) return 4;
+	if (Small.A != 0 || Small.C != 201 || Derived.First != 202 || Derived.Second != 203) return 5;
+
+	var s: Signed = Signed.Low;
+	var wide: i32 = s;											// sign-extended
+	if (wide != -128 || s >= 0 || Signed.Minus != -1) return 6;
+	var w: Wide = Wide.Neg;
+	if (cast<i32>(w) != -30000) return 7;
+
+	var p: Packet;
+	p.tag = 0xAA;
+	p.kind = Small.C;
+	p.port = Port.Max;
+	if (*cast<u8*>(&p.kind) != 201 || p.port != 65535 || p.tag != 0xAA) return 8;
+
+	var big: Big = Big.Top;
+	if (big != 0xFFFFFFFF) return 9;
+
+	var c: u32 = 0;
+	low {
+		mov R1, $Small.B
+		mov $c, R1
+	}
+	if (c != 200) return 10;
+	return 0;
+}

@@ -1,0 +1,3 @@
+// expect-error: must be an integer type (i8, i16, i32, u8, u16, u32), not bool
+enum E: bool { A };
+sub main() -> i32 { return 0; }

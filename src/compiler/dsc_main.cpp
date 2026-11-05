@@ -25,6 +25,7 @@ struct Options
 	std::string fixed;
 	std::string header;
 	bool debug { false };
+	bool noInline { false };
 	std::string disassemblyDir;
 	bool verbose { false };
 	std::vector<std::string> dasmArgs;	// -Wa,<options>: handed to the assembler
@@ -40,6 +41,8 @@ static void printHelp(void)
 		"  -D <NAME>[=<value>]       Defines NAME (like #define)\n"
 		"  --emit-dasm <file>        Also writes the generated dasm source\n"
 		"  --debug, -g               Keeps debug_break / debug_* instructions of low blocks\n"
+		"  --no-inline               Compiles inline subs as normal subs (each call is a real call: easier to\n"
+		"                            follow in the disassembly and the debugger)\n"
 		"  --verbose                 Prints the program size and relocations\n"
 		"  -Wa,<option>[,<option>...]  Passes options to the assembler (see dasm --help), e.g. -Wa,-D for dasm's\n"
 		"                            debug mode, -Wa,--save-disassembly,<file>, -Wa,--verbose-2. Not allowed: -o and\n"
@@ -85,6 +88,7 @@ static int parseArgs(int argc, char** argv, Options& o)
 		}
 		else if (a == "--emit-dasm") o.dasmOutput = l_value(a);
 		else if (a == "--debug" || a == "-g") o.debug = true;
+		else if (a == "--no-inline") o.noInline = true;
 		else if (a == "--verbose") o.verbose = true;
 		else if (a == "--raw") o.raw = true;
 		else if (a == "--rom") { o.rom = true; o.raw = true; }
@@ -252,6 +256,8 @@ int main(int argc, char** argv)
 		CodeGenOptions cg;
 		cg.raw = o.raw;
 		cg.rom = o.rom;
+		cg.noInline = o.noInline;
+		cg.noAsserts = pp.isDefined("NDEBUG");
 		if (o.raw)
 		{
 			const std::string defaultLoad = (o.rom ? "0x00000000" : "0x01010000");

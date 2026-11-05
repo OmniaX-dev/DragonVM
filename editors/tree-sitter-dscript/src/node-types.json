@@ -267,6 +267,184 @@
     }
   },
   {
+    "type": "assert_statement",
+    "named": true,
+    "fields": {
+      "condition": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "assignment_expression",
+            "named": true
+          },
+          {
+            "type": "binary_expression",
+            "named": true
+          },
+          {
+            "type": "boolean_literal",
+            "named": true
+          },
+          {
+            "type": "call_expression",
+            "named": true
+          },
+          {
+            "type": "cast_expression",
+            "named": true
+          },
+          {
+            "type": "char_literal",
+            "named": true
+          },
+          {
+            "type": "concatenated_string",
+            "named": true
+          },
+          {
+            "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "index_expression",
+            "named": true
+          },
+          {
+            "type": "lambda_expression",
+            "named": true
+          },
+          {
+            "type": "member_expression",
+            "named": true
+          },
+          {
+            "type": "null_literal",
+            "named": true
+          },
+          {
+            "type": "number_literal",
+            "named": true
+          },
+          {
+            "type": "parenthesized_expression",
+            "named": true
+          },
+          {
+            "type": "scoped_identifier",
+            "named": true
+          },
+          {
+            "type": "sizeof_expression",
+            "named": true
+          },
+          {
+            "type": "string_literal",
+            "named": true
+          },
+          {
+            "type": "ternary_expression",
+            "named": true
+          },
+          {
+            "type": "unary_expression",
+            "named": true
+          },
+          {
+            "type": "update_expression",
+            "named": true
+          }
+        ]
+      },
+      "message": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "assignment_expression",
+            "named": true
+          },
+          {
+            "type": "binary_expression",
+            "named": true
+          },
+          {
+            "type": "boolean_literal",
+            "named": true
+          },
+          {
+            "type": "call_expression",
+            "named": true
+          },
+          {
+            "type": "cast_expression",
+            "named": true
+          },
+          {
+            "type": "char_literal",
+            "named": true
+          },
+          {
+            "type": "concatenated_string",
+            "named": true
+          },
+          {
+            "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "index_expression",
+            "named": true
+          },
+          {
+            "type": "lambda_expression",
+            "named": true
+          },
+          {
+            "type": "member_expression",
+            "named": true
+          },
+          {
+            "type": "null_literal",
+            "named": true
+          },
+          {
+            "type": "number_literal",
+            "named": true
+          },
+          {
+            "type": "parenthesized_expression",
+            "named": true
+          },
+          {
+            "type": "scoped_identifier",
+            "named": true
+          },
+          {
+            "type": "sizeof_expression",
+            "named": true
+          },
+          {
+            "type": "string_literal",
+            "named": true
+          },
+          {
+            "type": "ternary_expression",
+            "named": true
+          },
+          {
+            "type": "unary_expression",
+            "named": true
+          },
+          {
+            "type": "update_expression",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "assignment_expression",
     "named": true,
     "fields": {
@@ -767,6 +945,10 @@
       "required": false,
       "types": [
         {
+          "type": "assert_statement",
+          "named": true
+        },
+        {
           "type": "block",
           "named": true
         },
@@ -1251,6 +1433,10 @@
             "named": false
           },
           {
+            "type": "assert_statement",
+            "named": true
+          },
+          {
             "type": "block",
             "named": true
           },
@@ -1419,6 +1605,40 @@
         "multiple": false,
         "required": true,
         "types": [
+          {
+            "type": "type_identifier",
+            "named": true
+          }
+        ]
+      },
+      "type": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "array_type",
+            "named": true
+          },
+          {
+            "type": "function_type",
+            "named": true
+          },
+          {
+            "type": "parenthesized_type",
+            "named": true
+          },
+          {
+            "type": "pointer_type",
+            "named": true
+          },
+          {
+            "type": "primitive_type",
+            "named": true
+          },
+          {
+            "type": "struct_type",
+            "named": true
+          },
           {
             "type": "type_identifier",
             "named": true
@@ -1811,6 +2031,10 @@
           {
             "type": ";",
             "named": false
+          },
+          {
+            "type": "assert_statement",
+            "named": true
           },
           {
             "type": "block",
@@ -2313,6 +2537,10 @@
             "named": false
           },
           {
+            "type": "assert_statement",
+            "named": true
+          },
+          {
             "type": "block",
             "named": true
           },
@@ -2463,6 +2691,10 @@
           {
             "type": ";",
             "named": false
+          },
+          {
+            "type": "assert_statement",
+            "named": true
           },
           {
             "type": "block",
@@ -4383,6 +4615,10 @@
             "named": false
           },
           {
+            "type": "assert_statement",
+            "named": true
+          },
+          {
             "type": "block",
             "named": true
           },
@@ -4702,6 +4938,10 @@
   },
   {
     "type": "and",
+    "named": false
+  },
+  {
+    "type": "assert",
     "named": false
   },
   {

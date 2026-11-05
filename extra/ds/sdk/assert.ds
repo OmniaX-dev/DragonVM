@@ -1,0 +1,54 @@
+#once
+
+// assert(condition) / assert(condition, "message"): when the condition is false, the program
+// calls __assert_fail with where it is and what failed. This default prints it (in the current
+// text mode) and stops the machine; with dsc -g, ddb stops first at the debug_break.
+// Define NDEBUG (dsc -D NDEBUG, or #define(NDEBUG)) to compile the asserts out: the conditions
+// are still checked by the compiler, but not run.
+// A program can write its own __assert_fail instead of including this file.
+
+#include(bios.ds)
+
+sub __assert_fail(var file: string, var line: u32, var condition: string, var message: string) {
+	if (vga_is_text16())
+	{
+		const fg: u8 = DefaultPaletteText16.Red;
+		const bg: u8 = DefaultPaletteText16.Black;
+		var y: u8 = cast<u8>(*cast<u32*>(CMOSRegisters.ScreenRows) - 2);
+		var buff: u8[12];
+		Text16::print("Assertion failed: ", 0, y, fg, bg);
+		Text16::print(condition, 18, y, fg, bg);
+		var x: u8 = 0;
+		while (file[x]) x++;
+		Text16::print(file, 0, y + 1, fg, bg);
+		Text16::print(':', x, y + 1, fg, bg);
+		Text16::print(line, x + 1, y + 1, fg, bg);
+		if (message[0])
+		{
+			itoa(line, buff);
+			var l: u8 = 0;
+			while (buff[l]) l++;
+			Text16::print(message, x + l + 3, y + 1, fg, bg);
+		}
+	}
+	else
+	{
+		TextSingle::print("Assertion failed: ");
+		TextSingle::print(condition);
+		TextSingle::print(" (");
+		TextSingle::print(file);
+		TextSingle::print(':');
+		TextSingle::print(line);
+		TextSingle::print(')');
+		if (message[0])
+		{
+			TextSingle::print(": ");
+			TextSingle::print(message);
+		}
+		TextSingle::new_line();
+	}
+	low {
+		debug_break
+		hlt
+	}
+}

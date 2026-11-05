@@ -1,10 +1,13 @@
 #include "Parser.hpp"
+#include <cstdio>
+#include <set>
 
 // Node fields by kind (see AST.hpp):
 //   Program:     list = declarations
 //   StructDecl:  name, list = fields (VarDecl), value = 1 if nameless (struct { ... } as a type,
 //                named __anon_struct_<n> and added at the end of the program)
-//   EnumDecl:    name, list = members (EnumMember: name, a = value or nullptr)
+//   EnumDecl:    name, typeSyntax = the integer type (nullptr: i32), list = members (EnumMember:
+//                name, a = value or nullptr)
 //   ConstDecl:   name, typeSyntax (optional), a = value (struct constants: an InitList, or nullptr
 //                for the fields' defaults)
 //   AliasDecl:   name, typeSyntax
@@ -19,6 +22,7 @@
 //   While:       a = condition, b = body       DoWhile: a = condition, b = body
 //   For:         a = init (VarDecl / ExprStmt), b = condition, c = step, d = body (all optional but d)
 //   Return:      a = value       ExprStmt: a       LowBlock: text
+//   Assert:      a = condition, b = message (optional), text = the condition as written
 //   Unary:       name = operator, a          Binary / Assign: name = operator, a, b
 //   Ternary:     a ? b : c                   Call: a = callee, list = arguments
 //   Index:       a[b]                        Member: a.name / a->name (value = 1)
@@ -244,6 +248,8 @@ namespace dscript
 		Node* n = make(NodeKind::EnumDecl, next().pos);
 		n->name = expectIdentifier("after 'enum'");
 		n->namePos = lastPos();
+		if (acceptPunct(":"))
+			n->typeSyntax = parseType();
 		expectPunct("{", "to start the enum");
 		while (!acceptPunct("}"))
 		{
@@ -638,6 +644,74 @@ namespace dscript
 		return make(NodeKind::Block, pos);
 	}
 
+	std::string Parser::tokenText(size_t from, size_t to) const
+	{
+		// Spaces between the tokens, except around the ones that are written without: calls,
+		// indexing, members, unary operators and the types in cast<...> / sizeof<...>.
+		static const std::set<std::string> noSpaceAfter = { "(", "[", ".", "->", "::", "!", "~" };
+		static const std::set<std::string> noSpaceBefore = { ")", "]", ",", ".", "->", "::", "[", "++", "--" };
+		auto l_is = [](const Token* t, TokenKind kind, const char* text) { return t && t->kind == kind && t->text == text; };
+		auto l_endsValue = [](const Token* t) {	// a token after which an operator is binary
+			return t && (t->kind == TokenKind::Identifier || t->kind == TokenKind::Integer || t->kind == TokenKind::String ||
+				(t->kind == TokenKind::Punct && (t->text == ")" || t->text == "]" || t->text == "++" || t->text == "--")) ||
+				(t->kind == TokenKind::Keyword && (t->text == "true" || t->text == "false" || t->text == "null")));
+		};
+		std::string s;
+		const Token* prev = nullptr;
+		const Token* prev2 = nullptr;
+		int typeDepth = 0;		// inside cast<...> / sizeof<...>
+		bool afterType = false;	// just closed one (the ( that follows is tight)
+		for (size_t i = from; i < to && i < m_tokens.size(); i++)
+		{
+			const Token& t = m_tokens[i];
+			std::string text = t.text;
+			if (t.kind == TokenKind::Integer)
+			{
+				if (t.isChar)
+					text = (t.value >= 0x20 && t.value < 0x7F) ? std::string("'") + (char)t.value + "'" : std::to_string(t.value);
+				else if (std::to_string(t.value) != t.text)
+				{
+					char hex[16];
+					std::snprintf(hex, sizeof(hex), "0x%llX", (unsigned long long)t.value);
+					text = hex;
+				}
+			}
+			else if (t.kind == TokenKind::String)
+				text = "\"" + t.text + "\"";
+			bool tight = (prev == nullptr);
+			if (prev != nullptr)
+			{
+				const bool unaryPrev = prev->kind == TokenKind::Punct && (prev->text == "-" || prev->text == "*" || prev->text == "&" ||
+					prev->text == "+") && !l_endsValue(prev2);
+				tight = (prev->kind == TokenKind::Punct && noSpaceAfter.count(prev->text) > 0) ||
+					(t.kind == TokenKind::Punct && noSpaceBefore.count(t.text) > 0) || unaryPrev || typeDepth > 0 ||
+					(l_is(&t, TokenKind::Punct, "(") && (l_endsValue(prev) || afterType ||
+						l_is(prev, TokenKind::Keyword, "sizeof"))) ||
+					(l_is(&t, TokenKind::Punct, "<") && (l_is(prev, TokenKind::Keyword, "cast") || l_is(prev, TokenKind::Keyword, "sizeof")));
+			}
+			afterType = false;
+			if (l_is(&t, TokenKind::Punct, "<") && (l_is(prev, TokenKind::Keyword, "cast") || l_is(prev, TokenKind::Keyword, "sizeof")))
+				typeDepth++;
+			else if (typeDepth > 0 && l_is(&t, TokenKind::Punct, "<"))
+				typeDepth++;
+			else if (typeDepth > 0 && (l_is(&t, TokenKind::Punct, ">") || l_is(&t, TokenKind::Punct, ">>")))
+			{
+				typeDepth -= (t.text == ">>") ? 2 : 1;
+				if (typeDepth <= 0)
+				{
+					typeDepth = 0;
+					afterType = true;
+				}
+			}
+			if (!tight)
+				s += " ";
+			s += text;
+			prev2 = prev;
+			prev = &t;
+		}
+		return s;
+	}
+
 	Node* Parser::parseStatement(void)
 	{
 		const SourcePos pos = peek().pos;
@@ -662,6 +736,19 @@ namespace dscript
 		}
 		if (isKeyword("low"))
 			return parseLow();
+		if (acceptKeyword("assert"))
+		{
+			Node* n = make(NodeKind::Assert, pos);
+			expectPunct("(", "after 'assert'");
+			const size_t from = m_pos;
+			n->a = parseExpression();
+			n->text = tokenText(from, m_pos);
+			if (acceptPunct(","))
+				n->b = parseExpression();
+			expectPunct(")", "after assert(condition[, message])");
+			expectPunct(";", "after assert(...)");
+			return n;
+		}
 		if (acceptKeyword("if"))
 		{
 			Node* n = make(NodeKind::If, pos);

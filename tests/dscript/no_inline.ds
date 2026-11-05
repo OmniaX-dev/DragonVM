@@ -1,0 +1,32 @@
+// --no-inline: inline subs are compiled as normal subs and give the same results.
+// dsc-flags: --no-inline
+// expect-rv: 0
+struct Counter {
+	priv var n: u32 = 0;
+	inline sub add(var k: u32 = 1) { this->n += k; }
+	inline sub get() -> u32 { return this->n; }
+	priv inline static sub twice(var v: u32) -> u32 { return v * 2; }
+	inline sub doubled() -> u32 { return Counter::twice(this->n); }
+};
+
+inline sub square(var x: i32) -> i32 { return x * x; }
+inline sub sum_squares(var a: i32, var b: i32) -> i32 { return square(a) + square(b); }
+inline sub count_calls() -> u32 {
+	static var calls: u32 = 0;
+	return ++calls;
+}
+
+sub main() -> i32 {
+	if (sum_squares(3, 4) != 25) return 1;
+	var c: Counter;
+	c.add();
+	c.add(4);
+	if (c.get() != 5) return 2;
+	if (c.doubled() != 10) return 3;
+	count_calls();
+	count_calls();
+	if (count_calls() != 3) return 4;			// one static, as when inlined
+	var f: sub(i32) -> i32 = square;	// inline subs used as sub pointers
+	if (f(6) != 36) return 5;
+	return 0;
+}

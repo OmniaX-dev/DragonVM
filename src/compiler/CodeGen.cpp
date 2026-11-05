@@ -308,7 +308,7 @@ namespace dscript
 							f->name = "the lambda at " + posString(d->pos);
 						f->decl = d;
 						f->interrupt = (d->value & 1) != 0;
-						f->isInline = (d->value & 2) != 0;
+						f->isInline = (d->value & 2) != 0 && !m_options.noInline;
 						f->defined = d->a != nullptr;
 						m_funcs[d->name].push_back(f);
 						m_funcList.push_back(f);
@@ -353,7 +353,7 @@ namespace dscript
 				{
 					if (m_options.index != nullptr)
 						indexName(ts->pos, ts->name, m_enums[ts->name].decl->namePos, hoverEnum(ts->name));
-					return m_types.i32();
+					return enumType(m_enums[ts->name]);
 				}
 				if (m_aliases.count(ts->name) > 0)
 				{
@@ -656,6 +656,12 @@ namespace dscript
 		if (info.resolving)
 			error(info.decl->pos, "enum '" + info.decl->name + "' depends on itself");
 		info.resolving = true;
+		Type* t = enumType(info);
+		// With a type, the values must fit it; without (i32), any 32 bit value (as before).
+		const bool typed = info.decl->typeSyntax != nullptr;
+		const int bits = (int)t->size() * 8;
+		const int64_t min = typed ? (t->isSigned() ? -(int64_t(1) << (bits - 1)) : 0) : INT32_MIN;
+		const int64_t max = typed ? (t->isSigned() ? (int64_t(1) << (bits - 1)) - 1 : (int64_t(1) << bits) - 1) : UINT32_MAX;
 		int64_t next = 0;
 		for (Node* m : info.decl->list)
 		{
@@ -663,11 +669,30 @@ namespace dscript
 				error(m->pos, "duplicate enum member: " + m->name);
 			if (m->a)
 				next = constExpr(m->a, "an enum value");
-			info.values[m->name] = (int32_t)next;
+			if (next < min || next > max)
+				error(m->a ? m->a->pos : m->pos, "enum value " + std::to_string(next) + " of " + info.decl->name + "." + m->name +
+					(m->a ? "" : " (the previous one + 1)") + " does not fit " + (typed ? t->name() : "32 bits") +
+					" (" + std::to_string(min) + " to " + std::to_string(max) + ")");
+			info.values[m->name] = typed ? next : (int32_t)next;
 			next++;
 		}
 		info.resolved = true;
 		info.resolving = false;
+	}
+
+	Type* CodeGen::enumType(EnumInfo& info)
+	{
+		if (info.type != nullptr)
+			return info.type;
+		info.type = m_types.i32();
+		if (info.decl->typeSyntax != nullptr)
+		{
+			Type* t = resolveType(info.decl->typeSyntax);
+			if (!t->isInteger() || t->kind == Type::Kind::Bool || t->size() > 4)
+				error(info.decl->typeSyntax->pos, "the type of enum " + info.decl->name + " must be an integer type (i8, i16, i32, u8, u16, u32), not " + t->name());
+			info.type = t;
+		}
+		return info.type;
 	}
 
 	std::string CodeGen::mangle(Type* t)
@@ -725,9 +750,11 @@ namespace dscript
 		f->type = m_types.function(params, ret);
 		if (f->interrupt && (!params.empty() || ret->kind != Type::Kind::Void))
 			error(d->pos, "interrupt subs take no parameters and return void");
-		if (f->isInline && f->name == "main")
+		// (On the declaration: also with --no-inline.)
+		const bool declaredInline = (d->value & 2) != 0;
+		if (declaredInline && f->name == "main")
 			error(d->pos, "main cannot be inline");
-		if (f->isInline && d->a)
+		if (declaredInline && d->a)
 		{
 			if (const Node* low = findLow(d->a))
 				error(low->pos, "inline subs cannot contain low blocks (the code is copied into every caller, "
@@ -1511,7 +1538,7 @@ namespace dscript
 						indexName(e->namePos, e->name, m->namePos, e->a->name + "." + e->name + " = " + std::to_string(info.values[e->name]));
 				}
 			}
-			e->type = m_types.i32();
+			e->type = enumType(info);
 			e->isConst = true;
 			e->constValue = info.values[e->name];
 			return;
@@ -2254,6 +2281,36 @@ namespace dscript
 	// Inline sub call: the arguments go into new locals of the caller, the body is generated
 	// here (seeing only its parameters and the globals), return jumps to the end, with the
 	// value in RV (as a real call).
+	void CodeGen::checkInlineRecursion(void)
+	{
+		// A cycle of calls between subs declared inline (each reported once, at the call that
+		// closes it).
+		std::map<FuncInfo*, int> state;	// 1: on the current path, 2: done
+		std::function<void(FuncInfo*)> l_visit = [&](FuncInfo* f) {
+			state[f] = 1;
+			for (const auto& call : m_inlineCalls[f])
+			{
+				if (state[call.first] == 1)
+				{
+					attempt([&] {
+						if (call.first == f)
+							error(call.second, "inline sub '" + f->name + "' calls itself: inline subs cannot be recursive");
+						error(call.second, "inline sub '" + call.first->name + "' calls itself (directly or through another "
+							"inline sub): inline subs cannot be recursive");
+					});
+				}
+				else if (state[call.first] == 0)
+					l_visit(call.first);
+			}
+			state[f] = 2;
+		};
+		for (FuncInfo* f : m_funcList)
+		{
+			if (state[f] == 0)
+				l_visit(f);
+		}
+	}
+
 	CodeGen::Reg CodeGen::genInlineCall(Node* e, FuncInfo* f)
 	{
 		for (const auto& c : m_inline)
@@ -2334,6 +2391,8 @@ namespace dscript
 		FuncInfo* f = e->func;
 		if (f && f->isInline)
 			return genInlineCall(e, f);
+		if (f && m_options.noInline && m_func && (m_func->decl->value & 2) != 0 && (f->decl->value & 2) != 0)
+			m_inlineCalls[m_func].push_back({ f, e->pos });
 		Type* fnType = nullptr;
 		Reg fr;
 		if (f == nullptr)
@@ -2564,6 +2623,46 @@ namespace dscript
 					error(s->pos, "'" + s->a->name + "' is a sub: call it with " + s->a->name + "()");
 				Reg r = gen(s->a);
 				release(r);
+			}
+			break;
+			case NodeKind::Assert:
+			{
+				// if (!condition) __assert_fail(file, line, "condition", message)
+				check(s->a);
+				if (!decay(s->a->type)->isScalar())
+					error(s->a->pos, "the assert condition must be an integer or a pointer");
+				if (s->b)
+				{
+					check(s->b);
+					requireConvertible(s->b, m_types.pointer(m_types.u8()), "the assert message");
+				}
+				if (m_options.noAsserts)
+					break;
+				if (m_funcs.count("__assert_fail") == 0)
+					error(s->pos, "assert needs a sub __assert_fail(var file: string, var line: u32, var condition: string, "
+						"var message: string) to call when the condition is false: #include(<assert.ds>), or write your own");
+				auto l_node = [&](NodeKind kind) { Node* n = new Node(); n->kind = kind; n->pos = s->pos; return n; };
+				Node* call = l_node(NodeKind::Call);
+				call->a = l_node(NodeKind::Ident);
+				call->a->name = "__assert_fail";
+				Node* file = l_node(NodeKind::StrLit);
+				file->text = s->pos.file;
+				Node* line = l_node(NodeKind::IntLit);
+				line->value = s->pos.line;
+				Node* condition = l_node(NodeKind::StrLit);
+				condition->text = s->text;
+				Node* message = s->b;
+				if (message == nullptr)
+				{
+					message = l_node(NodeKind::StrLit);
+					message->text = "";
+				}
+				call->list = { file, line, condition, message };
+				check(call);
+				const std::string lEnd = newLabel();
+				genBranch(s->a, lEnd, true);
+				release(gen(call));
+				label(lEnd);
 			}
 			break;
 			case NodeKind::If:
@@ -3171,7 +3270,7 @@ namespace dscript
 		std::string s;
 		if (f->interrupt)
 			s += "interrupt ";
-		if (f->isInline)
+		if ((f->decl->value & 2) != 0)
 			s += "inline ";
 		const bool method = (f->decl->value & 4) != 0;
 		const bool isStatic = (f->decl->value & 8) != 0;
@@ -3275,8 +3374,8 @@ namespace dscript
 
 	std::string CodeGen::hoverEnum(const std::string& name)
 	{
-		const EnumInfo& info = m_enums[name];
-		std::string s = "enum " + name + " {\n";
+		EnumInfo& info = m_enums[name];
+		std::string s = "enum " + name + (info.decl->typeSyntax && info.type ? ": " + info.type->name() : std::string()) + " {\n";
 		for (size_t i = 0; i < info.decl->list.size(); i++)
 		{
 			const std::string& member = info.decl->list[i]->name;
@@ -3488,6 +3587,8 @@ namespace dscript
 					genFunction(f);
 			});
 		}
+		if (m_options.noInline)
+			checkInlineRecursion();
 		// Inline subs get real code only if they are used as sub pointers (which the generated
 		// code can make true for more of them); the others are only checked.
 		std::set<FuncInfo*> kept;

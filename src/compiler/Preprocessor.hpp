@@ -29,6 +29,7 @@ namespace dscript
 			void setIndex(Index* index) { m_index = index; }
 			// Every file read (canonical paths).
 			const std::set<std::string>& files(void) const { return m_files; }
+			inline bool isDefined(const std::string& name) const { return m_defines.count(name) > 0; }
 
 		private:
 			struct Conditional

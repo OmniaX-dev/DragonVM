@@ -41,6 +41,8 @@ namespace dscript
 	{
 		bool raw { false };			// bare metal: ends with hlt instead of ret
 		bool rom { false };			// the program runs from ROM: everything stored in it is read-only
+		bool noInline { false };	// inline subs are compiled as normal subs (for debugging)
+		bool noAsserts { false };	// NDEBUG: assert(...) is only checked, no code
 		std::vector<std::string> directives;	// .load / .fixed / .header lines for raw mode
 		// For the language server: errors are collected (errors()) instead of stopping at the
 		// first one (each declaration and sub is checked on its own), no code is returned, and
@@ -67,7 +69,8 @@ namespace dscript
 			// path ("pos.x"); they have no memory (only their fields are used).
 			// String constants: isString, text (they are used as that string literal).
 			struct ConstInfo { Node* decl { nullptr }; bool resolving { false }; bool resolved { false }; int64_t value { 0 }; Type* type { nullptr }; std::map<std::string, int64_t> fields; bool isString { false }; std::string text; };
-			struct EnumInfo { Node* decl { nullptr }; bool resolving { false }; bool resolved { false }; std::map<std::string, int64_t> values; };
+			struct EnumInfo { Node* decl { nullptr }; bool resolving { false }; bool resolved { false }; std::map<std::string, int64_t> values;
+				Type* type { nullptr }; };	// type: the enum's integer type (i32 unless given: enum E: u8 { ... })
 			struct AliasInfo { Node* decl { nullptr }; bool resolving { false }; Type* type { nullptr }; };
 			struct Loop { std::string breakLabel; std::string continueLabel; };
 			typedef std::string Reg;
@@ -94,6 +97,7 @@ namespace dscript
 			void resolveStruct(StructInfo* info, const SourcePos& usePos);
 			int64_t resolveConst(const std::string& name, const SourcePos& usePos);
 			void resolveEnum(EnumInfo& info);
+			Type* enumType(EnumInfo& info);
 			void resolveFunction(FuncInfo* f);
 			int64_t constExpr(Node* e, const std::string& what);
 			void constStructValues(StructInfo* info, Node* init, const std::string& prefix, ConstInfo& c, const std::string& constName);
@@ -185,6 +189,10 @@ namespace dscript
 			struct InlineCall { FuncInfo* func; std::string endLabel; };
 			std::vector<InlineCall> m_inline;
 			bool m_discarding { false };	// checking an inline sub whose code is not kept
+			// --no-inline: the calls between subs declared inline (caller -> callee, at), so that
+			// recursion through them is still an error (it would be when inlining).
+			std::map<FuncInfo*, std::vector<std::pair<FuncInfo*, SourcePos>>> m_inlineCalls;
+			void checkInlineRecursion(void);
 			int m_regDepth { 0 };
 			int m_stmtDepth { 0 };		// m_regDepth at the start of a statement (> 0 in inline subs)
 			std::vector<std::string>* m_out { nullptr };
