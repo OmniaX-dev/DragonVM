@@ -1,0 +1,11 @@
+// expect-rv: 0
+// main(argc, argv): drun passes the program's path as argv[0] (DRX); a raw binary gets 0, null.
+sub main(var argc: u32, var argv: string*) -> i32 {
+    if (argc == 0) {
+        return argv == null ? 0 : 1;
+    }
+    if (argc != 1 || argv[1] != null || argv[0][0] == 0) {
+        return 2;
+    }
+    return 0;
+}

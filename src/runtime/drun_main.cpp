@@ -3,8 +3,10 @@
 //   drun <machine.dvm> [program] [options]
 //
 // Without a program the machine boots normally. With a program (a DRX, relocated to its load
-// address, or a raw binary loaded at --at), the program is called (push 0; call entry) from a
-// small trampoline that halts when it returns; with --boot the BIOS runs first (until it jumps
+// address, or a raw binary loaded at --at), the program is called with its arguments (push argc;
+// push argv; push 2; call entry: argv[0] is the program's path, then the arguments after --, the
+// strings and the argv array below the trampoline) from a small trampoline that halts when it
+// returns; with --boot the BIOS runs first (until it jumps
 // to the boot code it loaded at the RAM start), so its interrupts (int 0x20 / 0x30) work. Text printed in the single color text
 // mode goes to stdout.
 
@@ -89,12 +91,13 @@ static bool step(u64& cycles)
 
 static void usage(void)
 {
-	std::cout << "Usage: drun <machine.dvm> [program.drx | program.bin --at <address>] [options]\n"
+	std::cout << "Usage: drun <machine.dvm> [program.drx | program.bin --at <address>] [options] [-- arguments]\n"
 				 "  --at <address>         Load address (DRX: default 0x01020000; raw binaries: required)\n"
 				 "  --boot                 Runs the BIOS first (its interrupts then work)\n"
 				 "  --max-cycles <n>       Stops after n cycles (default 50000000)\n"
 				 "  --dump <address>[:n]   Prints n bytes (default 4) of memory at the end\n"
 				 "  --quiet                Only the program's output\n"
+				 "  -- <arguments>         The program's arguments (main(argc, argv); argv[0] is its path)\n"
 				 "Exit code: 0 if the machine halted without errors, 1 on errors, 2 when out of cycles.\n";
 }
 
@@ -110,9 +113,16 @@ int main(int argc, char** argv)
 	bool boot = false, quiet = false;
 	u64 maxCycles = 50000000;
 	std::vector<std::pair<u32, u32>> dumps;
+	std::vector<std::string> programArgs;
 	for (int i = 2; i < argc; i++)
 	{
 		std::string a = argv[i];
+		if (a == "--")
+		{
+			for (i++; i < argc; i++)
+				programArgs.push_back(argv[i]);
+			break;
+		}
 		auto l_value = [&](void) -> std::string { if (i + 1 >= argc) { usage(); std::exit(2); } return argv[++i]; };
 		if (a == "--at") at = (i64)std::strtoull(l_value().c_str(), nullptr, 0);
 		else if (a == "--boot") boot = true;
@@ -202,11 +212,33 @@ int main(int argc, char** argv)
 				return 1;
 			}
 		}
-		// The trampoline, below the stack: push 0; call entry; hlt.
+		// The trampoline, below the stack: push argc; push argv; push 2; call entry; hlt. Below it,
+		// the arguments: the argv array (argc pointers, then null), then the strings.
 		const u32 stackSize = cast<u32>(DragonRuntime::vCMOS.read32(data::CMOSRegisters::StackSize));
 		const u32 tramp = (cpu.getStackTop() - stackSize - 0x100) & ~0xFu;
-		const u8 code[] = { data::OpCodes::PushImm, 0, 0, 0, 0, data::OpCodes::CallImm,
-							(u8)(entry >> 24), (u8)(entry >> 16), (u8)(entry >> 8), (u8)entry, data::OpCodes::Halt };
+		programArgs.insert(programArgs.begin(), programPath);
+		u32 argsSize = (u32)(programArgs.size() + 1) * 4;
+		for (const auto& a : programArgs)
+			argsSize += (u32)a.size() + 1;
+		const u32 argvAddr = (tramp - argsSize - 0x10) & ~0xFu;
+		u32 str = argvAddr + (u32)(programArgs.size() + 1) * 4;
+		auto l_poke32 = [&](u32 addr, u32 value) {
+			for (u32 b = 0; b < 4; b++)
+				mem.poke8(addr + b, (u8)(value >> (24 - 8 * b)));
+		};
+		for (size_t i = 0; i < programArgs.size(); i++)
+		{
+			l_poke32(argvAddr + (u32)i * 4, str);
+			for (char c : programArgs[i])
+				mem.poke8(str++, (u8)c);
+			mem.poke8(str++, 0);
+		}
+		l_poke32(argvAddr + (u32)programArgs.size() * 4, 0);
+		const u32 argCount = (u32)programArgs.size();
+		const u8 code[] = { data::OpCodes::PushImm, (u8)(argCount >> 24), (u8)(argCount >> 16), (u8)(argCount >> 8), (u8)argCount,
+							data::OpCodes::PushImm, (u8)(argvAddr >> 24), (u8)(argvAddr >> 16), (u8)(argvAddr >> 8), (u8)argvAddr,
+							data::OpCodes::PushImm, 0, 0, 0, 2,
+							data::OpCodes::CallImm, (u8)(entry >> 24), (u8)(entry >> 16), (u8)(entry >> 8), (u8)entry, data::OpCodes::Halt };
 		for (size_t i = 0; i < sizeof(code); i++)
 			mem.poke8(tramp + (u32)i, code[i]);
 		cpu.writeRegister32(data::Registers::IP, cast<i32>(tramp));

@@ -88,7 +88,9 @@ inline sub sq(var x: i32) -> i32 { ... }    // the body is generated at every ca
 low { ... }                             // raw dasm (e.g. helper routines with labels)
 namespace Bios { ... }                  // groups declarations under a name (see below)
 ```
-Everything can be used before it is declared. `main` (no parameters) is the program's entry.
+Everything can be used before it is declared. `main` is the program's entry: `sub main() -> i32`
+(or `-> void`), or `sub main(var argc: u32, var argv: string*) -> i32` for the program's
+arguments (see "Starting a program").
 
 ### Namespaces
 ```
@@ -510,7 +512,8 @@ offsets of every 32-bit address in it (dsc finds them by assembling twice, at tw
 image (the program at address 0), then the relocation table (u32 offsets in the image)
 ```
 To load it at `base`: copy the image, add `base` to the 32-bit word at every relocation offset,
-then `push 0; call base + entry`. The program returns when `main` returns (its value in RV).
+then call `base + entry` (see "Starting a program"). The program returns when `main` returns
+(its value in RV).
 `src/tools/DRX.hpp` reads, writes and relocates DRX files; `dvm` / `ddb --force-load file.drx
 <ram offset>` and `drun` load them.
 
@@ -518,6 +521,23 @@ then `push 0; call base + entry`. The program returns when `main` returns (its v
 0x01010000), optional `--fixed` and `--header`, `hlt` after `main`. `--rom`: the same, for a
 program in ROM (see "ROM programs").
 
+
+## Starting a program
+The loader calls the entry with the program's arguments, or with none:
+```
+push argc        // the number of arguments (argv[0] is the program itself, by convention)
+push argv        // string*: argc strings, then null
+push 2
+call base + entry
+```
+or `push 0; call base + entry` (no arguments). `__ds_start` runs the global initializers and
+constructors (`__ds_init`), then calls `main`; with `main(argc, argv)`, it passes what it was
+called with, or `0, null` without arguments. A raw binary (`--raw`, `--rom`) is started by a
+jump: its `main(argc, argv)` always gets `0, null`. `main`'s value is returned in RV.
+- `drun` passes its program's path as `argv[0]`, then the arguments after `--`
+  (`drun machine.dvm prog.drx -- a b`: argc = 3); the strings and the argv array are below
+  the stack. The BIOS starts its boot code (raw) without arguments.
+- This is the convention a DragonOS loader will follow.
 
 ## Tests
 

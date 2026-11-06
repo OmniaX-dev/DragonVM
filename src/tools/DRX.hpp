@@ -15,8 +15,9 @@
 //   relocation table     reloc count x 4 bytes: offsets (in the image) of 32-bit addresses
 //
 // Loading at `base`: copy the image to base, then add base to the 32-bit (big endian) word at
-// base + offset for every relocation; then call base + entry (push 0; call ...): the program
-// returns (ret) when main returns, with main's value in RV.
+// base + offset for every relocation; then call base + entry, with the program's arguments
+// (push argc; push argv; push 2; call ...) or none (push 0; call ...): the program returns (ret)
+// when main returns, with main's value in RV. (main(argc, argv) gets 0, null without arguments.)
 
 #include <cstdint>
 #include <vector>

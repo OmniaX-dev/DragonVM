@@ -3923,6 +3923,7 @@ namespace dscript
 		resolveSubDefaults();
 		// Analysis: a file without main is fine (it is included by others).
 		FuncInfo* mainFunc = nullptr;
+		bool mainArgs = false;	// main(var argc: u32, var argv: string*)
 		if (m_funcs.count("main") == 0)
 		{
 			if (!m_options.analysis)
@@ -3932,8 +3933,19 @@ namespace dscript
 		{
 			mainFunc = m_funcs["main"][0];
 			attempt([&] {
-				if (m_funcs["main"].size() > 1 || !mainFunc->type->params.empty())
-					error(mainFunc->decl->pos, "main takes no parameters (sub main() -> i32 or -> void)");
+				// main() or main(var argc: u32, var argv: string*) (argc can be i32, argv i8**).
+				const auto& params = mainFunc->type->params;
+				auto l_isArgv = [](Type* t) {
+					return t->kind == Type::Kind::Pointer && t->base->kind == Type::Kind::Pointer && t->base->base->isInteger()
+						&& t->base->base->size() == 1 && t->base->base->kind != Type::Kind::Bool;
+				};
+				const bool withArgs = params.size() == 2 && (params[0]->kind == Type::Kind::U32 || params[0]->kind == Type::Kind::I32) && l_isArgv(params[1]);
+				if (m_funcs["main"].size() > 1 || !(params.empty() || withArgs))
+					error(mainFunc->decl->pos, "main takes no parameters, or the program's arguments: sub main(var argc: u32, var argv: string*) "
+						"(and returns i32 or void)");
+				if (withArgs && mainFunc->requiredParams != 2)
+					error(mainFunc->decl->pos, "main's parameters cannot have default values (without arguments, argc is 0 and argv null)");
+				mainArgs = withArgs;
 			});
 		}
 
@@ -4032,7 +4044,28 @@ namespace dscript
 			out.push_back("\tpush 0");
 			out.push_back("\tcall $__ds_init");
 		}
-		out.push_back("\tpush 0");
+		if (mainArgs)
+		{
+			// main(argc, argv): what the program was called with (push argc; push argv; push 2;
+			// call entry), or 0, null if it was called without arguments (PP is 0) or is a raw
+			// binary (started by a jump: nothing to read).
+			out.push_back("\tmov R1, 0");
+			out.push_back("\tmov R2, 0");
+			if (!m_options.raw)
+			{
+				out.push_back("\tmov R3, PP");
+				out.push_back("\tmov ACC, R3");
+				out.push_back("\tjeq $__ds_no_args, 0");
+				out.push_back("\tmovo R1, *PP, dword 0x00000000");
+				out.push_back("\tmovo R2, *PP, dword 0xFFFFFFFC");
+				out.push_back("__ds_no_args:");
+			}
+			out.push_back("\tpush R1");
+			out.push_back("\tpush R2");
+			out.push_back("\tpush 2");
+		}
+		else
+			out.push_back("\tpush 0");
 		out.push_back("\tcall $" + mainFunc->label);
 		out.push_back(m_options.raw ? "\thlt" : "\tret");
 		if (!m_initCode.empty())

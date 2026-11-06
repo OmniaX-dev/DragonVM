@@ -1,0 +1,2 @@
+// expect-error: main's parameters cannot have default values
+sub main(var argc: u32 = 0, var argv: string* = null) -> i32 { return 0; }
