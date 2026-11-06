@@ -157,7 +157,7 @@ struct Text16Console {
 
 	priv var m_error: u8 = 0;
 
-	sub init() -> bool {
+	sub new() {
 		this->m_initialized = false;
 		this->m_screen_x = *cast<u32*>(CMOSRegisters.ScreenColumns);
 		this->m_screen_y = *cast<u32*>(CMOSRegisters.ScreenRows);
@@ -166,9 +166,9 @@ struct Text16Console {
 			free(&this->m_screenBuffer);
 		this->m_screenBuffer = malloc(this->m_screenBufferSize);
 		if (not this->m_screenBuffer)
-			return this->set_error(Errors.ScreenBufferAllocFail, false);
+			this->set_error(Errors.ScreenBufferAllocFail);
 		this->m_initialized = true;
-		return this->set_error(Errors.NoError, true);
+		this->set_error(Errors.NoError);
 	}
 
 	sub is_valid() -> bool {
@@ -208,7 +208,7 @@ struct Text16Console {
 		TextSingle::new_line();
 	}
 
-	priv inline sub set_error(var err: u8, var passthrough: bool) -> bool {
+	priv inline sub set_error(var err: u8, var passthrough: bool = true) -> bool {
 		this->m_error = err;
 		return passthrough;
 	}
