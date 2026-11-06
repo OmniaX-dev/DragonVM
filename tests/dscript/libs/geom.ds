@@ -1,0 +1,30 @@
+// A library for the library tests (libraries.ds): built with dsc --lib.
+namespace Geom {
+	struct Vec {
+		var x: i32;
+		var y: i32 = 7;
+		priv var hits: i32;
+		sub new(var x: i32, var y: i32) { this->x = x; this->y = y; }
+		sub len() -> i32 { this->hits++; return this->x + this->y; }
+		inline sub sum() -> i32 { return this->x + this->y; }
+		sub hitCount() -> i32 { return this->hits; }
+		static sub dot(var a: Vec*, var b: Vec*) -> i32 { return a->x * b->x + a->y * b->y; }
+	}
+	enum Dir: u8 { Up, Down = 4 }
+	const SCALE = 3;
+	const NAME = "geom";
+	const ORIGIN: Vec = { 1, 2 };
+	const TABLE: u16[] = { 10, 20, 30 };
+	var counter: i32 = 5;
+	var computed: i32 = compute();
+	sub compute() -> i32 { return SCALE * 4; }
+	sub area(var w: i32, var h: i32 = 2) -> i32 { counter++; return w * h * SCALE; }
+	sub area(var v: Vec*) -> i32 { return v->x * v->y; }
+	inline sub twice(var n: i32) -> i32 {
+		const k = 2;
+		return n * k;
+	}
+	alias Op = sub(i32) -> i32;
+	sub apply(var f: Op, var n: i32) -> i32 { return f(n); }
+	sub table(var i: u32) -> i32 { return TABLE[i]; }
+}

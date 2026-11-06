@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Common.hpp"
+#include "Lexer.hpp"
 
 namespace dscript
 {
@@ -64,6 +65,11 @@ namespace dscript
 		// Ident: name is already final (a local, a parameter, a renamed local constant / static,
 		// ::global); the others are looked up from the scope by the code generator.
 		bool resolved { false };
+		// Declared in a library's interface (#import): 1 + the library's index. Its subs (but the
+		// inline ones) and globals are in the library: only declared here.
+		int external { 0 };
+		// Inline subs: the tokens of the body (from '{' to '}'), for a library's interface.
+		std::vector<Token> bodyTokens;
 
 		// Filled in by the code generator.
 		Type* type { nullptr };

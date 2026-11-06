@@ -42,7 +42,8 @@ workspace root (this repository has one):
     "files": { "extra/ds/bios/entry.ds": ["--rom"] }    more options for one program
 }
 ```
-(`-I <dir>`, `-D NAME[=value]`, `--rom`, `--raw`; paths relative to the workspace root.) Errors
+(`-I <dir>`, `-L <dir>` for the compiled libraries of `#import`, `-D NAME[=value]`, `--rom`,
+`--raw`; paths relative to the workspace root.) Errors
 are reported one per declaration or sub (the first one in each). Tests:
 `tests/dsls/run_tests.py`. The log (Zed: `dev: open language server logs`) shows what dsls did.
 

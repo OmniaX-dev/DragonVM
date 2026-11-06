@@ -133,6 +133,7 @@ namespace dscript
 		Node* n = new Node();
 		n->kind = kind;
 		n->pos = pos;
+		n->external = m_external;
 		return n;
 	}
 
@@ -156,6 +157,21 @@ namespace dscript
 
 	void Parser::parseTopLevel(std::vector<Node*>& out)
 	{
+		// A library's declarations (the preprocessor puts them there for #import).
+		if (peek().kind == TokenKind::Identifier && peek().text == "__dlib_extern" && peek(1).kind == TokenKind::Integer && m_external == 0)
+		{
+			next();
+			m_external = (int)next().value + 1;
+			expectPunct("{", "after __dlib_extern");
+			while (!acceptPunct("}"))
+			{
+				if (peek().kind == TokenKind::End)
+					error(peek().pos, "'}' missing at the end of a library's declarations");
+				parseTopLevel(out);
+			}
+			m_external = 0;
+			return;
+		}
 		if (isKeyword("namespace"))
 		{
 			parseNamespace(out);
@@ -515,7 +531,7 @@ namespace dscript
 		}
 		if (acceptPunct("->"))
 			n->typeSyntax = parseType();
-		if (owner != nullptr && !isPunct("{"))
+		if (owner != nullptr && !isPunct("{") && m_external == 0)
 			error(peek().pos, "a method needs its body here, in the struct ('{' expected)");
 		if (acceptPunct(";"))
 			return n;
@@ -524,7 +540,10 @@ namespace dscript
 		pushScope();
 		for (Node* p : n->list)
 			declareLocal(p->name);
+		const size_t bodyStart = m_pos;
 		n->a = parseBlock();
+		if ((flags & 2) != 0)
+			n->bodyTokens.assign(m_tokens.begin() + (std::ptrdiff_t)bodyStart, m_tokens.begin() + (std::ptrdiff_t)m_pos);
 		popScope();
 		m_currentFunc = outer;
 		return n;

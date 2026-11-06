@@ -1,0 +1,40 @@
+// Compiled libraries: #import, linking, a library that imports another one, globals that
+// their library initializes, overloads, inline subs, methods, constants.
+// dsc-lib: libs/geom.ds libs/shapes.ds
+// expect-sources: libraries.ds geom.ds shapes.ds
+// expect-rv: 1
+#include(<assert.ds>)
+#import(<geom>)
+#import(<shapes>)
+
+sub inc(var n: i32) -> i32 { return n + 1; }
+
+sub main() -> i32 {
+	var v: Geom::Vec(3, 4);
+	assert(v.len() == 7);
+	assert(v.len() == 7);
+	assert(v.hitCount() == 2);
+	assert(v.sum() == 7);
+	var w: Geom::Vec;
+	assert(w.y == 7);
+	assert(Geom::Vec.dot(&v, &v) == 25);
+	assert(Geom::area(2) == 12);
+	assert(Geom::area(2, 5) == 30);
+	assert(Geom::area(&v) == 12);
+	assert(Geom::counter == 7);
+	assert(Geom::computed == 12);
+	assert(Geom::twice(21) == 42);
+	assert(Geom::apply(inc, 9) == 10);
+	assert(Geom::apply(Geom::twice, 5) == 10);
+	assert(Geom::SCALE == 3 and Geom::NAME[0] == 'g' and Geom::ORIGIN.y == 2);
+	assert(Geom::TABLE[2] == 30 and Geom::table(1) == 20);
+	assert(Geom::Dir.Down == 4 and sizeof(Geom::Dir) == 1);
+	var r: Rect;
+	r.size.x = 5;
+	r.size.y = 6;
+	assert(perimeter(&r) == 22);
+	assert(rect_area(&r) == 30);
+	Geom::counter = 100;
+	assert(Geom::area(1, 1) == 3 and Geom::counter == 101);
+	return 1;
+}

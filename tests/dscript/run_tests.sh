@@ -8,6 +8,10 @@
 #   // expect-rom-rv: <n>      compiled with --rom as the machine's BIOS (16 MiB image), booted;
 #                              main's return value (instead of the DRX and raw runs)
 #   // dsc-flags: <options>    extra dsc options (for every compilation of the test)
+#   // expect-sources: <file.ds> ...  the raw build's disassembly (--save-disassembly, for the
+#                              debugger) has the source lines of these files (also the libraries')
+#   // dsc-lib: <file.ds> ...  libraries to compile first (dsc --lib, in this order, into a
+#                              directory given to the test with -L: #import(<file>))
 # Every test runs twice: as a DRX (relocatable, loaded at 0x01020000) and as a raw binary
 # (--raw --load 0x01030000).
 
@@ -33,9 +37,22 @@ for t in "${tests[@]}"; do
 	err="$(grep -m1 '^// expect-error:' "$t" | sed 's|^// expect-error: *||')"
 	romrv="$(grep -m1 '^// expect-rom-rv:' "$t" | sed 's|^// expect-rom-rv: *||')"
 	read -r -a flags <<< "$(grep -m1 '^// dsc-flags:' "$t" | sed 's|^// dsc-flags: *||')"
+	read -r -a libs <<< "$(grep -m1 '^// dsc-lib:' "$t" | sed 's|^// dsc-lib: *||')"
+	read -r -a sources <<< "$(grep -m1 '^// expect-sources:' "$t" | sed 's|^// expect-sources: *||')"
 	ok=1
 	msg=""
-	if [ -n "$err" ]; then
+	if [ ${#libs[@]} -gt 0 ]; then
+		mkdir -p "$OUT/$name.libs"
+		for lib in "${libs[@]}"; do
+			if ! "$DSC" "$lib" --lib -I "$ROOT/extra/ds/sdk" -L "$OUT/$name.libs" -o "$OUT/$name.libs/$(basename "$lib" .ds).dlib" > "$OUT/$name.log" 2>&1; then
+				ok=0; msg="library $lib: compile error: $(cat "$OUT/$name.log")"
+			fi
+		done
+		flags+=(-L "$OUT/$name.libs")
+	fi
+	if [ $ok -eq 0 ]; then
+		:
+	elif [ -n "$err" ]; then
 		if "$DSC" "$t" -I "$ROOT/extra/ds/sdk" "${flags[@]}" -o "$OUT/$name.drx" > "$OUT/$name.log" 2>&1; then
 			ok=0; msg="compiled, but should fail with: $err"
 		elif ! grep -qF -- "$err" "$OUT/$name.log"; then
@@ -62,7 +79,11 @@ for t in "${tests[@]}"; do
 				"$DSC" "$t" -I "$ROOT/extra/ds/sdk" "${flags[@]}" -o "$OUT/$name.drx" > "$OUT/$name.log" 2>&1 || { ok=0; msg="$mode: compile error: $(cat "$OUT/$name.log")"; break; }
 				prog="$OUT/$name.drx"; at=()
 			else
-				"$DSC" "$t" -I "$ROOT/extra/ds/sdk" "${flags[@]}" --raw --load 0x01030000 -o "$OUT/$name.bin" > "$OUT/$name.log" 2>&1 || { ok=0; msg="$mode: compile error: $(cat "$OUT/$name.log")"; break; }
+				"$DSC" "$t" -I "$ROOT/extra/ds/sdk" "${flags[@]}" --raw --load 0x01030000 --save-disassembly "$OUT/$name.dds" -o "$OUT/$name.bin" > "$OUT/$name.log" 2>&1 || { ok=0; msg="$mode: compile error: $(cat "$OUT/$name.log")"; break; }
+				for src in "${sources[@]}"; do
+					grep -qaF "/$src" "$OUT/$name.dds" || { ok=0; msg="the disassembly has no source lines of $src"; }
+				done
+				[ $ok -eq 0 ] && break
 				prog="$OUT/$name.bin"; at=(--at 0x01030000)
 			fi
 			boot=()

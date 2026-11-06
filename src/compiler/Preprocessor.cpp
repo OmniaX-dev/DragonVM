@@ -379,6 +379,100 @@ namespace dscript
 		error(tok.pos, "#include: file not found: " + path);
 	}
 
+	std::string Preprocessor::resolveImport(const Token& tok, std::string path, const std::string& directory)
+	{
+		bool libraryDirsOnly = false;
+		if (path.size() >= 2 && path.front() == '<' && path.back() == '>')
+		{
+			libraryDirsOnly = true;
+			path = trim(path.substr(1, path.size() - 2));
+		}
+		else if (path.size() >= 2 && path.front() == '"' && path.back() == '"')
+			path = path.substr(1, path.size() - 2);
+		if (path.empty())
+			error(tok.pos, "#import: no library named");
+		if (std::filesystem::path(path).extension() != ".dlib")
+			path += ".dlib";
+		std::vector<std::string> tried;
+		if (!libraryDirsOnly || std::filesystem::path(path).is_absolute())
+		{
+			std::filesystem::path p = std::filesystem::path(path).is_absolute() ? std::filesystem::path(path) : std::filesystem::path(directory) / path;
+			if (std::filesystem::exists(p))
+				return p.string();
+		}
+		for (const auto& dir : m_libraryDirs)
+		{
+			std::filesystem::path p = std::filesystem::path(dir) / path;
+			if (std::filesystem::exists(p))
+				return p.string();
+		}
+		error(tok.pos, "#import: library not found: " + path + (m_libraryDirs.empty() ? " (no library directories: -L <dir>)" : " (searched in the -L directories)"));
+	}
+
+	void Preprocessor::importLibrary(const Token& tok, const std::string& path, std::vector<Token>& out)
+	{
+		const std::string canonical = std::filesystem::weakly_canonical(path).string();
+		for (const auto& imp : m_imports)
+		{
+			if (imp.path == canonical)
+				return;
+		}
+		for (const auto& p : m_importStack)
+		{
+			if (p == canonical)
+				error(tok.pos, "#import: the libraries import each other (" + canonical + ")");
+		}
+		std::ifstream file(canonical, std::ios::binary);
+		if (!file)
+			error(tok.pos, "#import: cannot open " + canonical);
+		std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+		ImportedLibrary imp;
+		imp.path = canonical;
+		std::string message;
+		if (!dragon::dlib::read(bytes, imp.library, message))
+			error(tok.pos, "#import: " + canonical + ": " + message);
+		m_files.insert(canonical);
+		// Its dependencies first (found from where the library is).
+		m_importStack.push_back(canonical);
+		const std::string libDir = std::filesystem::path(canonical).parent_path().string();
+		for (const auto& dep : imp.library.dependencies)
+			importLibrary(tok, resolveImport(tok, dep, libDir), out);
+		m_importStack.pop_back();
+		// Its declarations, where they come from (the library's sources), without this
+		// program's defines.
+		const int index = (int)m_imports.size();
+		std::map<uint32_t, const dragon::dlib::LineInfo*> lines;
+		for (const auto& l : imp.library.lines)
+			lines[l.line] = &l;
+		Lexer lexer(imp.library.interface, canonical);
+		std::vector<Token> tokens = lexer.tokenize();
+		Token t = tok;
+		t.kind = TokenKind::Identifier;
+		t.text = "__dlib_extern";
+		out.push_back(t);
+		t.kind = TokenKind::Integer;
+		t.text = std::to_string(index);
+		t.value = index;
+		out.push_back(t);
+		t.kind = TokenKind::Punct;
+		t.text = "{";
+		out.push_back(t);
+		for (Token& x : tokens)
+		{
+			if (x.kind == TokenKind::End)
+				break;
+			if (x.kind == TokenKind::Directive)
+				error(x.pos, "#import: a directive in a library's declarations");
+			auto it = lines.find((uint32_t)x.pos.line);
+			if (it != lines.end())
+				x.pos = { it->second->file, (int)it->second->sourceLine, std::max(1, x.pos.column + it->second->columnDelta) };
+			out.push_back(x);
+		}
+		t.text = "}";
+		out.push_back(t);
+		m_imports.push_back(std::move(imp));
+	}
+
 	void Preprocessor::directive(const Token& tok, const std::string& directory, std::vector<Token>& out, std::vector<Conditional>& stack)
 	{
 		std::string text = trim(tok.text);
@@ -474,6 +568,16 @@ namespace dscript
 				error(tok.pos, "#include nesting too deep");
 			std::vector<Token> included = processFile(path);
 			out.insert(out.end(), included.begin(), included.end());
+		}
+		else if (name == "import")
+		{
+			const std::string written = argument(tok, rest, name);
+			const std::string path = resolveImport(tok, written, directory);
+			if (std::find(m_importArguments.begin(), m_importArguments.end(), written) == m_importArguments.end())
+				m_importArguments.push_back(written);
+			if (m_index != nullptr)
+				m_index->add(tok.pos, (int)tok.text.size() + 1, {}, "#import " + std::filesystem::weakly_canonical(path).string());
+			importLibrary(tok, path, out);
 		}
 		else if (name == "once")
 			m_onceFiles.insert(m_includeStack.back());

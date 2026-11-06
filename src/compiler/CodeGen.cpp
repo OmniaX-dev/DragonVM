@@ -435,6 +435,7 @@ namespace dscript
 							v->pos = d->pos;
 							v->defPos = d->namePos;
 							v->readOnly = true;
+							v->external = d->external != 0;
 							m_globals[d->name] = v;
 							m_globalDecls.push_back(d);
 							break;
@@ -453,6 +454,7 @@ namespace dscript
 						v->symbol = dataSymbol(d->name, v->isStatic);
 						v->pos = d->pos;
 						v->defPos = d->namePos;
+						v->external = d->external != 0;
 						m_globals[d->name] = v;
 						m_globalDecls.push_back(d);
 					}
@@ -468,7 +470,8 @@ namespace dscript
 						f->decl = d;
 						f->interrupt = (d->value & 1) != 0;
 						f->isInline = (d->value & 2) != 0 && !m_options.noInline;
-						f->defined = d->a != nullptr;
+						f->external = d->external != 0 && d->a == nullptr;
+						f->defined = d->a != nullptr || f->external;
 						m_funcs[d->name].push_back(f);
 						m_funcList.push_back(f);
 					}
@@ -3416,14 +3419,15 @@ namespace dscript
 		{
 			const bool ok = attempt([&] {
 				VarInfo* v = m_globals[d->name];
-				if (m_options.rom && !v->readOnly && v->isStatic)
+				if (m_options.rom && !v->readOnly && v->isStatic && !v->external)
 					error(d->pos, "--rom: '" + d->text + "' is a static variable (stored in the program, like a global), but the program is in ROM, "
 						"where nothing can change: use const for read-only values, and keep what changes in RAM (locals, or a pointer to a RAM address)");
-				if (m_options.rom && !v->readOnly)
+				if (m_options.rom && !v->readOnly && !v->external)
 					error(d->pos, "--rom: '" + d->name + "' is a global variable, but the program (and its data) is in ROM, "
 						"where nothing can change: use const for read-only values, and keep what changes in RAM (locals, or a pointer to a RAM address)");
 				Type* t = nullptr;
-				inferArraySize(d->typeSyntax, d->a, d->pos);
+				if (!v->external)
+					inferArraySize(d->typeSyntax, d->a, d->pos);
 				if (d->typeSyntax)
 					t = resolveType(d->typeSyntax);
 				else
@@ -3453,6 +3457,8 @@ namespace dscript
 		{
 			attempt([&] {
 				VarInfo* v = m_globals[d->name];
+				if (v->external)
+					return;		// in its library (which initializes it)
 				Type* t = v->type;
 				std::vector<uint8_t> bytes(t->size(), 0);
 				struct Pending { uint32_t offset; Type* type; Node* init; const StructField* field; };
@@ -3998,6 +4004,305 @@ namespace dscript
 		}
 	}
 
+	// ================================== Library interfaces ==================================
+	std::vector<std::string> CodeGen::exports(void) const
+	{
+		std::vector<std::string> out;
+		for (FuncInfo* f : m_funcList)
+		{
+			if (!f->external && f->decl->name.rfind("__lambda_", 0) != 0 && !f->label.empty())
+				out.push_back(f->label);	// (inline subs without code: not in the image)
+		}
+		for (const auto& g : m_globals)
+		{
+			if (!g.second->external && !g.second->isStatic)
+				out.push_back(g.second->symbol);
+		}
+		return out;
+	}
+
+	// A type as written in an interface (structs by their full name, from the global scope).
+	std::string CodeGen::interfaceType(Type* t)
+	{
+		switch (t->kind)
+		{
+			case Type::Kind::Pointer:
+			case Type::Kind::Array:
+			{
+				std::string base = interfaceType(t->base);
+				if (t->base->kind == Type::Kind::Function)
+					base = "(" + base + ")";
+				return base + (t->kind == Type::Kind::Pointer ? "*" : "[" + std::to_string(t->count) + "]");
+			}
+			case Type::Kind::Struct:
+			{
+				StructInfo* info = t->structInfo;
+				if (!info->anonymous)
+					return "::" + info->name;
+				std::string s = "struct { ";
+				for (const StructField& f : info->fields)
+					s += std::string(f.isPrivate ? "priv " : "") + "var " + f.name + ": " + interfaceType(f.type) + "; ";
+				return s + "}";
+			}
+			case Type::Kind::Function:
+			{
+				std::string s = "sub(";
+				for (size_t i = 0; i < t->params.size(); i++)
+					s += (i > 0 ? ", " : "") + interfaceType(t->params[i]);
+				return s + ") -> " + interfaceType(t->base);
+			}
+			case Type::Kind::Null: return "void*";
+			default: return t->name();
+		}
+	}
+
+	std::string CodeGen::interfaceNumber(int64_t value, Type* t)
+	{
+		if (t != nullptr && t->kind == Type::Kind::Bool)
+			return value ? "true" : "false";
+		if (t != nullptr && (t->isPointer() || t->isFunction()))
+			return value == 0 ? "null" : "cast<" + interfaceType(t) + ">(" + std::to_string((uint32_t)value) + ")";
+		return std::to_string(value);
+	}
+
+	// A default value (a constant expression).
+	std::string CodeGen::interfaceValue(Node* init, Type* t)
+	{
+		if (init->kind == NodeKind::StrLit)
+			return dscript::quoted(init->text);
+		if (init->kind == NodeKind::Ident && init->func != nullptr)
+			return init->func->decl->name.rfind("__lambda_", 0) == 0 ? "null" : "::" + init->func->decl->name;
+		if (init->isConst || init->constPtr)
+			return interfaceNumber(init->constValue, t);
+		return "0";
+	}
+
+	std::string CodeGen::interface(std::vector<dragon::dlib::LineInfo>& lines)
+	{
+		std::vector<std::string> out;
+		// A line; pos: where its name (at nameColumn, 0-based) is declared.
+		auto l_line = [&](const std::string& text, const SourcePos* pos = nullptr, size_t nameColumn = 0) {
+			const size_t first = out.size();
+			size_t start = 0;
+			while (true)
+			{
+				const size_t nl = text.find('\n', start);
+				out.push_back(text.substr(start, nl == std::string::npos ? std::string::npos : nl - start));
+				if (nl == std::string::npos)
+					break;
+				start = nl + 1;
+			}
+			if (pos == nullptr || pos->file.empty() || pos->line <= 0)
+				return;
+			for (size_t i = first; i < out.size(); i++)
+			{
+				const bool head = i == first;
+				lines.push_back({ (uint32_t)(i + 1), pos->file, (uint32_t)(pos->line + (int)(i - first)), head ? pos->column - (int)(nameColumn + 1) : 0 });
+			}
+		};
+		auto l_func = [&](const Node* d) -> FuncInfo* {
+			for (FuncInfo* f : m_funcList)
+			{
+				if (f->decl == d)
+					return f;
+			}
+			return nullptr;
+		};
+		auto l_token = [&](const Token& t) -> std::string {
+			switch (t.kind)
+			{
+				case TokenKind::String: return dscript::quoted(t.text);
+				case TokenKind::LowBlock: return "low {" + t.text + "}";
+				case TokenKind::Integer:
+					if (t.isChar)
+					{
+						const char c = (char)t.value;
+						if (c == '\'' || c == '\\')
+							return std::string("'\\") + c + "'";
+						if (c < 32 || c >= 127)
+						{
+							char buf[8];
+							std::snprintf(buf, sizeof(buf), "'\\x%02X'", (uint8_t)c);
+							return buf;
+						}
+						return std::string("'") + c + "'";
+					}
+					return std::to_string(t.value);
+				default: return t.text;
+			}
+		};
+		auto l_sub = [&](FuncInfo* f, const std::string& indent) {
+			Node* d = f->decl;
+			if (f->type == nullptr)
+				return;
+			const bool method = (d->value & 4) != 0, isStatic = (d->value & 8) != 0;
+			const std::string head = indent + ((d->value & 16) != 0 ? "priv " : "") + (isStatic ? "static " : "") + (f->interrupt ? "interrupt " : "")
+				+ ((d->value & 2) != 0 ? "inline " : "") + "sub ";
+			std::string text = head + declaredName(d) + "(";
+			const size_t first = (method && !isStatic) ? 1 : 0;
+			for (size_t i = first; i < f->type->params.size() && i < f->paramNames.size(); i++)
+			{
+				text += (i > first ? ", " : "") + std::string("var ") + f->paramNames[i] + ": " + interfaceType(f->type->params[i]);
+				if (i < f->defaults.size() && f->defaults[i] != nullptr)
+					text += " = " + interfaceValue(f->defaults[i], f->type->params[i]);
+			}
+			text += ")";
+			if (f->type->base->kind != Type::Kind::Void)
+				text += " -> " + interfaceType(f->type->base);
+			if ((d->value & 2) == 0 || d->bodyTokens.empty())
+			{
+				l_line(text + ";", &d->namePos, head.size());
+				return;
+			}
+			// An inline sub: its body, each token where it is in the source (the lines and the
+			// columns, so that errors and the index point there).
+			std::string line = text;
+			SourcePos linePos = d->namePos;
+			size_t lineName = head.size();
+			int lineNr = d->namePos.line;
+			bool headLine = true;
+			for (const Token& t : d->bodyTokens)
+			{
+				if (t.pos.line != lineNr && t.pos.file == linePos.file)
+				{
+					l_line(line, &linePos, lineName);
+					line.clear();
+					linePos = { t.pos.file, t.pos.line, 1 };
+					lineName = 0;
+					lineNr = t.pos.line;
+					headLine = false;
+				}
+				if (!headLine && line.size() < (size_t)std::max(0, t.pos.column - 1))
+					line.append((size_t)(t.pos.column - 1) - line.size(), ' ');
+				else if (!line.empty())
+					line += ' ';
+				const std::string text = l_token(t);
+				line += text;
+				lineNr += (int)std::count(text.begin(), text.end(), '\n');
+			}
+			l_line(line, &linePos, lineName);
+		};
+		auto l_enum = [&](Node* d, const std::string& indent) {
+			EnumInfo& info = m_enums[d->name];
+			const std::string head = indent + (d->isPrivate ? "priv " : "") + "enum ";
+			l_line(head + declaredName(d) + (d->typeSyntax != nullptr && info.type != nullptr ? ": " + info.type->name() : "") + " {", &d->namePos, head.size());
+			for (size_t i = 0; i < d->list.size(); i++)
+			{
+				const Node* m = d->list[i];
+				auto it = info.values.find(m->name);
+				const std::string text = indent + "\t" + m->name + " = " + std::to_string(it != info.values.end() ? it->second : 0) + (i + 1 < d->list.size() ? "," : "");
+				l_line(text, &m->namePos, indent.size() + 1);
+			}
+			l_line(indent + "}");
+		};
+		std::function<void(Node*, const std::string&)> l_struct = [&](Node* d, const std::string& indent) {
+			StructInfo* info = m_structs[d->name];
+			const std::string head = indent + (d->isPrivate ? "priv " : "") + "struct ";
+			l_line(head + declaredName(d) + " {", &d->namePos, head.size());
+			for (const StructField& f : info->fields)
+			{
+				const std::string h = indent + "\t" + (f.isPrivate ? "priv " : "") + "var ";
+				l_line(h + f.name + ": " + interfaceType(f.type) + (f.init != nullptr ? " = " + interfaceValue(f.init, f.type) : "") + ";", &f.namePos, h.size());
+			}
+			for (Node* n : m_program->list)
+			{
+				if (n->owner != d || n->external != 0 || !n->text.empty() || n->name.rfind("__lambda_", 0) == 0)
+					continue;
+				if (n->kind == NodeKind::StructDecl && m_structs.count(n->name) > 0)
+					l_struct(n, indent + "\t");
+				else if (n->kind == NodeKind::EnumDecl && m_enums.count(n->name) > 0)
+					l_enum(n, indent + "\t");
+				else if (n->kind == NodeKind::FuncDecl)
+				{
+					if (FuncInfo* f = l_func(n))
+						l_sub(f, indent + "\t");
+				}
+			}
+			l_line(indent + "}");
+		};
+		// A struct constant's value: its fields (up to the first private one: { ... } cannot set
+		// those outside the struct, they keep their defaults).
+		std::function<std::string(StructInfo*, const std::string&, const ConstInfo&)> l_constFields = [&](StructInfo* info, const std::string& prefix, const ConstInfo& c) {
+			std::string s = "{ ";
+			for (size_t i = 0; i < info->fields.size(); i++)
+			{
+				const StructField& f = info->fields[i];
+				if (f.isPrivate)
+					break;
+				s += (i > 0 ? ", " : "");
+				if (f.type->kind == Type::Kind::Struct)
+					s += l_constFields(f.type->structInfo, prefix + f.name + ".", c);
+				else if (f.type->kind == Type::Kind::Array)
+					s += "{ }";
+				else
+				{
+					auto it = c.fields.find(prefix + f.name);
+					s += interfaceNumber(it != c.fields.end() ? it->second : 0, f.type);
+				}
+			}
+			return s + " }";
+		};
+
+		for (Node* d : m_program->list)
+		{
+			if (d->external != 0 || !d->text.empty() || d->owner != nullptr || d->kind == NodeKind::NamespaceDecl || d->kind == NodeKind::LowBlock)
+				continue;
+			if (d->kind == NodeKind::FuncDecl && (d->name.rfind("__lambda_", 0) == 0 || l_func(d) == nullptr))
+				continue;
+			if ((d->kind == NodeKind::StructDecl && (d->value != 0 || m_structs.count(d->name) == 0)) || (d->kind == NodeKind::EnumDecl && m_enums.count(d->name) == 0))
+				continue;
+			const std::string indent = d->scope.empty() ? "" : "\t";
+			if (!d->scope.empty())
+				l_line("namespace " + d->scope + " {");
+			const std::string name = declaredName(d);
+			switch (d->kind)
+			{
+				case NodeKind::StructDecl: l_struct(d, indent); break;
+				case NodeKind::EnumDecl: l_enum(d, indent); break;
+				case NodeKind::FuncDecl: l_sub(l_func(d), indent); break;
+				case NodeKind::AliasDecl:
+				{
+					const std::string head = indent + "alias ";
+					l_line(head + name + " = " + (m_aliases[d->name].type ? interfaceType(m_aliases[d->name].type) : "i32") + ";", &d->namePos, head.size());
+				}
+				break;
+				case NodeKind::VarDecl:
+				{
+					const std::string head = indent + "var ";
+					VarInfo* v = m_globals[d->name];
+					l_line(head + name + ": " + interfaceType(v->type ? v->type : m_types.i32()) + ";", &d->namePos, head.size());
+				}
+				break;
+				case NodeKind::ConstDecl:
+				{
+					const std::string head = indent + "const ";
+					std::string text = head + name;
+					if (m_globals.count(d->name) > 0)
+						text += ": " + interfaceType(m_globals[d->name]->type ? m_globals[d->name]->type : m_types.i32()) + ";";	// a constant array: its data is in the library
+					else
+					{
+						const ConstInfo& c = m_consts[d->name];
+						if (c.isString)
+							text += " = " + dscript::quoted(c.text) + ";";
+						else if (c.type != nullptr && c.type->kind == Type::Kind::Struct)
+							text += ": " + interfaceType(c.type) + " = " + l_constFields(c.type->structInfo, "", c) + ";";
+						else
+							text += ": " + (c.type ? interfaceType(c.type) : std::string("i32")) + " = " + interfaceNumber(c.value, c.type) + ";";
+					}
+					l_line(text, &d->namePos, head.size());
+				}
+				break;
+				default: break;
+			}
+			if (!d->scope.empty())
+				l_line("}");
+		}
+		std::string text;
+		for (const auto& l : out)
+			text += l + "\n";
+		return text;
+	}
+
 	std::vector<std::string> CodeGen::generate(Node* program)
 	{
 		collect(program);
@@ -4095,7 +4400,11 @@ namespace dscript
 			for (FuncInfo* f : funcs)
 			{
 				f->label = codeLabel(entry.first, (f->decl->value & 4) != 0);
-				if (funcs.size() > 1)
+				// A library's sub has the label it has there (the overloads it has there).
+				size_t overloads = funcs.size();
+				if (f->decl->external != 0)
+					overloads = (size_t)std::count_if(funcs.begin(), funcs.end(), [&](FuncInfo* g) { return g->decl->external == f->decl->external; });
+				if (overloads > 1)
 				{
 					f->label += "__";
 					for (Type* p : f->type->params)
@@ -4109,7 +4418,13 @@ namespace dscript
 		// Analysis: a file without main is fine (it is included by others).
 		FuncInfo* mainFunc = nullptr;
 		bool mainArgs = false;	// main(var argc: u32, var argv: string*)
-		if (m_funcs.count("main") == 0)
+		m_program = program;
+		if (m_options.library)
+		{
+			if (m_funcs.count("main") > 0)
+				error(m_funcs["main"][0]->decl->pos, "a library has no main (programs import it: #import(...))");
+		}
+		else if (m_funcs.count("main") == 0)
 		{
 			if (!m_options.analysis)
 				error({ program->pos.file, 1, 1 }, "no 'main' sub");
@@ -4150,7 +4465,7 @@ namespace dscript
 			attempt([&] {
 				if (!f->defined)
 					error(f->decl->pos, "sub '" + f->name + "' is declared but not defined");
-				if (!f->isInline)
+				if (!f->isInline && !f->external)
 					genFunction(f);
 			});
 		}
@@ -4204,7 +4519,7 @@ namespace dscript
 			std::filesystem::path path = std::filesystem::weakly_canonical(std::filesystem::absolute(m_sourcePaths[i], ec), ec);
 			out.push_back(".srcfile " + std::to_string(i) + " " + (ec ? m_sourcePaths[i] : path.string()));
 		}
-		out.push_back(".entry __ds_start");
+		out.push_back(m_options.library ? ".entry __ds_lib_init" : ".entry __ds_start");
 		for (const auto& d : m_options.directives)
 			out.push_back(d);
 		out.push_back(".data");
@@ -4225,37 +4540,57 @@ namespace dscript
 			out.push_back(line);
 		}
 		out.push_back(".code");
-		out.push_back("__ds_start:");
-		out.push_back(".loc -");
-		if (!m_initCode.empty())
+		if (m_options.library)
 		{
-			out.push_back("\tpush 0");
-			out.push_back("\tcall $__ds_init");
-		}
-		if (mainArgs)
-		{
-			// main(argc, argv): what the program was called with (push argc; push argv; push 2;
-			// call entry), or 0, null if it was called without arguments (PP is 0) or is a raw
-			// binary (started by a jump: nothing to read).
-			out.push_back("\tmov R1, 0");
-			out.push_back("\tmov R2, 0");
-			if (!m_options.raw)
+			// Called by the programs that import the library (before their main).
+			out.push_back("__ds_lib_init:");
+			out.push_back(".loc -");
+			if (!m_initCode.empty())
 			{
-				out.push_back("\tmov R3, PP");
-				out.push_back("\tmov ACC, R3");
-				out.push_back("\tjeq $__ds_no_args, 0");
-				out.push_back("\tmovo R1, *PP, dword 0x00000000");
-				out.push_back("\tmovo R2, *PP, dword 0xFFFFFFFC");
-				out.push_back("__ds_no_args:");
+				out.push_back("\tpush 0");
+				out.push_back("\tcall $__ds_init");
 			}
-			out.push_back("\tpush R1");
-			out.push_back("\tpush R2");
-			out.push_back("\tpush 2");
+			out.push_back("\tret");
 		}
 		else
-			out.push_back("\tpush 0");
-		out.push_back("\tcall $" + mainFunc->label);
-		out.push_back(m_options.raw ? "\thlt" : "\tret");
+		{
+			out.push_back("__ds_start:");
+			out.push_back(".loc -");
+			for (int i = 0; i < m_options.libraries; i++)
+			{
+				out.push_back("\tpush 0");
+				out.push_back("\tcall $__dlib_init_" + std::to_string(i));
+			}
+			if (!m_initCode.empty())
+			{
+				out.push_back("\tpush 0");
+				out.push_back("\tcall $__ds_init");
+			}
+			if (mainArgs)
+			{
+				// main(argc, argv): what the program was called with (push argc; push argv; push 2;
+				// call entry), or 0, null if it was called without arguments (PP is 0) or is a raw
+				// binary (started by a jump: nothing to read).
+				out.push_back("\tmov R1, 0");
+				out.push_back("\tmov R2, 0");
+				if (!m_options.raw)
+				{
+					out.push_back("\tmov R3, PP");
+					out.push_back("\tmov ACC, R3");
+					out.push_back("\tjeq $__ds_no_args, 0");
+					out.push_back("\tmovo R1, *PP, dword 0x00000000");
+					out.push_back("\tmovo R2, *PP, dword 0xFFFFFFFC");
+					out.push_back("__ds_no_args:");
+				}
+				out.push_back("\tpush R1");
+				out.push_back("\tpush R2");
+				out.push_back("\tpush 2");
+			}
+			else
+				out.push_back("\tpush 0");
+			out.push_back("\tcall $" + mainFunc->label);
+			out.push_back(m_options.raw ? "\thlt" : "\tret");
+		}
 		if (!m_initCode.empty())
 		{
 			out.push_back("");

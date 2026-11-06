@@ -142,7 +142,13 @@ namespace dragon
 				static ostd::ByteStream assembleToFile(String sourceFileName, String binaryFileName);
 				static ostd::ByteStream assembleToVirtualDisk(String fileName, hw::VirtualHardDrive& vhdd, u32 address);
 				static bool saveDisassemblyToFile(String fileName, String programName = "");
+				// What saveDisassemblyToFile writes (after an assembly; empty if there is nothing),
+				// and writing such a list (dsc adds the code of the libraries it links to it).
+				static std::vector<tDisassemblyLine> disassemblyEntries(String programName = "");
+				static bool saveDisassemblyEntries(String fileName, const std::vector<tDisassemblyLine>& entries);
 				static void printProgramInfo(i32 verbose_level = 1);
+				// After an assembly: every label and data symbol (without '$') and its address.
+				static std::vector<std::pair<std::string, u32>> symbolAddresses(void);
 
 			private:
 				static ostd::ByteStream assemble(const std::vector<String>& sourceLines);

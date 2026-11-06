@@ -19,7 +19,7 @@
 //     "args": ["-I", "extra/ds/sdk"],                      dsc options for every root
 //     "files": { "extra/ds/bios/entry.ds": ["--rom"] }     more options for one root
 //   }
-// Options: -I <dir>, -D NAME[=value], --rom, --raw. Paths are relative to the workspace root.
+// Options: -I <dir>, -L <dir>, -D NAME[=value], --rom, --raw. Paths are relative to the workspace root.
 
 #include "../compiler/Preprocessor.hpp"
 #include "../compiler/Parser.hpp"
@@ -111,6 +111,7 @@ namespace
 	struct Options
 	{
 		std::vector<std::string> includeDirs;
+		std::vector<std::string> libraryDirs;
 		std::vector<std::pair<std::string, std::string>> defines;
 		bool rom { false };
 		bool raw { false };
@@ -121,7 +122,7 @@ namespace
 		for (size_t i = 0; i < args.size(); i++)
 		{
 			const std::string& a = args[i];
-			if ((a == "-I" || a == "-D") && i + 1 >= args.size())
+			if ((a == "-I" || a == "-L" || a == "-D") && i + 1 >= args.size())
 			{
 				std::cerr << "dsls: dsls.json: missing value for " << a << "\n";
 				break;
@@ -130,6 +131,11 @@ namespace
 			{
 				fs::path p(args[++i]);
 				o.includeDirs.push_back(canonical((p.is_absolute() ? p : fs::path(base) / p).string()));
+			}
+			else if (a == "-L")
+			{
+				fs::path p(args[++i]);
+				o.libraryDirs.push_back(canonical((p.is_absolute() ? p : fs::path(base) / p).string()));
 			}
 			else if (a == "-D")
 			{
@@ -180,6 +186,7 @@ namespace
 		setWarningHandler(onWarning);
 		Preprocessor::setOverlay(&docs);
 		Preprocessor pp(o.includeDirs);
+		pp.setLibraryDirs(o.libraryDirs);
 		pp.setIndex(&index);
 		pp.define("__DSCRIPT__", "1");
 		if (o.raw)

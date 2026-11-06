@@ -1,0 +1,3 @@
+// dsc-flags: --lib
+// expect-error: a library has no main
+sub main() -> i32 { return 0; }

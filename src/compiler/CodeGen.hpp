@@ -2,6 +2,7 @@
 
 #include "Types.hpp"
 #include "Index.hpp"
+#include "../tools/DLIB.hpp"
 #include <functional>
 #include <map>
 #include <set>
@@ -21,6 +22,7 @@ namespace dscript
 		SourcePos defPos;			// where the name is declared
 		bool param { false };		// a parameter (also those of an expanded inline sub)
 		bool isStatic { false };	// a static variable / constant array of a sub (<sub>::<name>)
+		bool external { false };	// in a library (#import): only declared here
 		const Node* decl { nullptr };	// globals: the declaration
 	};
 
@@ -37,6 +39,7 @@ namespace dscript
 		bool isInline { false };		// inline sub: its body is generated at every direct call
 		bool addressTaken { false };	// used as a value (a sub pointer): an inline sub also needs real code
 		bool defined { false };
+		bool external { false };		// in a library (#import): its code is there (not the inline ones)
 	};
 
 	struct CodeGenOptions
@@ -51,6 +54,11 @@ namespace dscript
 		// what every name refers to goes in the index.
 		bool analysis { false };
 		Index* index { nullptr };
+		// A library (dsc --lib): no main; __ds_lib_init initializes its globals.
+		bool library { false };
+		// The libraries the program imports: __ds_start calls their __ds_lib_init first (as
+		// __dlib_init_<n>, which the linker connects), in this order.
+		int libraries { 0 };
 	};
 
 	// Checks the program (types, names, overloads) and generates dasm source for it.
@@ -65,6 +73,11 @@ namespace dscript
 			std::vector<std::string> generate(Node* program);
 			// Analysis mode: the errors found.
 			const std::vector<CompileError>& errors(void) const { return m_errors; }
+			// A library (after generate()): the symbols the programs that import it can use (its
+			// subs and globals), and its declarations as DScript source (lines: where each line
+			// of it comes from).
+			std::vector<std::string> exports(void) const;
+			std::string interface(std::vector<dragon::dlib::LineInfo>& lines);
 
 		private:
 			// Struct constants: type is the struct, fields holds every scalar field's value by its
@@ -246,5 +259,11 @@ namespace dscript
 			int m_labelCounter { 0 };
 			std::vector<CompileError> m_errors;
 			std::vector<const StructField*> m_subDefaults;	// struct fields with a sub as default value
+			Node* m_program { nullptr };
+
+			// ===== library interfaces =====
+			std::string interfaceType(Type* t);
+			std::string interfaceValue(Node* init, Type* t);
+			std::string interfaceNumber(int64_t value, Type* t);
 	};
 }

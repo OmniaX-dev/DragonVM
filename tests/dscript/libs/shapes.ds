@@ -1,0 +1,15 @@
+// A library that uses another one (geom).
+#import(<geom>)
+
+struct Rect {
+	var corner: Geom::Vec;
+	var size: Geom::Vec;
+}
+
+sub perimeter(var r: Rect*) -> i32 {
+	return 2 * (r->size.x + r->size.y) + Geom::twice(0);
+}
+
+sub rect_area(var r: Rect*) -> i32 {
+	return Geom::area(&r->size);
+}

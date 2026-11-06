@@ -92,6 +92,7 @@ namespace dscript
 			std::string m_namespace;
 			std::string m_scope;
 			// Nested structs / enums (in a struct): hidden top-level declarations.
+			int m_external { 0 };			// in a library's declarations (__dlib_extern <n> { ... }): n + 1
 			std::vector<Node*> m_nested;	// in the value of a local const / static: the scopes below this one are not usable
 	};
 }

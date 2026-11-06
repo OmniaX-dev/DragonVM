@@ -134,9 +134,15 @@ namespace dragon
 			//                (as the size), "<line> <inline depth> <statement: 0/1>"
 			//   { SOURCES }  per source file used by the lines: the index (as the address),
 			//                "<path>\n<the file's text>"
-			if (m_code.size() == 0 || m_disassembly.size() == 0) return false;
-			const String header_string = "{ DRAGON_DEBUG_DISASSEMBLY }";
+			const std::vector<tDisassemblyLine> entries = disassemblyEntries(programName);
+			if (entries.empty()) return false;
+			return saveDisassemblyEntries(fileName, entries);
+		}
+
+		std::vector<Assembler::tDisassemblyLine> Assembler::disassemblyEntries(String programName)
+		{
 			std::vector<tDisassemblyLine> entries;
+			if (m_code.size() == 0 || m_disassembly.size() == 0) return entries;
 			// The program's name, as the first (pseudo) line: the file itself is named after a hash.
 			entries.push_back({ 0, String("{ NAME } ").add(programName), 0 });
 			entries.push_back({ 0, String("{ VERSION } ").add(DisassemblyVersion), 0 });
@@ -162,6 +168,12 @@ namespace dragon
 					entries.push_back({ cast<u32>(index), String(file.path).add("\n").add(file.text), 0 });
 				}
 			}
+			return entries;
+		}
+
+		bool Assembler::saveDisassemblyEntries(String fileName, const std::vector<tDisassemblyLine>& entries)
+		{
+			const String header_string = "{ DRAGON_DEBUG_DISASSEMBLY }";
 			u64 da_size = (header_string.len() + 1) * ostd::tTypeSize::BYTE;
 			for (auto& da : entries)
 				da_size += ostd::tTypeSize::DWORD + ostd::tTypeSize::WORD + (da.code.len() + 1) * ostd::tTypeSize::BYTE;
@@ -3130,6 +3142,16 @@ namespace dragon
 		}
 
 
+
+		std::vector<std::pair<std::string, u32>> Assembler::symbolAddresses(void)
+		{
+			std::vector<std::pair<std::string, u32>> out;
+			for (const auto& label : m_labelTable)
+				out.push_back({ label.first.new_substr(1).cpp_str(), label.second.address });
+			for (const auto& symbol : m_symbolTable)
+				out.push_back({ symbol.first.new_substr(1).cpp_str(), symbol.second.address });
+			return out;
+		}
 
 		String Assembler::replaceSymbols(String line)
 		{

@@ -1,0 +1,6 @@
+// A sub the library already has.
+// dsc-lib: libs/geom.ds
+// expect-error: 'Geom::compute' is already defined
+#import(<geom>)
+namespace Geom { sub compute() -> i32 { return 1; } }
+sub main() -> i32 { return Geom::compute(); }

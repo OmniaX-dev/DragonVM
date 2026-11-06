@@ -42,6 +42,9 @@ into called subs), `nl` / `next-line` (F8: calls, interrupts and inlined subs ru
 Pipeline: lexer -> preprocessor (on tokens) -> parser (AST) -> checking + code generation
 (dasm text) -> assembler -> DRX / raw binary. Sources: `src/compiler/`.
 
+Compiled libraries: `dsc lib.ds --lib` makes a `.dlib`, that programs `#import(<lib>)` (see
+"Libraries").
+
 Editors: `dsls` is the language server (errors as you type, go to definition, hover, completion, symbols;
 `src/lsp/`, see `editors/README.md`). It uses the same compiler in an analysis mode, which keeps
 checking after an error (each declaration and sub on its own) and records what every name in
@@ -459,6 +462,7 @@ sub print(var text: string) -> void {
 ```
 #include(file.ds)          relative to the file, then the -I directories
 #include(<file.ds>)        the -I directories only
+#import(<name>)            a compiled library (name.dlib) from the -L directories (see "Libraries")
 #define(NAME = tokens)     #define(NAME)     #undef(NAME)
 #define(NAME(a, b) = tokens)                 with parameters
 #if(expr) #ifdef(NAME) #ifndef(NAME) #elif(expr) #else #endif
@@ -522,6 +526,51 @@ then call `base + entry` (see "Starting a program"). The program returns when `m
 program in ROM (see "ROM programs").
 
 
+## Libraries
+
+A library is compiled on its own, once, into a `.dlib`; programs (and other libraries) import
+it and dsc links it into them. There are no header files: the compiler writes the library's
+declarations into the `.dlib` itself.
+```
+dsc gfx.ds --lib -o build/gfx.dlib           // a library: no main
+dsc game.ds -L build -o game.drx             // #import(<gfx>) in game.ds
+```
+```
+#import(<gfx>)          // gfx.dlib, in the -L directories
+#import(libs/gfx)       // next to this file first, then the -L directories (.dlib is added)
+
+sub main() -> i32 { return Gfx::width(); }
+```
+- `#import` makes the library's declarations visible there (once, however many times it is
+  imported), as if they were written in the program: names, namespaces, structs, methods,
+  overloads, default values, `priv`, constants and enums all work the same. The program's own
+  `#define`s don't apply to them. The library's code is linked into the program after its own
+  (the output is still one DRX or raw binary: nothing changes for loaders, the BIOS or drun).
+- The library's globals are its own (in its data); the ones that need code to be initialized
+  (and their constructors) are set up before the program's: every imported library's
+  initialization runs first, the libraries a library imports before it.
+- `inline` subs are generated at every call, so their bodies are in the `.dlib` (like templates
+  in a C++ header) and compiled into the program. A `static var` in an inline sub of a library
+  is the program's own copy, not the library's.
+- A library can import other libraries: the `.dlib` remembers its `#import`s, as written, and
+  finds them again from where the `.dlib` is, then in the -L directories.
+- The `.dlib` holds the library's code and data (assembled at 0), its relocations, the
+  addresses of other libraries' symbols it uses (imports), its symbols (exports) and its
+  declarations (DScript source, with where each one is in the library's sources: errors,
+  hover and go to definition in dsls point there). `src/tools/DLIB.hpp` has the format.
+- Linking: the program is assembled with the library symbols it uses as made-up addresses
+  (assembled again with them moved: the words that change are where they are used), then
+  the libraries are put after it (16-byte aligned) and those words are set (and become
+  relocations in a DRX).
+- dsls finds the libraries with `-L` in `dsls.json` (`"args": ["-L", "build"]`).
+- The debugger sees the libraries' code like the program's: a `.dlib` keeps its disassembly
+  (with its source lines and files), and the program's (`--save-disassembly`,
+  `-Wa,--save-disassembly`) gets it at the address the library is linked at, with the
+  addresses in its instructions as linked (and the symbols of other libraries by name).
+- For now: the whole library is linked (also what the program doesn't use); a raw program with
+  libraries is padded (`--fixed`) after linking.
+
+
 ## Starting a program
 The loader calls the entry with the program's arguments, or with none:
 ```
@@ -551,7 +600,8 @@ machine config (e.g. one with a known-good BIOS).
 
 ## Limitations (for now)
 
-- One source file (plus includes) per program: no separate compilation / linking.
+- One source file (plus includes) per program or library; libraries are linked statically
+  (into the program, by dsc), not loaded at run time.
 - `#define` has no stringizing or token pasting.
 - No `switch`, `goto`, unions, floating point, variadic subs.
 - Structs are passed and returned through pointers.
