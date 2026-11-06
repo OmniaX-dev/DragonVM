@@ -917,6 +917,14 @@ namespace dscript
 		f->type = m_types.function(params, ret);
 		if (f->interrupt && (!params.empty() || ret->kind != Type::Kind::Void))
 			error(d->pos, "interrupt subs take no parameters and return void");
+		// A constructor: sub new(...) in a struct, on the object being built (this).
+		if ((d->value & 4) != 0 && d->shortName == "new")
+		{
+			if ((d->value & 8) != 0)
+				error(d->namePos, "a constructor (new) works on the struct being built (this): it cannot be static");
+			if (ret->kind != Type::Kind::Void)
+				error(d->namePos, "a constructor (new) returns nothing (sub new(...) { ... }, without -> type)");
+		}
 		// (On the declaration: also with --no-inline.)
 		const bool declaredInline = (d->value & 2) != 0;
 		if (declaredInline && f->name == "main")
@@ -2571,9 +2579,14 @@ namespace dscript
 		// The body sees its parameters (and the globals), not the caller's variables or loops.
 		auto scopes = std::move(m_scopes);
 		auto loops = std::move(m_loops);
+		auto defers = std::move(m_defers);
+		const int inDefer = m_inDefer;
 		m_scopes.clear();
 		m_scopes.push_back(std::move(paramScope));
 		m_loops.clear();
+		m_defers.clear();
+		m_defers.emplace_back();
+		m_inDefer = 0;
 		m_inline.push_back({ f, newLabel() });
 		const int stmtDepth = m_stmtDepth;
 		m_stmtDepth = m_regDepth;	// the caller's temporaries stay in their registers
@@ -2582,10 +2595,12 @@ namespace dscript
 		for (Node* s : body->list)
 			genStatement(s);
 		const bool endsWithReturn = !body->list.empty() && body->list.back()->kind == NodeKind::Return;
-		if (!endsWithReturn && f->type->base->kind != Type::Kind::Void)
+		if (!endsWithReturn)
 		{
 			loc(body->endPos);
-			emit("mov RV, 0");
+			genDefers(0);
+			if (f->type->base->kind != Type::Kind::Void)
+				emit("mov RV, 0");
 		}
 		label(m_inline.back().endLabel);
 		m_inline.pop_back();
@@ -2597,6 +2612,8 @@ namespace dscript
 		m_stmtDepth = stmtDepth;
 		m_scopes = std::move(scopes);
 		m_loops = std::move(loops);
+		m_defers = std::move(defers);
+		m_inDefer = inDefer;
 		if (f->type->base->kind == Type::Kind::Void)
 			return "";
 		Reg r = alloc(e->pos);
@@ -2818,7 +2835,65 @@ namespace dscript
 			genInit(a, t, s->a, 0);
 			release(a);
 		}
+		if (s->c)
+			genConstructor(v, s);
 		m_scopes.back()[s->name] = v;
+	}
+
+	void CodeGen::genConstructor(VarInfo* v, Node* decl)
+	{
+		Type* t = v->type;
+		if (t->kind != Type::Kind::Struct)
+			error(decl->c->pos, "'" + decl->name + "' is " + t->name() + ": only struct variables have a constructor (var p: Point(...))");
+		StructInfo* info = t->structInfo;
+		if (m_funcs.count(info->name + "::new") == 0)
+			error(decl->c->pos, (info->anonymous ? info->displayName() : "struct " + info->name) + " has no constructor (sub new(...) in the struct)");
+		// The variable is bound to a hidden name: the arguments see the names around the
+		// declaration (var x: P(x) uses the outer x).
+		m_scopes.push_back({ { " ctor", v } });
+		check(decl->c);
+		release(gen(decl->c));
+		m_scopes.pop_back();
+	}
+
+	bool CodeGen::hasDefers(size_t downTo) const
+	{
+		for (size_t i = downTo; i < m_defers.size(); i++)
+		{
+			if (!m_defers[i].empty())
+				return true;
+		}
+		return false;
+	}
+
+	void CodeGen::genDefers(size_t downTo)
+	{
+		for (size_t i = m_defers.size(); i-- > downTo; )
+		{
+			// (copied: generating a defer adds frames)
+			const std::vector<Deferred> frame = m_defers[i];
+			for (size_t j = frame.size(); j-- > 0; )
+				genDeferred(frame[j]);
+		}
+	}
+
+	void CodeGen::genDeferred(const Deferred& d)
+	{
+		// With the variables of where it was written; no loops to leave; the defers in it have a
+		// frame of their own (run at its end).
+		auto scopes = std::move(m_scopes);
+		auto loops = std::move(m_loops);
+		m_scopes = d.scopes;
+		m_loops.clear();
+		m_inDefer++;
+		m_defers.emplace_back();
+		genStatement(d.body);
+		if (hasDefers(m_defers.size() - 1))
+			genDefers(m_defers.size() - 1);
+		m_defers.pop_back();
+		m_inDefer--;
+		m_scopes = std::move(scopes);
+		m_loops = std::move(loops);
 	}
 
 	void CodeGen::genStatement(Node* s)
@@ -2828,10 +2903,26 @@ namespace dscript
 		switch (s->kind)
 		{
 			case NodeKind::Block:
+			{
 				m_scopes.push_back({});
+				m_defers.emplace_back();
 				for (Node* st : s->list)
 					genStatement(st);
+				// Its defers, unless it ends with a jump (that ran them).
+				const NodeKind last = s->list.empty() ? NodeKind::Block : s->list.back()->kind;
+				if (last != NodeKind::Return && last != NodeKind::Break && last != NodeKind::Continue && hasDefers(m_defers.size() - 1))
+				{
+					loc(s->endPos);
+					genDefers(m_defers.size() - 1);
+				}
+				m_defers.pop_back();
 				m_scopes.pop_back();
+			}
+			break;
+			case NodeKind::Defer:
+				if (m_defers.empty())
+					error(s->pos, "internal error: defer outside of a block");
+				m_defers.back().push_back({ s->a, m_scopes });
 			break;
 			case NodeKind::VarDecl:
 				genLocalVar(s);
@@ -2918,7 +3009,7 @@ namespace dscript
 				std::string lStart = newLabel(), lEnd = newLabel();
 				label(lStart);
 				genBranch(s->a, lEnd, false);
-				m_loops.push_back({ lEnd, lStart });
+				m_loops.push_back({ lEnd, lStart, m_defers.size() });
 				genStatement(s->b);
 				m_loops.pop_back();
 				emit("jmp $" + lStart);	// (the body's last line: then the condition, on the while's line)
@@ -2929,7 +3020,7 @@ namespace dscript
 			{
 				std::string lStart = newLabel(), lCont = newLabel(), lEnd = newLabel();
 				label(lStart);
-				m_loops.push_back({ lEnd, lCont });
+				m_loops.push_back({ lEnd, lCont, m_defers.size() });
 				genStatement(s->b);
 				m_loops.pop_back();
 				label(lCont);
@@ -2951,7 +3042,7 @@ namespace dscript
 					check(s->b);
 					genBranch(s->b, lEnd, false);
 				}
-				m_loops.push_back({ lEnd, lCont });
+				m_loops.push_back({ lEnd, lCont, m_defers.size() });
 				genStatement(s->d);
 				m_loops.pop_back();
 				loc(s->pos);
@@ -2970,19 +3061,34 @@ namespace dscript
 			{
 				FuncInfo* fn = m_inline.empty() ? m_func : m_inline.back().func;
 				Type* ret = fn->type->base;
+				if (m_inDefer > 0)
+					error(s->pos, "return cannot leave a defer");
+				Reg r;
 				if (s->a)
 				{
 					if (ret->kind == Type::Kind::Void)
 						error(s->pos, fn->name + " returns void");
 					check(s->a, ret);
 					requireConvertible(s->a, ret, "in the return value");
-					Reg r = gen(s->a);
+					r = gen(s->a);
 					convert(r, decay(s->a->type), ret);
-					emit("mov RV, " + r);
-					release(r);
 				}
 				else if (ret->kind != Type::Kind::Void)
 					error(s->pos, fn->name + " must return a value (" + ret->name() + ")");
+				// The value first, then every defer of the sub (it stays in its register: calls keep them).
+				if (hasDefers(0))
+				{
+					const int stmtDepth = m_stmtDepth;
+					m_stmtDepth = m_regDepth;
+					genDefers(0);
+					m_stmtDepth = stmtDepth;
+					loc(s->pos);
+				}
+				if (!r.empty())
+				{
+					emit("mov RV, " + r);
+					release(r);
+				}
 				if (!m_inline.empty())
 					emit("jmp $" + m_inline.back().endLabel);
 				else
@@ -2990,14 +3096,18 @@ namespace dscript
 			}
 			break;
 			case NodeKind::Break:
-				if (m_loops.empty())
-					error(s->pos, "break outside of a loop");
-				emit("jmp $" + m_loops.back().breakLabel);
-			break;
 			case NodeKind::Continue:
+			{
+				const bool isBreak = s->kind == NodeKind::Break;
 				if (m_loops.empty())
-					error(s->pos, "continue outside of a loop");
-				emit("jmp $" + m_loops.back().continueLabel);
+					error(s->pos, std::string(isBreak ? "break" : "continue") + (m_inDefer > 0 ? " cannot leave a defer" : " outside of a loop"));
+				if (hasDefers(m_loops.back().deferDepth))
+				{
+					genDefers(m_loops.back().deferDepth);
+					loc(s->pos);
+				}
+				emit("jmp $" + (isBreak ? m_loops.back().breakLabel : m_loops.back().continueLabel));
+			}
 			break;
 			case NodeKind::LowBlock:
 				genLow(s, false);
@@ -3244,6 +3354,9 @@ namespace dscript
 		m_localCursor = 4;
 		m_localMin = 4;
 		m_loops.clear();
+		m_defers.clear();
+		m_defers.emplace_back();
+		m_inDefer = 0;
 		m_regDepth = 0;
 		Node* bodyNode = f->decl->a;
 		for (Node* s : bodyNode->list)
@@ -3252,6 +3365,7 @@ namespace dscript
 		if (!endsWithReturn)
 		{
 			loc(bodyNode->endPos);
+			genDefers(0);
 			if (f->type->base->kind != Type::Kind::Void)
 				emit("mov RV, 0");
 			emit(f->interrupt ? "rti" : "ret");
@@ -3269,6 +3383,7 @@ namespace dscript
 		}
 		m_code.insert(m_code.end(), body.begin(), body.end());
 		m_scopes.clear();
+		m_defers.clear();
 		m_func = nullptr;
 	}
 
@@ -3449,6 +3564,9 @@ namespace dscript
 					release(addr);
 					release(val);
 				}
+				// var g: Struct(args): its constructor, after the values (in the order of the source).
+				if (d->c)
+					genConstructor(v, d);
 			});
 		}
 	}
@@ -3479,6 +3597,8 @@ namespace dscript
 			m_regDepth = 0;
 			m_stmtDepth = 0;
 			m_loops.clear();
+			m_defers.clear();
+			m_inDefer = 0;
 			return false;
 		}
 	}

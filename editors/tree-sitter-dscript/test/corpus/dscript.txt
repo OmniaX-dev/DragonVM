@@ -733,3 +733,68 @@ struct List {
           (scoped_type_identifier
             (namespace_identifier)
             (type_identifier)))))))
+
+================================================================================
+Constructors and defer
+================================================================================
+
+struct Point {
+    var x: i32;
+    sub new(var x: i32) -> void { this->x = x; }
+}
+
+sub main() -> i32 {
+    var p: Point(1);
+    defer free(p);
+    defer { log(1); }
+    return 0;
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (struct_declaration
+    (type_identifier)
+    (field_list
+      (field_declaration
+        (field_identifier)
+        (primitive_type))
+      (function_declaration
+        (identifier)
+        (parameter_list
+          (parameter
+            (identifier)
+            (primitive_type)))
+        (primitive_type)
+        (block
+          (expression_statement
+            (assignment_expression
+              (member_expression
+                (identifier)
+                (field_identifier))
+              (identifier)))))))
+  (function_declaration
+    (identifier)
+    (parameter_list)
+    (primitive_type)
+    (block
+      (variable_declaration
+        (identifier)
+        (type_identifier)
+        (argument_list
+          (number_literal)))
+      (defer_statement
+        (expression_statement
+          (call_expression
+            (identifier)
+            (argument_list
+              (identifier)))))
+      (defer_statement
+        (block
+          (expression_statement
+            (call_expression
+              (identifier)
+              (argument_list
+                (number_literal))))))
+      (return_statement
+        (number_literal)))))

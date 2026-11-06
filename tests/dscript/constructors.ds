@@ -1,0 +1,56 @@
+// expect-rv: 0
+#include(check.ds)
+
+struct Point {
+    var x: i32;
+    var y: i32 = 7;				// set before the constructor runs
+    var seen_y: i32;
+    sub new(var x: i32, var y: i32) -> void { this->seen_y = this->y; this->x = x; this->y = y; }
+    sub new(var v: i32 = 3) -> void { this->x = v; this->seen_y = this->y; }	// overloads, defaults
+}
+
+struct Counter {
+    priv var count: i32;
+    priv sub new(var start: i32) -> void { this->count = start; }	// only Counter can build one
+    static sub make(var out: Counter*) -> void {
+        var c: Counter(40);
+        *out = c;
+    }
+    sub get() -> i32 { return this->count; }
+}
+
+namespace Geo {
+    struct Size {
+        var w: i32; var h: i32;
+        inline sub new(var side: i32) -> void { this->w = side; this->h = side; }
+    }
+    var unit: Size(1);				// a global: built before main
+}
+
+var origin: Point(0, 0);
+var g_built: i32 = origin.seen_y;		// (globals are set in the order of the source)
+
+sub main() -> i32 {
+    var a: Point(1, 2);
+    check(1, a.x == 1 && a.y == 2 && a.seen_y == 7);
+    var b: Point(5);
+    check(2, b.x == 5 && b.y == 7);
+    var c: Point();
+    check(3, c.x == 3);
+    var x: i32 = 9;
+    {
+        var x: Point(x);			// the argument is the outer x
+        check(4, x.x == 9);
+    }
+    var k: Counter;
+    Counter::make(&k);
+    check(5, k.get() == 40);
+    var s: Geo::Size(4);
+    check(6, s.w == 4 && s.h == 4 && Geo::unit.w == 1);
+    check(7, origin.x == 0 && origin.y == 0 && origin.seen_y == 7);
+    static var once: Point(8, 9);
+    check(8, once.x == 8);
+    a.new(6, 6);					// a method: can be called again
+    check(9, a.x == 6);
+    return result();
+}

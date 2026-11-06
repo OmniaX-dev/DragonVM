@@ -11,7 +11,8 @@
 //   ConstDecl:   name, typeSyntax (optional), a = value (struct constants: an InitList, or nullptr
 //                for the fields' defaults)
 //   AliasDecl:   name, typeSyntax
-//   VarDecl:     name, typeSyntax (optional if initialized), a = initializer (expression / InitList)
+//   VarDecl:     name, typeSyntax (optional if initialized), a = initializer (expression / InitList),
+//                c = the constructor call of var p: Point(args) (a Call: Member(Ident " ctor", new)(args))
 //   FuncDecl:    name, list = params (VarDecl, a = default value), typeSyntax = return type
 //                (nullptr: void), a = body (nullptr: declaration only), value = flags: 1 interrupt,
 //                2 inline, 4 method (sub in a struct: named <Struct>::<name>, added at the end of
@@ -23,6 +24,7 @@
 //   For:         a = init (VarDecl / ExprStmt), b = condition, c = step, d = body (all optional but d)
 //   Return:      a = value       ExprStmt: a       LowBlock: text
 //   Assert:      a = condition, b = message (optional), text = the condition as written
+//   Defer:       a = the statement run when the block is left
 //   Unary:       name = operator, a          Binary / Assign: name = operator, a, b
 //   Ternary:     a ? b : c                   Call: a = callee, list = arguments
 //   Index:       a[b]                        Member: a.name / a->name (value = 1)
@@ -423,6 +425,34 @@ namespace dscript
 		n->namePos = lastPos();
 		if (acceptPunct(":"))
 			n->typeSyntax = parseType();
+		if (n->typeSyntax != nullptr && isPunct("("))
+		{
+			// var p: Point(args): the struct's constructor (sub new) on it, after its defaults.
+			if (!allowNoType)
+				error(peek().pos, "struct fields cannot call a constructor (call it in a sub, or use a default value)");
+			const SourcePos at = next().pos;
+			Node* call = make(NodeKind::Call, at);
+			Node* member = make(NodeKind::Member, at);
+			member->namePos = at;
+			member->name = "new";
+			member->a = make(NodeKind::Ident, n->namePos);
+			member->a->name = " ctor";		// the variable (bound by the code generator)
+			member->a->text = n->name;
+			member->a->resolved = true;
+			call->a = member;
+			while (!acceptPunct(")"))
+			{
+				call->list.push_back(parseAssignment());
+				if (!acceptPunct(","))
+				{
+					expectPunct(")", "after the constructor's arguments");
+					break;
+				}
+			}
+			n->c = call;
+			if (isPunct("="))
+				error(peek().pos, "'" + n->name + "' is built by its constructor: it cannot also have a value");
+		}
 		if (acceptPunct("="))
 			n->a = parseInitializer();
 		if (n->typeSyntax == nullptr && (n->a == nullptr || !allowNoType || n->a->kind == NodeKind::InitList))
@@ -785,6 +815,12 @@ namespace dscript
 		return make(NodeKind::Block, pos);
 	}
 
+	void Parser::requireBlockFor(const Node* body, const std::string& what)
+	{
+		if (body != nullptr && body->kind == NodeKind::Defer)
+			error(body->pos, "a defer runs when its block is left: put it in a block ({ defer ...; }), not directly after " + what);
+	}
+
 	std::string Parser::tokenText(size_t from, size_t to) const
 	{
 		// Spaces between the tokens, except around the ones that are written without: calls,
@@ -890,6 +926,16 @@ namespace dscript
 			expectPunct(";", "after assert(...)");
 			return n;
 		}
+		if (acceptKeyword("defer"))
+		{
+			// defer statement: run when the block it is in is left (in the reverse order).
+			Node* n = make(NodeKind::Defer, pos);
+			if (isKeyword("var"))
+				error(peek().pos, "a deferred variable would not be usable: defer a statement or a block");
+			n->a = parseStatement();
+			requireBlockFor(n->a, "defer");
+			return n;
+		}
 		if (acceptKeyword("debug_print"))
 		{
 			Node* n = make(NodeKind::DebugPrint, pos);
@@ -906,8 +952,12 @@ namespace dscript
 			n->a = parseExpression();
 			expectPunct(")", "after the condition");
 			n->b = parseStatement();
+			requireBlockFor(n->b, "if");
 			if (acceptKeyword("else"))
+			{
 				n->c = parseStatement();
+				requireBlockFor(n->c, "else");
+			}
 			return n;
 		}
 		if (acceptKeyword("while"))
@@ -917,12 +967,14 @@ namespace dscript
 			n->a = parseExpression();
 			expectPunct(")", "after the condition");
 			n->b = parseStatement();
+			requireBlockFor(n->b, "while");
 			return n;
 		}
 		if (acceptKeyword("do"))
 		{
 			Node* n = make(NodeKind::DoWhile, pos);
 			n->b = parseStatement();
+			requireBlockFor(n->b, "do");
 			expectKeyword("while", "after the do body");
 			expectPunct("(", "after 'while'");
 			n->a = parseExpression();
@@ -953,6 +1005,7 @@ namespace dscript
 				n->c = parseExpression();
 			expectPunct(")", "after the for step");
 			n->d = parseStatement();
+			requireBlockFor(n->d, "for");
 			popScope();
 			return n;
 		}

@@ -34,7 +34,7 @@ namespace dscript
 	static const char* s_keywords[] = {
 		"var", "const", "sub", "struct", "enum", "alias", "return", "if", "else", "while", "do", "for",
 		"break", "continue", "null", "true", "false", "cast", "sizeof", "low", "interrupt", "inline", "static", "priv",
-		"assert", "debug_print", "namespace", "and", "or", "not", "void", nullptr
+		"assert", "debug_print", "namespace", "defer", "and", "or", "not", "void", nullptr
 	};
 
 	bool Lexer::isKeyword(const std::string& word)

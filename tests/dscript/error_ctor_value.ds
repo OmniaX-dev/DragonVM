@@ -1,0 +1,6 @@
+// expect-error: it cannot also have a value
+struct P { var x: i32; sub new() -> void { } }
+sub main() -> i32 {
+    var p: P() = { 1 };
+    return 0;
+}

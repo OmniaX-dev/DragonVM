@@ -130,7 +130,9 @@ module.exports = grammar({
 		variable_declaration: $ => seq(
 			'var',
 			field('name', $.identifier),
-			optional(seq(':', field('type', $._type))),
+			optional(seq(':', field('type', $._type),
+				// var p: Point(1, 2): the struct's constructor (sub new)
+				optional(field('arguments', $.argument_list)))),
 			optional(seq('=', field('value', choice($._expression, $.initializer_list)))),
 		),
 
@@ -227,6 +229,7 @@ module.exports = grammar({
 			$.low_block,
 			$.assert_statement,
 			$.debug_print_statement,
+			$.defer_statement,
 			$.expression_statement,
 			$.empty_statement,
 		),
@@ -234,6 +237,9 @@ module.exports = grammar({
 			'assert', '(', field('condition', $._expression),
 			optional(seq(',', field('message', $._expression))), ')', ';',
 		),
+
+		// Run when the block is left (in the reverse order), on every way out of it.
+		defer_statement: $ => seq('defer', field('body', $._statement)),
 
 		debug_print_statement: $ => seq('debug_print', '(', field('value', $._expression), ')', ';'),
 

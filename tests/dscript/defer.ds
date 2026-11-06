@@ -1,0 +1,96 @@
+// expect-rv: 0
+#include(check.ds)
+
+// The order things ran in, as digits (log * 10 + n).
+var log: i32 = 0;
+sub mark(var n: i32) -> void { log = log * 10 + n; }
+
+sub reverse_order() -> void {
+    defer mark(1);
+    defer mark(2);
+    mark(3);
+}
+
+sub early_return(var stop: bool) -> i32 {
+    defer mark(9);
+    if (stop) {
+        defer mark(8);
+        return 5;			// 8 then 9, after the value
+    }
+    mark(7);
+    return 6;
+}
+
+// The value is evaluated before the defers run.
+var counter: i32 = 10;
+sub value_first() -> i32 {
+    defer counter = 99;
+    return counter;
+}
+
+sub loops() -> void {
+    for (var i: i32 = 1; i <= 3; i++) {
+        defer mark(i);		// at the end of every iteration
+        if (i == 2) {
+            continue;
+        }
+        mark(0);
+    }
+    while (true) {
+        defer mark(5);
+        {
+            defer mark(4);
+            break;			// 4, then 5
+        }
+    }
+}
+
+// A defer sees the variables declared before it (not later ones with the same name).
+sub scopes() -> i32 {
+    var x: i32 = 1;
+    var r: i32 = 0;
+    {
+        defer r = r * 10 + x;
+        var x: i32 = 7;
+        r = x;
+    }
+    return r;
+}
+
+// Blocks and nested defers in a defer.
+sub nested() -> void {
+    defer {
+        mark(1);
+        defer mark(3);
+        mark(2);
+    }
+    mark(4);
+}
+
+inline sub inl(var n: i32) -> i32 {
+    defer mark(n);
+    if (n > 5) {
+        return n * 2;
+    }
+    return n;
+}
+
+sub main() -> i32 {
+    reverse_order();
+    check(1, log == 321);
+    log = 0;
+    check(2, early_return(true) == 5 && log == 89);
+    log = 0;
+    check(3, early_return(false) == 6 && log == 79);
+    check(4, value_first() == 10 && counter == 99);
+    log = 0;
+    loops();
+    check(5, log == 120345);	// i=1: 0 1, i=2: 2 (continue), i=3: 0 3, then 4 5
+    check(6, scopes() == 71);
+    log = 0;
+    nested();
+    check(7, log == 4123);
+    log = 0;
+    check(8, inl(7) == 14 && inl(2) == 2 && log == 72);
+    return result();
+}

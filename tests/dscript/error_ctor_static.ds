@@ -1,0 +1,3 @@
+// expect-error: a constructor (new) works on the struct being built (this): it cannot be static
+struct P { var x: i32; static sub new() -> void { } }
+sub main() -> i32 { return 0; }

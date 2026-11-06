@@ -50,6 +50,9 @@ namespace dscript
 			Node* parseStatement(void);
 			Node* parseBlock(void);
 			Node* parseLocalStatic(const SourcePos& pos);
+			// A defer as the body of if / while / ...: it needs a block of its own (it is run when
+			// a block is left).
+			void requireBlockFor(const Node* body, const std::string& what);
 			std::string tokenText(size_t from, size_t to) const;	// the tokens [from, to) as source text
 
 			// Local scopes (inside subs): what each name means there.

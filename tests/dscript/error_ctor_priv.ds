@@ -1,0 +1,6 @@
+// expect-error: 'new' is private to P
+struct P { var x: i32; priv sub new(var v: i32) -> void { this->x = v; } }
+sub main() -> i32 {
+    var p: P(1);
+    return 0;
+}

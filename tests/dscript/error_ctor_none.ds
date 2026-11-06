@@ -1,0 +1,6 @@
+// expect-error: struct P has no constructor
+struct P { var x: i32; }
+sub main() -> i32 {
+    var p: P(1);
+    return 0;
+}

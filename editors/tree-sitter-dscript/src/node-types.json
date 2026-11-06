@@ -977,6 +977,10 @@
           "named": true
         },
         {
+          "type": "defer_statement",
+          "named": true
+        },
+        {
           "type": "do_statement",
           "named": true
         },
@@ -1576,6 +1580,90 @@
     }
   },
   {
+    "type": "defer_statement",
+    "named": true,
+    "fields": {
+      "body": {
+        "multiple": true,
+        "required": true,
+        "types": [
+          {
+            "type": ";",
+            "named": false
+          },
+          {
+            "type": "assert_statement",
+            "named": true
+          },
+          {
+            "type": "block",
+            "named": true
+          },
+          {
+            "type": "break_statement",
+            "named": true
+          },
+          {
+            "type": "const_declaration",
+            "named": true
+          },
+          {
+            "type": "continue_statement",
+            "named": true
+          },
+          {
+            "type": "debug_print_statement",
+            "named": true
+          },
+          {
+            "type": "defer_statement",
+            "named": true
+          },
+          {
+            "type": "do_statement",
+            "named": true
+          },
+          {
+            "type": "empty_statement",
+            "named": true
+          },
+          {
+            "type": "expression_statement",
+            "named": true
+          },
+          {
+            "type": "for_statement",
+            "named": true
+          },
+          {
+            "type": "if_statement",
+            "named": true
+          },
+          {
+            "type": "low_block",
+            "named": true
+          },
+          {
+            "type": "return_statement",
+            "named": true
+          },
+          {
+            "type": "static_declaration",
+            "named": true
+          },
+          {
+            "type": "variable_declaration",
+            "named": true
+          },
+          {
+            "type": "while_statement",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "do_statement",
     "named": true,
     "fields": {
@@ -1609,6 +1697,10 @@
           },
           {
             "type": "debug_print_statement",
+            "named": true
+          },
+          {
+            "type": "defer_statement",
             "named": true
           },
           {
@@ -2228,6 +2320,10 @@
             "named": true
           },
           {
+            "type": "defer_statement",
+            "named": true
+          },
+          {
             "type": "do_statement",
             "named": true
           },
@@ -2748,6 +2844,10 @@
             "named": true
           },
           {
+            "type": "defer_statement",
+            "named": true
+          },
+          {
             "type": "do_statement",
             "named": true
           },
@@ -2905,6 +3005,10 @@
           },
           {
             "type": "debug_print_statement",
+            "named": true
+          },
+          {
+            "type": "defer_statement",
             "named": true
           },
           {
@@ -4787,6 +4891,16 @@
     "type": "variable_declaration",
     "named": true,
     "fields": {
+      "arguments": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "argument_list",
+            "named": true
+          }
+        ]
+      },
       "name": {
         "multiple": false,
         "required": true,
@@ -4961,6 +5075,10 @@
           },
           {
             "type": "debug_print_statement",
+            "named": true
+          },
+          {
+            "type": "defer_statement",
             "named": true
           },
           {
@@ -5304,6 +5422,10 @@
   },
   {
     "type": "debug_print",
+    "named": false
+  },
+  {
+    "type": "defer",
     "named": false
   },
   {

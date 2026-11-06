@@ -183,6 +183,33 @@ struct Print {
 Print.line("hello");
 ```
 
+### Constructors
+`sub new(...)` in a struct is its constructor: a method (on `this`, returning nothing) that
+`var p: Struct(args);` calls on the new variable, after its fields got their zeroes and
+default values.
+```
+struct Point {
+    var x: i32;
+    var y: i32 = 7;
+    sub new(var x: i32, var y: i32) { this->x = x; this->y = y; }
+    sub new(var v: i32 = 0) { this->x = v; }        // overloads and default values
+}
+var origin: Point(0, 0);            // a global: built before main, in the order of the source
+sub main() -> i32 {
+    var p: Point(1, 2);             // Point::new(&p, 1, 2)
+    var q: Point();                 // new(): q.x == 0, q.y == 7
+    static var s: Point(5);         // once, before main (like a global)
+    ...
+}
+```
+- A constructor only runs where it is written: `var p: Point;`, `{ ... }` lists, arrays and
+  struct fields work as before (no hidden calls), and a variable with a constructor call
+  cannot also have a value.
+- The arguments see the names around the declaration (in `var x: Point(x);`, `x` is the outer
+  one). `priv sub new` makes a struct that only its own subs can build; `new` is a method like
+  the others (`p.new(3)` runs it again). It cannot be `static` or return a value.
+- `--rom`: globals (and so global constructors) are errors, as before.
+
 ### Nested structs and enums
 A struct can declare structs and enums: they are named `Outer::Inner`, and inside the struct
 (its fields, subs and the types nested in it) also just `Inner`.
@@ -336,7 +363,33 @@ Not checked: low blocks (raw dasm), and writes through pointers to the program's
 `var` declarations (locals: scalars are not initialized unless given a value; structs are zeroed
 and get their default values), `if` / `else`, `while`, `do ... while (...);`,
 `for (init; condition; step)`, `break`, `continue`, `return`, blocks, expression statements,
-`low { ... }`, `assert(...)`, `debug_print(...)`.
+`low { ... }`, `assert(...)`, `debug_print(...)`, `defer ...`.
+
+### defer
+`defer <statement or block>` runs that code when the block it is in is left, on every way out:
+the end of the block, `return`, `break` and `continue` (each runs the defers of the blocks it
+leaves). Several defers run in the reverse order. As in Zig:
+```
+sub copy(var path: string) -> i32 {
+    var f: File* = open(path);
+    defer close(f);                 // runs after the return value is computed
+    if (f->size == 0) {
+        return 0;                   // close(f) runs here
+    }
+    for (var i: u32 = 0; i < f->size; i++) {
+        var b: u8* = alloc(16);
+        defer release(b);           // at the end of every iteration (continue / break too)
+        ...
+    }
+    return 1;                       // and here
+}
+```
+- `return x` computes `x` first, then the defers run, then the sub returns.
+- A defer sees the variables declared before it (as they are when it runs). `return`,
+  `break` and `continue` cannot jump out of a defer, and a defer cannot be declared alone as
+  the body of `if` / `while` / ...: it needs a block (`if (c) { defer ...; }`).
+- The code is generated at every exit (like an inline sub), so a long defer in a sub with many
+  `return`s makes it bigger. Jumping out of a low block skips the defers.
 
 ### Expressions
 C operators and precedence: `= += -= *= /= %= &= |= ^= <<= >>=`, `?:`, `|| &&` (also `or`

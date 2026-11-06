@@ -1,0 +1,5 @@
+// expect-error: only struct variables have a constructor
+sub main() -> i32 {
+    var n: i32(4);
+    return 0;
+}

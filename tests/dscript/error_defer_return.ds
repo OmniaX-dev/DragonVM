@@ -1,0 +1,5 @@
+// expect-error: return cannot leave a defer
+sub main() -> i32 {
+    defer { return 1; }
+    return 0;
+}

@@ -74,7 +74,10 @@ namespace dscript
 			struct EnumInfo { Node* decl { nullptr }; bool resolving { false }; bool resolved { false }; std::map<std::string, int64_t> values;
 				Type* type { nullptr }; };	// type: the enum's integer type (i32 unless given: enum E: u8 { ... })
 			struct AliasInfo { Node* decl { nullptr }; bool resolving { false }; Type* type { nullptr }; };
-			struct Loop { std::string breakLabel; std::string continueLabel; };
+			// deferDepth: the defer frames outside the loop (break / continue run the ones above).
+			struct Loop { std::string breakLabel; std::string continueLabel; size_t deferDepth { 0 }; };
+			// A defer: its statement, and the variables it sees (those declared before it).
+			struct Deferred { Node* body; std::vector<std::map<std::string, VarInfo*>> scopes; };
 			typedef std::string Reg;
 
 		private:
@@ -149,6 +152,12 @@ namespace dscript
 			void genGlobals(void);
 			void genStatement(Node* s);
 			void genLocalVar(Node* s);
+			// var v: Struct(args): calls Struct::new(&v, args).
+			void genConstructor(VarInfo* v, Node* decl);
+			// The defers of the frames from `downTo` up (the innermost first, in reverse order).
+			void genDefers(size_t downTo);
+			bool hasDefers(size_t downTo) const;
+			void genDeferred(const Deferred& d);
 			void genInit(Reg addr, Type* type, Node* init, int32_t offset);
 			void genBranch(Node* e, const std::string& label, bool jumpIfTrue);
 			Reg gen(Node* e);
@@ -207,6 +216,9 @@ namespace dscript
 			int32_t m_localCursor { 4 };
 			int32_t m_localMin { 4 };
 			std::vector<Loop> m_loops;
+			// defer: a frame per block being generated (the sub's body is the first one).
+			std::vector<std::vector<Deferred>> m_defers;
+			int m_inDefer { 0 };		// generating a defer's statement (return / break / continue cannot leave it)
 			// Inline subs being expanded (innermost last): return jumps to endLabel.
 			struct InlineCall { FuncInfo* func; std::string endLabel; };
 			std::vector<InlineCall> m_inline;

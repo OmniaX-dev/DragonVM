@@ -1,0 +1,6 @@
+// expect-error: put it in a block
+sub f() -> void { }
+sub main() -> i32 {
+    if (true) defer f();
+    return 0;
+}

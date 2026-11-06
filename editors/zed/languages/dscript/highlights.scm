@@ -35,6 +35,7 @@
 	"continue"
 	"assert"
 	"debug_print"
+	"defer"
 ] @keyword
 
 [
@@ -56,6 +57,12 @@
 ; Declarations and uses
 (function_declaration
 	name: (identifier) @function)
+
+; A struct's constructor (sub new)
+(field_list
+	(function_declaration
+		name: (identifier) @constructor
+		(#eq? @constructor "new")))
 
 (call_expression
 	function: (identifier) @function)

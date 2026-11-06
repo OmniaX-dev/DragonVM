@@ -1,0 +1,7 @@
+// expect-error: break cannot leave a defer
+sub main() -> i32 {
+    while (true) {
+        defer { break; }
+    }
+    return 0;
+}
