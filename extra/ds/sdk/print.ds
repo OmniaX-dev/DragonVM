@@ -136,14 +136,14 @@ struct Text16 {
 	}
 };
 
-const Text16ConsoleErrors: struct {
-	var NoError: u8 				= 0x00;
-	var ScreenBufferAllocFail: u8	= 0x01;
-	var Uninitialized: u8			= 0x02;
-	var WrongVideoMode: u8			= 0x03;
-};
-
 struct Text16Console {
+	enum Errors: u8 {
+		NoError						= 0x00,
+		ScreenBufferAllocFail		= 0x01,
+		Uninitialized				= 0x02,
+		WrongVideoMode				= 0x03
+	};
+
 	priv var m_cursor_x: u16 = 0;
 	priv var m_cursor_y: u16 = 0;
 	priv var m_bg_col: u8 = DefaultPaletteText16.Black;
@@ -166,16 +166,16 @@ struct Text16Console {
 			free(&this->m_screenBuffer);
 		this->m_screenBuffer = malloc(this->m_screenBufferSize);
 		if (not this->m_screenBuffer)
-			return this->set_error(Text16ConsoleErrors.ScreenBufferAllocFail, false);
+			return this->set_error(Errors.ScreenBufferAllocFail, false);
 		this->m_initialized = true;
-		return this->set_error(Text16ConsoleErrors.NoError, true);
+		return this->set_error(Errors.NoError, true);
 	}
 
 	sub is_valid() -> bool {
 		if (not this->m_initialized)
-			return this->set_error(Text16ConsoleErrors.Uninitialized, false);
+			return this->set_error(Errors.Uninitialized, false);
 		if (not vga_is_text16())
-			return this->set_error(Text16ConsoleErrors.WrongVideoMode, false);
+			return this->set_error(Errors.WrongVideoMode, false);
 		return true;
 	}
 
