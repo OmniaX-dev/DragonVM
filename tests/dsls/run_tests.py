@@ -174,6 +174,53 @@ check("a method's container is its struct", any(s["name"] == "sum" and s.get("co
 syms = c.request("workspace/symbol", {"query": "are"})
 check("workspace symbols", [s["name"] for s in syms] == ["area"], str(syms))
 
+print("completion")
+
+
+def complete(path, text, line, new_line, version):
+    # The labels offered at '|' in new_line (replacing 0-based `line` of text), as being typed.
+    lines = text.split("\n")
+    character = new_line.index("|")
+    lines[line] = new_line.replace("|", "")
+    c.notify("textDocument/didChange", {"textDocument": {"uri": uri(path), "version": version}, "contentChanges": [{"text": "\n".join(lines)}]})
+    trigger = new_line[character - 1] in ".:>" if character > 0 else False
+    context = {"triggerKind": 2, "triggerCharacter": new_line[character - 1]} if trigger else {"triggerKind": 1}
+    r = c.request("textDocument/completion", {"textDocument": {"uri": uri(path)}, "position": {"line": line, "character": character}, "context": context})
+    items = r["items"] if isinstance(r, dict) else r
+    c.notify("textDocument/didChange", {"textDocument": {"uri": uri(path), "version": version + 1}, "contentChanges": [{"text": text}]})
+    return items
+
+
+def completes(name, path, text, line, new_line, expected, exact=True):
+    global version
+    items = complete(path, text, line, new_line, version)
+    version += 2
+    labels = sorted(i["label"] for i in items)
+    ok = labels == sorted(expected) if exact else all(e in labels for e in expected)
+    check(name, ok, "got " + str(labels))
+    return items
+
+
+version = 10
+completes("fields and methods through ->", MAIN, main_text, 8, "\tvar total: i32 = p->|", ["x", "y", "sum"])
+completes("fields and methods through .", MAIN, main_text, 18, "\tpt.|", ["x", "y", "sum"])
+completes("the name being typed", MAIN, main_text, 18, "\tpt.s|", ["sum"])
+completes("static subs (Struct.)", MAIN, main_text, 18, "\tGeo.|", ["twice"])
+completes("a struct's scope, without its priv subs", MAIN, main_text, 18, "\tGeo::|", ["twice"])
+completes("enum members", MAIN, main_text, 18, "\tvar k = Color.|", ["Red", "Green", "Blue"])
+completes("priv members in the struct's own subs", SHAPES, shapes_text, geo_line + 3, "\tpriv sub reset() { this->| }", ["cache", "reset"])
+completes("the type of a call", MAIN, main_text, 18, "\tvar n = describe(&pt)|", ["describe"], exact=False)
+completes("locals, statics and local constants", MAIN, main_text, 13, "\treturn |", ["total", "calls", "units", "p", "area", "g_count", "describe", "Point", "return"], exact=False)
+items = complete(MAIN, main_text, 18, "\tto|", version)
+version += 2
+check("not the locals of other subs", "total" not in [i["label"] for i in items], str([i["label"] for i in items]))
+items = completes("types only after ':'", MAIN, main_text, 18, "\tvar q: |", ["Point", "Geo", "Color", "Level", "i32", "string"], exact=False)
+check("types only after ':' (no subs)", not any(i["label"] in ("area", "pt", "return") for i in items), str([i["label"] for i in items]))
+completes("nothing in a comment", MAIN, main_text, 18, "\t// pt.|", [])
+completes("nothing in a string", MAIN, main_text, 18, "\tvar s = \"pt.|", [])
+items = completes("a sub's signature", MAIN, main_text, 18, "\tare|", ["area"])
+check("a sub's signature", bool(items) and items[0].get("detail") == "sub area(var w: i32, var h: i32 = 2) -> i32", str(items[:1]))
+
 print("editing (unsaved buffers)")
 broken = main_text.replace("p->x + p->y", "p->x + p->zz")
 c.notify("textDocument/didChange", {"textDocument": {"uri": uri(MAIN), "version": 2}, "contentChanges": [{"text": broken}]})

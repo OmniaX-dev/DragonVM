@@ -2792,7 +2792,10 @@ namespace dscript
 		v->pos = s->pos;
 		v->defPos = s->namePos;
 		if (m_options.index != nullptr)
+		{
 			indexName(v->defPos, v->name, v->defPos, hoverVar(v));
+			completeLocal(v);
+		}
 		m_localCursor -= (int32_t)alignUp(std::max<uint32_t>(t->size(), 1), 4);
 		v->offset = m_localCursor;
 		m_localMin = std::min(m_localMin, m_localCursor);
@@ -2905,6 +2908,7 @@ namespace dscript
 			case NodeKind::Block:
 			{
 				m_scopes.push_back({});
+				m_scopeEnds.push_back(s->endPos);
 				m_defers.emplace_back();
 				for (Node* st : s->list)
 					genStatement(st);
@@ -2917,6 +2921,7 @@ namespace dscript
 				}
 				m_defers.pop_back();
 				m_scopes.pop_back();
+				m_scopeEnds.pop_back();
 			}
 			break;
 			case NodeKind::Defer:
@@ -3033,6 +3038,8 @@ namespace dscript
 			case NodeKind::For:
 			{
 				m_scopes.push_back({});
+				m_scopeEnds.push_back(s->d != nullptr && s->d->kind == NodeKind::Block ? s->d->endPos
+					: (m_scopeEnds.empty() ? SourcePos {} : m_scopeEnds.back()));
 				if (s->a)
 					genStatement(s->a);
 				std::string lStart = newLabel(), lCont = newLabel(), lEnd = newLabel();
@@ -3055,6 +3062,7 @@ namespace dscript
 				emit("jmp $" + lStart);
 				label(lEnd);
 				m_scopes.pop_back();
+				m_scopeEnds.pop_back();
 			}
 			break;
 			case NodeKind::Return:
@@ -3350,6 +3358,13 @@ namespace dscript
 			if (m_options.index != nullptr)
 				indexName(v->defPos, v->name, v->defPos, hoverVar(v));
 			m_scopes.back()[v->name] = v;
+		}
+		m_scopeEnds.clear();
+		if (f->decl->a != nullptr)
+		{
+			m_scopeEnds.push_back(f->decl->a->endPos);
+			for (size_t i = 0; i < f->paramNames.size(); i++)
+				completeLocal(m_scopes.back()[f->paramNames[i]]);
 		}
 		m_localCursor = 4;
 		m_localMin = 4;
@@ -3813,6 +3828,176 @@ namespace dscript
 		m_options.index->rehover(hovers);
 	}
 
+	// A type for completion (see Completion in Index.hpp).
+	static std::string typeCode(const Type* t)
+	{
+		if (t == nullptr)
+			return "i";
+		switch (t->kind)
+		{
+			case Type::Kind::Void: return "v";
+			case Type::Kind::Struct: return "s:" + t->structInfo->name;
+			case Type::Kind::Pointer: return "p:" + typeCode(t->base);
+			case Type::Kind::Array: return "a:" + typeCode(t->base);
+			case Type::Kind::Function: return "f:" + typeCode(t->base);
+			default: return "i";
+		}
+	}
+
+	void CodeGen::completeLocal(VarInfo* v)
+	{
+		// Not the expansions of inline subs (their own body is analyzed too).
+		if (m_options.index == nullptr || v == nullptr || !m_inline.empty() || m_scopeEnds.empty())
+			return;
+		CompletionSymbol c;
+		c.name = v->name;
+		c.kind = v->param ? CompletionSymbol::Param : CompletionSymbol::Local;
+		c.type = typeCode(v->type);
+		c.hover = hoverVar(v);
+		c.def = v->defPos;
+		c.end = m_scopeEnds.back();
+		for (const CompletionSymbol& l : m_options.index->completion.locals)
+		{
+			if (l.name == c.name && l.def.line == c.def.line && l.def.column == c.def.column && l.def.file == c.def.file)	// generated again (a defer)
+				return;
+		}
+		m_options.index->completion.locals.push_back(c);
+	}
+
+	void CodeGen::indexCompletion(Node* program)
+	{
+		Completion& out = m_options.index->completion;
+		auto l_func = [&](const Node* d) -> FuncInfo* {
+			for (FuncInfo* f : m_funcList)
+			{
+				if (f->decl == d)
+					return f;
+			}
+			return nullptr;
+		};
+		std::set<std::string> namespaces;
+		for (Node* d : program->list)
+		{
+			CompletionSymbol c;
+			c.name = d->shortName.empty() ? d->name : d->shortName;
+			c.parent = (d->owner != nullptr && d->owner->kind == NodeKind::StructDecl) ? d->owner->name : d->scope;
+			c.def = d->namePos;
+			c.isPrivate = d->isPrivate;
+			// Local constants / statics: visible in their sub, after their declaration.
+			if (!d->text.empty())
+			{
+				if (d->owner == nullptr || d->owner->kind != NodeKind::FuncDecl || d->owner->a == nullptr)
+					continue;
+				c.name = d->text;
+				c.parent.clear();
+				c.end = d->owner->a->endPos;
+				if (m_globals.count(d->name) > 0)
+				{
+					c.kind = d->kind == NodeKind::ConstDecl ? CompletionSymbol::Const : CompletionSymbol::Local;
+					c.type = typeCode(m_globals[d->name]->type);
+					c.hover = hoverVar(m_globals[d->name]);
+				}
+				else if (m_consts.count(d->name) > 0)
+				{
+					c.kind = CompletionSymbol::Const;
+					c.type = m_consts[d->name].isString ? "p:i" : typeCode(m_consts[d->name].type);
+					c.hover = hoverConst(d->name);
+				}
+				else
+					continue;
+				out.locals.push_back(c);
+				continue;
+			}
+			switch (d->kind)
+			{
+				case NodeKind::NamespaceDecl:
+					out.namespaces.push_back({ d->namePos, d->endPos, d->name, {} });
+					if (!namespaces.insert(d->name).second)
+						continue;
+					c.kind = CompletionSymbol::Namespace;
+					c.hover = "namespace " + d->name;
+				break;
+				case NodeKind::StructDecl:
+					if (d->value != 0 || m_structs.count(d->name) == 0)	// nameless
+						continue;
+					c.kind = CompletionSymbol::Struct;
+					c.type = "s:" + d->name;
+					c.hover = hoverStruct(m_structs[d->name]);
+				break;
+				case NodeKind::EnumDecl:
+					if (m_enums.count(d->name) == 0)
+						continue;
+					c.kind = CompletionSymbol::Enum;
+					c.hover = hoverEnum(d->name);
+					for (const Node* m : d->list)
+					{
+						auto it = m_enums[d->name].values.find(m->name);
+						out.members.push_back({ m->name, d->name, CompletionSymbol::EnumMember, "i",
+							d->name + "." + m->name + " = " + (it != m_enums[d->name].values.end() ? number(it->second) : "?"), m->namePos, {}, false });
+					}
+				break;
+				case NodeKind::AliasDecl:
+					if (m_aliases.count(d->name) == 0)
+						continue;
+					c.kind = CompletionSymbol::Alias;
+					c.type = typeCode(m_aliases[d->name].type);
+					c.hover = hoverAlias(d->name);
+				break;
+				case NodeKind::ConstDecl:
+				case NodeKind::VarDecl:
+					c.kind = d->kind == NodeKind::ConstDecl ? CompletionSymbol::Const : CompletionSymbol::Var;
+					if (m_globals.count(d->name) > 0)
+					{
+						c.type = typeCode(m_globals[d->name]->type);
+						c.hover = hoverVar(m_globals[d->name]);
+					}
+					else if (m_consts.count(d->name) > 0)
+					{
+						c.type = m_consts[d->name].isString ? "p:i" : typeCode(m_consts[d->name].type);
+						c.hover = hoverConst(d->name);
+					}
+					else
+						continue;
+				break;
+				case NodeKind::FuncDecl:
+				{
+					if (d->name.rfind("__lambda_", 0) == 0)
+						continue;
+					FuncInfo* f = l_func(d);
+					if (f == nullptr)
+						continue;
+					const bool method = (d->value & 4) != 0;
+					c.kind = !method ? CompletionSymbol::Sub : (d->value & 8) != 0 ? CompletionSymbol::StaticSub : CompletionSymbol::Method;
+					c.type = f->type != nullptr ? typeCode(f->type) : "f:v";
+					c.hover = hoverFunc(f);
+					c.isPrivate = (d->value & 16) != 0;
+					if (method)
+						out.members.push_back(c);
+				}
+				break;
+				default: continue;
+			}
+			out.globals.push_back(c);
+		}
+		for (auto& s : m_structs)
+		{
+			for (const StructField& f : s.second->fields)
+				out.members.push_back({ f.name, s.first, CompletionSymbol::Field, typeCode(f.type), hoverField(s.second, f), f.namePos, {}, f.isPrivate });
+		}
+		for (FuncInfo* f : m_funcList)
+		{
+			if (f->decl->a == nullptr)
+				continue;
+			CompletionContext ctx { f->decl->pos, f->decl->a->endPos, f->decl->scope, {} };
+			for (const Node* o = f->decl->owner; o != nullptr; o = o->owner)
+			{
+				if (o->kind == NodeKind::StructDecl)
+					ctx.structs.push_back(o->name);
+			}
+			out.subs.push_back(ctx);
+		}
+	}
+
 	std::vector<std::string> CodeGen::generate(Node* program)
 	{
 		collect(program);
@@ -4002,7 +4187,10 @@ namespace dscript
 		}
 
 		if (m_options.index != nullptr)
+		{
 			indexDeclarations();
+			indexCompletion(program);
+		}
 		if (m_options.analysis)
 			return {};
 

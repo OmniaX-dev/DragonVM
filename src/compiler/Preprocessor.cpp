@@ -176,6 +176,16 @@ namespace dscript
 				error(pos, "#define " + defName + ": a directive or a low block can't be in a define");
 		}
 		m_defines[defName] = def;
+		if (m_index != nullptr)
+		{
+			CompletionSymbol c;
+			c.name = defName;
+			c.kind = CompletionSymbol::Define;
+			c.hover = def.text;
+			c.def = def.pos;
+			c.isPrivate = def.function;		// has parameters
+			m_index->completion.globals.push_back(c);
+		}
 	}
 
 	std::vector<Token> Preprocessor::processFile(const std::string& path)

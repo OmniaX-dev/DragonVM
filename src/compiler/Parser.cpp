@@ -180,11 +180,13 @@ namespace dscript
 		const std::string outerScope = m_scope;
 		// namespace A::B { ... }: opens A, then A::B.
 		size_t start = 0;
+		std::vector<Node*> opened;
 		while (true)
 		{
 			const size_t sep = name.find("::", start);
 			const std::string part = name.substr(start, sep == std::string::npos ? std::string::npos : sep - start);
 			Node* n = make(NodeKind::NamespaceDecl, pos);
+			opened.push_back(n);
 			n->namePos = namePos;
 			n->shortName = part;
 			n->scope = m_namespace;
@@ -197,12 +199,15 @@ namespace dscript
 		}
 		m_scope = m_namespace;
 		expectPunct("{", "to start the namespace");
-		while (!acceptPunct("}"))
+		while (!isPunct("}"))
 		{
 			if (peek().kind == TokenKind::End)
 				error(pos, "'}' missing at the end of namespace " + m_namespace);
 			parseTopLevel(out);
 		}
+		for (Node* n : opened)
+			n->endPos = peek().pos;
+		next();
 		acceptPunct(";");
 		m_namespace = outerNamespace;
 		m_scope = outerScope;

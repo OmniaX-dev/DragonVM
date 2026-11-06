@@ -1,5 +1,11 @@
 // dsls: the DScript language server (LSP over stdin / stdout).
-//   Diagnostics (as you type), go to definition, hover, document and workspace symbols.
+//   Diagnostics (as you type), go to definition, hover, completion, document and workspace symbols.
+//
+// Completion: the compiler describes what the program declares (CodeGen::indexCompletion: the
+// globals, the members of structs / enums, every local with where its scope ends, the subs'
+// bodies). The server reads the expression before the cursor (a.b->c()[i]., Ns::, ...) and
+// works out its type from that. The line being typed rarely parses: the program is analyzed
+// again without it (its braces kept), else the last description that parsed is used.
 //
 // Every analysis runs the compiler (preprocessor, parser and checking, no code generation) in
 // a forked child process, which writes its results as JSON to a pipe and exits: the compiler
@@ -24,6 +30,7 @@
 #include <sstream>
 #include <iostream>
 #include <regex>
+#include <memory>
 #include <algorithm>
 #include <cstring>
 #include <unistd.h>
@@ -173,6 +180,7 @@ namespace
 		setWarningHandler(onWarning);
 		Preprocessor::setOverlay(&docs);
 		Preprocessor pp(o.includeDirs);
+		pp.setIndex(&index);
 		pp.define("__DSCRIPT__", "1");
 		if (o.raw)
 			pp.define("__RAW__", "1");
@@ -180,7 +188,6 @@ namespace
 			pp.define("__ROM__", "1");
 		for (const auto& d : o.defines)
 			pp.define(d.first, d.second);
-		pp.setIndex(&index);
 		Node* program = nullptr;
 		try
 		{
@@ -257,6 +264,27 @@ namespace
 				}
 			}
 		}
+		// Completion: what the program declares (only when it could be parsed).
+		out["parsed"] = program != nullptr;
+		if (program != nullptr)
+		{
+			const Completion& c = index.completion;
+			auto l_pos = [&](const SourcePos& p) { return json::array({ l_canon(p.file), p.line, p.column }); };
+			auto l_symbols = [&](const std::vector<CompletionSymbol>& list) {
+				json a = json::array();
+				for (const CompletionSymbol& s : list)
+					a.push_back({ s.name, s.parent, s.kind, s.type, s.hover, l_pos(s.def), l_pos(s.end), s.isPrivate });
+				return a;
+			};
+			auto l_contexts = [&](const std::vector<CompletionContext>& list) {
+				json a = json::array();
+				for (const CompletionContext& x : list)
+					a.push_back({ l_pos(x.start), l_pos(x.end), x.scope, x.structs });
+				return a;
+			};
+			out["completion"] = { { "globals", l_symbols(c.globals) }, { "members", l_symbols(c.members) }, { "locals", l_symbols(c.locals) },
+				{ "subs", l_contexts(c.subs) }, { "namespaces", l_contexts(c.namespaces) } };
+		}
 		for (const auto& w : s_warnings)
 			l_diag(w.first, w.second, 2);
 		for (const auto& e : index.entries())
@@ -288,6 +316,18 @@ namespace
 		std::string container;
 	};
 
+	// What completion knows about a program (see Completion in Index.hpp).
+	struct CompletionModel
+	{
+		bool valid { false };
+		dscript::Completion data;
+		std::map<std::string, std::vector<const dscript::CompletionSymbol*>> byFullName;	// globals
+		std::map<std::string, std::vector<const dscript::CompletionSymbol*>> byParent;		// globals
+		std::map<std::string, std::vector<const dscript::CompletionSymbol*>> membersOf;	// struct / enum -> members
+
+		void load(const json& j);
+	};
+
 	struct Analysis
 	{
 		bool valid { false };	// analyzed at least once
@@ -296,7 +336,39 @@ namespace
 		std::vector<Diagnostic> diagnostics;
 		dscript::Index index;
 		std::vector<Symbol> symbols;
+		bool parsed { false };					// the last analysis could parse the program
+		std::shared_ptr<CompletionModel> completion;	// of the last analysis that could
 	};
+
+	void CompletionModel::load(const json& j)
+	{
+		using namespace dscript;
+		auto l_pos = [](const json& p) { return SourcePos { p[0].get<std::string>(), p[1].get<int>(), p[2].get<int>() }; };
+		auto l_symbols = [&](const json& a, std::vector<CompletionSymbol>& out) {
+			for (const auto& s : a)
+			{
+				out.push_back({ s[0].get<std::string>(), s[1].get<std::string>(), s[2].get<int>(), s[3].get<std::string>(),
+					s[4].get<std::string>(), l_pos(s[5]), l_pos(s[6]), s[7].get<bool>() });
+			}
+		};
+		auto l_contexts = [&](const json& a, std::vector<CompletionContext>& out) {
+			for (const auto& x : a)
+				out.push_back({ l_pos(x[0]), l_pos(x[1]), x[2].get<std::string>(), x[3].get<std::vector<std::string>>() });
+		};
+		l_symbols(j["globals"], data.globals);
+		l_symbols(j["members"], data.members);
+		l_symbols(j["locals"], data.locals);
+		l_contexts(j["subs"], data.subs);
+		l_contexts(j["namespaces"], data.namespaces);
+		for (const CompletionSymbol& s : data.globals)
+		{
+			byFullName[s.parent.empty() ? s.name : s.parent + "::" + s.name].push_back(&s);
+			byParent[s.parent].push_back(&s);
+		}
+		for (const CompletionSymbol& s : data.members)
+			membersOf[s.parent].push_back(&s);
+		valid = true;
+	}
 
 	class Server
 	{
@@ -322,6 +394,8 @@ namespace
 			void markDirty(const std::string& file);
 			void documentChanged(const std::string& file);
 			Analysis& analyze(const std::string& root);
+			// Runs the analysis of root (with these open documents) in a child process.
+			bool runAnalysis(const std::string& root, const std::map<std::string, std::string>& docs, json& result, std::string& why);
 			Analysis& fresh(const std::string& file);
 			void flushPending(void);
 			void publish(const std::string& root);
@@ -337,6 +411,9 @@ namespace
 			json hover(const json& params);
 			json documentSymbols(const json& params);
 			json workspaceSymbols(const json& params);
+			json completion(const json& params);
+			// The program as it would be without the line being typed (it rarely parses).
+			std::shared_ptr<CompletionModel> completionWithoutLine(const std::string& root, const std::string& file, int line);
 			json symbolInformation(const Symbol& s);
 
 		private:
@@ -348,6 +425,8 @@ namespace
 			std::set<std::string> m_roots;
 			std::map<std::string, Analysis> m_analyses;
 			std::set<std::string> m_pending;							// roots to analyze and publish when idle
+			std::string m_lineModelKey;									// completionWithoutLine(): the last one
+			std::shared_ptr<CompletionModel> m_lineModel;
 			bool m_shutdown { false };
 	};
 
@@ -469,7 +548,8 @@ namespace
 					{ "definitionProvider", true },
 					{ "hoverProvider", true },
 					{ "documentSymbolProvider", true },
-					{ "workspaceSymbolProvider", true } } },
+					{ "workspaceSymbolProvider", true },
+					{ "completionProvider", { { "triggerCharacters", { ".", ":", ">" } }, { "resolveProvider", false } } } } },
 				{ "serverInfo", { { "name", "dsls" }, { "version", "0.1" } } } });
 		}
 		else if (method == "initialized")
@@ -511,6 +591,8 @@ namespace
 			respond(msg["id"], documentSymbols(params));
 		else if (method == "workspace/symbol")
 			respond(msg["id"], workspaceSymbols(params));
+		else if (method == "textDocument/completion")
+			respond(msg["id"], completion(params));
 		else if (request)
 			respondError(msg["id"], -32601, "method not supported: " + method);
 	}
@@ -639,9 +721,8 @@ namespace
 		m_pending.insert(chooseRoot(file));
 	}
 
-	Analysis& Server::analyze(const std::string& root)
+	bool Server::runAnalysis(const std::string& root, const std::map<std::string, std::string>& docs, json& r, std::string& why)
 	{
-		Analysis& a = m_analyses[root];
 		const Options options = optionsFor(root);
 		std::string output;
 		int fds[2];
@@ -659,7 +740,7 @@ namespace
 				std::string data;
 				try
 				{
-					data = analyzeInProcess(root, options, m_docs).dump(-1, ' ', false, json::error_handler_t::replace);
+					data = analyzeInProcess(root, options, docs).dump(-1, ' ', false, json::error_handler_t::replace);
 				}
 				catch (const std::exception& e)
 				{
@@ -700,15 +781,29 @@ namespace
 			}
 			close(fds[0]);
 		}
-		json r = ok ? json::parse(output, nullptr, false) : json();
+		r = ok ? json::parse(output, nullptr, false) : json();
+		if (!ok || r.is_discarded() || !r.is_object() || r.contains("error"))
+		{
+			why = (r.is_object() && r.contains("error")) ? r["error"].get<std::string>() : "the compiler crashed or did not finish";
+			return false;
+		}
+		return true;
+	}
+
+	Analysis& Server::analyze(const std::string& root)
+	{
+		Analysis& a = m_analyses[root];
+		json r;
+		std::string why;
+		const bool ok = runAnalysis(root, m_docs, r, why);
 		a.valid = true;
 		a.dirty = false;
 		a.diagnostics.clear();
 		a.symbols.clear();
 		a.index = dscript::Index();
-		if (!ok || r.is_discarded() || !r.is_object() || r.contains("error"))
+		a.parsed = false;
+		if (!ok)
 		{
-			const std::string why = (r.is_object() && r.contains("error")) ? r["error"].get<std::string>() : "the compiler crashed or did not finish";
 			a.diagnostics.push_back({ root, 1, 1, "dsls: the analysis failed (" + why + ")", 1 });
 			std::cerr << "dsls: analysis of " << root << " failed: " << why << "\n";
 			return a;
@@ -728,6 +823,12 @@ namespace
 		{
 			a.symbols.push_back({ s[0].get<std::string>(), s[1].get<int>(), s[2].get<std::string>(), s[3].get<int>(), s[4].get<int>(),
 				s[5].get<int>(), s[6].get<std::string>() });
+		}
+		a.parsed = r.value("parsed", false) && r.contains("completion");
+		if (a.parsed)
+		{
+			a.completion = std::make_shared<CompletionModel>();
+			a.completion->load(r["completion"]);
 		}
 		return a;
 	}
@@ -938,6 +1039,604 @@ namespace
 			}
 		}
 		return out;
+	}
+
+	// ===================================== Completion ====================================
+	bool isIdentChar(char c)
+	{
+		return std::isalnum((unsigned char)c) || c == '_';
+	}
+
+	std::string rtrim(std::string s)
+	{
+		while (!s.empty() && (s.back() == ' ' || s.back() == '\t'))
+			s.pop_back();
+		return s;
+	}
+
+	// The cursor (line: 1-based, column: 0-based byte) is in a comment, a string / character
+	// literal or a low block (dasm).
+	bool notCode(const std::string& text, int line, size_t column)
+	{
+		size_t offset = 0;
+		for (int l = 1; l < line; l++)
+		{
+			offset = text.find('\n', offset);
+			if (offset == std::string::npos)
+				return false;
+			offset++;
+		}
+		offset = std::min(offset + column, text.size());
+		enum { Code, LineComment, BlockComment, String, Char, Low } state = Code;
+		int depth = 0;
+		for (size_t i = 0; i < offset; i++)
+		{
+			const char c = text[i];
+			const char n = i + 1 < text.size() ? text[i + 1] : 0;
+			switch (state)
+			{
+				case Code:
+					if (c == '/' && n == '/') { state = LineComment; i++; }
+					else if (c == '/' && n == '*') { state = BlockComment; i++; }
+					else if (c == '"') state = String;
+					else if (c == '\'') state = Char;
+					else if (c == 'l' && text.compare(i, 3, "low") == 0 && (i == 0 || !isIdentChar(text[i - 1])))
+					{
+						size_t j = i + 3;
+						while (j < text.size() && std::isspace((unsigned char)text[j]))
+							j++;
+						if (j < text.size() && text[j] == '{' && j < offset)
+						{
+							state = Low;
+							depth = 1;
+							i = j;
+						}
+					}
+				break;
+				case LineComment: if (c == '\n') state = Code; break;
+				case BlockComment: if (c == '*' && n == '/') { state = Code; i++; } break;
+				case String: if (c == '\\') i++; else if (c == '"' || c == '\n') state = Code; break;
+				case Char: if (c == '\\') i++; else if (c == '\'' || c == '\n') state = Code; break;
+				case Low:
+					if (c == '{') depth++;
+					else if (c == '}' && --depth == 0) state = Code;
+				break;
+			}
+		}
+		return state != Code;
+	}
+
+	// A postfix expression, as written before a '.' / '->' / '::': a.b->c(1)[2], Ns::f(), cast<T*>(p).
+	struct Segment
+	{
+		enum Kind { Name, Dot, Arrow, Scope, Call, Index, Cast } kind;
+		std::string text;	// Name: the name; Cast: the type
+	};
+
+	// The chain that ends at `end` in s, first to last (global: it starts with ::). false: none.
+	bool parseChain(const std::string& s, size_t end, std::vector<Segment>& out, bool& global, size_t& chainStart)
+	{
+		size_t i = end;
+		global = false;
+		std::vector<Segment> rev;
+		auto l_skip = [&]() { while (i > 0 && (s[i - 1] == ' ' || s[i - 1] == '\t')) i--; };
+		// s[i - 1] is `close`: i becomes the position of its `open`.
+		auto l_match = [&](char open, char close) -> bool {
+			int depth = 0;
+			while (i > 0)
+			{
+				const char c = s[--i];
+				if (c == close)
+					depth++;
+				else if (c == open && --depth == 0)
+					return true;
+			}
+			return false;
+		};
+		while (true)
+		{
+			l_skip();
+			if (i == 0)
+				break;
+			const char c = s[i - 1];
+			if (c == ')')
+			{
+				const size_t close = i;
+				if (!l_match('(', ')'))
+					return false;
+				const size_t open = i;
+				l_skip();
+				if (i > 0 && s[i - 1] == '>')
+				{
+					const size_t gt = i;
+					if (!l_match('<', '>'))
+						return false;
+					const std::string type = s.substr(i + 1, gt - i - 2);
+					l_skip();
+					const size_t e = i;
+					while (i > 0 && isIdentChar(s[i - 1]))
+						i--;
+					if (s.substr(i, e - i) != "cast")
+						return false;
+					rev.push_back({ Segment::Cast, type });
+					break;
+				}
+				rev.push_back({ Segment::Call, s.substr(open + 1, close - open - 2) });
+				continue;
+			}
+			if (c == ']')
+			{
+				if (!l_match('[', ']'))
+					return false;
+				rev.push_back({ Segment::Index, "" });
+				continue;
+			}
+			if (isIdentChar(c))
+			{
+				const size_t e = i;
+				while (i > 0 && isIdentChar(s[i - 1]))
+					i--;
+				rev.push_back({ Segment::Name, s.substr(i, e - i) });
+				l_skip();
+				if (i >= 2 && s[i - 1] == ':' && s[i - 2] == ':')
+				{
+					i -= 2;
+					l_skip();
+					if (i == 0 || !isIdentChar(s[i - 1]))
+					{
+						global = true;
+						break;
+					}
+					rev.push_back({ Segment::Scope, "" });
+					continue;
+				}
+				if (i >= 2 && s[i - 1] == '>' && s[i - 2] == '-')
+				{
+					i -= 2;
+					rev.push_back({ Segment::Arrow, "" });
+					continue;
+				}
+				if (i >= 1 && s[i - 1] == '.')
+				{
+					i -= 1;
+					rev.push_back({ Segment::Dot, "" });
+					continue;
+				}
+				break;
+			}
+			return false;
+		}
+		out.assign(rev.rbegin(), rev.rend());
+		chainStart = i;
+		return !out.empty() && (out[0].kind == Segment::Name || out[0].kind == Segment::Cast);
+	}
+
+	bool before(const dscript::SourcePos& a, int line, int column)	// a <= (line, column)
+	{
+		return a.line < line || (a.line == line && a.column <= column);
+	}
+
+	bool contains(const dscript::CompletionContext& c, const std::string& file, int line, int column)
+	{
+		return c.start.file == file && before(c.start, line, column) && !before(c.end, line, column - 1);
+	}
+
+	std::shared_ptr<CompletionModel> Server::completionWithoutLine(const std::string& root, const std::string& file, int line)
+	{
+		std::map<std::string, std::string> docs = m_docs;
+		std::string text;
+		auto doc = docs.find(file);
+		if (doc != docs.end())
+			text = doc->second;
+		else if (!readFile(file, text))
+			return nullptr;
+		size_t start = 0;
+		for (int i = 1; i < line; i++)
+		{
+			start = text.find('\n', start);
+			if (start == std::string::npos)
+				return nullptr;
+			start++;
+		}
+		size_t end = text.find('\n', start);
+		if (end == std::string::npos)
+			end = text.size();
+		// Without the line, but with its braces (if (p.x) { -> {): the blocks stay balanced.
+		for (size_t i = start; i < end; i++)
+		{
+			if (text[i] != '{' && text[i] != '}' && text[i] != '\t' && text[i] != '\r')
+				text[i] = ' ';
+		}
+		docs[file] = text;
+		std::string key = root;
+		for (const auto& d : docs)
+			key += "\n" + std::to_string(d.first.size()) + d.first + std::to_string(d.second.size()) + d.second;
+		if (key == m_lineModelKey)
+			return m_lineModel;
+		m_lineModelKey = key;
+		m_lineModel = nullptr;
+		json r;
+		std::string why;
+		if (runAnalysis(root, docs, r, why) && r.value("parsed", false) && r.contains("completion"))
+		{
+			m_lineModel = std::make_shared<CompletionModel>();
+			m_lineModel->load(r["completion"]);
+		}
+		return m_lineModel;
+	}
+
+	json Server::completion(const json& params)
+	{
+		using namespace dscript;
+		typedef CompletionSymbol CS;
+		const std::string file = uriToPath(params.at("textDocument").at("uri").get<std::string>());
+		const int line = params.at("position").at("line").get<int>(), character = params.at("position").at("character").get<int>();
+		const json context = params.value("context", json::object());
+		const bool invoked = context.value("triggerKind", 1) == 1;
+		json items = json::array();
+		const json none = { { "isIncomplete", true }, { "items", items } };
+
+		std::string text;
+		auto doc = m_docs.find(file);
+		if (doc != m_docs.end())
+			text = doc->second;
+		else if (!readFile(file, text))
+			return none;
+		const std::string lineStr = lineText(file, line + 1);
+		const size_t cursor = std::min((size_t)std::max(0, toColumn(file, line, character) - 1), lineStr.size());
+		if (notCode(text, line + 1, cursor))
+			return none;
+		const std::string head = lineStr.substr(0, cursor);
+		const size_t firstChar = head.find_first_not_of(" \t");
+		if (firstChar != std::string::npos && head[firstChar] == '#')
+			return none;	// a directive
+		size_t start = cursor;
+		while (start > 0 && isIdentChar(head[start - 1]))
+			start--;
+		const std::string prefix = head.substr(start);
+		if (!prefix.empty() && std::isdigit((unsigned char)prefix[0]))
+			return none;
+		const std::string rest = rtrim(head.substr(0, start));
+
+		// What comes before the name being typed.
+		enum { General, Dot, Arrow, Scope, TypeName } where = General;
+		auto l_endsWith = [&](const std::string& s) { return rest.size() >= s.size() && rest.compare(rest.size() - s.size(), s.size(), s) == 0; };
+		static const std::regex returnType(R"(\bsub\b[^;{}=]*\)\s*->$)");
+		static const std::regex declType(R"((\b(var|const)\s+[A-Za-z_]\w*|[(,]\s*[A-Za-z_]\w*)\s*:$|\benum\s+[A-Za-z_]\w*\s*:$|\balias\s+[A-Za-z_]\w*\s*=$|\b(cast|sizeof)\s*<$)");
+		if (l_endsWith("->"))
+			where = std::regex_search(rest, returnType) ? TypeName : Arrow;
+		else if (l_endsWith("::"))
+			where = Scope;
+		else if (l_endsWith(".") && !l_endsWith(".."))
+			where = Dot;
+		else if (std::regex_search(rest, declType))
+			where = TypeName;
+		if (where == General && prefix.empty() && !invoked)
+			return none;	// ':' / '>' not after a name
+
+		Analysis& a = fresh(file);
+		std::shared_ptr<CompletionModel> model = a.parsed ? a.completion : completionWithoutLine(chooseRoot(file), file, line + 1);
+		if (!model)
+			model = a.completion;	// the last one that parsed
+		if (!model)
+			return none;
+		const Completion& data = model->data;
+
+		// Where the cursor is: the sub (the innermost), or the namespace block.
+		const int curLine = line + 1, curColumn = (int)cursor + 1;
+		const CompletionContext* sub = nullptr;
+		for (const CompletionContext& c : data.subs)
+		{
+			if (contains(c, file, curLine, curColumn) && (sub == nullptr || before(sub->start, c.start.line, c.start.column)))
+				sub = &c;
+		}
+		std::string scope;
+		std::set<std::string> privs;
+		if (sub != nullptr)
+		{
+			scope = sub->scope;
+			privs.insert(sub->structs.begin(), sub->structs.end());
+		}
+		else
+		{
+			const CompletionContext* ns = nullptr;
+			for (const CompletionContext& c : data.namespaces)
+			{
+				if (contains(c, file, curLine, curColumn) && (ns == nullptr || before(ns->start, c.start.line, c.start.column)))
+					ns = &c;
+			}
+			if (ns != nullptr)
+				scope = ns->scope;
+		}
+		std::vector<std::string> ancestors;
+		for (std::string sc = scope; ; )
+		{
+			ancestors.push_back(sc);
+			if (sc.empty())
+				break;
+			const size_t sep = sc.rfind("::");
+			sc = sep == std::string::npos ? "" : sc.substr(0, sep);
+		}
+		auto l_full = [](const CS* s) { return s->parent.empty() ? s->name : s->parent + "::" + s->name; };
+		auto l_kindOf = [&](const std::string& full) -> int {
+			auto it = model->byFullName.find(full);
+			return (it == model->byFullName.end() || it->second.empty()) ? -1 : it->second[0]->kind;
+		};
+		// A name as written from the cursor's scope (the innermost first; in a struct, only its
+		// nested types), like the compiler.
+		auto l_lookup = [&](const std::string& q, bool global) -> const CS* {
+			const std::string first = q.substr(0, q.find("::"));
+			for (const std::string& anc : ancestors)
+			{
+				if (global && !anc.empty())
+					continue;
+				if (l_kindOf(anc) == CS::Struct && l_kindOf(anc + "::" + first) != CS::Struct && l_kindOf(anc + "::" + first) != CS::Enum)
+					continue;
+				auto it = model->byFullName.find(anc.empty() ? q : anc + "::" + q);
+				if (it != model->byFullName.end() && !it->second.empty())
+					return it->second[0];
+			}
+			return nullptr;
+		};
+		// The locals at the cursor (the innermost declaration of each name).
+		std::map<std::string, const CS*> locals;
+		for (const CS& l : data.locals)
+		{
+			if (l.def.file != file || !before(l.def, curLine, curColumn) || !l.end.file.empty() && before(l.end, curLine, curColumn - 1))
+				continue;
+			if (sub != nullptr && !before(sub->start, l.def.line, l.def.column))
+				continue;
+			auto it = locals.find(l.name);
+			if (it == locals.end() || before(it->second->def, l.def.line, l.def.column))
+				locals[l.name] = &l;
+		}
+
+		// The value / type a chain is.
+		struct Value
+		{
+			enum Kind { None, Typed, StructType, EnumType, Namespace } kind { None };
+			std::string s;		// Typed: its type; the others: the full name
+		};
+		auto l_symbolValue = [&](const CS* s) -> Value {
+			if (s == nullptr)
+				return {};
+			switch (s->kind)
+			{
+				case CS::Struct: return { Value::StructType, l_full(s) };
+				case CS::Enum: return { Value::EnumType, l_full(s) };
+				case CS::Namespace: return { Value::Namespace, l_full(s) };
+				case CS::Alias: return s->type.rfind("s:", 0) == 0 ? Value { Value::StructType, s->type.substr(2) } : Value {};
+				case CS::Define: return {};
+				default: return { Value::Typed, s->type };
+			}
+		};
+		auto l_typeText = [&](std::string t) -> std::string {
+			t = rtrim(t.substr(std::min(t.size(), t.find_first_not_of(" \t"))));
+			size_t e = 0;
+			while (e < t.size() && (isIdentChar(t[e]) || t[e] == ':'))
+				e++;
+			const std::string name = t.substr(0, e);
+			std::string code = "i";
+			if (name == "void")
+				code = "v";
+			else if (name == "string")
+				code = "p:i";
+			else if (const CS* s = l_lookup(name.rfind("::", 0) == 0 ? name.substr(2) : name, name.rfind("::", 0) == 0))
+				code = s->kind == CS::Struct ? "s:" + l_full(s) : s->kind == CS::Alias ? s->type : "i";
+			for (size_t i = e; i < t.size(); i++)
+			{
+				if (t[i] == '*')
+					code = "p:" + code;
+				else if (t[i] == '[')
+					code = "a:" + code;
+			}
+			return code;
+		};
+		auto l_member = [&](const std::string& owner, const std::string& name) -> const CS* {
+			auto it = model->membersOf.find(owner);
+			if (it == model->membersOf.end())
+				return nullptr;
+			for (const CS* m : it->second)
+			{
+				if (m->name == name)
+					return m;
+			}
+			return nullptr;
+		};
+		auto l_evaluate = [&](const std::vector<Segment>& chain, bool global) -> Value {
+			Value v;
+			size_t k = 1;
+			if (chain[0].kind == Segment::Cast)
+				v = { Value::Typed, l_typeText(chain[0].text) };
+			else
+			{
+				std::string q = chain[0].text;
+				while (k + 1 < chain.size() && chain[k].kind == Segment::Scope && chain[k + 1].kind == Segment::Name)
+				{
+					q += "::" + chain[k + 1].text;
+					k += 2;
+				}
+				auto local = locals.find(q);
+				if (!global && local != locals.end())
+					v = { Value::Typed, local->second->type };
+				else
+					v = l_symbolValue(l_lookup(q, global));
+			}
+			for (; k < chain.size() && v.kind != Value::None; k++)
+			{
+				const Segment& seg = chain[k];
+				if (seg.kind == Segment::Call)
+					v = (v.kind == Value::Typed && v.s.rfind("f:", 0) == 0) ? Value { Value::Typed, v.s.substr(2) } : Value {};
+				else if (seg.kind == Segment::Index)
+					v = (v.kind == Value::Typed && (v.s.rfind("a:", 0) == 0 || v.s.rfind("p:", 0) == 0)) ? Value { Value::Typed, v.s.substr(2) } : Value {};
+				else if (k + 1 < chain.size() && chain[k + 1].kind == Segment::Name)
+				{
+					const std::string& name = chain[++k].text;
+					if (seg.kind == Segment::Scope)
+					{
+						auto it = model->byFullName.find(v.s + "::" + name);
+						v = (v.kind != Value::Typed && it != model->byFullName.end()) ? l_symbolValue(it->second[0]) : Value {};
+					}
+					else if (seg.kind == Segment::Arrow)
+						v = (v.kind == Value::Typed && v.s.rfind("p:s:", 0) == 0) ? l_symbolValue(l_member(v.s.substr(4), name)) : Value {};
+					else if (v.kind == Value::Typed && v.s.rfind("s:", 0) == 0)
+						v = l_symbolValue(l_member(v.s.substr(2), name));
+					else if (v.kind == Value::StructType)
+						v = l_symbolValue(l_member(v.s, name));
+					else if (v.kind == Value::EnumType)
+						v = { Value::Typed, "i" };
+					else
+						v = {};
+				}
+				else
+					v = {};
+			}
+			return v;
+		};
+
+		// The items: the name being typed is somewhere in them (in order, any case).
+		std::map<std::string, size_t> seen;
+		std::string lowerPrefix = prefix;
+		std::transform(lowerPrefix.begin(), lowerPrefix.end(), lowerPrefix.begin(), ::tolower);
+		const json editRange = { { "start", { { "line", line }, { "character", toCharacter(file, curLine, (int)start + 1) } } },
+								 { "end", { { "line", line }, { "character", character } } } };
+		auto l_add = [&](const std::string& label, int kind, const std::string& hover, int group) {
+			size_t p = 0;
+			for (char c : label)
+			{
+				if (p < lowerPrefix.size() && std::tolower((unsigned char)c) == lowerPrefix[p])
+					p++;
+			}
+			if (p < lowerPrefix.size())
+				return;
+			auto it = seen.find(label);
+			if (it != seen.end())
+			{
+				// Overloads: every signature in the documentation.
+				json& item = items[it->second];
+				if (!hover.empty() && item.contains("documentation"))
+				{
+					std::string doc = item["documentation"]["value"].get<std::string>();
+					doc.insert(doc.size() - 4, "\n" + hover);
+					item["documentation"]["value"] = doc;
+				}
+				return;
+			}
+			static const int lspKinds[] = { 9, 22, 13, 25, 21, 6, 3, 2, 3, 5, 20, 6, 6, 21 };
+			json item = { { "label", label }, { "kind", kind < 0 ? 14 : lspKinds[kind] },
+						  { "sortText", std::to_string(group) + label }, { "textEdit", { { "range", editRange }, { "newText", label } } } };
+			if (!hover.empty())
+			{
+				std::string detail = hover.substr(0, hover.find('\n'));
+				const size_t brace = detail.find(" {");
+				if (brace != std::string::npos)
+					detail.erase(brace);
+				item["detail"] = detail;
+				item["documentation"] = { { "kind", "markdown" }, { "value", "```dscript\n" + hover + "\n```" } };
+			}
+			seen[label] = items.size();
+			items.push_back(item);
+		};
+		auto l_visible = [&](const CS* s) { return !s->isPrivate || privs.count(s->parent) > 0; };
+		auto l_addMembers = [&](const std::string& owner, std::initializer_list<int> kinds) {
+			auto it = model->membersOf.find(owner);
+			if (it == model->membersOf.end())
+				return;
+			for (const CS* m : it->second)
+			{
+				if (std::find(kinds.begin(), kinds.end(), m->kind) != kinds.end() && l_visible(m))
+					l_add(m->name, m->kind, m->hover, 1);
+			}
+		};
+		auto l_addChildren = [&](const std::string& parent, bool typesOnly) {
+			auto it = model->byParent.find(parent);
+			if (it == model->byParent.end())
+				return;
+			for (const CS* s : it->second)
+			{
+				const bool type = s->kind == CS::Struct || s->kind == CS::Enum || s->kind == CS::Alias || s->kind == CS::Namespace;
+				if (l_visible(s) && s->kind != CS::Define && (type || !typesOnly))
+					l_add(s->name, s->kind, s->hover, 2);
+			}
+		};
+		// The names usable from the cursor's scope (types only: types and namespaces).
+		auto l_addScopes = [&](bool typesOnly) {
+			for (const std::string& anc : ancestors)
+			{
+				const bool inStruct = l_kindOf(anc) == CS::Struct;
+				auto it = model->byParent.find(anc);
+				if (it == model->byParent.end())
+					continue;
+				for (const CS* s : it->second)
+				{
+					const bool type = s->kind == CS::Struct || s->kind == CS::Enum || s->kind == CS::Alias || s->kind == CS::Namespace;
+					if ((inStruct && s->kind != CS::Struct && s->kind != CS::Enum) || (typesOnly && !type))
+						continue;
+					l_add(s->name, s->kind, s->hover, s->kind == CS::Define ? 3 : 2);
+				}
+			}
+		};
+
+		static const char* builtinTypes[] = { "i8", "u8", "i16", "u16", "i32", "u32", "bool", "char", "int", "uint", "string", "void", nullptr };
+		static const char* keywords[] = { "var", "const", "sub", "struct", "enum", "alias", "return", "if", "else", "while", "do", "for",
+			"break", "continue", "null", "true", "false", "cast", "sizeof", "low", "interrupt", "inline", "static", "priv", "assert",
+			"debug_print", "namespace", "defer", "and", "or", "not", nullptr };
+		if (where == General || where == TypeName)
+		{
+			if (where == General)
+			{
+				for (const auto& l : locals)
+					l_add(l.first, l.second->kind, l.second->hover, 0);
+			}
+			l_addScopes(where == TypeName);
+			for (int i = 0; builtinTypes[i] != nullptr; i++)
+				l_add(builtinTypes[i], -1, "", 4);
+			if (where == General)
+			{
+				for (int i = 0; keywords[i] != nullptr; i++)
+					l_add(keywords[i], -1, "", 4);
+			}
+		}
+		else
+		{
+			std::vector<Segment> chain;
+			bool global = false;
+			const size_t end = rest.size() - (where == Dot ? 1 : 2);
+			size_t chainStart = 0;
+			// sub f() -> Ns::|  (a return type, not '->' on a value)
+			static const std::regex scopedReturnType(R"(\bsub\b[^;{}=]*\)\s*->\s*(::)?[A-Za-z_][\w:]*::$)");
+			const size_t arrow = rest.rfind("->");
+			const bool returnScope = where == Scope && arrow != std::string::npos && std::regex_search(rest, scopedReturnType);
+			const bool parsed = returnScope ? parseChain(rest.substr(arrow + 2), end - arrow - 2, chain, global, chainStart)
+				: parseChain(rest, end, chain, global, chainStart);
+			if (returnScope)
+				chainStart += arrow + 2;
+			// var x: Ns::|  (types only)
+			const std::string lead = rtrim(rest.substr(0, std::min(chainStart, rest.size())));
+			const bool typesOnly = where == Scope && parsed && (returnScope || std::regex_search(lead, declType));
+			if (where == Scope && !parsed)
+			{
+				// ::name: the global ones.
+				const std::string r = rtrim(rest.substr(0, end));
+				if (r.empty() || !isIdentChar(r.back()))
+					l_addChildren("", false);
+			}
+			else if (parsed)
+			{
+				const Value v = l_evaluate(chain, global);
+				if (where == Scope && (v.kind == Value::Namespace || v.kind == Value::StructType || v.kind == Value::EnumType))
+					l_addChildren(v.s, typesOnly);
+				else if (where == Dot && v.kind == Value::Typed && v.s.rfind("s:", 0) == 0)
+					l_addMembers(v.s.substr(2), { CS::Field, CS::Method });
+				else if (where == Dot && v.kind == Value::StructType)
+					l_addMembers(v.s, { CS::StaticSub });
+				else if (where == Dot && v.kind == Value::EnumType)
+					l_addMembers(v.s, { CS::EnumMember });
+				else if (where == Arrow && v.kind == Value::Typed && v.s.rfind("p:s:", 0) == 0)
+					l_addMembers(v.s.substr(4), { CS::Field, CS::Method });
+			}
+		}
+		return { { "isIncomplete", false }, { "items", items } };
 	}
 }
 

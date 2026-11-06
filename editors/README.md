@@ -21,10 +21,17 @@ as DScript, `.dss` files as dasm, and the inside of `low { }` blocks is highligh
 
 For DScript files Zed starts `dsls`: errors as you type, go to definition (ctrl+click; also on
 `#include` lines and `$name`s in low blocks), hover (types, signatures, constant values, struct
-layouts), document and project symbols. Zed finds it on the `PATH`, or with this setting:
+layouts), completion, document and project symbols. Zed finds it on the `PATH`, or with this setting:
 ```
 "lsp": { "dsls": { "binary": { "path": "/path/to/DragonVM/bin/dsls" } } }
 ```
+Completion offers the names visible where you type (locals, then the namespaces' names from the
+innermost out, types, keywords, defines), the members after `.` and `->` (fields and methods;
+static subs after `Struct.`, the members of an enum after `Enum.`, through calls, `[i]` and
+`cast<T>(...)`), what a namespace or a struct has after `::`, and only types after `var x:`,
+`-> ` in a sub's declaration and `cast<`. `priv` members show up only in their struct's subs.
+The line being typed rarely compiles: completion analyzes the program without it.
+
 Each analysis compiles the program the file belongs to (without generating code): a file with a
 `main` sub is a program; another file is checked as part of the closest program that includes
 it (or on its own). Unsaved changes are used. The options come from `dsls.json` in the

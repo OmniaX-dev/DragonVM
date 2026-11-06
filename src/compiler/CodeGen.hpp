@@ -85,6 +85,9 @@ namespace dscript
 			bool attempt(const std::function<void()>& fn);
 			void indexName(const SourcePos& pos, const std::string& written, const SourcePos& def, const std::string& hover);
 			void indexDeclarations(void);
+			// Completion: a local / parameter (visible until the end of its scope), and the rest.
+			void completeLocal(VarInfo* v);
+			void indexCompletion(Node* program);
 			void indexLow(const SourcePos& pos, const std::string& written, const std::string& name);
 			std::string hoverVar(VarInfo* v);
 			std::string hoverFunc(FuncInfo* f);
@@ -213,6 +216,7 @@ namespace dscript
 			// The sub being generated.
 			FuncInfo* m_func { nullptr };
 			std::vector<std::map<std::string, VarInfo*>> m_scopes;
+			std::vector<SourcePos> m_scopeEnds;		// analysis: where the scopes being generated end
 			int32_t m_localCursor { 4 };
 			int32_t m_localMin { 4 };
 			std::vector<Loop> m_loops;

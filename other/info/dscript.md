@@ -42,7 +42,7 @@ into called subs), `nl` / `next-line` (F8: calls, interrupts and inlined subs ru
 Pipeline: lexer -> preprocessor (on tokens) -> parser (AST) -> checking + code generation
 (dasm text) -> assembler -> DRX / raw binary. Sources: `src/compiler/`.
 
-Editors: `dsls` is the language server (errors as you type, go to definition, hover, symbols;
+Editors: `dsls` is the language server (errors as you type, go to definition, hover, completion, symbols;
 `src/lsp/`, see `editors/README.md`). It uses the same compiler in an analysis mode, which keeps
 checking after an error (each declaration and sub on its own) and records what every name in
 the source refers to (`src/compiler/Index.hpp`).
