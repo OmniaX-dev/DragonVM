@@ -6,29 +6,28 @@
 // ddb stops first at the debug_break.
 // Define NDEBUG (dsc -D NDEBUG, or #define(NDEBUG)) to compile the asserts out: the conditions
 // are still checked by the compiler, but not run.
+// It is global: the compiler looks for ::__assert_fail.
 // A program (or an OS) can write its own __assert_fail instead of including this file.
 
 #include(utils.ds)
 
-namespace dr {
-	sub __assert_fail(var file: string, var line: u32, var condition: string, var message: string) {
-		var buff: u8[12];
-		debug_print("Assertion failed: ");
-		debug_print(condition);
-		debug_print(" (");
-		debug_print(file);
-		debug_print(":");
-		debug_print(itoa(cast<i32>(line), buff));
-		debug_print(")");
-		if (message[0])
-		{
-			debug_print(": ");
-			debug_print(message);
-		}
-		debug_print("\n");
-		low {
-			debug_break
-			hlt
-		}
+sub __assert_fail(var file: string, var line: u32, var condition: string, var message: string) {
+	var buff: u8[12];
+	debug_print("Assertion failed: ");
+	debug_print(condition);
+	debug_print(" (");
+	debug_print(file);
+	debug_print(":");
+	debug_print(dr::itoa(cast<i32>(line), buff));
+	debug_print(")");
+	if (message[0])
+	{
+		debug_print(": ");
+		debug_print(message);
+	}
+	debug_print("\n");
+	low {
+		debug_break
+		hlt
 	}
 }

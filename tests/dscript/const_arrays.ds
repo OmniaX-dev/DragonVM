@@ -1,6 +1,6 @@
 // expect-output: |=====|\n| ab  |\n|=====|\nred green blue
 // Constant arrays (read-only data in the program) and array sizes from the value ([]).
-#include(<bios.ds>)
+#import(<dragon-sdk>)
 #include(check.ds)
 
 const Logo: u8[8][] = {
@@ -26,10 +26,10 @@ sub sum(var values: u16*, var count: u32) -> u32 {
 
 sub main() -> void {
     for (var i: u32 = 0; i < sizeof(Logo) / sizeof(Logo[0]); i++)
-        println(Logo[i]);
+        dr::TextSingle::println(Logo[i]);
     for (var i: u32 = 0; i < sizeof(Names) / sizeof(Names[0]); i++) {
-        if (i > 0) print(" ");
-        print(Names[i]);
+        if (i > 0) dr::TextSingle::print(" ");
+        dr::TextSingle::print(Names[i]);
     }
     check(1, sizeof(Logo) == 24 && sizeof(Names) == 12 && sizeof(Primes) == 10);
     check(2, sum(Primes, sizeof(Primes) / sizeof(Primes[0])) == 28);
@@ -49,5 +49,5 @@ sub main() -> void {
         mov $first, R2
     }
     check(9, first == 2);
-    if (result() != 0) { print(" failed: "); print(result()); }
+    if (result() != 0) { dr::TextSingle::print(" failed: "); dr::TextSingle::print(result()); }
 }

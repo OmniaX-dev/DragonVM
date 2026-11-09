@@ -619,6 +619,25 @@ namespace dscript
 	}
 
 	// ======================================== Types =========================================
+	// A name followed by '*'s and then ')' or '[': a pointer type (as an expression, the '*' would
+	// need something after it).
+	bool Parser::pointerTypeAhead(void) const
+	{
+		int i = 0;
+		if (peek(i).kind == TokenKind::Punct && peek(i).text == "::")
+			i++;
+		if (peek(i).kind != TokenKind::Identifier)
+			return false;
+		i++;
+		while (peek(i).kind == TokenKind::Punct && peek(i).text == "::" && peek(i + 1).kind == TokenKind::Identifier)
+			i += 2;
+		if (peek(i).kind != TokenKind::Punct || peek(i).text != "*")
+			return false;
+		while (peek(i).kind == TokenKind::Punct && peek(i).text == "*")
+			i++;
+		return peek(i).kind == TokenKind::Punct && (peek(i).text == ")" || peek(i).text == "[");
+	}
+
 	bool Parser::startsType(void) const
 	{
 		const Token& t = peek();
@@ -1180,7 +1199,7 @@ namespace dscript
 			}
 			expectPunct("(", "after 'sizeof' (sizeof(value or type) or sizeof<type>)");
 			Node* n = nullptr;
-			if (startsType())
+			if (startsType() || pointerTypeAhead())
 			{
 				n = make(NodeKind::SizeofType, pos);
 				n->typeSyntax = parseType();

@@ -45,6 +45,7 @@ namespace dscript
 			Node* parseLow(void);
 			TypeSyntax* parseType(void);
 			bool startsType(void) const;
+			bool pointerTypeAhead(void) const;
 			Node* parseInitializer(void);
 
 			Node* parseStatement(void);

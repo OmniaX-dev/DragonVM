@@ -67,13 +67,13 @@ interrupt sub __int_30_handler() {
 	else if (code == INT30_DIRECT_PRINT_INTEGER_TEXT_SINGLE)
 	{
 		var buff: u8[12];
-		dr::itoa(param1, buff);
+		dr::utoa(param1, buff);
 		l_textSingleStr(cast<u32>(buff), device, false);
 	}
 	else if (code == INT30_STORE_INTEGER_TEXT_SINGLE)
 	{
 		var buff: u8[12];
-		dr::itoa(param1, buff);
+		dr::utoa(param1, buff);
 		l_textSingleStr(cast<u32>(buff), device, true);
 	}
 	else if (code == INT30_STORE_CHAR_TEXT_SINGLE)

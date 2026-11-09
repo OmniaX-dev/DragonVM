@@ -1,18 +1,17 @@
 // expect-rv: 0
-// dsc-flags: -I extra/ds/sdk
 
-#include(<ringbuffer.ds>)
+#import(<dragon-sdk>)
 
 struct Event { var note: u8; var velocity: u8; var time: u32; }
 
-sub push_note(var rb: RingBuffer*, var note: u8) -> bool {
+sub push_note(var rb: dr::RingBuffer*, var note: u8) -> bool {
     var e: Event = { note, 100, cast<u32>(note) * 10 };
     return rb->push(&e);
 }
 
 sub main() -> i32 {
     var storage: Event[4];
-    var rb: RingBuffer;
+    var rb: dr::RingBuffer;
     var e: Event;
 
     if (rb.init(&storage[0], sizeof(Event), 3)) { return 1; }      // 3: not a power of two

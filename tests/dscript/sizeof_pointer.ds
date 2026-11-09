@@ -1,0 +1,17 @@
+// sizeof of a pointer to a named type; multiplications stay expressions.
+// expect-rv: 0
+namespace Ns { struct Pt { var x: i32; var y: i32; }; }
+struct Pt { var v: u8[20]; };
+
+sub main() -> i32 {
+	var a: i32 = 3;
+	var b: i32 = 4;
+	var p: i32* = &b;
+	if (sizeof(Pt*) != 4) return 1;
+	if (sizeof(Ns::Pt*) != 4) return 2;
+	if (sizeof(::Ns::Pt**) != 4) return 3;
+	if (sizeof(Ns::Pt) != 8) return 4;
+	if (sizeof(a * b) != 4) return 5;
+	if (sizeof(a * *p) != 4) return 6;
+	return 0;
+}

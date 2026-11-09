@@ -5,7 +5,7 @@ assembler is linked in), producing a relocatable **DRX** program (the default) o
 binary (`--raw`).
 
 ```
-dsc program.ds -I extra/ds/sdk                    -> program.drx (relocatable)
+dsc program.ds -L extra/ds/dragon-sdk/lib         -> program.drx (relocatable)
 dsc kernel.ds --raw --load 0x01012000 --fixed 1024,0xFF --header KERNEL0_BOOT
 dsc program.ds --emit-dasm program.dasm           (also writes the generated dasm)
 dsc bios.ds --rom --fixed 16777216,0xFF -Wa,-D    (dasm options: here its debug mode)

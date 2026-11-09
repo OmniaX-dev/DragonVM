@@ -30,6 +30,22 @@ namespace dr {
 	    return result;
 	}
 
+	// An unsigned integer in decimal (result: at least 11 bytes).
+	sub utoa(var value: u32, var result: u8*) -> string
+	{
+		var digits: u8[10];
+		var count: u32 = 0;
+		do {
+			digits[count++] = cast<u8>('0' + value % 10);
+			value /= 10;
+		} while (value);
+		var ptr: u8* = result;
+		while (count > 0)
+			*ptr++ = digits[--count];
+		*ptr = '\0';
+		return result;
+	}
+
 	inline sub isprint(var c: u32) -> bool {
 		return c >= 0x20 && c <= 0x7E;
 	}

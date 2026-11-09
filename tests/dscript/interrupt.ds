@@ -1,14 +1,14 @@
 // expect-output: tick 1\ntick 2\nticks: 2
-#include(<bios.ds>)
+#import(<dragon-sdk>)
 
 var ticks: i32 = 0;
 
 // Interrupt subs end with rti and can't be called directly.
 interrupt sub on_tick() {
     ticks++;
-    print("tick ");
-    print(ticks);
-    new_line();
+    dr::TextSingle::print("tick ");
+    dr::TextSingle::print(ticks);
+    dr::TextSingle::new_line();
 }
 
 sub install(var code: u8, var handler: sub() -> void) -> void {
@@ -26,6 +26,6 @@ sub main() -> void {
         int 0x40
         int 0x40
     }
-    print("ticks: ");
-    print(ticks);
+    dr::TextSingle::print("ticks: ");
+    dr::TextSingle::print(ticks);
 }

@@ -1,11 +1,11 @@
 // expect-output: Hello, DragonOS!\n-42 / 4294967295 / x
-#include(<bios.ds>)
+#import(<dragon-sdk>)
 
 sub main() -> void {
-    println("Hello, DragonOS!");
-    print(-42);
-    print(" / ");
-    print(0xFFFFFFFF);
-    print(" / ");
-    print('x');
+    dr::TextSingle::println("Hello, DragonOS!");
+    dr::TextSingle::print(-42);
+    dr::TextSingle::print(" / ");
+    dr::TextSingle::print(cast<u32>(0xFFFFFFFF));
+    dr::TextSingle::print(" / ");
+    dr::TextSingle::print('x');
 }

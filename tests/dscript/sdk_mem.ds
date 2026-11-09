@@ -1,16 +1,16 @@
 // expect-rv: 0
 #include(check.ds)
-#include(<mem.ds>)
+#import(<dragon-sdk>)
 
 sub main() -> i32 {
     var a: u8[16];
     var b: u8[16];
-    memset(a, 'z', 16);
+    dr::memset(a, 'z', 16);
     check(1, a[0] == 'z' && a[15] == 'z');
-    strcpy(a, "dragon");
-    check(2, strlen(a) == 6 && strcmp(a, "dragon") == 0);
-    check(3, strcmp("abc", "abd") < 0 && strcmp("b", "a") > 0);
-    memcpy(b, a, 7);
-    check(4, memcmp(a, b, 7) == 0 && b[6] == 0);
+    dr::strcpy(a, "dragon");
+    check(2, dr::strlen(a) == 6 && dr::strcmp(a, "dragon") == 0);
+    check(3, dr::strcmp("abc", "abd") < 0 && dr::strcmp("b", "a") > 0);
+    dr::memcpy(b, a, 7);
+    check(4, dr::memcmp(a, b, 7) == 0 && b[6] == 0);
     return result();
 }

@@ -3,7 +3,7 @@
 // dsc-lib: libs/geom.ds libs/shapes.ds
 // expect-sources: libraries.ds geom.ds shapes.ds
 // expect-rv: 1
-#include(<assert.ds>)
+#import(<dragon-sdk>)
 #import(<geom>)
 #import(<shapes>)
 

@@ -38,7 +38,7 @@ it (or on its own). Unsaved changes are used. The options come from `dsls.json` 
 workspace root (this repository has one):
 ```
 {
-    "args": ["-I", "extra/ds/sdk"],                     dsc options for every program
+    "args": ["-L", "extra/ds/dragon-sdk/lib"],          dsc options for every program
     "files": { "extra/ds/bios/entry.ds": ["--rom"] }    more options for one program
 }
 ```

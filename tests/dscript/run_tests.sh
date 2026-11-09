@@ -24,6 +24,13 @@ CONFIG="${DSCRIPT_TEST_CONFIG:-config/testMachine.dvm}"	# another machine: DSCRI
 OUT="$(mktemp -d)"
 trap 'rm -rf "$OUT"' EXIT
 
+# The SDK library, built from its sources (the tests use it with #import(<dragon-sdk>)).
+mkdir -p "$OUT/sdk"
+if ! "$DSC" --lib "$ROOT"/extra/ds/dragon-sdk/src/*.ds -o "$OUT/sdk/dragon-sdk.dlib"; then
+	echo "cannot build the SDK library"
+	exit 1
+fi
+
 pass=0
 fail=0
 tests=("$@")
@@ -46,7 +53,7 @@ for t in "${tests[@]}"; do
 		for lib in "${libs[@]}"; do
 			# a.ds,b.ds: one library from several files (named after the first one)
 			IFS=, read -r -a lib_sources <<< "$lib"
-			if ! "$DSC" "${lib_sources[@]}" --lib -I "$ROOT/extra/ds/sdk" -L "$OUT/$name.libs" -o "$OUT/$name.libs/$(basename "${lib_sources[0]}" .ds).dlib" > "$OUT/$name.log" 2>&1; then
+			if ! "$DSC" "${lib_sources[@]}" --lib -L "$OUT/sdk" -L "$OUT/$name.libs" -o "$OUT/$name.libs/$(basename "${lib_sources[0]}" .ds).dlib" > "$OUT/$name.log" 2>&1; then
 				ok=0; msg="library $lib: compile error: $(cat "$OUT/$name.log")"
 			fi
 		done
@@ -55,14 +62,14 @@ for t in "${tests[@]}"; do
 	if [ $ok -eq 0 ]; then
 		:
 	elif [ -n "$err" ]; then
-		if "$DSC" "$t" -I "$ROOT/extra/ds/sdk" "${flags[@]}" -o "$OUT/$name.drx" > "$OUT/$name.log" 2>&1; then
+		if "$DSC" "$t" -L "$OUT/sdk" "${flags[@]}" -o "$OUT/$name.drx" > "$OUT/$name.log" 2>&1; then
 			ok=0; msg="compiled, but should fail with: $err"
 		elif ! grep -qF -- "$err" "$OUT/$name.log"; then
 			ok=0; msg="wrong error: $(head -1 "$OUT/$name.log") (expected: $err)"
 		fi
 	elif [ -n "$romrv" ]; then
 		cfg="$CONFIG"; [[ "$cfg" = /* ]] || cfg="$BIN/$cfg"
-		if ! "$DSC" "$t" -I "$ROOT/extra/ds/sdk" "${flags[@]}" --rom --fixed 16777216,0xFF -o "$OUT/$name.rom" > "$OUT/$name.log" 2>&1; then
+		if ! "$DSC" "$t" -L "$OUT/sdk" "${flags[@]}" --rom --fixed 16777216,0xFF -o "$OUT/$name.rom" > "$OUT/$name.log" 2>&1; then
 			ok=0; msg="rom: compile error: $(cat "$OUT/$name.log")"
 		else
 			sed "s|^Bios = .*|Bios = $OUT/$name.rom|" "$cfg" > "$OUT/$name.dvm"
@@ -78,10 +85,10 @@ for t in "${tests[@]}"; do
 	else
 		for mode in drx raw; do
 			if [ $mode = drx ]; then
-				"$DSC" "$t" -I "$ROOT/extra/ds/sdk" "${flags[@]}" -o "$OUT/$name.drx" > "$OUT/$name.log" 2>&1 || { ok=0; msg="$mode: compile error: $(cat "$OUT/$name.log")"; break; }
+				"$DSC" "$t" -L "$OUT/sdk" "${flags[@]}" -o "$OUT/$name.drx" > "$OUT/$name.log" 2>&1 || { ok=0; msg="$mode: compile error: $(cat "$OUT/$name.log")"; break; }
 				prog="$OUT/$name.drx"; at=()
 			else
-				"$DSC" "$t" -I "$ROOT/extra/ds/sdk" "${flags[@]}" --raw --load 0x01030000 --save-disassembly "$OUT/$name.dds" -o "$OUT/$name.bin" > "$OUT/$name.log" 2>&1 || { ok=0; msg="$mode: compile error: $(cat "$OUT/$name.log")"; break; }
+				"$DSC" "$t" -L "$OUT/sdk" "${flags[@]}" --raw --load 0x01030000 --save-disassembly "$OUT/$name.dds" -o "$OUT/$name.bin" > "$OUT/$name.log" 2>&1 || { ok=0; msg="$mode: compile error: $(cat "$OUT/$name.log")"; break; }
 				for src in "${sources[@]}"; do
 					grep -qaF "/$src" "$OUT/$name.dds" || { ok=0; msg="the disassembly has no source lines of $src"; }
 				done
