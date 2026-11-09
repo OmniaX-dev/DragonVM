@@ -442,8 +442,13 @@ namespace dscript
 		// program's defines.
 		const int index = (int)m_imports.size();
 		std::map<uint32_t, const dragon::dlib::LineInfo*> lines;
-		for (const auto& l : imp.library.lines)
+		for (auto& l : imp.library.lines)
+		{
+			// Recorded relative to the library.
+			if (!l.file.empty() && l.file[0] != '<')
+				l.file = (std::filesystem::path(canonical).parent_path() / l.file).lexically_normal().string();
 			lines[l.line] = &l;
+		}
 		Lexer lexer(imp.library.interface, canonical);
 		std::vector<Token> tokens = lexer.tokenize();
 		Token t = tok;

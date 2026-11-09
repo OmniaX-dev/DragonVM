@@ -1,38 +1,36 @@
 #once
 
-#include(<bios.ds>)
-#include(<dpt.ds>)
-#include(<ringbuffer.ds>)
+#import(<dragon-sdk>)
 
 #define(KEY_BUFF_SIZE = 128)
 
 var keyBuff: u32[KEY_BUFF_SIZE];
-var keyRingBuff: RingBuffer;
+var keyRingBuff: dr::RingBuffer;
 
-var scrx: u32 = *cast<u32*>(CMOSRegisters.ScreenColumns);
-var scry: u32 = *cast<u32*>(CMOSRegisters.ScreenRows);
+var scrx: u32 = *cast<u32*>(dr::CMOSRegisters.ScreenColumns);
+var scry: u32 = *cast<u32*>(dr::CMOSRegisters.ScreenRows);
 var screenBufferSize: u32 = scrx * scry * 4;
 var screenBuffer: u8* = null;
 var pressedKey: u32 = 0;
 
 sub main() {
-	TextSingle::clear_screen();
-	vga_set_video_mode(VGAVideoModes.Text16Color);
+	dr::TextSingle::clear_screen();
+	dr::vga_set_video_mode(dr::VGAVideoModes.Text16Color);
 
-	var dpt_block: DPTBlock;
-	halt_on_condition(not dpt_load_block(&dpt_block), "No valid DPT block found.");
+	var dpt_block: dr::DPTBlock;
+	halt_on_condition(not dr::dpt_load_block(&dpt_block), "No valid DPT block found.");
 
-	var boot_part: DPTPartitionBlock* = get_boot_partition(&dpt_block);
+	var boot_part: dr::DPTPartitionBlock* = get_boot_partition(&dpt_block);
 	halt_on_condition(not boot_part, "No bootable partition found.");
 
-	screenBuffer = malloc(screenBufferSize);
+	screenBuffer = dr::malloc(screenBufferSize);
 	halt_on_condition(not screenBuffer, "Screen buffer allocation failed.");
-	Text16::print(screenBufferSize, 0, 0, DefaultPaletteText16.Blue, DefaultPaletteText16.Yellow);
+	dr::Text16::print(screenBufferSize, 0, 0, dr::DefaultPaletteText16.Blue, dr::DefaultPaletteText16.Yellow);
 
 	keyRingBuff.init(keyBuff, sizeof(u32), KEY_BUFF_SIZE);
 
-	vga_enable_double_buffering();
-	set_interrupt_vector_entry(0xA0, &key_pressed_handler);
+	dr::vga_enable_double_buffering();
+	dr::set_interrupt_vector_entry(0xA0, &key_pressed_handler);
 
 	var i: u32 = 0;
 	while(true) {
@@ -40,66 +38,66 @@ sub main() {
 		if (keyRingBuff.pop(&key)) {
 			on_key_pressed(key);
 		}
-		raise_interrupt(0x30, INT30_COPY_FRAME_TEXT16, cast<u32>(screenBuffer), screenBufferSize);
-		raise_interrupt(0x30, INT30_SWAP_BUFFERS_TEXT16);
+		dr::raise_interrupt(0x30, INT30_COPY_FRAME_TEXT16, cast<u32>(screenBuffer), screenBufferSize);
+		dr::raise_interrupt(0x30, INT30_SWAP_BUFFERS_TEXT16);
 	}
 
 	print_system_info(dpt_block.versionMaj, dpt_block.versionMin);
 
 	load_kernel0_block(boot_part);
-	free(screenBuffer);
-	low { jmp $DPTBootPartStructure.CodeLoadAddr }
+	dr::free(screenBuffer);
+	low { jmp $dr::DPTBootPartStructure.CodeLoadAddr }
 }
 
 sub on_key_pressed(var key: u32) {
 	static var i: u32 = 0; // THis will eventually overflow, but it's just for testing
-	if (isprint(key)) {
+	if (dr::isprint(key)) {
 		screenBuffer[i++] = cast<u8>(key);
-		screenBuffer[i++] = DefaultPaletteText16.Green;
-		screenBuffer[i++] = DefaultPaletteText16.Black;
+		screenBuffer[i++] = dr::DefaultPaletteText16.Green;
+		screenBuffer[i++] = dr::DefaultPaletteText16.Black;
 		i++; // 1 Reserved byte
 	}
 }
 
 interrupt sub key_pressed_handler() {
-	pressedKey = *cast<u32*>(KeyboardRegisters.KeyCode);
+	pressedKey = *cast<u32*>(dr::KeyboardRegisters.KeyCode);
 	if (not keyRingBuff.push(&pressedKey))
 	{
 		//TODO: Handle missed key presses
 	}
 }
 
-sub load_kernel0_block(var part: DPTPartitionBlock*) {
-	var ddd: DiskDriverData;
-	ddd.mode = DiskMode.Read;
-	ddd.disk = get_boot_disk();
-	ddd.address = part->startAddress + DPTBootPartStructure.CodeStart;
-	ddd.dataSize = DPTBootPartStructure.CodeSize;
-	ddd.memoryAddress = DPTBootPartStructure.CodeLoadAddr;
-	raise_interrupt(0x20, INT20_LOAD_FROM_DDD_BLOCKING, cast<u32>(&ddd));
+sub load_kernel0_block(var part: dr::DPTPartitionBlock*) {
+	var ddd: dr::DiskDriverData;
+	ddd.mode = dr::DiskMode.Read;
+	ddd.disk = dr::get_boot_disk();
+	ddd.address = part->startAddress + dr::DPTBootPartStructure.CodeStart;
+	ddd.dataSize = dr::DPTBootPartStructure.CodeSize;
+	ddd.memoryAddress = dr::DPTBootPartStructure.CodeLoadAddr;
+	dr::raise_interrupt(0x20, INT20_LOAD_FROM_DDD_BLOCKING, cast<u32>(&ddd));
 }
 
-sub get_boot_partition(var dpt_block: DPTBlock*) -> DPTPartitionBlock* {
+sub get_boot_partition(var dpt_block: dr::DPTBlock*) -> dr::DPTPartitionBlock* {
 	for (var i: i8 = 0; i < dpt_block->partitionCount; i++)
 	{
-		if (dpt_is_partition_bootable(&dpt_block->entries[i]))
+		if (dr::dpt_is_partition_bootable(&dpt_block->entries[i]))
 			return &dpt_block->entries[i];
 	}
 	return null;
 }
 
 sub print_system_info(var dpt_ver_maj: u8, var dpt_ver_min: u8) {
-	Text16::print("Drake 0.2 -- ", 0, 0, DefaultPaletteText16.Green, DefaultPaletteText16.Black);
-	Text16::print("DPT Version ", 13, 0, DefaultPaletteText16.Green, DefaultPaletteText16.Black);
-	Text16::print(cast<u32>(dpt_ver_maj), 26, 0, DefaultPaletteText16.Green, DefaultPaletteText16.Black);
-	Text16::print('.', 27, 0, DefaultPaletteText16.Green, DefaultPaletteText16.Black);
-	Text16::print(cast<u32>(dpt_ver_min), 28, 0, DefaultPaletteText16.Green, DefaultPaletteText16.Black);
+	dr::Text16::print("Drake 0.2 -- ", 0, 0, dr::DefaultPaletteText16.Green, dr::DefaultPaletteText16.Black);
+	dr::Text16::print("DPT Version ", 13, 0, dr::DefaultPaletteText16.Green, dr::DefaultPaletteText16.Black);
+	dr::Text16::print(cast<u32>(dpt_ver_maj), 26, 0, dr::DefaultPaletteText16.Green, dr::DefaultPaletteText16.Black);
+	dr::Text16::print('.', 27, 0, dr::DefaultPaletteText16.Green, dr::DefaultPaletteText16.Black);
+	dr::Text16::print(cast<u32>(dpt_ver_min), 28, 0, dr::DefaultPaletteText16.Green, dr::DefaultPaletteText16.Black);
 }
 
 sub halt_on_condition(var condition: bool, var err_msg: string) {
 	if (condition)
 	{
-		Text16::print(err_msg, 0, 0, DefaultPaletteText16.Red, DefaultPaletteText16.Black);
+		dr::Text16::print(err_msg, 0, 0, dr::DefaultPaletteText16.Red, dr::DefaultPaletteText16.Black);
 		low { hlt };
 	}
 }

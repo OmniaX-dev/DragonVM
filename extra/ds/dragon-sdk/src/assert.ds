@@ -10,23 +10,25 @@
 
 #include(utils.ds)
 
-sub __assert_fail(var file: string, var line: u32, var condition: string, var message: string) {
-	var buff: u8[12];
-	debug_print("Assertion failed: ");
-	debug_print(condition);
-	debug_print(" (");
-	debug_print(file);
-	debug_print(":");
-	debug_print(itoa(cast<i32>(line), buff));
-	debug_print(")");
-	if (message[0])
-	{
-		debug_print(": ");
-		debug_print(message);
-	}
-	debug_print("\n");
-	low {
-		debug_break
-		hlt
+namespace dr {
+	sub __assert_fail(var file: string, var line: u32, var condition: string, var message: string) {
+		var buff: u8[12];
+		debug_print("Assertion failed: ");
+		debug_print(condition);
+		debug_print(" (");
+		debug_print(file);
+		debug_print(":");
+		debug_print(itoa(cast<i32>(line), buff));
+		debug_print(")");
+		if (message[0])
+		{
+			debug_print(": ");
+			debug_print(message);
+		}
+		debug_print("\n");
+		low {
+			debug_break
+			hlt
+		}
 	}
 }

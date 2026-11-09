@@ -5,11 +5,15 @@ set -e
 green='\033[0;32m'
 clear='\033[0m'
 
+printf "${green}Building dragon-sdk...\n${clear}"
+./dsc --lib ./ds/dragon-sdk/src/dragon.ds -o ds/dragon-sdk/lib/dragon-sdk.dlib -Wa,$1
+cp ./ds/dragon-sdk/lib/dragon-sdk.dlib ../extra/ds/dragon-sdk/lib/dragon-sdk.dlib
+
 printf "${green}Flashing BIOS...\n${clear}"
-./dsc ./ds/bios/entry.ds -I ds/sdk/ --verbose -o ./dragon/bios.bin --raw --load 0x0 --fixed 16777216,0xFF --rom -Wa,$1
+./dsc ./ds/bios/entry.ds -L ds/dragon-sdk/lib --verbose -o ./dragon/bios.bin --raw --load 0x0 --fixed 16777216,0xFF --rom -Wa,$1
 
 printf "\n${green}Compiling Drake...\n${clear}"
-./dsc ./ds/drake/entry.ds -I ds/sdk/ --verbose -o dragon/drake.bin --raw --load 0x01010000 --fixed 4194304,0x00 --save-disassembly disassembly/ -Wa,$1
+./dsc ./ds/drake/entry.ds -L ds/dragon-sdk/lib --verbose -o dragon/drake.bin --raw --load 0x01010000 --fixed 4194304,0x00 --save-disassembly disassembly/ -Wa,$1
 ./dtools load-binary dragon/disk.drd dragon/drake.bin 0x00000000
 
 printf "\n${green}Compiling DragonOS...\n${clear}"

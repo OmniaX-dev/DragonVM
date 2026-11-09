@@ -639,6 +639,23 @@ int main(int argc, char** argv)
 		std::sort(lib.exports.begin(), lib.exports.end(), [](const auto& x, const auto& y) { return x.symbol < y.symbol; });
 		lib.dependencies = dependencies;
 		lib.interface = interface;
+		// The sources are recorded relative to the library, so that they are found wherever
+		// the library and its sources are, and from whatever directory it is imported.
+		std::error_code ec;
+		const std::filesystem::path libDir = std::filesystem::weakly_canonical(std::filesystem::absolute(o.output), ec).parent_path();
+		std::map<std::string, std::string> relative;
+		for (auto& l : interfaceLines)
+		{
+			if (l.file.empty() || l.file[0] == '<')
+				continue;
+			auto it = relative.find(l.file);
+			if (it == relative.end())
+			{
+				const std::string rel = std::filesystem::weakly_canonical(std::filesystem::absolute(l.file), ec).lexically_relative(libDir).string();
+				it = relative.emplace(l.file, rel.empty() ? l.file : rel).first;
+			}
+			l.file = it->second;
+		}
 		lib.lines = interfaceLines;
 		for (const auto& e : unit.disassembly)
 		{

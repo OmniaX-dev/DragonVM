@@ -1,6 +1,6 @@
 #once
 
-#include(<bios.ds>)
+#import(<dragon-sdk>)
 
 struct __block {
     var size: u32;   // total block size including this header, multiple of 8
@@ -15,10 +15,10 @@ const __TAG_USED: u32  = 0x55534544;   // "USED"
 
 struct Allocator {
 	priv inline static sub __heap_start() -> u8* {
-		return cast<u8*>(read_cmos(CMOSRegisters.HeapStart));
+		return cast<u8*>(dr::read_cmos(dr::CMOSRegisters.HeapStart));
 	}
 	priv inline static sub __heap_end() -> u8* {
-		return cast<u8*>(read_cmos(CMOSRegisters.HeapEnd));
+		return cast<u8*>(dr::read_cmos(dr::CMOSRegisters.HeapEnd));
 	}
 	priv inline static sub __next_block(var b: __block*) -> __block* {
 		return cast<__block*>(cast<u8*>(b) + b->size);
@@ -33,9 +33,9 @@ struct Allocator {
 	}
 	static sub init(var start: u8*, var size: u32) {
 		var pad: u32 = (__ALIGN - (cast<u32>(start) & (__ALIGN - 1))) & (__ALIGN - 1);
-		write_cmos(CMOSRegisters.HeapStart, cast<u32>(start) + pad);
+		dr::write_cmos(dr::CMOSRegisters.HeapStart, cast<u32>(start) + pad);
 	    size = (size - pad) & ~(__ALIGN - 1);
-	    write_cmos(CMOSRegisters.HeapEnd, cast<u32>(Allocator::__heap_start()) + size);
+	    dr::write_cmos(dr::CMOSRegisters.HeapEnd, cast<u32>(Allocator::__heap_start()) + size);
 
 	    var b: __block* = cast<__block*>(Allocator::__heap_start());  // one big free block
 	    b->size = size;

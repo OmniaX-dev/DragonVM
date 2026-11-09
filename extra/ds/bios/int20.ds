@@ -1,7 +1,8 @@
 #once
 
-#include(<bios.ds>)
-#include(<int.ds>)
+#import(<dragon-sdk>)
+
+#include(allocator.ds)
 
 interrupt sub __int_20_handler() {
 	var code: u32;
@@ -14,44 +15,44 @@ interrupt sub __int_20_handler() {
 	}
 	if (code == INT20_START_DISK_CONTROLLER)
 	{
-		var ddd: DiskDriverData* = cast<DiskDriverData*>(param1);
+		var ddd: dr::DiskDriverData* = cast<dr::DiskDriverData*>(param1);
 		__int20_load_from_ddd(ddd);
 	}
 	else if (code == INT20_GET_DISK_LIST)
 	{
 		// TODO: Implement
 	}
-	else if (code == INT20_LOAD_FROM_DDD_BLOCKING) // selector is a DiskDriverData*
+	else if (code == INT20_LOAD_FROM_DDD_BLOCKING) // selector is a dr::DiskDriverData*
 	{
-		var ddd: DiskDriverData* = cast<DiskDriverData*>(param1);
+		var ddd: dr::DiskDriverData* = cast<dr::DiskDriverData*>(param1);
 		__int20_load_from_ddd(ddd, true);
 	}
 	else if (code == INT20_SET_NEW_INT_HANDLER)
 	{
 		if (param2 > 0xFF)
 			return; // TODO: Eventually this should probably raise some kind of error/warning
-		set_interrupt_vector_entry(param2, cast<sub()>(param1));
+		dr::set_interrupt_vector_entry(param2, cast<sub()>(param1));
 	}
 	else if (code == INT20_CLEAR_INT_HANDLER)
 	{
 		if (param1 > 0xFF)
 			return; // TODO: Eventually this should probably raise some kind of error/warning
-		clear_interrupt_vector_entry(param1);
+		dr::clear_interrupt_vector_entry(param1);
 	}
 	else if (code == INT20_ALLOC_HEAP)
 	{
 		if (not param2) return;
-		set_interrupts_enabled(false);
+		dr::set_interrupts_enabled(false);
 		*cast<u32*>(param2) = cast<u32>(Allocator::alloc(param1));
-		set_interrupts_enabled(true);
+		dr::set_interrupts_enabled(true);
 	}
 	else if (code == INT20_FREE_HEAP)
 	{
 		if (not param1) return;
-		set_interrupts_enabled(false);
+		dr::set_interrupts_enabled(false);
 		var result: u32 = Allocator::free(cast<void*>(param1)) ? 1 : 0;
 		low { mov RV, $result }
-		set_interrupts_enabled(true);
+		dr::set_interrupts_enabled(true);
 	}
 	else
 	{
@@ -61,19 +62,19 @@ interrupt sub __int_20_handler() {
 
 struct DiskInterfaceRegs { var signal: u8; var mode: u8; var disk: u8; var reserved: u8; var address: u32;
 						   var dataSize: u32; var memoryAddress: u32; var status: u8; };
-sub __int20_load_from_ddd(var ddd: DiskDriverData*, var blocking: bool = false) {
-        var regs: DiskInterfaceRegs* = cast<DiskInterfaceRegs*>(MemoryLayout.DiskInterface);
+sub __int20_load_from_ddd(var ddd: dr::DiskDriverData*, var blocking: bool = false) {
+        var regs: DiskInterfaceRegs* = cast<DiskInterfaceRegs*>(dr::MemoryLayout.DiskInterface);
         regs->mode = ddd->mode;
         regs->disk = ddd->disk;
         regs->address = ddd->address;
         regs->dataSize = ddd->dataSize;
         regs->memoryAddress = ddd->memoryAddress;
         if (!blocking) {
-            regs->signal = DiskSignals.Start;
+            regs->signal = dr::DiskSignals.Start;
             return;
         }
-        low { zflg $CPUFlags.InterruptsEnabled }
-        regs->signal = DiskSignals.Start;
-        while (regs->status != DiskStatus.Free) {}
-        low { sflg $CPUFlags.InterruptsEnabled }
+        low { zflg $dr::CPUFlags.InterruptsEnabled }
+        regs->signal = dr::DiskSignals.Start;
+        while (regs->status != dr::DiskStatus.Free) {}
+        low { sflg $dr::CPUFlags.InterruptsEnabled }
 }

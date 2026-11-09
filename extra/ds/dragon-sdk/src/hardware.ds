@@ -1,0 +1,54 @@
+#once
+
+#include(dragon.ds)
+
+namespace dr {
+	inline sub get_boot_disk() -> u8 {
+		return *cast<u8*>(CMOSRegisters.BootDisk);
+	}
+
+	sub cpu_halt() {
+		low { hlt }
+	}
+
+	inline sub vga_is_valid_video_mode(var mode: u8) -> bool {
+		if (mode == VGAVideoModes.TextSingleColor) return true;
+		if (mode == VGAVideoModes.Text16Color) return true;
+		return false;
+	}
+
+	inline sub vga_get_video_mode() -> u8 {
+		return *cast<u8*>(VGARegisters.VideoMode);
+	}
+
+	inline sub vga_set_video_mode(var mode: u8) {
+		if (vga_get_video_mode() == mode)
+			return;
+		if (not vga_is_valid_video_mode(mode))
+			return;
+		*cast<u8*>(VGARegisters.VideoMode) = mode;
+	}
+
+	inline sub vga_is_text16() -> bool {
+		return vga_get_video_mode() == VGAVideoModes.Text16Color;
+	}
+
+	inline sub vga_is_textSingle() -> bool {
+		return vga_get_video_mode() == VGAVideoModes.TextSingleColor;
+	}
+
+	inline sub vga_enable_double_buffering(var enable: bool = true) {
+		if (not vga_is_text16())
+			return;
+		var flags: BitField32* = cast<BitField32*>(VGARegisters.Flags);
+		flags->val(VGAFlags.DoubleBufferingEnabled, enable);
+	}
+
+	inline sub read_cmos(var addr: u32) -> u32 {
+		return *cast<u32*>(addr);
+	}
+
+	inline sub write_cmos(var addr: u32, var value: u32) {
+		*cast<u32*>(addr) = value;
+	}
+}

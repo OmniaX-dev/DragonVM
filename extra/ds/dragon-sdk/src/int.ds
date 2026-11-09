@@ -1,6 +1,6 @@
 #once
 
-#include(bios.ds)
+#include(dragon.ds)
 
 const INT20_START_DISK_CONTROLLER: u8 				= 0x10;
 const INT20_GET_DISK_LIST: u8 						= 0x11;
@@ -34,55 +34,57 @@ const INT30_COPY_FRAME_TEXT16: u8 					= 0x27;
 const INT30_CLEAR_SCREEN: u8 						= 0xE0;
 const INT30_REFRESH_SCREEN: u8 						= 0xE1;
 
-struct IntVectorEntry { var enabled: u8; var handler: u32; };
-sub set_interrupt_vector_entry(var code: u8, var handler_addr: sub()) {
-        var entry: IntVectorEntry* = cast<IntVectorEntry*>(MemoryLayout.InterruptVector) + code;
-        var handler: u32 = cast<u32>(handler_addr);
-        entry->enabled = handler != 0 ? 0xFF : 0x00;
-        entry->handler = handler;
-}
-
-inline sub clear_interrupt_vector_entry(var code: u8) {
-	set_interrupt_vector_entry(code, 0x0000);
-}
-
-sub set_interrupts_enabled(var enable: bool) {
-	if (enable)
-		low { sflg $CPUFlags.InterruptsEnabled }
-	else
-		low { zflg $CPUFlags.InterruptsEnabled }
-}
-
-sub raise_interrupt(var code: u8, var func: u8) {
-	low {
-		mov R10, $func
-		int $code
+namespace dr {
+	struct IntVectorEntry { var enabled: u8; var handler: u32; };
+	sub set_interrupt_vector_entry(var code: u8, var handler_addr: sub()) {
+	        var entry: IntVectorEntry* = cast<IntVectorEntry*>(MemoryLayout.InterruptVector) + code;
+	        var handler: u32 = cast<u32>(handler_addr);
+	        entry->enabled = handler != 0 ? 0xFF : 0x00;
+	        entry->handler = handler;
 	}
-}
 
-sub raise_interrupt(var code: u8, var func: u8, var __r9: u32) {
-	low {
-		mov R10, $func
-		mov R9, $__r9
-		int $code
+	inline sub clear_interrupt_vector_entry(var code: u8) {
+		set_interrupt_vector_entry(code, 0x0000);
 	}
-}
 
-sub raise_interrupt(var code: u8, var func: u8, var __r9: u32, var __r8: u32) {
-	low {
-		mov R10, $func
-		mov R9, $__r9
-		mov R8, $__r8
-		int $code
+	sub set_interrupts_enabled(var enable: bool) {
+		if (enable)
+			low { sflg $CPUFlags.InterruptsEnabled }
+		else
+			low { zflg $CPUFlags.InterruptsEnabled }
 	}
-}
 
-sub raise_interrupt(var code: u8, var func: u8, var __r9: u32, var __r8: u32, var __r11: u32) {
-	low {
-		mov R10, $func
-		mov R9, $__r9
-		mov R8, $__r8
-		mov R11, $__r11
-		int $code
+	sub raise_interrupt(var code: u8, var func: u8) {
+		low {
+			mov R10, $func
+			int $code
+		}
+	}
+
+	sub raise_interrupt(var code: u8, var func: u8, var __r9: u32) {
+		low {
+			mov R10, $func
+			mov R9, $__r9
+			int $code
+		}
+	}
+
+	sub raise_interrupt(var code: u8, var func: u8, var __r9: u32, var __r8: u32) {
+		low {
+			mov R10, $func
+			mov R9, $__r9
+			mov R8, $__r8
+			int $code
+		}
+	}
+
+	sub raise_interrupt(var code: u8, var func: u8, var __r9: u32, var __r8: u32, var __r11: u32) {
+		low {
+			mov R10, $func
+			mov R9, $__r9
+			mov R8, $__r8
+			mov R11, $__r11
+			int $code
+		}
 	}
 }

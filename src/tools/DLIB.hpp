@@ -13,8 +13,9 @@
 //   dependencies   the libraries it imports, as written in its #import(...)s
 //   interface      DScript source: the declarations (subs without bodies, structs, constants,
 //                  enums, aliases, globals; inline subs with their bodies)
-//   lines          interface line -> where it comes from (file, line, column delta), so that
-//                  errors, hover and go to definition point at the library's sources
+//   lines          interface line -> where it comes from (file relative to the library, line,
+//                  column delta), so that errors, hover and go to definition point at the
+//                  library's sources
 //   debug          (optional) the library's disassembly for the debugger, as the assembler
 //                  saves it (.dds entries: address, size, text; addresses from 0): dsc puts it
 //                  in the program's disassembly, at the library's address

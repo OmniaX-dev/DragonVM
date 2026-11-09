@@ -5,6 +5,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
@@ -249,5 +250,32 @@ c.request("shutdown", None)
 c.notify("exit", None)
 code = c.proc.wait(timeout=10)
 check("shutdown and exit", code == 0, "exit code %d" % code)
+
+# A compiled library: its names lead to its sources, whatever directory it was built from and
+# whatever directory the server runs in.
+with tempfile.TemporaryDirectory() as tmp:
+    tmp = os.path.realpath(tmp)
+    os.makedirs(os.path.join(tmp, "sdk", "src"))
+    os.makedirs(os.path.join(tmp, "sdk", "lib"))
+    lib_source = os.path.join(tmp, "sdk", "src", "geo.ds")
+    with open(lib_source, "w") as f:
+        f.write("namespace Geo {\n\tsub area(w: i32, h: i32) -> i32 {\n\t\treturn w * h;\n\t}\n}\n")
+    subprocess.run([os.path.join(ROOT, "bin", "dsc"), "--lib", "src/geo.ds", "-o", "lib/geo.dlib"], cwd=os.path.join(tmp, "sdk"), check=True)
+    app = os.path.join(tmp, "app.ds")
+    app_text = "#import(<geo>)\nsub main() -> i32 {\n\treturn Geo::area(2, 3);\n}\n"
+    with open(app, "w") as f:
+        f.write(app_text)
+    with open(os.path.join(tmp, "dsls.json"), "w") as f:
+        json.dump({"args": ["-L", "sdk/lib"]}, f)
+    c = Client()
+    c.request("initialize", {"processId": None, "rootUri": uri(tmp), "capabilities": {}})
+    c.notify("initialized", {})
+    c.notify("textDocument/didOpen", {"textDocument": {"uri": uri(app), "languageId": "dscript", "version": 1, "text": app_text}})
+    c.sync()
+    check("a program using a library has no errors", c.diagnostics.get(uri(app)) == [], str(c.diagnostics.get(uri(app))))
+    definition_is(c, "go to definition into a library's sources", app, app_text, 2, "area", lib_source, 1, "area")
+    c.request("shutdown", None)
+    c.notify("exit", None)
+    c.proc.wait(timeout=10)
 print("%d passed, %d failed" % (passed, failed))
 sys.exit(1 if failed else 0)

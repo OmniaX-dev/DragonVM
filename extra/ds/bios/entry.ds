@@ -1,20 +1,20 @@
-#include(data.ds)
-#include(<bios.ds>)
-#include(<dpt.ds>)
+#once
+
+#import(<dragon-sdk>)
+
 #include(int20.ds)
 #include(int30.ds)
-#include(allocator.ds)
-#include(<assert.ds>)
+#include(data.ds)
 
 sub main() {
-	*cast<u8*>(VGARegisters.VideoMode) = VGAVideoModes.TextSingleColor;
-	set_interrupts_enabled(true);
-	set_interrupt_vector_entry(0x20, &__int_20_handler);
-	set_interrupt_vector_entry(0x30, &__int_30_handler);
+	*cast<u8*>(dr::VGARegisters.VideoMode) = dr::VGAVideoModes.TextSingleColor;
+	dr::set_interrupts_enabled(true);
+	dr::set_interrupt_vector_entry(0x20, &__int_20_handler);
+	dr::set_interrupt_vector_entry(0x30, &__int_30_handler);
 
-	var stack_size: u32 = read_cmos(CMOSRegisters.StackSize);
+	var stack_size: u32 = dr::read_cmos(dr::CMOSRegisters.StackSize);
 	var heap_size: u32 = 4*1024*1024;
-	var heap_addr: u32 = read_cmos(CMOSRegisters.MemoryStart) + read_cmos(CMOSRegisters.MemorySize) - stack_size - heap_size;
+	var heap_addr: u32 = dr::read_cmos(dr::CMOSRegisters.MemoryStart) + dr::read_cmos(dr::CMOSRegisters.MemorySize) - stack_size - heap_size;
 	Allocator::init(cast<u8*>(heap_addr), heap_size);
 
 	__print_machine_info(stack_size + heap_size);
@@ -35,39 +35,39 @@ sub main() {
 	// Exit BIOS mode
 	low {
 		%low $INST_BIOS_NODE_TOGGLE 0x00
-		jmp $MemoryLayout.RAM
+		jmp $dr::MemoryLayout.RAM
 	}
 }
 
 sub __load_mbr_data_block() {
-	var disk: u8 = get_boot_disk();
-	var ddd: DiskDriverData;
-	ddd.mode = DiskMode.Read;
+	var disk: u8 = dr::get_boot_disk();
+	var ddd: dr::DiskDriverData;
+	ddd.mode = dr::DiskMode.Read;
 	ddd.disk = disk;
 	ddd.address = 0x00000000;
 	ddd.dataSize = 4194304;
-	ddd.memoryAddress = MemoryLayout.RAM;
-	raise_interrupt(0x20, INT20_LOAD_FROM_DDD_BLOCKING, cast<u32>(&ddd));
+	ddd.memoryAddress = dr::MemoryLayout.RAM;
+	dr::raise_interrupt(0x20, INT20_LOAD_FROM_DDD_BLOCKING, cast<u32>(&ddd));
 }
 
 sub __print_machine_info(var reserved_ram: u32) {
 	for (var i: u32 = 0; i < sizeof(BiosLogo) / sizeof(BiosLogo[0]); i++) {
-		TextSingle::print(BiosLogo[i]);
+		dr::TextSingle::print(BiosLogo[i]);
 		if (i == 1)
 		{
-			TextSingle::print(' ');
-			raise_interrupt(0x30, INT30_INVERT_COLORS_TEXT_SINGLE);
-			TextSingle::print(BiosName);
-			TextSingle::print(' ');
-			TextSingle::print(cast<u16>(BiosVersion >> 16));
-			TextSingle::print('.');
-			TextSingle::print(cast<u16>(BiosVersion & 0xFFFF));
-			raise_interrupt(0x30, INT30_INVERT_COLORS_TEXT_SINGLE);
+			dr::TextSingle::print(' ');
+			dr::raise_interrupt(0x30, INT30_INVERT_COLORS_TEXT_SINGLE);
+			dr::TextSingle::print(BiosName);
+			dr::TextSingle::print(' ');
+			dr::TextSingle::print(cast<u16>(BiosVersion >> 16));
+			dr::TextSingle::print('.');
+			dr::TextSingle::print(cast<u16>(BiosVersion & 0xFFFF));
+			dr::raise_interrupt(0x30, INT30_INVERT_COLORS_TEXT_SINGLE);
 		}
 		else if (i == 2)
 		{
-			TextSingle::print(" Clock: ");
-			var speed: u32 = *cast<u32*>(CMOSRegisters.ClockSpeed);
+			dr::TextSingle::print(" Clock: ");
+			var speed: u32 = *cast<u32*>(dr::CMOSRegisters.ClockSpeed);
 			var dec: u32 = 0;
 			var unit: string = "    ";
 			unit = "Hz";
@@ -83,26 +83,26 @@ sub __print_machine_info(var reserved_ram: u32) {
 					unit = "MHz";
 				}
 			}
-			TextSingle::print(speed);
-			TextSingle::print(".");
-			TextSingle::print(dec);
-			TextSingle::print(" ");
-			TextSingle::print(unit);
+			dr::TextSingle::print(speed);
+			dr::TextSingle::print(".");
+			dr::TextSingle::print(dec);
+			dr::TextSingle::print(" ");
+			dr::TextSingle::print(unit);
 		}
 		else if (i == 3)
 		{
-			TextSingle::print(" Memory: ");
-			var memStart: u32 = *cast<u32*>(CMOSRegisters.MemoryStart);
-			var memSize: u32 = *cast<u32*>(CMOSRegisters.MemorySize);
+			dr::TextSingle::print(" Memory: ");
+			var memStart: u32 = *cast<u32*>(dr::CMOSRegisters.MemoryStart);
+			var memSize: u32 = *cast<u32*>(dr::CMOSRegisters.MemorySize);
 			var mem: u32 = memSize - reserved_ram;
 			var buff: u8[10];
-			format_size(mem, buff, true, 2);
-			TextSingle::print(buff);
-			TextSingle::print("/");
-			format_size(memSize, buff);
-			TextSingle::print(buff);
+			dr::format_size(mem, buff, true, 2);
+			dr::TextSingle::print(buff);
+			dr::TextSingle::print("/");
+			dr::format_size(memSize, buff);
+			dr::TextSingle::print(buff);
 		}
-		TextSingle::new_line();
+		dr::TextSingle::new_line();
 	}
 	// TODO: Add back the info
 }
