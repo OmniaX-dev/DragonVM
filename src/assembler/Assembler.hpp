@@ -147,6 +147,10 @@ namespace dragon
 				static std::vector<tDisassemblyLine> disassemblyEntries(String programName = "");
 				static bool saveDisassemblyEntries(String fileName, const std::vector<tDisassemblyLine>& entries);
 				static void printProgramInfo(i32 verbose_level = 1);
+				// The .fixed values to report: dsc pads the image itself when it links libraries.
+				inline static void setFixedInfo(u32 size, u8 fill) { m_fixedSize = size; m_fixedFillValue = fill; }
+				// dsc links libraries after the assembly: their size (with alignment) goes in the report.
+				inline static void setLibrariesInfo(u32 size) { m_librariesSize = size; m_programSize += size; }
 				// After an assembly: every label and data symbol (without '$') and its address.
 				static std::vector<std::pair<std::string, u32>> symbolAddresses(void);
 
@@ -200,6 +204,7 @@ namespace dragon
 				inline static std::unordered_map<String, tLabel> m_labelTable;
 
 				inline static u32 m_fixedSize { 0 };
+				inline static u32 m_librariesSize { 0 };
 				inline static u8 m_fixedFillValue { 0x00 };
 				inline static u32 m_loadAddress { 0x00000000 };
 				inline static u32 m_currentDataAddr { 0x00000000 };

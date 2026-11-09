@@ -222,11 +222,28 @@ static bool loadDasmArgs(const Options& o)
 }
 
 // After the program is assembled (at the address it runs at): what the -Wa options ask for.
-static void dasmAfterAssembly(const Options& o)
+// --fixed <size>,<fill>
+static void parseFixed(const std::string& fixed, size_t& size, uint8_t& fill)
+{
+	const size_t comma = fixed.find(',');
+	size = (size_t)std::strtoul(fixed.substr(0, comma).c_str(), nullptr, 0);
+	fill = (uint8_t)(comma == std::string::npos ? 0 : std::strtoul(fixed.substr(comma + 1).c_str(), nullptr, 0));
+}
+
+static void dasmAfterAssembly(const Options& o, uint32_t librariesSize)
 {
 	auto& args = dragon::code::Assembler::Application::args;
 	if (o.dasmArgs.empty())
 		return;
+	if (!o.fixed.empty())
+	{
+		// With libraries, the assembler doesn't get .fixed (see the link step).
+		size_t size = 0;
+		uint8_t fill = 0;
+		parseFixed(o.fixed, size, fill);
+		dragon::code::Assembler::setFixedInfo((u32)size, fill);
+	}
+	dragon::code::Assembler::setLibrariesInfo(librariesSize);
 	if (args.verbose_level != -1)
 		dragon::code::Assembler::printProgramInfo(args.verbose_level);
 	// (-Wa,--save-disassembly: after the libraries are linked, with their code.)
@@ -268,7 +285,8 @@ struct Unit
 // FakeShift, the words that move are where they are used. relocatable: assembled again at
 // base + RelocDelta, the words that move by that are its own addresses.
 static bool assembleUnit(const std::vector<std::string>& dasm, const std::set<std::string>& importable, const std::string& directory, uint32_t base,
-	bool relocatable, Unit& out, const Options& o, bool program)
+	bool relocatable, Unit& out, const Options& o, bool program,
+	const std::vector<Preprocessor::ImportedLibrary>& libraries = {})
 {
 	const uint32_t RelocDelta = 0x01000000, FakeBase = 0xF0000000, FakeShift = 0x02000000;
 	std::set<std::string> defined;
@@ -346,7 +364,13 @@ static bool assembleUnit(const std::vector<std::string>& dasm, const std::set<st
 	out.symbols = dragon::code::Assembler::symbolAddresses();
 	out.disassembly = dragon::code::Assembler::disassemblyEntries(String(program ? std::filesystem::path(o.output).filename().string() : ""));
 	if (program)
-		dasmAfterAssembly(o);	// (a DRX's disassembly and symbols are at offset 0: add the load address)
+	{
+		// What the link step will append (each library aligned).
+		size_t end = a.size();
+		for (const auto& l : libraries)
+			end = ((end + 15) & ~(size_t)15) + l.library.image.size();
+		dasmAfterAssembly(o, (uint32_t)(end - a.size()));	// (a DRX's disassembly and symbols are at offset 0: add the load address)
+	}
 	std::vector<uint8_t> moved, shifted;
 	if (relocatable)
 		moved = assemble(lines, directory, base + RelocDelta);
@@ -690,7 +714,7 @@ int main(int argc, char** argv)
 	if (o.raw)
 		base = (uint32_t)std::strtoul((o.load.empty() ? (o.rom ? "0x00000000" : "0x01010000") : o.load).c_str(), nullptr, 0);
 	Unit unit;
-	if (!assembleUnit(dasm, importable, directory, 0, !o.raw, unit, o, true))
+	if (!assembleUnit(dasm, importable, directory, 0, !o.raw, unit, o, true, libraries))
 		return 1;
 	std::vector<uint8_t> image = unit.image;
 	std::vector<uint32_t> relocations = unit.relocations;
@@ -743,9 +767,9 @@ int main(int argc, char** argv)
 	{
 		if (!o.fixed.empty() && !libraries.empty())
 		{
-			const size_t comma = o.fixed.find(',');
-			const size_t size = (size_t)std::strtoul(o.fixed.substr(0, comma).c_str(), nullptr, 0);
-			const uint8_t fill = (uint8_t)(comma == std::string::npos ? 0 : std::strtoul(o.fixed.substr(comma + 1).c_str(), nullptr, 0));
+			size_t size = 0;
+			uint8_t fill = 0;
+			parseFixed(o.fixed, size, fill);
 			if (image.size() > size)
 			{
 				std::cerr << "dsc: the program and its libraries (" << image.size() << " bytes) are bigger than --fixed " << size << "\n";

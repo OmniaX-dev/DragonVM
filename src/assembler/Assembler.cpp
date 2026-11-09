@@ -65,6 +65,7 @@ namespace dragon
 			m_locStatement = false;
 			m_structDefs.clear();
 			m_fixedSize = 0;
+			m_librariesSize = 0;
 			m_fixedFillValue = 0x00;
 			m_loadAddress = defaultLoadAddress;
 			m_currentDataAddr = defaultLoadAddress + EntryJumpSize;
@@ -193,6 +194,24 @@ namespace dragon
 			return serializer.saveToFile(fileName);
 		}
 
+		// 512 B, 1.5 KiB (1536 bytes), 16 MiB (16777216 bytes): two decimals at most, cut (not rounded).
+		static String sizeText(u32 bytes)
+		{
+			if (bytes < 1024)
+				return String(std::to_string(bytes) + " B");
+			const u64 unit = (bytes < 1024 * 1024) ? 1024 : 1024 * 1024;
+			const u64 hundredths = (u64)bytes * 100 / unit;
+			std::string text = std::to_string(hundredths / 100);
+			const u64 decimals = hundredths % 100;
+			if (decimals != 0)
+			{
+				text += "." + std::to_string(decimals / 10);
+				if (decimals % 10 != 0)
+					text += std::to_string(decimals % 10);
+			}
+			return String(text + (unit == 1024 ? " KiB (" : " MiB (") + std::to_string(bytes) + " bytes)");
+		}
+
 		void Assembler::printProgramInfo(i32 verbose_level)
 		{
 			if (verbose_level == 0xFF) return;
@@ -239,9 +258,19 @@ namespace dragon
 			if (verbose_level == 0 || verbose_level == 1)
 			{
 				out.fg(ostd::ConsoleColors::Yellow).p("Program data:").nl();
-				out.fg(ostd::ConsoleColors::Cyan).p(String("Fixed Size:  ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p((int)m_fixedSize).p(" bytes").nl();
-				out.fg(ostd::ConsoleColors::Cyan).p(String("Program Size:").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p((int)m_programSize).p(" bytes").nl();
-				out.fg(ostd::ConsoleColors::Cyan).p(String("Data Size:   ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p((int)m_dataSize).p(" bytes").nl();
+				out.fg(ostd::ConsoleColors::Cyan).p(String("Fixed Size:  ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p(sizeText(m_fixedSize)).nl();
+				out.fg(ostd::ConsoleColors::Cyan).p(String("Program Size:").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p(sizeText(m_programSize)).nl();
+				if (m_librariesSize > 0)
+					out.fg(ostd::ConsoleColors::Cyan).p(String("Libs:        ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p(sizeText(m_librariesSize)).nl();
+				out.fg(ostd::ConsoleColors::Cyan).p(String("Data Size:   ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p(sizeText(m_dataSize)).nl();
+				if (m_fixedSize > 0)
+				{
+					// (m_programSize already has the data section and the libraries in it.)
+					const u64 hundredths = (u64)m_programSize * 10000 / m_fixedSize;
+					const u64 decimals = hundredths % 100;
+					out.fg(ostd::ConsoleColors::Cyan).p(String("Used:        ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed)
+						.p(String(std::to_string(hundredths / 100) + "." + (decimals < 10 ? "0" : "") + std::to_string(decimals) + "%")).nl();
+				}
 				out.fg(ostd::ConsoleColors::Cyan).p(String("Fixed Fill:  ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p(String::getHexStr(m_fixedFillValue, true, 1)).nl();
 				out.fg(ostd::ConsoleColors::Cyan).p(String("Load Address:").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p(String::getHexStr(m_loadAddress, true, 4)).nl();
 				out.fg(ostd::ConsoleColors::Cyan).p(String("Entry Point: ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p(String::getHexStr(m_dataSize + m_loadAddress + EntryJumpSize, true, 4)).nl();
