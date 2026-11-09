@@ -1,0 +1,16 @@
+// dr::utoa: unsigned integers, in any base from 2 to 36.
+// expect-rv: 0
+#include(check.ds)
+#import(<dragon-sdk>)
+
+sub main() -> i32 {
+	var b: u8[33];
+	check(1, dr::strcmp(dr::utoa(0, b), "0") == 0);
+	check(2, dr::strcmp(dr::utoa(4294967295, b), "4294967295") == 0);
+	check(3, dr::strcmp(dr::utoa(0xFFFFFFFF, b, 16), "ffffffff") == 0);
+	check(4, dr::strcmp(dr::utoa(0xFFFFFFFF, b, 2), "11111111111111111111111111111111") == 0);
+	check(5, dr::strcmp(dr::utoa(35, b, 36), "z") == 0);
+	check(6, dr::strcmp(dr::utoa(10, b, 1), "") == 0);
+	check(7, dr::strcmp(dr::utoa(10, b, 37), "") == 0);
+	return result();
+}

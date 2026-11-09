@@ -30,19 +30,29 @@ namespace dr {
 	    return result;
 	}
 
-	// An unsigned integer in decimal (result: at least 11 bytes).
-	sub utoa(var value: u32, var result: u8*) -> string
+	// Like itoa, for an unsigned integer (result: up to 33 bytes, in base 2; 11 in base 10).
+	sub utoa(var value: u32, var result: u8*, var base: i32 = 10) -> string
 	{
-		var digits: u8[10];
-		var count: u32 = 0;
-		do {
-			digits[count++] = cast<u8>('0' + value % 10);
-			value /= 10;
-		} while (value);
+		// check that the base if valid
+		if (base < 2 or base > 36) { *result = '\0'; return result; }
+
+		var ubase: u32 = cast<u32>(base);
 		var ptr: u8* = result;
-		while (count > 0)
-			*ptr++ = digits[--count];
-		*ptr = '\0';
+		var ptr1: u8* = result;
+		var tmp_char: u8;
+
+		do {
+			*ptr++ = "0123456789abcdefghijklmnopqrstuvwxyz" [value % ubase];
+			value /= ubase;
+		} while (value);
+		*ptr-- = '\0';
+
+		// Reverse the string
+		while (ptr1 < ptr) {
+			tmp_char = *ptr;
+			*ptr-- = *ptr1;
+			*ptr1++ = tmp_char;
+		}
 		return result;
 	}
 
