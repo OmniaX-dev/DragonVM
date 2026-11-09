@@ -466,7 +466,8 @@ sub print(var text: string) -> void {
 #define(NAME = tokens)     #define(NAME)     #undef(NAME)
 #define(NAME(a, b) = tokens)                 with parameters
 #if(expr) #ifdef(NAME) #ifndef(NAME) #elif(expr) #else #endif
-#once                      this file is included once
+#multiple                  this file can be included many times (the first thing in the file)
+#once                      accepted, does nothing: files are included once by default
 #error(message)  #warning(message)
 ```
 Defined names are replaced (as tokens) everywhere. `#if` expressions use integers, the C
@@ -533,6 +534,7 @@ it and dsc links it into them. There are no header files: the compiler writes th
 declarations into the `.dlib` itself.
 ```
 dsc gfx.ds --lib -o build/gfx.dlib           // a library: no main
+dsc src/*.ds --lib -o build/gfx.dlib         // several files, compiled as one, in order
 dsc game.ds -L build -o game.drx             // #import(<gfx>) in game.ds
 ```
 ```

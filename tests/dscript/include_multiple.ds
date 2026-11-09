@@ -1,0 +1,10 @@
+// A file starting with #multiple is pasted at every #include.
+// expect-rv: 3
+
+sub main() -> i32 {
+	var counter_total: i32 = 0;
+	#include(libs/repeat.ds)
+	#include(libs/repeat.ds)
+	#include(libs/repeat.ds)
+	return counter_total;
+}

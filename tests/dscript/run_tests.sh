@@ -44,7 +44,9 @@ for t in "${tests[@]}"; do
 	if [ ${#libs[@]} -gt 0 ]; then
 		mkdir -p "$OUT/$name.libs"
 		for lib in "${libs[@]}"; do
-			if ! "$DSC" "$lib" --lib -I "$ROOT/extra/ds/sdk" -L "$OUT/$name.libs" -o "$OUT/$name.libs/$(basename "$lib" .ds).dlib" > "$OUT/$name.log" 2>&1; then
+			# a.ds,b.ds: one library from several files (named after the first one)
+			IFS=, read -r -a lib_sources <<< "$lib"
+			if ! "$DSC" "${lib_sources[@]}" --lib -I "$ROOT/extra/ds/sdk" -L "$OUT/$name.libs" -o "$OUT/$name.libs/$(basename "${lib_sources[0]}" .ds).dlib" > "$OUT/$name.log" 2>&1; then
 				ok=0; msg="library $lib: compile error: $(cat "$OUT/$name.log")"
 			fi
 		done

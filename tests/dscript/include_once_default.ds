@@ -1,0 +1,6 @@
+// Files are included once without #once.
+// expect-rv: 7
+#include(libs/once_default.ds)
+#include(libs/once_default.ds)
+
+sub main() -> i32 { return OnceDefault; }

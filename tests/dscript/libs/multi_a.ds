@@ -1,0 +1,6 @@
+// Part of a library made of several files; includes multi_b.ds, also given to dsc.
+#include(multi_b.ds)
+
+namespace Multi {
+	sub from_a() -> i32 { return from_b() + 1; }
+}

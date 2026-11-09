@@ -1,0 +1,4 @@
+// expect-error: recursive #include
+#include(libs/recursive.ds)
+
+sub main() -> i32 { return 0; }

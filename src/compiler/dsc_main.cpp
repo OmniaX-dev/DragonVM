@@ -18,7 +18,8 @@ using namespace dscript;
 
 struct Options
 {
-	std::string input;
+	std::string input;					// the first source file
+	std::vector<std::string> inputs;	// all of them (more than one: only for libraries)
 	std::string output;
 	std::string dasmOutput;
 	std::vector<std::string> includeDirs;
@@ -41,12 +42,14 @@ static void printHelp(void)
 {
 	std::cout <<
 		"dsc - the DScript compiler\n\n"
-		"Usage: dsc <source.ds> [options]\n\n"
+		"Usage: dsc <source.ds> [options]\n"
+		"       dsc --lib <source.ds>... -o <file.dlib> [options]\n\n"
 		"  -o <file>                 Output file (default: the source name with .drx, or .bin with --raw)\n"
 		"  -I <dir>                  Adds an include directory (#include(<file>) and fallback for #include(file))\n"
 		"  -L <dir>                  Adds a library directory (#import(<name>): name.dlib; fallback for #import(path))\n"
 		"  --lib                     Compiles a library (.dlib) instead of a program: no main; programs use it with\n"
-		"                            #import(<name>), and it is linked into them\n"
+		"                            #import(<name>), and it is linked into them. Can take several source files\n"
+		"                            (compiled as one, in order; -o is then required)\n"
 		"  -D <NAME>[=<value>]       Defines NAME (like #define)\n"
 		"  --emit-dasm <file>        Also writes the generated dasm source\n"
 		"  --debug, -g               Keeps debug_break / debug_* instructions of low blocks\n"
@@ -127,17 +130,23 @@ static int parseArgs(int argc, char** argv, Options& o)
 			std::cerr << "dsc: unknown option: " << a << " (see --help)\n";
 			return 2;
 		}
-		else if (o.input.empty())
-			o.input = a;
 		else
-		{
-			std::cerr << "dsc: only one source file is compiled (found " << a << ")\n";
-			return 2;
-		}
+			o.inputs.push_back(a);
 	}
-	if (o.input.empty())
+	if (o.inputs.empty())
 	{
 		std::cerr << "dsc: no source file (see --help)\n";
+		return 2;
+	}
+	o.input = o.inputs[0];
+	if (o.inputs.size() > 1 && !o.library)
+	{
+		std::cerr << "dsc: only one source file is compiled, unless it's a library (--lib) (found " << o.inputs[1] << ")\n";
+		return 2;
+	}
+	if (o.inputs.size() > 1 && o.output.empty())
+	{
+		std::cerr << "dsc: a library made of several source files needs -o\n";
 		return 2;
 	}
 	if (!o.raw && (!o.load.empty() || !o.fixed.empty() || !o.header.empty() || !o.disassemblyDir.empty()))
@@ -543,7 +552,7 @@ int main(int argc, char** argv)
 			pp.define("__ROM__", "1");
 		for (const auto& d : o.defines)
 			pp.define(d.first, d.second);
-		std::vector<Token> tokens = pp.processFile(o.input);
+		std::vector<Token> tokens = pp.processFiles(o.inputs);
 		Parser parser(tokens);
 		Node* program = parser.parseProgram();
 		CodeGenOptions cg;

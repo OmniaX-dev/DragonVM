@@ -1,0 +1,4 @@
+// expect-error: #multiple must be the first thing in the file
+#include(libs/multiple_late.ds)
+
+sub main() -> i32 { return 0; }

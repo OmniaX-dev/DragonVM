@@ -1,0 +1,4 @@
+// Not included by the others.
+namespace Multi {
+	sub from_c(var t: Thing*) -> i32 { return t->v + 100; }
+}

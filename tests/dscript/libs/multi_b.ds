@@ -1,0 +1,4 @@
+namespace Multi {
+	struct Thing { var v: i32; };
+	sub from_b() -> i32 { return 10; }
+}

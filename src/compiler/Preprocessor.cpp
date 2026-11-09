@@ -198,12 +198,34 @@ namespace dscript
 		m_includeStack.push_back(canonical);
 		Lexer lexer(source, path);
 		std::vector<Token> tokens = lexer.tokenize();
+		// Files are included once, unless they start with #multiple.
+		if (tokens.front().kind == TokenKind::Directive && trim(tokens.front().text) == "multiple")
+			tokens.erase(tokens.begin());
+		else
+			m_onceFiles.insert(canonical);
 		std::vector<Token> out;
 		std::string directory = std::filesystem::path(path).parent_path().string();
 		processTokens(tokens, directory, out);
 		m_includeStack.pop_back();
 		if (m_includeStack.empty())
 			out.push_back(tokens.back());	// End
+		return out;
+	}
+
+	std::vector<Token> Preprocessor::processFiles(const std::vector<std::string>& paths)
+	{
+		std::vector<Token> out;
+		Token end;
+		for (const auto& path : paths)
+		{
+			if (m_onceFiles.count(std::filesystem::weakly_canonical(path).string()) > 0)
+				continue;
+			std::vector<Token> tokens = processFile(path);
+			end = tokens.back();
+			tokens.pop_back();
+			out.insert(out.end(), tokens.begin(), tokens.end());
+		}
+		out.push_back(end);
 		return out;
 	}
 
@@ -585,7 +607,9 @@ namespace dscript
 			importLibrary(tok, path, out);
 		}
 		else if (name == "once")
-			m_onceFiles.insert(m_includeStack.back());
+			;	// the default
+		else if (name == "multiple")
+			error(tok.pos, "#multiple must be the first thing in the file");
 		else if (name == "error")
 			error(tok.pos, "#error: " + argument(tok, rest, name));
 		else if (name == "warning")

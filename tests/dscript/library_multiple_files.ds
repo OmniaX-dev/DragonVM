@@ -1,0 +1,10 @@
+// A library compiled from several files; a file given twice (through an #include) counts once.
+// dsc-lib: libs/multi_a.ds,libs/multi_b.ds,libs/multi_c.ds
+// expect-rv: 121
+#import(<multi_a>)
+
+sub main() -> i32 {
+	var t: Multi::Thing;
+	t.v = 10;
+	return Multi::from_a() + Multi::from_c(&t);
+}

@@ -18,7 +18,9 @@ namespace dscript
 	//   #import(path) #import(<name>)   a compiled library (name.dlib, see DLIB.hpp): next to the
 	//                             file, then in the library dirs (-L); <name>: the library dirs only.
 	//                             Its declarations are put there (once), its dependencies first.
-	//   #once                     the file is included only once
+	//   #multiple                 (first thing in the file) the file can be included many times;
+	//                             every other file is included only once
+	//   #once                     accepted, does nothing (it is the default)
 	//   #error(message) #warning(message)
 	// Defined names are replaced by their tokens (recursively, but never inside their own
 	// expansion) everywhere else. A name with parameters is only replaced when it's followed
@@ -29,6 +31,8 @@ namespace dscript
 			Preprocessor(const std::vector<std::string>& includeDirs);
 			void define(const std::string& name, const std::string& value);
 			std::vector<Token> processFile(const std::string& path);
+			// Several files, in order, as one program (a file already included is skipped).
+			std::vector<Token> processFiles(const std::vector<std::string>& paths);
 
 			// For the language server: the text of files open in the editor (by canonical path),
 			// used instead of what is on the disk; the #includes go in the index.
