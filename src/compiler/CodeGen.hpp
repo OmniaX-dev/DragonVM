@@ -90,7 +90,7 @@ namespace dscript
 			// deferDepth: the defer frames outside the loop (break / continue run the ones above).
 			struct Loop { std::string breakLabel; std::string continueLabel; size_t deferDepth { 0 }; };
 			// A defer: its statement, and the variables it sees (those declared before it).
-			struct Deferred { Node* body; std::vector<std::map<std::string, VarInfo*>> scopes; };
+			struct Deferred { Node* body; std::vector<std::map<std::string, VarInfo*>> scopes; int atomic; };
 			typedef std::string Reg;
 
 		private:
@@ -235,6 +235,7 @@ namespace dscript
 			std::vector<Loop> m_loops;
 			// defer: a frame per block being generated (the sub's body is the first one).
 			std::vector<std::vector<Deferred>> m_defers;
+			int m_atomic { 0 };			// in an atomic block (interrupts disabled: an int would be ignored)
 			int m_inDefer { 0 };		// generating a defer's statement (return / break / continue cannot leave it)
 			// Inline subs being expanded (innermost last): return jumps to endLabel.
 			struct InlineCall { FuncInfo* func; std::string endLabel; };

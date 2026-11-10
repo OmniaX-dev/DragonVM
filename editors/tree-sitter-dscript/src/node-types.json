@@ -681,6 +681,27 @@
     }
   },
   {
+    "type": "atomic_modifier",
+    "named": true,
+    "fields": {}
+  },
+  {
+    "type": "atomic_statement",
+    "named": true,
+    "fields": {
+      "body": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "block",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "binary_expression",
     "named": true,
     "fields": {
@@ -954,6 +975,10 @@
       "types": [
         {
           "type": "assert_statement",
+          "named": true
+        },
+        {
+          "type": "atomic_statement",
           "named": true
         },
         {
@@ -1596,6 +1621,10 @@
             "named": true
           },
           {
+            "type": "atomic_statement",
+            "named": true
+          },
+          {
             "type": "block",
             "named": true
           },
@@ -1677,6 +1706,10 @@
           },
           {
             "type": "assert_statement",
+            "named": true
+          },
+          {
+            "type": "atomic_statement",
             "named": true
           },
           {
@@ -2300,6 +2333,10 @@
             "named": true
           },
           {
+            "type": "atomic_statement",
+            "named": true
+          },
+          {
             "type": "block",
             "named": true
           },
@@ -2707,6 +2744,10 @@
       "required": false,
       "types": [
         {
+          "type": "atomic_modifier",
+          "named": true
+        },
+        {
           "type": "inline_modifier",
           "named": true
         },
@@ -2821,6 +2862,10 @@
           },
           {
             "type": "assert_statement",
+            "named": true
+          },
+          {
+            "type": "atomic_statement",
             "named": true
           },
           {
@@ -2985,6 +3030,10 @@
           },
           {
             "type": "assert_statement",
+            "named": true
+          },
+          {
+            "type": "atomic_statement",
             "named": true
           },
           {
@@ -5058,6 +5107,10 @@
             "named": true
           },
           {
+            "type": "atomic_statement",
+            "named": true
+          },
+          {
             "type": "block",
             "named": true
           },
@@ -5389,6 +5442,10 @@
   },
   {
     "type": "assert",
+    "named": false
+  },
+  {
+    "type": "atomic",
     "named": false
   },
   {

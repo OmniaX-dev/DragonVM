@@ -798,3 +798,23 @@ sub main() -> i32 {
                 (number_literal))))))
       (return_statement
         (number_literal)))))
+
+================================================================================
+Atomic blocks and subs
+================================================================================
+
+atomic sub bump() { atomic { n++; } }
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    (atomic_modifier)
+    (identifier)
+    (parameter_list)
+    (block
+      (atomic_statement
+        (block
+          (expression_statement
+            (update_expression
+              (identifier))))))))

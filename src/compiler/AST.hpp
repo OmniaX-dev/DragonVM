@@ -70,6 +70,8 @@ namespace dscript
 		int external { 0 };
 		// Inline subs: the tokens of the body (from '{' to '}'), for a library's interface.
 		std::vector<Token> bodyTokens;
+		// Block: the body of an atomic block (interrupts disabled; see Parser::atomicBlock).
+		bool atomic { false };
 
 		// Filled in by the code generator.
 		Type* type { nullptr };

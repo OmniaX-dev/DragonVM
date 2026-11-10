@@ -36,6 +36,7 @@
 	"assert"
 	"debug_print"
 	"defer"
+	"atomic"
 ] @keyword
 
 [
@@ -45,6 +46,7 @@
 ] @keyword
 
 (interrupt_modifier) @keyword
+(atomic_modifier) @keyword
 (inline_modifier) @keyword
 (static_modifier) @keyword
 (priv_modifier) @keyword

@@ -843,6 +843,10 @@
             "members": [
               {
                 "type": "SYMBOL",
+                "name": "atomic_modifier"
+              },
+              {
+                "type": "SYMBOL",
                 "name": "interrupt_modifier"
               },
               {
@@ -927,6 +931,10 @@
     "interrupt_modifier": {
       "type": "STRING",
       "value": "interrupt"
+    },
+    "atomic_modifier": {
+      "type": "STRING",
+      "value": "atomic"
     },
     "static_modifier": {
       "type": "STRING",
@@ -1589,6 +1597,10 @@
         },
         {
           "type": "SYMBOL",
+          "name": "atomic_statement"
+        },
+        {
+          "type": "SYMBOL",
           "name": "expression_statement"
         },
         {
@@ -1664,6 +1676,23 @@
           "content": {
             "type": "SYMBOL",
             "name": "_statement"
+          }
+        }
+      ]
+    },
+    "atomic_statement": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "atomic"
+        },
+        {
+          "type": "FIELD",
+          "name": "body",
+          "content": {
+            "type": "SYMBOL",
+            "name": "block"
           }
         }
       ]

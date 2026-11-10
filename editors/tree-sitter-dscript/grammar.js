@@ -145,7 +145,7 @@ module.exports = grammar({
 
 		function_declaration: $ => seq(
 			// static: in a struct, a sub without this (static inline / inline static)
-			repeat(choice($.interrupt_modifier, $.inline_modifier, $.static_modifier, $.priv_modifier)),
+			repeat(choice($.atomic_modifier, $.interrupt_modifier, $.inline_modifier, $.static_modifier, $.priv_modifier)),
 			'sub',
 			field('name', $.identifier),
 			field('parameters', $.parameter_list),
@@ -153,6 +153,8 @@ module.exports = grammar({
 			choice(field('body', $.block), ';'),
 		),
 		interrupt_modifier: _ => 'interrupt',
+		// atomic sub: its body runs with interrupts disabled (like atomic { ... })
+		atomic_modifier: _ => 'atomic',
 		static_modifier: _ => 'static',
 		// priv: a struct field or sub only the struct's own subs can use
 		priv_modifier: _ => 'priv',
@@ -230,6 +232,7 @@ module.exports = grammar({
 			$.assert_statement,
 			$.debug_print_statement,
 			$.defer_statement,
+			$.atomic_statement,
 			$.expression_statement,
 			$.empty_statement,
 		),
@@ -240,6 +243,9 @@ module.exports = grammar({
 
 		// Run when the block is left (in the reverse order), on every way out of it.
 		defer_statement: $ => seq('defer', field('body', $._statement)),
+
+		// Interrupts disabled in the block, put back as they were on every way out of it.
+		atomic_statement: $ => seq('atomic', field('body', $.block)),
 
 		debug_print_statement: $ => seq('debug_print', '(', field('value', $._expression), ')', ';'),
 

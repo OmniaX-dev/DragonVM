@@ -368,7 +368,7 @@ Not checked: low blocks (raw dasm), and writes through pointers to the program's
 `var` declarations (locals: scalars are not initialized unless given a value; structs are zeroed
 and get their default values), `if` / `else`, `while`, `do ... while (...);`,
 `for (init; condition; step)`, `break`, `continue`, `return`, blocks, expression statements,
-`low { ... }`, `assert(...)`, `debug_print(...)`, `defer ...`.
+`low { ... }`, `assert(...)`, `debug_print(...)`, `defer ...`, `atomic { ... }`.
 
 ### defer
 `defer <statement or block>` runs that code when the block it is in is left, on every way out:
@@ -395,6 +395,26 @@ sub copy(var path: string) -> i32 {
   the body of `if` / `while` / ...: it needs a block (`if (c) { defer ...; }`).
 - The code is generated at every exit (like an inline sub), so a long defer in a sub with many
   `return`s makes it bigger. Jumping out of a low block skips the defers.
+
+### atomic
+`atomic { ... }` runs the block with interrupts disabled, and puts them back as they were on
+every way out of it (the end, `return`, `break`, `continue`): it saves the `InterruptsEnabled`
+flag, clears it, and restores the saved value (not just enables it), so atomic blocks can be
+nested and used where interrupts are already disabled. `atomic sub` (also `atomic interrupt
+sub`, and `atomic` methods) makes the whole body an atomic block.
+```
+var g_ticks: u32;                   // also written by an interrupt sub
+atomic sub take_ticks() -> u32 {
+    var t: u32 = g_ticks;           // no interrupt between the read and the write
+    g_ticks = 0;
+    return t;
+}
+```
+- The CPU ignores every interrupt while they are disabled, `int` too: a `raise_interrupt`
+  (`print`, `malloc`, ...) does nothing in an atomic block. An `int` written in a low block of
+  an atomic block is an error; the compiler cannot see the ones in the subs it calls.
+- Defers written inside the block run before interrupts are put back.
+- Not in inline subs (`atomic` uses a low block).
 
 ### Expressions
 C operators and precedence: `= += -= *= /= %= &= |= ^= <<= >>=`, `?:`, `|| &&` (also `or`

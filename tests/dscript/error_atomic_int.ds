@@ -1,0 +1,7 @@
+// expect-error: int in an atomic block
+sub main() -> i32 {
+	atomic {
+		low { int 0x20 }
+	}
+	return 0;
+}

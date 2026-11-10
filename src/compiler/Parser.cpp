@@ -25,6 +25,7 @@
 //   Return:      a = value       ExprStmt: a       LowBlock: text
 //   Assert:      a = condition, b = message (optional), text = the condition as written
 //   Defer:       a = the statement run when the block is left
+//   atomic { }:  a Block (see atomicBlock)
 //   Unary:       name = operator, a          Binary / Assign: name = operator, a, b
 //   Ternary:     a ? b : c                   Call: a = callee, list = arguments
 //   Index:       a[b]                        Member: a.name / a->name (value = 1)
@@ -283,14 +284,27 @@ namespace dscript
 			error(peek().pos, "'static' is for the local variables and constants of a sub (a global already exists for the whole program)");
 		if (isKeyword("priv"))
 			error(peek().pos, "'priv' is for the fields and subs of a struct");
+		if (acceptKeyword("atomic"))
+		{
+			if (isKeyword("inline"))
+				error(peek().pos, "inline subs cannot be atomic (they are copied into their callers: use a normal sub)");
+			const bool interrupt = acceptKeyword("interrupt");
+			if (!isKeyword("sub"))
+				error(peek().pos, "'sub' expected after 'atomic'");
+			return parseFunction(32 | (interrupt ? 1 : 0));
+		}
 		if (acceptKeyword("interrupt"))
 		{
+			if (isKeyword("atomic"))
+				error(peek().pos, "write 'atomic interrupt sub'");
 			if (!isKeyword("sub"))
 				error(peek().pos, "'sub' expected after 'interrupt'");
 			return parseFunction(1);
 		}
 		if (acceptKeyword("inline"))
 		{
+			if (isKeyword("atomic"))
+				error(peek().pos, "inline subs cannot be atomic (they are copied into their callers: use a normal sub)");
 			if (isKeyword("interrupt"))
 				error(peek().pos, "interrupt subs cannot be inline (they are entered by an interrupt, not called)");
 			if (!isKeyword("sub"))
@@ -337,7 +351,7 @@ namespace dscript
 			}
 			if (isKeyword("static") && isKeyword("var", 1))
 				error(peek(1).pos, "structs have no static fields: use a global (or a constant) next to the struct");
-			if (isKeyword("sub") || isKeyword("inline") || isKeyword("static") || isKeyword("priv"))
+			if (isKeyword("sub") || isKeyword("inline") || isKeyword("static") || isKeyword("priv") || isKeyword("atomic"))
 			{
 				// A method: a hidden top-level sub (added at the end of the program). static: no
 				// this, called as Struct::name(...) / Struct.name(...).
@@ -353,9 +367,13 @@ namespace dscript
 						flags |= 2;
 					else if ((flags & 16) == 0 && acceptKeyword("priv"))
 						flags |= 16;
+					else if ((flags & 32) == 0 && acceptKeyword("atomic"))
+						flags |= 32;
 					else
 						break;
 				}
+				if ((flags & 34) == 34)
+					error(peek().pos, "inline subs cannot be atomic (they are copied into their callers: use a normal sub)");
 				if (!isKeyword("sub"))
 					error(peek().pos, "'sub' expected after '" + m_tokens[m_pos - 1].text + "', found " + describe(peek()));
 				Node* outerFunc = m_currentFunc;
@@ -498,8 +516,8 @@ namespace dscript
 		return n;
 	}
 
-	// FuncDecl flags (value): 1 interrupt, 2 inline.
-	// FuncDecl flags (value): 1 interrupt, 2 inline, 4 method, 8 static method, 16 priv. owner:
+	// FuncDecl flags (value): 1 interrupt, 2 inline, 4 method, 8 static method, 16 priv, 32 atomic
+	// (the body is an atomic block). owner:
 	// the struct of a method.
 	Node* Parser::parseFunction(int flags, const Node* owner)
 	{
@@ -542,6 +560,8 @@ namespace dscript
 			declareLocal(p->name);
 		const size_t bodyStart = m_pos;
 		n->a = parseBlock();
+		if ((flags & 32) != 0)
+			n->a = atomicBlock(n->a, n->pos);
 		if ((flags & 2) != 0)
 			n->bodyTokens.assign(m_tokens.begin() + (std::ptrdiff_t)bodyStart, m_tokens.begin() + (std::ptrdiff_t)m_pos);
 		popScope();
@@ -768,6 +788,56 @@ namespace dscript
 		m_scopes.pop_back();
 	}
 
+	// atomic { body }: interrupts are disabled in the body, and put back as they were (not just
+	// enabled: atomic blocks can be nested) on every way out of it:
+	//   { var __atomic_N: u32;
+	//     low { mov $__atomic_N, FL }   low { zflg 0 }          (InterruptsEnabled: bit 0 of FL)
+	//     defer { the bit of __atomic_N back into FL }
+	//     body }                                                (body->atomic: no int in it)
+	// The CPU ignores every interrupt while they are disabled, int too.
+	Node* Parser::atomicBlock(Node* body, const SourcePos& pos)
+	{
+		if (m_currentFunc != nullptr && (m_currentFunc->value & 2) != 0)
+			error(pos, "atomic cannot be used in inline subs (they are copied into their callers: use a normal sub)");
+		const std::string saved = "__atomic_" + std::to_string(m_atomicCount++);
+		auto l_low = [&](const std::string& text, const SourcePos& at) {
+			Node* low = make(NodeKind::LowBlock, at);
+			low->text = text;
+			return low;
+		};
+		Node* block = make(NodeKind::Block, pos);
+		block->endPos = body->endPos;
+		Node* var = make(NodeKind::VarDecl, pos);
+		var->name = saved;
+		var->namePos = pos;
+		var->typeSyntax = new TypeSyntax();
+		var->typeSyntax->pos = pos;
+		var->typeSyntax->name = "u32";
+		var->typeSyntax->resolved = true;
+		block->list.push_back(var);
+		block->list.push_back(l_low("mov $" + saved + ", FL", pos));
+		block->list.push_back(l_low("zflg 0", pos));
+		// FL = (FL & ~1) | (saved & 1), with interrupts still disabled until the last mov. Only the
+		// low blocks' scratch registers (S1, S2: reg(0x07), reg(0x08)) and ACC (and / or write
+		// their result there): a return value is waiting in a register while the defers run.
+		Node* restore = make(NodeKind::Block, body->endPos);
+		restore->endPos = body->endPos;
+		for (const char* line : { "mov reg(0x08), FL", "and reg(0x08), 0xFFFFFFFE", "mov reg(0x08), ACC", "mov reg(0x07), $SAVED", "and reg(0x07), 1", "or ACC, reg(0x08)", "mov FL, ACC" })
+		{
+			std::string text = line;
+			const size_t at = text.find("SAVED");
+			if (at != std::string::npos)
+				text.replace(at, 5, saved);
+			restore->list.push_back(l_low(text, body->endPos));
+		}
+		Node* deferred = make(NodeKind::Defer, pos);
+		deferred->a = restore;
+		block->list.push_back(deferred);
+		body->atomic = true;
+		block->list.push_back(body);
+		return block;
+	}
+
 	void Parser::declareLocal(const std::string& name, const std::string& hidden)
 	{
 		if (!m_scopes.empty())
@@ -968,6 +1038,12 @@ namespace dscript
 			expectPunct(")", "after assert(condition[, message])");
 			expectPunct(";", "after assert(...)");
 			return n;
+		}
+		if (acceptKeyword("atomic"))
+		{
+			if (!isPunct("{"))
+				error(peek().pos, "'{' expected after 'atomic' (atomic { ... })");
+			return atomicBlock(parseBlock(), pos);
 		}
 		if (acceptKeyword("defer"))
 		{

@@ -1,0 +1,69 @@
+// atomic { ... } / atomic sub: interrupts are disabled inside, and put back as they were on
+// every way out (the end, return, break, continue), also when nested.
+// expect-rv: 0
+#include(check.ds)
+
+sub ie() -> u32 { var f: u32; low { mov $f, FL } return f & 1; }
+sub on() { low { sflg 0 } }
+sub off() { low { zflg 0 } }
+
+var g_seen: u32 = 99;
+
+atomic sub crit() -> u32 { return ie(); }
+atomic interrupt sub never_installed() { g_seen = ie(); }
+
+struct Counter {
+	var n: u32;
+	atomic sub bump() -> u32 { this->n++; return ie(); }
+	static atomic sub flag() -> u32 { return ie(); }
+};
+
+sub early(var x: i32) -> u32 {
+	atomic {
+		if (x > 0)
+			return ie() + 10;
+	}
+	return ie() + 20;
+}
+
+sub main() -> i32 {
+	on();
+	atomic { check(1, ie() == 0); }
+	check(2, ie() == 1);
+
+	off();
+	atomic { check(3, ie() == 0); }
+	check(4, ie() == 0);			// was disabled: stays disabled
+
+	on();
+	atomic {
+		atomic { check(5, ie() == 0); }
+		check(6, ie() == 0);		// the inner block doesn't enable them
+	}
+	check(7, ie() == 1);
+
+	check(8, early(1) == 10 && ie() == 1);
+	check(9, early(0) == 21 && ie() == 1);
+
+	var count: u32 = 0;
+	for (var i: u32 = 0; i < 5; i++) {
+		atomic {
+			if (i == 1) continue;
+			if (i == 3) break;
+			count++;
+		}
+	}
+	check(10, count == 2 && ie() == 1);
+
+	check(11, crit() == 0 && ie() == 1);
+	var c: Counter;
+	c.n = 0;
+	check(12, c.bump() == 0 && c.n == 1 && ie() == 1);
+	check(13, Counter::flag() == 0 && ie() == 1);
+
+	atomic {
+		defer { g_seen = ie(); }	// runs before interrupts are put back
+	}
+	check(14, g_seen == 0 && ie() == 1);
+	return result();
+}

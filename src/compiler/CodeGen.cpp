@@ -2891,6 +2891,8 @@ namespace dscript
 		auto loops = std::move(m_loops);
 		m_scopes = d.scopes;
 		m_loops.clear();
+		const int atomic = m_atomic;
+		m_atomic = d.atomic;		// (run where it was written: inside or outside of atomic blocks)
 		m_inDefer++;
 		m_defers.emplace_back();
 		genStatement(d.body);
@@ -2898,6 +2900,7 @@ namespace dscript
 			genDefers(m_defers.size() - 1);
 		m_defers.pop_back();
 		m_inDefer--;
+		m_atomic = atomic;
 		m_scopes = std::move(scopes);
 		m_loops = std::move(loops);
 	}
@@ -2913,8 +2916,12 @@ namespace dscript
 				m_scopes.push_back({});
 				m_scopeEnds.push_back(s->endPos);
 				m_defers.emplace_back();
+				if (s->atomic)
+					m_atomic++;
 				for (Node* st : s->list)
 					genStatement(st);
+				if (s->atomic)
+					m_atomic--;
 				// Its defers, unless it ends with a jump (that ran them).
 				const NodeKind last = s->list.empty() ? NodeKind::Block : s->list.back()->kind;
 				if (last != NodeKind::Return && last != NodeKind::Break && last != NodeKind::Continue && hasDefers(m_defers.size() - 1))
@@ -2930,7 +2937,7 @@ namespace dscript
 			case NodeKind::Defer:
 				if (m_defers.empty())
 					error(s->pos, "internal error: defer outside of a block");
-				m_defers.back().push_back({ s->a, m_scopes });
+				m_defers.back().push_back({ s->a, m_scopes, m_atomic });
 			break;
 			case NodeKind::VarDecl:
 				genLocalVar(s);
@@ -3159,6 +3166,9 @@ namespace dscript
 			line = line.substr(a);
 			while (!line.empty() && (line.back() == ' ' || line.back() == '\t' || line.back() == '\r'))
 				line.pop_back();
+			if (m_atomic > 0 && line.size() > 3 && (line[3] == ' ' || line[3] == '\t')
+				&& std::tolower((unsigned char)line[0]) == 'i' && std::tolower((unsigned char)line[1]) == 'n' && std::tolower((unsigned char)line[2]) == 't')
+				error(pos, "int in an atomic block: the CPU ignores every interrupt while they are disabled, int too");
 			if (line[0] == '.')
 				switchedSection = true;
 			else if (line[0] != '@' && line.rfind("##", 0) != 0)
@@ -3375,6 +3385,7 @@ namespace dscript
 		m_defers.clear();
 		m_defers.emplace_back();
 		m_inDefer = 0;
+		m_atomic = 0;
 		m_regDepth = 0;
 		Node* bodyNode = f->decl->a;
 		for (Node* s : bodyNode->list)

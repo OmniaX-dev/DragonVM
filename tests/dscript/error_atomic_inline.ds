@@ -1,0 +1,3 @@
+// expect-error: inline subs cannot be atomic
+atomic inline sub f() -> i32 { return 1; }
+sub main() -> i32 { return f(); }

@@ -3,7 +3,7 @@
 	name: (namespace_name) @name) @item
 
 (function_declaration
-	[(interrupt_modifier) (inline_modifier) (static_modifier) (priv_modifier)]* @context
+	[(atomic_modifier) (interrupt_modifier) (inline_modifier) (static_modifier) (priv_modifier)]* @context
 	"sub" @context
 	name: (identifier) @name
 	parameters: (parameter_list) @context) @item

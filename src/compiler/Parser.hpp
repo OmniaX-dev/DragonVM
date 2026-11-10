@@ -50,6 +50,7 @@ namespace dscript
 
 			Node* parseStatement(void);
 			Node* parseBlock(void);
+			Node* atomicBlock(Node* body, const SourcePos& pos);
 			Node* parseLocalStatic(const SourcePos& pos);
 			// A defer as the body of if / while / ...: it needs a block of its own (it is run when
 			// a block is left).
@@ -80,6 +81,7 @@ namespace dscript
 			// Lambdas: hidden top-level FuncDecls.
 			std::vector<Node*> m_lambdas;
 			int m_lambdaCount { 0 };
+			int m_atomicCount { 0 };
 			Node* m_currentFunc { nullptr };	// the sub being parsed (for lambdas)
 			// Local constants and static variables: hidden top-level declarations named
 			// <sub>::<name> (added before the declaration they are in); the scopes map a local name
