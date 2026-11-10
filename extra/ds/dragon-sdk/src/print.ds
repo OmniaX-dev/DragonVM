@@ -224,8 +224,11 @@ namespace dr {
 					else
 					{
 						this->m_cursor_x = cast<u16>(x);
+						var y0: u16 = this->m_cursor_y;
+						var s0: u32 = this->m_scrollOffset;
 						this->nl();                             // rare: the full logic (policy, scroll(false))
-						if (this->has_error())
+						// An error, or no new line (vertical Ignore on the last row): the rest is dropped.
+						if (this->has_error() or (this->m_cursor_y == y0 and this->m_scrollOffset == s0))
 							break;
 						x = 0;
 						skip = false;
@@ -300,13 +303,12 @@ namespace dr {
 			return this;
 		}
 		sub clear(var col: u8, var present: bool = true) {
-			for (var i: i32 = 0; i < this->m_screenBufferSize; i += 4)
-			{
-				this->m_screenBuffer[i + 0] = ' ';
-				this->m_screenBuffer[i + 1] = this->m_fg_col;
-				this->m_screenBuffer[i + 2] = col;
-				this->m_screenBuffer[i + 3] = 0;
-			}
+			// One 32-bit store per cell (big endian: character, fg, bg, 0).
+			var blank: u32 = (cast<u32>(' ') << 24) | (cast<u32>(this->m_fg_col) << 16) | (cast<u32>(col) << 8);
+			var cells: u32* = cast<u32*>(this->m_screenBuffer);
+			var count: u32 = this->m_screenBufferSize / 4;
+			for (var i: u32 = 0; i < count; i++)
+				cells[i] = blank;
 			if (present)
 				this->present();
 		}

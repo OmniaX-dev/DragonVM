@@ -1,0 +1,23 @@
+// dr::Text16Console on the screen: present() copies the ring buffer to the video memory with
+// its y offset (Graphics::writeVRAMFrame_16Colors) and swaps the buffers. After 25 lines with
+// the Scroll policy (and several presents), the screen shows the last 20 and the empty last row.
+// drun-flags: --screen
+// expect-output: row 5\nrow 6\nrow 7\nrow 8\nrow 9\nrow 10\nrow 11\nrow 12\nrow 13\nrow 14\nrow 15\nrow 16\nrow 17\nrow 18\nrow 19\nrow 20\nrow 21\nrow 22\nrow 23\nrow 24
+#import(<dragon-sdk>)
+
+sub main() -> void {
+	dr::vga_set_video_mode(dr::VGAVideoModes.Text16Color);
+	var con: dr::Text16Console();
+	con.set_vertical_overflow_policy(dr::Text16Console::VOverflowPolicy.Scroll);
+	con.clear(dr::DefaultPaletteText16.Black, false);
+	con.println("before the first present");
+	con.present();
+	con.clear(dr::DefaultPaletteText16.Black, false);
+	con.xy(0, 0);
+	for (var i: i32 = 0; i < 25; i++) {
+		con.print("row ")->print(i)->nl();
+		if (i % 7 == 0)
+			con.present();
+	}
+	con.present();
+}

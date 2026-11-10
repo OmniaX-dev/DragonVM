@@ -1,0 +1,287 @@
+// dr::Text16Console (the SDK's 16 colors text console): what it writes in its screen buffer,
+// the cursor, colors, the overflow policies, scrolling (the buffer is a ring: m_yOffset is the
+// row shown at the top) and the errors. The buffer is read through a struct with the same
+// fields (they are priv); text16_screen.ds checks what present() puts on the screen.
+// drun-flags: --boot
+// expect-rv: 0
+#import(<dragon-sdk>)
+
+alias Con = dr::Text16Console;
+
+// Text16Console's fields, in the same order.
+struct View {
+	var cursor_x: u16;
+	var cursor_y: u16;
+	var bg: u8;
+	var fg: u8;
+	var cols: u32;
+	var rows: u32;
+	var size: u32;
+	var buffer: u8*;
+	var yOffset: u32;
+	var scrollOffset: u32;
+	var initialized: bool;
+	var error: u8;
+	var policyH: u8;
+	var policyV: u8;
+};
+
+var g_failures: i32 = 0;
+
+sub expect(var id: i32, var ok: bool) {
+	if (ok)
+		return;
+	var buff: u8[12];
+	debug_print("text16_console: check ");
+	debug_print(dr::itoa(id, buff));
+	debug_print(" failed\n");
+	g_failures++;
+}
+
+sub view(var con: Con*) -> View* { return cast<View*>(con); }
+
+// The cell at x, y of the screen (the ring buffer's row (y + yOffset) % rows).
+sub cell(var con: Con*, var x: u32, var y: u32) -> u32 {
+	var v: View* = view(con);
+	return cast<u32*>(v->buffer)[((y + v->yOffset) % v->rows) * v->cols + x];
+}
+sub ch(var c: u32) -> u8 { return cast<u8>(c >> 24); }
+sub fgOf(var c: u32) -> u8 { return cast<u8>((c >> 16) & 0xFF); }
+sub bgOf(var c: u32) -> u8 { return cast<u8>((c >> 8) & 0xFF); }
+
+// Row y of the screen is text, then spaces.
+sub row_is(var con: Con*, var y: u32, var text: string) -> bool {
+	var n: u32 = dr::strlen(text);
+	for (var x: u32 = 0; x < view(con)->cols; x++) {
+		var want: u8 = x < n ? text[x] : ' ';
+		if (ch(cell(con, x, y)) != want)
+			return false;
+	}
+	return true;
+}
+
+sub at(var con: Con*, var x: u16, var y: u16) -> bool {
+	return view(con)->cursor_x == x and view(con)->cursor_y == y;
+}
+
+// A blank screen, the cursor at 0, 0, the default colors and policies, no error.
+sub reset(var con: Con*) {
+	con->clear_error();
+	con->set_horizontal_overflow_policy(Con::HOverflowPolicy.Ignore);
+	con->set_vertical_overflow_policy(Con::VOverflowPolicy.Ignore);
+	con->fg(dr::DefaultPaletteText16.Green)->bg(dr::DefaultPaletteText16.Black);
+	con->clear(dr::DefaultPaletteText16.Black, false);
+	con->xy(0, 0);
+}
+
+sub main() -> i32 {
+	var cols: u32 = *cast<u32*>(dr::CMOSRegisters.ScreenColumns);
+	var rows: u32 = *cast<u32*>(dr::CMOSRegisters.ScreenRows);
+	expect(1, sizeof(View) == sizeof(Con));
+
+	// Not built (no constructor call): nothing works, Uninitialized.
+	var raw: Con;
+	raw.print("x");
+	expect(2, raw.get_error() == Con::Errors.Uninitialized and not raw.is_valid());
+	raw.clear(dr::DefaultPaletteText16.Black);	// (no buffer: nothing to write, no crash)
+	raw.present();
+	raw.scroll()->nl();
+	expect(4, view(&raw)->buffer == null and view(&raw)->yOffset == 0);
+
+	// Built in the wrong video mode.
+	dr::vga_set_video_mode(dr::VGAVideoModes.TextSingleColor);
+	var single: Con();
+	expect(3, not single.is_valid() and single.get_error() == Con::Errors.WrongVideoMode);
+
+	dr::vga_set_video_mode(dr::VGAVideoModes.Text16Color);
+	var con: Con();
+	var v: View* = view(&con);
+	expect(10, con.is_valid() and not con.has_error());
+	expect(11, v->cols == cols and v->rows == rows and v->size == cols * rows * 4 and v->buffer != null);
+	expect(12, v->initialized and at(&con, 0, 0) and v->yOffset == 0);
+	expect(13, con.get_horizontal_overflow_policy() == Con::HOverflowPolicy.Ignore
+		and con.get_vertical_overflow_policy() == Con::VOverflowPolicy.Ignore);
+
+	// clear: every cell a space in the default foreground and the given background.
+	con.clear(dr::DefaultPaletteText16.Blue, false);
+	var all: bool = true;
+	for (var y: u32 = 0; y < rows; y++)
+		for (var x: u32 = 0; x < cols; x++) {
+			var c: u32 = cell(&con, x, y);
+			if (ch(c) != ' ' or fgOf(c) != dr::DefaultPaletteText16.Green or bgOf(c) != dr::DefaultPaletteText16.Blue or (c & 0xFF) != 0)
+				all = false;
+		}
+	expect(20, all and at(&con, 0, 0));
+
+	// print: characters with the current colors, the cursor after them; chaining returns the console.
+	reset(&con);
+	var self: Con* = con.print("abc");
+	expect(30, self == &con and row_is(&con, 0, "abc") and at(&con, 3, 0));
+	var c0: u32 = cell(&con, 0, 0);
+	expect(31, fgOf(c0) == dr::DefaultPaletteText16.Green and bgOf(c0) == dr::DefaultPaletteText16.Black and (c0 & 0xFF) == 0);
+	con.fg(dr::DefaultPaletteText16.Red)->bg(dr::DefaultPaletteText16.Yellow)->print("d");
+	var c3: u32 = cell(&con, 3, 0);
+	expect(32, ch(c3) == 'd' and fgOf(c3) == dr::DefaultPaletteText16.Red and bgOf(c3) == dr::DefaultPaletteText16.Yellow);
+	expect(33, fgOf(cell(&con, 2, 0)) == dr::DefaultPaletteText16.Green);	// earlier cells keep theirs
+	con.fg(16)->bg(200)->print("e");										// not colors: ignored
+	var c4: u32 = cell(&con, 4, 0);
+	expect(34, fgOf(c4) == dr::DefaultPaletteText16.Red and bgOf(c4) == dr::DefaultPaletteText16.Yellow);
+
+	// The other print overloads.
+	reset(&con);
+	expect(40, con.print(cast<u8>('Z')) == &con and con.print(cast<u32>(4294967295)) == &con and con.print(-42) == &con);
+	expect(41, row_is(&con, 0, "Z4294967295-42") and at(&con, 14, 0));
+	con.print(cast<u32>(0))->print(cast<i32>(0));
+	expect(42, row_is(&con, 0, "Z4294967295-4200"));
+	con.print("");
+	expect(43, at(&con, 16, 0) and not con.has_error());
+
+	// New lines: nl, println, '\n' in the text.
+	reset(&con);
+	con.println("one")->print("two\nthree")->nl()->print("4");
+	expect(50, row_is(&con, 0, "one") and row_is(&con, 1, "two") and row_is(&con, 2, "three") and row_is(&con, 3, "4"));
+	expect(51, at(&con, 1, 3) and not con.has_error());
+	con.print("\n\n");
+	expect(52, at(&con, 0, 5));
+
+	// xy, x, y.
+	reset(&con);
+	con.xy(10, 4)->print("here");
+	expect(60, at(&con, 14, 4) and ch(cell(&con, 10, 4)) == 'h' and ch(cell(&con, 13, 4)) == 'e' and ch(cell(&con, 9, 4)) == ' ');
+	con.x(2)->print("x2");
+	expect(61, ch(cell(&con, 2, 4)) == 'x' and at(&con, 4, 4));
+	con.y(7)->print("y7");
+	expect(62, ch(cell(&con, 4, 7)) == 'y' and at(&con, 6, 7));
+	con.xy(cast<u16>(cols - 1), cast<u16>(rows - 1))->print("E");
+	expect(63, ch(cell(&con, cols - 1, rows - 1)) == 'E' and not con.has_error());
+
+	// Horizontal policy Ignore: past the right edge, the text is dropped up to the next '\n';
+	// x() past the edge does nothing.
+	reset(&con);
+	con.xy(cast<u16>(cols - 3), 0)->print("ABCDEF\nnext");
+	expect(70, ch(cell(&con, cols - 3, 0)) == 'A' and ch(cell(&con, cols - 1, 0)) == 'C' and row_is(&con, 1, "next"));
+	expect(71, not con.has_error() and at(&con, 4, 1));
+	con.x(cast<u16>(cols + 5));
+	expect(72, at(&con, 4, 1) and not con.has_error());
+
+	// Horizontal policy Wrap: the text goes on at the start of the next row; x() past the edge
+	// goes to the next row.
+	reset(&con);
+	con.set_horizontal_overflow_policy(Con::HOverflowPolicy.Wrap);
+	con.xy(cast<u16>(cols - 2), 0)->print("WXYZ");
+	expect(80, ch(cell(&con, cols - 2, 0)) == 'W' and ch(cell(&con, cols - 1, 0)) == 'X' and row_is(&con, 1, "YZ") and at(&con, 2, 1));
+	con.xy(0, 2);
+	var long: u8[200];
+	for (var i: u32 = 0; i < cols + 5; i++)
+		long[i] = cast<u8>('a' + i % 26);
+	long[cols + 5] = 0;
+	con.print(long);
+	expect(81, ch(cell(&con, cols - 1, 2)) == cast<u8>('a' + (cols - 1) % 26) and ch(cell(&con, 0, 3)) == cast<u8>('a' + cols % 26) and at(&con, 5, 3));
+	con.x(cast<u16>(cols + 9));
+	expect(82, at(&con, 0, 4) and not con.has_error());
+
+	// Horizontal policy Error: what fits is written, then HorizontalOverflow; nothing more is
+	// printed until clear_error().
+	reset(&con);
+	con.set_horizontal_overflow_policy(Con::HOverflowPolicy.Error);
+	con.xy(cast<u16>(cols - 2), 0)->print("QRST");
+	expect(90, ch(cell(&con, cols - 2, 0)) == 'Q' and ch(cell(&con, cols - 1, 0)) == 'R' and row_is(&con, 1, ""));
+	expect(91, con.get_error() == Con::Errors.HorizontalOverflow);
+	con.xy(0, 3)->print("blocked");
+	expect(92, row_is(&con, 3, "") and con.get_error() == Con::Errors.HorizontalOverflow);
+	con.clear_error();
+	con.xy(0, 3)->print("again");
+	expect(93, row_is(&con, 3, "again") and not con.has_error());
+	con.x(cast<u16>(cols));
+	expect(94, con.get_error() == Con::Errors.HorizontalOverflow);
+
+	// Vertical policy Error: a new line on the last row is VerticalOverflow; y() past the end too.
+	reset(&con);
+	con.set_vertical_overflow_policy(Con::VOverflowPolicy.Error);
+	con.xy(0, cast<u16>(rows - 1))->print("last")->nl();
+	expect(100, con.get_error() == Con::Errors.VerticalOverflow and at(&con, 4, cast<u16>(rows - 1)));
+	con.clear_error();
+	con.y(cast<u16>(rows));
+	expect(101, con.get_error() == Con::Errors.VerticalOverflow);
+
+	// Vertical policy Ignore: a new line on the last row is ignored (no error, the cursor stays);
+	// what comes after it is dropped, not written over the last row.
+	reset(&con);
+	con.xy(0, cast<u16>(rows - 1))->print("bottom");
+	con.nl();
+	expect(110, not con.has_error() and at(&con, 6, cast<u16>(rows - 1)));
+	con.print("\nover");
+	expect(111, row_is(&con, rows - 1, "bottom"));
+	con.y(cast<u16>(rows + 2));
+	expect(112, view(&con)->cursor_y == rows - 1 and not con.has_error());
+
+	// Vertical policy Scroll: a new line on the last row scrolls (the ring's offset moves, the
+	// rows move up, the new last row is blank in the current colors).
+	reset(&con);
+	con.set_vertical_overflow_policy(Con::VOverflowPolicy.Scroll);
+	var scrolls: u32 = con.get_scroll_offset();
+	var y0: u32 = v->yOffset;
+	con.println("first");
+	con.xy(0, cast<u16>(rows - 1))->print("bottom");
+	con.bg(dr::DefaultPaletteText16.Gray)->nl();
+	expect(120, v->yOffset == (y0 + 1) % rows and con.get_scroll_offset() == scrolls + 1);
+	expect(121, at(&con, 0, cast<u16>(rows - 1)) and row_is(&con, rows - 2, "bottom") and row_is(&con, rows - 1, ""));
+	expect(122, not row_is(&con, 0, "first") and bgOf(cell(&con, 5, rows - 1)) == dr::DefaultPaletteText16.Gray);
+	con.print("new");
+	expect(123, row_is(&con, rows - 1, "new") and not con.has_error());
+
+	// Many lines: the screen shows the last ones; the ring wraps around.
+	reset(&con);
+	con.set_vertical_overflow_policy(Con::VOverflowPolicy.Scroll);
+	var buff: u8[12];
+	for (var i: i32 = 0; i < 50; i++)
+		con.print("line ")->print(i)->nl();
+	var ok: bool = true;
+	for (var y: u32 = 0; y < rows - 1; y++) {
+		var want: u8[16] = "line ";
+		dr::strcpy(&want[5], dr::itoa(cast<i32>(50 - (rows - 1) + y), buff));
+		if (not row_is(&con, y, want))
+			ok = false;
+	}
+	expect(130, ok and row_is(&con, rows - 1, "") and at(&con, 0, cast<u16>(rows - 1)) and not con.has_error());
+
+	// y() past the end with Scroll: scrolls as many rows, the cursor on the last row; far past
+	// the end, the screen is cleared.
+	reset(&con);
+	con.set_vertical_overflow_policy(Con::VOverflowPolicy.Scroll);
+	con.xy(0, cast<u16>(rows - 1))->print("keep");
+	scrolls = con.get_scroll_offset();
+	con.y(cast<u16>(rows));
+	expect(140, view(&con)->cursor_y == rows - 1 and con.get_scroll_offset() == scrolls + 1 and row_is(&con, rows - 2, "keep"));
+	con.y(cast<u16>(rows * 3 + 2));
+	expect(141, view(&con)->cursor_y < rows and row_is(&con, rows - 2, "") and not con.has_error());
+
+	// Wrap and Scroll together: a long text on the last row scrolls.
+	reset(&con);
+	con.set_horizontal_overflow_policy(Con::HOverflowPolicy.Wrap);
+	con.set_vertical_overflow_policy(Con::VOverflowPolicy.Scroll);
+	con.xy(0, cast<u16>(rows - 1))->print(long);
+	expect(150, at(&con, 5, cast<u16>(rows - 1)) and ch(cell(&con, 0, rows - 2)) == 'a' and ch(cell(&con, 0, rows - 1)) == cast<u8>('a' + cols % 26));
+
+	// Wrap with vertical Error on the last row: VerticalOverflow.
+	reset(&con);
+	con.set_horizontal_overflow_policy(Con::HOverflowPolicy.Wrap);
+	con.set_vertical_overflow_policy(Con::VOverflowPolicy.Error);
+	con.xy(0, cast<u16>(rows - 1))->print(long);
+	expect(160, con.get_error() == Con::Errors.VerticalOverflow and ch(cell(&con, cols - 1, rows - 1)) == cast<u8>('a' + (cols - 1) % 26));
+
+	// An invalid policy.
+	reset(&con);
+	con.set_horizontal_overflow_policy(7);
+	con.x(3);
+	expect(170, con.get_error() == Con::Errors.InvalidOverflowPolicy);
+
+	// Video mode changed after it was built: WrongVideoMode.
+	reset(&con);
+	dr::vga_set_video_mode(dr::VGAVideoModes.TextSingleColor);
+	con.print("no");
+	expect(180, con.get_error() == Con::Errors.WrongVideoMode and row_is(&con, 0, ""));
+	dr::vga_set_video_mode(dr::VGAVideoModes.Text16Color);
+
+	return g_failures;
+}

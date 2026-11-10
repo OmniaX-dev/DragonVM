@@ -8,7 +8,7 @@
 // strings and the argv array below the trampoline) from a small trampoline that halts when it
 // returns; with --boot the BIOS runs first (until it jumps
 // to the boot code it loaded at the RAM start), so its interrupts (int 0x20 / 0x30) work. Text printed in the single color text
-// mode goes to stdout.
+// mode goes to stdout. The 16 colors text mode goes to the video memory (as with the window); --screen prints it at the end.
 
 #include "DragonRuntime.hpp"
 #include "../tools/DRX.hpp"
@@ -71,7 +71,64 @@ static void processVideoSignal(void)
 		}
 		std::cout.flush();
 	}
+	else if (mode == hw::VirtualDisplay::tVideoModeValues::Text16Colors)
+	{
+		// As VirtualDisplay does it (without drawing).
+		using R = hw::VirtualDisplay::tRegisters;
+		using S = hw::VirtualDisplay::tSignalValues;
+		auto& graphics = DragonRuntime::vGraphicsInterface;
+		switch (signal)
+		{
+			case S::Text16Color_WriteMemory:
+				graphics.writeVRAM_16Colors((u8)mem.read32(vga + R::MemControllerX), (u8)mem.read32(vga + R::MemControllerY),
+					mem.read8(vga + R::MemControllerChar), mem.read8(vga + R::MemControllerBGCol), mem.read8(vga + R::MemControllerFGCol));
+			break;
+			case S::Text16Color_PrintString:
+			{
+				u32 text = cast<u32>(mem.read32(vga + R::Text16String));
+				const u32 cell = cast<u32>(mem.read32(vga + R::Text16StringCell));	// character, foreground, background, x, y
+				u8 x = mem.read8(cell + 3);
+				for (u8 c = mem.read8(text); c != 0; c = mem.read8(++text))
+					graphics.writeVRAM_16Colors(x++, mem.read8(cell + 4), c, mem.read8(cell + 2), mem.read8(cell + 1));
+			}
+			break;
+			case S::Text16Color_CopyFrame:
+				graphics.writeVRAMFrame_16Colors(cast<u32>(mem.read32(vga + R::Text16FrameAddr)), cast<u32>(mem.read32(vga + R::Text16FrameSize)),
+					cast<u32>(mem.read32(vga + R::Text16FrameYOffset)));
+			break;
+			case S::ClearSCreen:
+				graphics.clearVRAM_16Colors(mem.read8(vga + R::MemControllerChar), mem.read8(vga + R::MemControllerBGCol), mem.read8(vga + R::MemControllerFGCol));
+			break;
+			case S::Text16Color_SwapBuffers: graphics.swapBuffers_16Colors(); break;
+			case S::Text16Color_Scroll: graphics.scroll_16Colors(); break;
+			default: break;
+		}
+	}
 	DragonRuntime::vGraphicsInterface.write8(hw::VirtualDisplay::tRegisters::Signal, hw::VirtualDisplay::tSignalValues::Continue);
+}
+
+// --screen: the 16 colors text mode's screen (what the window shows), as text: the rows without
+// their trailing spaces, without the empty rows at the end.
+static void printScreen(void)
+{
+	std::vector<std::string> rows;
+	for (i32 y = 0; y < hw::VirtualDisplay::Rows; y++)
+	{
+		std::string row;
+		for (i32 x = 0; x < hw::VirtualDisplay::Columns; x++)
+		{
+			hw::interface::Graphics::tText16_Cell cell;
+			const bool ok = DragonRuntime::vGraphicsInterface.readVRAM_16Colors(cast<u8>(x), cast<u8>(y), cell);
+			const u8 c = ok ? cast<u8>(cell.character) : 0;
+			row += (c >= 0x20 && c < 0x7F) ? (char)c : ' ';
+		}
+		row.erase(row.find_last_not_of(' ') + 1);
+		rows.push_back(row);
+	}
+	while (!rows.empty() && rows.back().empty())
+		rows.pop_back();
+	for (const auto& r : rows)
+		std::cout << r << "\n";
 }
 
 static bool step(u64& cycles)
@@ -97,6 +154,7 @@ static void usage(void)
 				 "  --max-cycles <n>       Stops after n cycles (default 50000000)\n"
 				 "  --dump <address>[:n]   Prints n bytes (default 4) of memory at the end\n"
 				 "  --quiet                Only the program's output\n"
+				 "  --screen               Prints the 16 colors text mode's screen at the end (as text)\n"
 				 "  -- <arguments>         The program's arguments (main(argc, argv); argv[0] is its path)\n"
 				 "Exit code: 0 if the machine halted without errors, 1 on errors, 2 when out of cycles.\n";
 }
@@ -110,7 +168,7 @@ int main(int argc, char** argv)
 	}
 	std::string config = argv[1], programPath;
 	i64 at = -1;
-	bool boot = false, quiet = false;
+	bool boot = false, quiet = false, screen = false;
 	u64 maxCycles = 50000000;
 	std::vector<std::pair<u32, u32>> dumps;
 	std::vector<std::string> programArgs;
@@ -127,6 +185,7 @@ int main(int argc, char** argv)
 		if (a == "--at") at = (i64)std::strtoull(l_value().c_str(), nullptr, 0);
 		else if (a == "--boot") boot = true;
 		else if (a == "--quiet") quiet = true;
+		else if (a == "--screen") screen = true;
 		else if (a == "--max-cycles") maxCycles = std::strtoull(l_value().c_str(), nullptr, 0);
 		else if (a == "--dump")
 		{
@@ -255,6 +314,8 @@ int main(int argc, char** argv)
 	std::cout.flush();
 	if (!s_textBuffer.empty())
 		std::cout << s_textBuffer;
+	if (screen)
+		printScreen();
 	const i32 rv = cpu.readRegister(data::Registers::RV);
 	if (!quiet)
 	{

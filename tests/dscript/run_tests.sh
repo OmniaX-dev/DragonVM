@@ -8,6 +8,8 @@
 #   // expect-rom-rv: <n>      compiled with --rom as the machine's BIOS (16 MiB image), booted;
 #                              main's return value (instead of the DRX and raw runs)
 #   // dsc-flags: <options>    extra dsc options (for every compilation of the test)
+#   // drun-flags: <options>   extra drun options (e.g. --boot, --screen: the 16 colors text screen
+#                              is printed after the program's output)
 #   // expect-sources: <file.ds> ...  the raw build's disassembly (--save-disassembly, for the
 #                              debugger) has the source lines of these files (also the libraries')
 #   // dsc-lib: <file.ds> ...  libraries to compile first (dsc --lib, in this order, into a
@@ -44,6 +46,7 @@ for t in "${tests[@]}"; do
 	err="$(grep -m1 '^// expect-error:' "$t" | sed 's|^// expect-error: *||')"
 	romrv="$(grep -m1 '^// expect-rom-rv:' "$t" | sed 's|^// expect-rom-rv: *||')"
 	read -r -a flags <<< "$(grep -m1 '^// dsc-flags:' "$t" | sed 's|^// dsc-flags: *||')"
+	read -r -a runflags <<< "$(grep -m1 '^// drun-flags:' "$t" | sed 's|^// drun-flags: *||')"
 	read -r -a libs <<< "$(grep -m1 '^// dsc-lib:' "$t" | sed 's|^// dsc-lib: *||')"
 	read -r -a sources <<< "$(grep -m1 '^// expect-sources:' "$t" | sed 's|^// expect-sources: *||')"
 	ok=1
@@ -97,7 +100,7 @@ for t in "${tests[@]}"; do
 			fi
 			boot=()
 			[ -n "$output" ] && boot=(--boot)
-			(cd "$BIN" && "$DRUN" "$CONFIG" "$prog" "${at[@]}" "${boot[@]}" --max-cycles 20000000 > "$OUT/$name.out" 2> "$OUT/$name.err")
+			(cd "$BIN" && "$DRUN" "$CONFIG" "$prog" "${at[@]}" "${boot[@]}" "${runflags[@]}" --max-cycles 20000000 > "$OUT/$name.out" 2> "$OUT/$name.err")
 			code=$?
 			if [ $code -ne 0 ]; then
 				ok=0; msg="$mode: drun exit code $code: $(grep -v '^$' "$OUT/$name.err" | head -3)"; break
