@@ -7,6 +7,7 @@
 var keyBuff: u32[KEY_BUFF_SIZE];
 var keyRingBuff: dr::RingBuffer;
 var console: dr::Text16Console;
+var bootParts: dr::DPTPartitionBlock*[dr::DPTStructure.MaxPartitions];
 
 var pressedKey: u32 = 0;
 
@@ -17,8 +18,8 @@ sub main() {
 	var dpt_block: dr::DPTBlock;
 	halt_on_condition(not dr::dpt_load_block(&dpt_block), "No valid DPT block found.");
 
-	var boot_part: dr::DPTPartitionBlock* = get_boot_partition(&dpt_block);
-	halt_on_condition(not boot_part, "No bootable partition found.");
+	var boot_part: dr::DPTPartitionBlock* = get_bootable_partitions(&dpt_block, bootParts);
+	halt_on_condition(not bootParts[0], "No bootable partition found.");
 
 	console.new();
 	keyRingBuff.init(keyBuff, sizeof(u32), KEY_BUFF_SIZE);
@@ -66,11 +67,15 @@ sub load_kernel0_block(var part: dr::DPTPartitionBlock*) {
 	dr::raise_interrupt(0x20, INT20_LOAD_FROM_DDD_BLOCKING, cast<u32>(&ddd));
 }
 
-sub get_boot_partition(var dpt_block: dr::DPTBlock*) -> dr::DPTPartitionBlock* {
+sub get_bootable_partitions(var dpt_block: dr::DPTBlock*, var outEntries: dr::DPTPartitionBlock**) -> dr::DPTPartitionBlock* {
+	var j: i8 = 0;
+	for (; j < dr::DPTStructure.MaxPartitions; j++)
+		outEntries[j] = null;
+	j = 0;
 	for (var i: i8 = 0; i < dpt_block->partitionCount; i++)
 	{
 		if (dr::dpt_is_partition_bootable(&dpt_block->entries[i]))
-			return &dpt_block->entries[i];
+			outEntries[j++] = &dpt_block->entries[i];
 	}
 	return null;
 }

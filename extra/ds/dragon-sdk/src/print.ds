@@ -313,19 +313,12 @@ namespace dr {
 			this->m_scrollOffset++;
 			return this;
 		}
-		sub clear(var col: u8, var present: bool = true) -> Text16Console* {
+		sub clear(var col: u8, var present: bool = true, var clear_buffer: bool = true) -> Text16Console* {
 			var cell: VGAText16Cell;
 			cell.character = ' ';
 			cell.background = col;
 			cell.foreground = col;
-			// The video card clears this console's frame buffer too (and its own back buffer).
-			raise_interrupt(0x30, INT30_CLEAR_SCREEN_TEXT16, cast<u32>(&cell), cast<u32>(this->m_screenBuffer));
-			// One 32-bit store per cell (big endian: character, fg, bg, 0).
-			// var blank: u32 = (cast<u32>(' ') << 24) | (cast<u32>(this->m_fg_col) << 16) | (cast<u32>(col) << 8);
-			// var cells: u32* = cast<u32*>(this->m_screenBuffer);
-			// var count: u32 = this->m_screenBufferSize / 4;
-			// for (var i: u32 = 0; i < count; i++)
-			// 	cells[i] = blank;
+			raise_interrupt(0x30, INT30_CLEAR_SCREEN_TEXT16, cast<u32>(&cell), (clear_buffer ? cast<u32>(this->m_screenBuffer) : 0));
 			if (present)
 				this->present();
 			return this;
@@ -358,6 +351,58 @@ namespace dr {
 		sub bg(var col: u8) -> Text16Console* {
 			if (this->check_color(col))
 				this->m_bg_col = col;
+			return this;
+		}
+		sub store_fg() -> Text16Console* {
+			this->m_stored_fg_col = this->m_fg_col;
+			return this;
+		}
+		sub store_bg() -> Text16Console* {
+			this->m_stored_bg_col = this->m_bg_col;
+			return this;
+		}
+		sub store_colors() -> Text16Console* {
+			this->store_fg();
+			this->store_bg();
+			return this;
+		}
+		sub store_x() -> Text16Console* {
+			this->m_stored_cursor_x = this->m_cursor_x;
+			return this;
+		}
+		sub store_y() -> Text16Console* {
+			this->m_stored_cursor_y = this->m_cursor_y;
+			return this;
+		}
+		sub store_xy() -> Text16Console* {
+			this->store_x();
+			this->store_y();
+			return this;
+		}
+		sub restore_bg() -> Text16Console* {
+			this->m_bg_col = this->m_stored_bg_col;
+			return this;
+		}
+		sub restore_fg() -> Text16Console* {
+			this->m_fg_col = this->m_stored_fg_col;
+			return this;
+		}
+		sub restore_colors() -> Text16Console* {
+			this->restore_fg();
+			this->restore_bg();
+			return this;
+		}
+		sub restore_x() -> Text16Console* {
+			this->m_cursor_x = this->m_stored_cursor_x;
+			return this;
+		}
+		sub restore_y() -> Text16Console* {
+			this->m_cursor_y = this->m_stored_cursor_y;
+			return this;
+		}
+		sub restore_xy() -> Text16Console* {
+			this->restore_x();
+			this->restore_y();
 			return this;
 		}
 

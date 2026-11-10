@@ -32,6 +32,7 @@ namespace dr {
 
 		var ID: u16								= 0xF1CA;
 		var EntrySize: u32						= 100;
+		var MaxPartitions: u8					= 5;
 	};
 
 	const DPTBootPartStructure: struct {
