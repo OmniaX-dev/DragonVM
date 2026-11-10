@@ -38,7 +38,7 @@ sub main() {
 		if (keyRingBuff.pop(&key)) {
 			on_key_pressed(key);
 		}
-		dr::raise_interrupt(0x30, INT30_COPY_FRAME_TEXT16, cast<u32>(screenBuffer), screenBufferSize);
+		dr::raise_interrupt(0x30, INT30_COPY_FRAME_TEXT16, cast<u32>(screenBuffer), screenBufferSize, 0);
 		dr::raise_interrupt(0x30, INT30_SWAP_BUFFERS_TEXT16);
 	}
 

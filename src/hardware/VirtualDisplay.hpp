@@ -41,6 +41,7 @@ namespace dragon
 
 				inline static constexpr u8 Text16FrameAddr = 0x38;        // 4 bytes (address)
 				inline static constexpr u8 Text16FrameSize = 0x3C;        // 4 bytes (address)
+				inline static constexpr u8 Text16FrameYOffset = 0x40;        // 4 bytes
 
 				inline static constexpr u8 Flags = 0x7C;                    // 4 bytes
 

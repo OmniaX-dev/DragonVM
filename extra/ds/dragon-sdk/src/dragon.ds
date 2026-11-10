@@ -106,6 +106,7 @@ namespace dr {
 		var Text16Cell: u32						= MemoryLayout.VGA + 0x0034;
 		var Text16FrameAddr: u32				= MemoryLayout.VGA + 0x0038;
 		var Text16FrameSize: u32				= MemoryLayout.VGA + 0x003C;
+		var Text16FrameYOffset: u32				= MemoryLayout.VGA + 0x0040;
 		var Flags: u32							= MemoryLayout.VGA + 0x007C;
 		var MemoryControllerX: u32				= MemoryLayout.VGA + 0x0080;
 		var MemoryControllerXByte: u32			= MemoryLayout.VGA + 0x0080 + 3;

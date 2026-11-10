@@ -221,7 +221,8 @@ namespace dragon
 					{
 						u32 frame_addr = cast<u32>(mem.read32(vga_addr + tRegisters::Text16FrameAddr));
 						u32 frame_size = cast<u32>(mem.read32(vga_addr + tRegisters::Text16FrameSize));
-						graphics.writeVRAMFrame_16Colors(frame_addr, frame_size);
+						u32 frame_y_offset = cast<u32>(mem.read32(vga_addr + tRegisters::Text16FrameYOffset));
+						graphics.writeVRAMFrame_16Colors(frame_addr, frame_size, frame_y_offset);
 						break;
 					}
 					case tSignalValues::ClearSCreen:

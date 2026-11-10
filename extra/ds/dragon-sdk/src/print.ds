@@ -110,7 +110,7 @@ namespace dr {
 			if (!vga_is_text16())
 				return;
 			var buff: u8[12];
-			dr::itoa(n, buff);
+			dr::utoa(n, buff);
 			Text16::print(buff, x, y, fg, bg);
 		}
 
@@ -118,12 +118,9 @@ namespace dr {
 		static sub print(var n: i32, var x: u8, var y: u8, var fg: u8, var bg: u8) -> void {
 			if (!vga_is_text16())
 				return;
-			if (n < 0) {
-				Text16::print('-', x, y, fg, bg);
-				Text16::print(cast<u32>(-n), x, y, fg, bg);
-				return;
-			}
-			Text16::print(cast<u32>(n), x, y, fg, bg);
+			var buff: u8[12];
+			dr::itoa(n, buff);
+			Text16::print(buff, x, y, fg, bg);
 		}
 
 		static sub clear_screen(var color: u8) -> void {
@@ -142,21 +139,37 @@ namespace dr {
 			NoError						= 0x00,
 			ScreenBufferAllocFail		= 0x01,
 			Uninitialized				= 0x02,
-			WrongVideoMode				= 0x03
+			WrongVideoMode				= 0x03,
+			VerticalOverflow			= 0x04,
+			HorizontalOverflow			= 0x05,
+			InvalidOverflowPolicy		= 0x06,
+			InvalidState				= 0x07
+		};
+		enum VOverflowPolicy: u8 {
+			Ignore						= 0x00,
+			Scroll						= 0x01,
+			Error						= 0x02
+		};
+		enum HOverflowPolicy: u8 {
+			Ignore						= 0x00,
+			Wrap						= 0x01,
+			Error						= 0x02
 		};
 
 		priv var m_cursor_x: u16 = 0;
 		priv var m_cursor_y: u16 = 0;
 		priv var m_bg_col: u8 = DefaultPaletteText16.Black;
 		priv var m_fg_col: u8 = DefaultPaletteText16.Green;
-
 		priv var m_screen_x: u32 = 0;
 		priv var m_screen_y: u32 = 0;
 		priv var m_screenBufferSize: u32 = 0;
 		priv var m_screenBuffer: u8* = null;
+		priv var m_yOffset: u32 = 0;
+		priv var m_scrollOffset: u32 = 0;
 		priv var m_initialized: bool = false;
-
 		priv var m_error: u8 = 0;
+		priv var m_overflowPolicyH: u8 = 0;
+		priv var m_overflowPolicyV: u8 = 0;
 
 		sub new() {
 			this->m_initialized = false;
@@ -164,14 +177,19 @@ namespace dr {
 			this->m_screen_y = *cast<u32*>(CMOSRegisters.ScreenRows);
 			this->m_screenBufferSize = this->m_screen_x * this->m_screen_y * 4;
 			if (this->m_screenBuffer)
-				free(&this->m_screenBuffer);
+				free(this->m_screenBuffer);
 			this->m_screenBuffer = malloc(this->m_screenBufferSize);
 			if (not this->m_screenBuffer)
+			{
 				this->set_error(Errors.ScreenBufferAllocFail);
+				return;
+			}
+			this->m_overflowPolicyV = VOverflowPolicy.Ignore;
+			this->m_overflowPolicyH = HOverflowPolicy.Ignore;
+			dr::vga_enable_double_buffering();
 			this->m_initialized = true;
 			this->set_error(Errors.NoError);
 		}
-
 		sub is_valid() -> bool {
 			if (not this->m_initialized)
 				return this->set_error(Errors.Uninitialized, false);
@@ -179,36 +197,258 @@ namespace dr {
 				return this->set_error(Errors.WrongVideoMode, false);
 			return true;
 		}
-
-		sub print(var text: string, var x: u16, var y: u16, var fg: u8, var bg: u8 = 0xFF) -> void {
-			if (not this->is_valid())
-				return;
-		}
-		sub print(var c: u8) -> void {
-			if (not this->is_valid())
-				return;
-		}
-		sub print(var n: u32) -> void {
-			if (not this->is_valid())
-				return;
-		}
-		sub print(var n: i32) -> void {
-			if (not this->is_valid())
-				return;
-		}
-		sub new_line() -> void {
-			if (not this->is_valid())
-				return;
-		}
-		sub scroll() -> void {
-			if (not this->is_valid())
-				return;
-		}
-		sub println(var text: string) -> void {
-			TextSingle::print(text);
-			TextSingle::new_line();
+		sub present() {
+			dr::raise_interrupt(0x30, INT30_COPY_FRAME_TEXT16, cast<u32>(this->m_screenBuffer), this->m_screenBufferSize, this->m_yOffset);
+			dr::raise_interrupt(0x30, INT30_SWAP_BUFFERS_TEXT16);
 		}
 
+		sub print(var text: string) -> Text16Console* {
+			if (not this->is_valid() or this->has_error())
+				return this;
+			var cols: u32 = this->m_screen_x;
+			var x: u32 = this->m_cursor_x;
+			var attr: u32 = (cast<u32>(this->m_fg_col) << 16) | (cast<u32>(this->m_bg_col) << 8);
+			var row: u32* = cast<u32*>(this->m_screenBuffer) + ((this->m_cursor_y + this->m_yOffset) % this->m_screen_y) * cols;
+			var skip: bool = false;         // Ignore policy: past the right edge until '\n'
+			var i: u32 = 0;
+			var c: u8 = text[0];
+			while (c != 0) {
+				if (c == '\n' or (x >= cols and not skip)) {
+					if (c != '\n' and this->m_overflowPolicyH != HOverflowPolicy.Wrap) {
+						if (this->m_overflowPolicyH == HOverflowPolicy.Error) {
+							this->set_error(Errors.HorizontalOverflow);
+							break;
+						}
+						skip = true;                    // Ignore
+					}
+					else
+					{
+						this->m_cursor_x = cast<u16>(x);
+						this->nl();                             // rare: the full logic (policy, scroll(false))
+						if (this->has_error())
+							break;
+						x = 0;
+						skip = false;
+						row = cast<u32*>(this->m_screenBuffer) + ((this->m_cursor_y + this->m_yOffset) % this->m_screen_y) * cols;
+						if (c == '\n') { c = text[++i]; continue; }
+					}
+				}
+				if (not skip)
+					row[x++] = (cast<u32>(c) << 24) | attr;
+				c = text[++i];
+			}
+			this->m_cursor_x = cast<u16>(x);
+			return this;
+		}
+		sub print(var c: u8) -> Text16Console* {
+			if (not this->is_valid() or this->has_error())
+				return this;
+			var buff: u8[2] = " \0";
+			buff[0] = c;
+			return this->print(buff);
+		}
+		sub print(var n: u32) -> Text16Console* {
+			if (not this->is_valid() or this->has_error())
+				return this;
+			var buff: u8[12];
+			dr::utoa(n, buff);
+			return this->print(buff);
+		}
+		sub print(var n: i32) -> Text16Console* {
+			if (not this->is_valid() or this->has_error())
+				return this;
+			var buff: u8[12];
+			dr::itoa(n, buff);
+			return this->print(buff);
+		}
+		sub nl() -> Text16Console* {
+			if (not this->is_valid() or this->has_error())
+				return this;
+			if (not this->check_new_line())
+			{
+				if (this->get_vertical_overflow_policy() != VOverflowPolicy.Ignore)
+					this->set_error(Errors.VerticalOverflow);
+				return this;
+			}
+			if (this->m_cursor_y < this->m_screen_y - 1)
+				this->m_cursor_y++;
+			else if (this->m_cursor_y == this->m_screen_y - 1)
+				this->scroll(false);
+			else
+			{
+				this->set_error(Errors.InvalidState);
+				return this;
+			}
+			this->m_cursor_x = 0;
+			return this;
+		}
+		sub scroll(var present: bool = true) -> Text16Console* {
+			if (not this->is_valid() or this->has_error())
+				return this;
+			this->m_yOffset = (this->m_yOffset + 1) % this->m_screen_y;
+			var start: u32 = ((this->m_yOffset + this->m_screen_y - 1) % this->m_screen_y) * this->m_screen_x * 4;
+			for (var i: u32 = start; i < start + this->m_screen_x * 4; i += 4)
+			{
+				this->m_screenBuffer[i + 0] = ' ';
+				this->m_screenBuffer[i + 1] = this->m_fg_col;
+				this->m_screenBuffer[i + 2] = this->m_bg_col;
+				this->m_screenBuffer[i + 3] = 0;
+			}
+			if (present)
+				this->present();
+			this->m_scrollOffset++;
+			return this;
+		}
+		sub clear(var col: u8, var present: bool = true) {
+			for (var i: i32 = 0; i < this->m_screenBufferSize; i += 4)
+			{
+				this->m_screenBuffer[i + 0] = ' ';
+				this->m_screenBuffer[i + 1] = this->m_fg_col;
+				this->m_screenBuffer[i + 2] = col;
+				this->m_screenBuffer[i + 3] = 0;
+			}
+			if (present)
+				this->present();
+		}
+		sub println(var text: string) -> Text16Console* {
+			return this->print(text)->nl();
+		}
+		sub xy(var x: u16, var y: u16) -> Text16Console* {
+			return this->x(x)->y(y);
+		}
+		sub x(var x: u16) -> Text16Console* {
+			var stop: bool = false;
+			var new_x: u16 = this->check_horizontal_overflow(x, &stop);
+			if (not stop and not this->has_error())
+				this->m_cursor_x = new_x;
+			return this;
+		}
+		sub y(var y: u16) -> Text16Console* {
+			var stop: bool = false;
+			var new_y: u16 = this->check_vertical_overflow(y, &stop);
+			if (not stop and not this->has_error())
+				this->m_cursor_y = new_y;
+			return this;
+		}
+		sub fg(var col: u8) -> Text16Console* {
+			if (this->check_color(col))
+				this->m_fg_col = col;
+			return this;
+		}
+		sub bg(var col: u8) -> Text16Console* {
+			if (this->check_color(col))
+				this->m_bg_col = col;
+			return this;
+		}
+
+		inline sub set_vertical_overflow_policy(var policy: u8) -> Text16Console* {
+			this->m_overflowPolicyV = policy;
+			return this;
+		}
+		inline sub set_horizontal_overflow_policy(var policy: u8) -> Text16Console* {
+			this->m_overflowPolicyH = policy;
+			return this;
+		}
+
+		inline sub get_scroll_offset() -> u32 {
+			return this->m_scrollOffset;
+		}
+		inline sub get_vertical_overflow_policy() -> u8 {
+			return this->m_overflowPolicyV;
+		}
+		inline sub get_horizontal_overflow_policy() -> u8 {
+			return this->m_overflowPolicyH;
+		}
+		inline sub get_error() -> u8 {
+			return this->m_error;
+		}
+		inline sub has_error() -> bool {
+			return this->get_error() != Errors.NoError;
+		}
+		inline sub clear_error() {
+			this->set_error(Errors.NoError);
+		}
+
+		priv sub check_horizontal_overflow(var x: u16, var outStop: bool*) -> u16 {
+			if (this->get_horizontal_overflow_policy() == HOverflowPolicy.Error)
+			{
+				if (x >= this->m_screen_x)
+					this->set_error(Errors.HorizontalOverflow);
+				return x;
+			}
+			else if (this->get_horizontal_overflow_policy() == HOverflowPolicy.Ignore)
+			{
+				if (x >= this->m_screen_x)
+					*outStop = true;
+				return x;
+			}
+			else if (this->get_horizontal_overflow_policy() == HOverflowPolicy.Wrap)
+			{
+				if (x >= this->m_screen_x)
+				{
+					if (this->check_new_line())
+					{
+						this->nl();
+						return 0;
+					}
+					else
+						this->set_error(Errors.VerticalOverflow);
+				}
+				return x;
+			}
+			else
+			{
+				this->set_error(Errors.InvalidOverflowPolicy);
+				return x;
+			}
+		}
+		priv sub check_vertical_overflow(var y: u16, var outStop: bool*) -> u16 {
+			if (this->get_vertical_overflow_policy() == VOverflowPolicy.Error)
+			{
+				if (y >= this->m_screen_y)
+					this->set_error(Errors.VerticalOverflow);
+				return y;
+			}
+			else if (this->get_vertical_overflow_policy() == VOverflowPolicy.Ignore)
+			{
+				if (y >= this->m_screen_y)
+					*outStop = true;
+				return y;
+			}
+			else if (this->get_vertical_overflow_policy() == VOverflowPolicy.Scroll)
+			{
+				if (y >= this->m_screen_y)
+				{
+					if (y - this->m_screen_y > this->m_screen_y)
+					{
+						this->clear(this->m_bg_col, false);
+						y %= this->m_screen_y;
+						return y;
+					}
+					while (y >= this->m_screen_y)
+					{
+						this->scroll(false);
+						y--;
+					}
+				}
+				return y;
+			}
+			else
+			{
+				this->set_error(Errors.InvalidOverflowPolicy);
+				return y;
+			}
+		}
+		priv sub check_new_line() -> bool {
+			if (this->get_vertical_overflow_policy() == VOverflowPolicy.Scroll)
+				return true;
+			if (this->m_cursor_y < this->m_screen_y - 1)
+				return true;
+			return false;
+		}
+		priv inline sub check_color(var col: u8) -> bool {
+			return col < 16;
+		}
 		priv inline sub set_error(var err: u8, var passthrough: bool = true) -> bool {
 			this->m_error = err;
 			return passthrough;

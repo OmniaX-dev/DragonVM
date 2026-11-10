@@ -747,23 +747,45 @@ namespace dragon
 				return true;
 			}
 
-			bool Graphics::writeVRAMFrame_16Colors(u32 newFrameAddr, u32 size)
+			bool Graphics::writeVRAMFrame_16Colors(u32 newFrameAddr, u32 size, u32 yOffset)
 			{
 				auto& mem = DragonRuntime::memMap;
 				if (size > m_16Color_frameSize)
 					return false;
+
 				u32 frame_addr = m_16Color_currentFrameAddr;
 				if (readFlag(tFlags::DoubleBufferingEnabled))
 					frame_addr = m_16Color_secondFrameAddr;
-				for (i64 i = frame_addr; i < frame_addr + size; i += m_16Color_cellSize)
+
+				const u32 srcCellSize = 4;                              // char, fg, bg, reserved
+				const u32 cols        = mem.read32(data::MemoryMapAddresses::CMOS_Start + data::CMOSRegisters::ScreenWidth);
+				if (cols == 0)
+					return false; //TODO: Error
+				const u32 cellCount   = size / m_16Color_cellSize;
+				const u32 rowCount    = cellCount / cols;
+				if (rowCount == 0 || cellCount % cols != 0)
+					return false; //TODO: Error (size isn't a whole number of rows)
+
+				const u32 srcRowBytes = cols * srcCellSize;
+				yOffset %= rowCount;
+
+				u32 dst = frame_addr;
+				for (u32 row = 0; row < rowCount; row++)
 				{
-					if (!m_videoMemory.w_Byte(i + tText16_CellStructure::character, mem.read8(newFrameAddr++)))
-						return false; //TODO: Error
-					if (!m_videoMemory.w_Byte(i + tText16_CellStructure::foreground, mem.read8(newFrameAddr++)))
-						return false; //TODO: Error
-					if (!m_videoMemory.w_Byte(i + tText16_CellStructure::background, mem.read8(newFrameAddr++)))
-						return false; //TODO: Error
-					newFrameAddr++; // 1 reserved byte
+					u32 srcRow = row + yOffset;
+					if (srcRow >= rowCount)
+						srcRow -= rowCount;                             // wrap without a second %
+					u32 src = newFrameAddr + srcRow * srcRowBytes;
+
+					for (u32 col = 0; col < cols; col++, dst += m_16Color_cellSize, src += srcCellSize)
+					{
+						if (!m_videoMemory.w_Byte(dst + tText16_CellStructure::character,  mem.read8(src + 0)))
+							return false; //TODO: Error
+						if (!m_videoMemory.w_Byte(dst + tText16_CellStructure::foreground, mem.read8(src + 1)))
+							return false; //TODO: Error
+						if (!m_videoMemory.w_Byte(dst + tText16_CellStructure::background, mem.read8(src + 2)))
+							return false; //TODO: Error
+					}
 				}
 				return true;
 			}

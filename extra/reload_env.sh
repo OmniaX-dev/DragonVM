@@ -6,7 +6,7 @@ green='\033[0;32m'
 clear='\033[0m'
 
 printf "${green}Building dragon-sdk...\n${clear}"
-./dsc --lib ./ds/dragon-sdk/src/dragon.ds -o ds/dragon-sdk/lib/dragon-sdk.dlib -Wa,$1
+./dsc --lib ./ds/dragon-sdk/src/* -o ds/dragon-sdk/lib/dragon-sdk.dlib -Wa,$1
 cp ./ds/dragon-sdk/lib/dragon-sdk.dlib ../extra/ds/dragon-sdk/lib/dragon-sdk.dlib
 
 printf "${green}Flashing BIOS...\n${clear}"

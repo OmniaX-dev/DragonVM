@@ -47,11 +47,12 @@ namespace dr {
 		set_interrupt_vector_entry(code, 0x0000);
 	}
 
-	sub set_interrupts_enabled(var enable: bool) {
-		if (enable)
-			low { sflg $CPUFlags.InterruptsEnabled }
-		else
-			low { zflg $CPUFlags.InterruptsEnabled }
+	sub enable_interrupts() {
+		low { sflg $CPUFlags.InterruptsEnabled }
+	}
+
+	sub disable_interrupts() {
+		low { zflg $CPUFlags.InterruptsEnabled }
 	}
 
 	sub raise_interrupt(var code: u8, var func: u8) {

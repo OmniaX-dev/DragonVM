@@ -68,7 +68,10 @@ namespace dr {
 		return ptr;
 	}
 
-	inline sub free(var ptr: void*) {
-		raise_interrupt(0x20, INT20_FREE_HEAP, cast<u32>(&ptr));
+	sub free(var ptr: void*) -> bool {
+		raise_interrupt(0x20, INT20_FREE_HEAP, cast<u32>(ptr));
+		var rv: u32 = 0;
+		low { mov $rv, RV };
+		return rv != 0;
 	}
 }

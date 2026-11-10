@@ -138,7 +138,8 @@
         0x30: (4 bytes) Text 16 Colors Buffered String Address
         0x34: (4 bytes) Text 16 Colors Buffered String Cell Address
         0x38: (4 bytes) Text 16 Colors Copy Frame Address
-        0x42: (4 bytes) Text 16 Colors Copy Frame Size
+        0x3C: (4 bytes) Text 16 Colors Copy Frame Size
+        0x40: (4 bytes) Text 16 Colors Copy Frame YOffset
 
         0x7C: Flags (4 Bytes)
             0b00000000.00000001: Double Buffering Enabled

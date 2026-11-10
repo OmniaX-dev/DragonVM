@@ -16,7 +16,8 @@ struct VGARegs {
     var text16ColorBufferStringCellAddr: u32;
     var text16ColorFrameAddr: u32;
     var text16ColorFrameSize: u32;
-    var __padding2: u8[60];
+    var text16ColorFrameYOffset: u32;
+    var __padding2: u8[56];
     var flags: u32;
     var text16MemoryController: struct {
             var x: u32;
@@ -25,6 +26,7 @@ struct VGARegs {
             var background: u8;
             var foreground: u8;
     };
+    var __padding3: u8[117];
 };
 
 interrupt sub __int_30_handler() {
@@ -138,6 +140,7 @@ interrupt sub __int_30_handler() {
 	{
 		device->text16ColorFrameAddr = param1;
 		device->text16ColorFrameSize = param2;
+		device->text16ColorFrameYOffset = param3;
 		device->signal = dr::VGAText16ColorSignals.CopyFrame;
 	}
 	else if (code == INT30_PRINT_INTEGER_TEXT16)
