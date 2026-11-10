@@ -115,6 +115,9 @@ namespace dscript
 			// The full name `written` refers to from `scope` (the innermost scope first; in a struct,
 			// only its nested types), or `written` if nothing has it.
 			std::string qualify(const std::string& written, const std::string& scope);
+			std::string qualifyThroughAlias(const std::string& written, const std::string& scope);
+			std::string aliasedScope(const std::string& full);
+			int m_aliasDepth { 0 };		// qualifyThroughAlias (an alias naming itself)
 			bool isDeclared(const std::string& name);
 			// priv nested types: only usable in their struct.
 			void checkTypeAccess(const std::string& full, const std::string& scope, const SourcePos& pos);

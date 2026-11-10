@@ -1,0 +1,4 @@
+// An alias that names itself, used as a scope: an error, not a hang.
+// expect-error: refers to itself
+alias Loop = Loop;
+sub main() -> i32 { return Loop::X; }

@@ -1,0 +1,45 @@
+// An alias of a struct / enum can be used as a scope: its nested types, enums and static subs.
+// expect-rv: 0
+#include(check.ds)
+
+struct Shape {
+	enum Kind { Circle = 1, Square = 2 };
+	struct Point { var x: i32; var y: i32; };
+	var kind: u8;
+	static sub area(var side: i32) -> i32 { return side * side; }
+};
+alias S = Shape;
+alias S2 = S;							// an alias of an alias
+
+enum Color { Red = 3, Green = 4 };
+alias C = Color;
+
+namespace Geo {
+	struct Box { enum Side { Top = 5, Bottom = 6 }; static sub id() -> i32 { return 7; } };
+	alias B = Box;						// relative to Geo
+	alias Outer = ::Shape;
+	sub inside() -> i32 { return cast<i32>(B::Side.Bottom) + Outer::area(2); }	// 6 + 4
+}
+
+const FromAlias: i32 = cast<i32>(S::Kind.Square);	// in a constant expression
+
+sub main() -> i32 {
+	check(1, S::Kind.Circle == 1 and S2::Kind.Square == 2);
+	check(2, S::area(3) == 9 and S2::area(4) == 16);
+	var p: S::Point;					// a nested type through the alias
+	p.x = 5;
+	var q: S2::Point* = &p;
+	check(3, q->x == 5 and sizeof(S::Point) == 8);
+	check(4, C.Green == 4);				// Enum.Member through the alias
+	check(5, Geo::B::Side.Top == 5 and Geo::B::id() == 7 and Geo::Outer::Kind.Circle == 1);
+	check(6, Geo::inside() == 10);
+	check(7, FromAlias == 2);
+	var s: S;
+	s.kind = S::Kind.Square;
+	check(8, s.kind == 2);
+	check(9, S.area(5) == 25 and S2::Kind.Circle == S::Kind.Circle);	// Struct.sub() through the alias
+	var low_value: u32 = 0;
+	low { mov $low_value, $C.Red }		// $Enum.Member in a low block, through the alias
+	check(10, low_value == 3);
+	return result();
+}

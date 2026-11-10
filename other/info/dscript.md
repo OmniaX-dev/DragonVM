@@ -120,6 +120,9 @@ var c: Bios::Color = Bios::Color.White;
   `::name` is the global one (`::print` inside a namespace that has its own `print`).
 - `.` is for values (enum members, the fields of struct constants: `Bios::Color.White`), `::`
   for scopes (namespaces, a struct's static subs and nested types).
+- An alias of a struct or enum works as that struct or enum, scopes included: with
+  `alias Con = Gfx::Console;`, `Con::Errors.Bad`, `Con::Cell`, `Con::make()`, `Con.make()`;
+  with `alias C = Bios::Color;`, `C.White` (also `$C.White` in low blocks).
 - `$name` in low blocks follows the same lookup (from the namespace of the sub, or of the low
   block); `$Bios::ROWS` works too.
 - The labels and data symbols are made from the full name (`__ns_Bios__Text16__print`): names

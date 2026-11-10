@@ -285,10 +285,52 @@ namespace dscript
 			if (found)
 				return candidate;
 			if (s.empty())
-				return written;
+				return qualifyThroughAlias(written, scope);
 			const size_t sep = s.rfind("::");
 			s = (sep == std::string::npos) ? "" : s.substr(0, sep);
 		}
+	}
+
+	// A::rest where A (or a longer prefix) is an alias of a struct / enum: the struct's name
+	// instead (alias Con = Gfx::Console;  Con::Errors.Bad  ->  Gfx::Console::Errors.Bad).
+	// written itself if there is no such alias.
+	std::string CodeGen::qualifyThroughAlias(const std::string& written, const std::string& scope)
+	{
+		if (m_aliasDepth > 8)
+			return written;
+		for (size_t sep = written.find("::", 1); sep != std::string::npos; sep = written.find("::", sep + 2))
+		{
+			const std::string prefix = qualify(written.substr(0, sep), scope);
+			auto it = m_aliases.find(prefix);
+			if (it == m_aliases.end())
+				continue;
+			const std::string target = aliasedScope(prefix);
+			if (target == prefix)
+				return written;
+			m_aliasDepth++;
+			const std::string full = qualify(target + written.substr(sep), "");
+			m_aliasDepth--;
+			return full;
+		}
+		return written;
+	}
+
+	// The struct / enum an alias (full name) names, through aliases of aliases; full itself if
+	// it is not such an alias.
+	std::string CodeGen::aliasedScope(const std::string& full)
+	{
+		std::string name = full;
+		for (int depth = 0; depth < 8; depth++)
+		{
+			auto it = m_aliases.find(name);
+			if (it == m_aliases.end())
+				break;
+			const TypeSyntax* ts = it->second.decl->typeSyntax;
+			if (ts == nullptr || ts->kind != TypeSyntax::Kind::Named)
+				return full;
+			name = ts->resolved ? ts->name : qualify(ts->name, it->second.decl->scope);
+		}
+		return (m_structs.count(name) > 0 || m_enums.count(name) > 0) ? name : full;
 	}
 
 	void CodeGen::checkTypeAccess(const std::string& full, const std::string& scope, const SourcePos& pos)
@@ -338,7 +380,8 @@ namespace dscript
 			resolveTypeNames(n->typeSyntax, scope);
 		if (n->kind == NodeKind::Ident && !n->resolved)
 		{
-			const std::string full = qualify(n->name, scope);
+			// (an alias of a struct / enum: that struct / enum, for Enum.Member and Struct.sub())
+			const std::string full = aliasedScope(qualify(n->name, scope));
 			if (full != n->name)
 			{
 				if (n->text.empty())
@@ -3219,7 +3262,7 @@ namespace dscript
 				for (const auto& sc : m_scopes)
 					local = local || sc.count(name) > 0;
 				if (!name.empty() && !local)
-					name = qualify(name, topLevel ? low->scope : (m_func != nullptr ? m_func->decl->scope : std::string()));
+					name = aliasedScope(qualify(name, topLevel ? low->scope : (m_func != nullptr ? m_func->decl->scope : std::string())));
 				std::string member;
 				if (j < line.size() && line[j] == '.' && m_enums.count(name) > 0)
 				{

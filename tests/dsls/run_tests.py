@@ -207,6 +207,9 @@ completes("fields and methods through ->", MAIN, main_text, 8, "\tvar total: i32
 completes("fields and methods through .", MAIN, main_text, 18, "\tpt.|", ["x", "y", "sum"])
 completes("the name being typed", MAIN, main_text, 18, "\tpt.s|", ["sum"])
 completes("static subs (Struct.)", MAIN, main_text, 18, "\tGeo.|", ["twice"])
+alias_text = main_text.rstrip("\n") + "\nalias G = Geo;\n"
+completes("an alias as a scope (Alias::)", MAIN, alias_text, 18, "\tG::|", ["twice"])
+completes("static subs through an alias (Alias.)", MAIN, alias_text, 18, "\tG.|", ["twice"])
 completes("a struct's scope, without its priv subs", MAIN, main_text, 18, "\tGeo::|", ["twice"])
 completes("enum members", MAIN, main_text, 18, "\tvar k = Color.|", ["Red", "Green", "Blue"])
 completes("priv members in the struct's own subs", SHAPES, shapes_text, geo_line + 3, "\tpriv sub reset() { this->| }", ["cache", "reset"])
