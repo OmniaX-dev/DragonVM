@@ -130,7 +130,7 @@ namespace dr {
 			cell.character = ' ';
 			cell.foreground = color;
 			cell.background = color;
-			raise_interrupt(0x30, INT30_CLEAR_SCREEN_TEXT16, cast<u32>(&cell));
+			raise_interrupt(0x30, INT30_CLEAR_SCREEN_TEXT16, cast<u32>(&cell), 0);	// (0: no frame buffer of the program's)
 		}
 	};
 
@@ -158,8 +158,12 @@ namespace dr {
 
 		priv var m_cursor_x: u16 = 0;
 		priv var m_cursor_y: u16 = 0;
+		priv var m_stored_cursor_x: u16 = 0;
+		priv var m_stored_cursor_y: u16 = 0;
 		priv var m_bg_col: u8 = DefaultPaletteText16.Black;
 		priv var m_fg_col: u8 = DefaultPaletteText16.Green;
+		priv var m_stored_bg_col: u8 = DefaultPaletteText16.Black;
+		priv var m_stored_fg_col: u8 = DefaultPaletteText16.Green;
 		priv var m_screen_x: u32 = 0;
 		priv var m_screen_y: u32 = 0;
 		priv var m_screenBufferSize: u32 = 0;
@@ -189,6 +193,13 @@ namespace dr {
 			dr::vga_enable_double_buffering();
 			this->m_initialized = true;
 			this->set_error(Errors.NoError);
+		}
+		sub destroy() {
+			if (this->m_screenBuffer)
+				dr::free(this->m_screenBuffer);
+			this->m_screenBuffer = null;
+			this->set_error(Errors.NoError);
+			this->m_initialized = false;
 		}
 		sub is_valid() -> bool {
 			if (not this->m_initialized)
@@ -302,15 +313,22 @@ namespace dr {
 			this->m_scrollOffset++;
 			return this;
 		}
-		sub clear(var col: u8, var present: bool = true) {
+		sub clear(var col: u8, var present: bool = true) -> Text16Console* {
+			var cell: VGAText16Cell;
+			cell.character = ' ';
+			cell.background = col;
+			cell.foreground = col;
+			// The video card clears this console's frame buffer too (and its own back buffer).
+			raise_interrupt(0x30, INT30_CLEAR_SCREEN_TEXT16, cast<u32>(&cell), cast<u32>(this->m_screenBuffer));
 			// One 32-bit store per cell (big endian: character, fg, bg, 0).
-			var blank: u32 = (cast<u32>(' ') << 24) | (cast<u32>(this->m_fg_col) << 16) | (cast<u32>(col) << 8);
-			var cells: u32* = cast<u32*>(this->m_screenBuffer);
-			var count: u32 = this->m_screenBufferSize / 4;
-			for (var i: u32 = 0; i < count; i++)
-				cells[i] = blank;
+			// var blank: u32 = (cast<u32>(' ') << 24) | (cast<u32>(this->m_fg_col) << 16) | (cast<u32>(col) << 8);
+			// var cells: u32* = cast<u32*>(this->m_screenBuffer);
+			// var count: u32 = this->m_screenBufferSize / 4;
+			// for (var i: u32 = 0; i < count; i++)
+			// 	cells[i] = blank;
 			if (present)
 				this->present();
+			return this;
 		}
 		sub println(var text: string) -> Text16Console* {
 			return this->print(text)->nl();

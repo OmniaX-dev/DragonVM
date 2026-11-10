@@ -11,7 +11,8 @@ struct VGARegs {
 	var textSingleColorInverted: u8;
     var __padding0: u8[2];
     var textSingleColorBufferStringAddr: u32;
-    var __padding1: u8[36];
+    var __padding1: u8[32];
+    var text16ColorClearSoftwareBufferAddr: u32;
     var text16ColorBufferStringAddr: u32;
     var text16ColorBufferStringCellAddr: u32;
     var text16ColorFrameAddr: u32;
@@ -157,6 +158,7 @@ interrupt sub __int_30_handler() {
 		device->text16MemoryController.character = cell->character;
 		device->text16MemoryController.background = cell->background;
 		device->text16MemoryController.foreground = cell->foreground;
+		device->text16ColorClearSoftwareBufferAddr = param2;
 		device->signal = dr::VGAText16ColorSignals.ForceClearScreen;
 	}
 	else if (code == INT30_SWAP_BUFFERS_TEXT16)

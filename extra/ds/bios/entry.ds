@@ -20,6 +20,7 @@ sub main() {
 
 	__print_machine_info(stack_size + heap_size);
 	__load_mbr_data_block();
+	low { debug_break };
 
 	// var dpt_block: DPTBlock;
 	// dpt_load_block(&dpt_block);

@@ -23,6 +23,7 @@ namespace dragon
 
 				inline u32 getSize(void) const { return cast<u32>(m_memory.size()); }
 				ostd::ByteStream* getByteStream(void) override;
+				inline u32 streamAddress(u32 addr) const override { return final_address(addr); }
 				inline void syncByteStream(void) override { m_dirty.markAll(); }
 				inline DirtyPageMap* getDirtyPages(void) override { return &m_dirty; }
 

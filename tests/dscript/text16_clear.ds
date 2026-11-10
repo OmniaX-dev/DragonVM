@@ -1,0 +1,17 @@
+// The video card's clear (int 0x30 CLEAR_SCREEN_TEXT16, Graphics::clearVRAM_16Colors): what was
+// presented before is gone, and text printed after it (PRINT_STRING_TEXT16) is all that is left
+// once the buffers are swapped (with double buffering, the screen shows the finished buffer).
+// drun-flags: --screen
+// expect-output: after the clear
+#import(<dragon-sdk>)
+
+sub main() -> void {
+	dr::vga_set_video_mode(dr::VGAVideoModes.Text16Color);
+	var con: dr::Text16Console();
+	con.clear(dr::DefaultPaletteText16.Black, false);
+	con.println("this line")->println("and this one")->print("are presented first");
+	con.present();
+	dr::Text16::clear_screen(dr::DefaultPaletteText16.Blue);
+	dr::Text16::print("after the clear", 0, 0, dr::DefaultPaletteText16.White, dr::DefaultPaletteText16.Blue);
+	dr::raise_interrupt(0x30, INT30_SWAP_BUFFERS_TEXT16);
+}

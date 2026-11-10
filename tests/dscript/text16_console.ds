@@ -102,13 +102,13 @@ sub main() -> i32 {
 	expect(13, con.get_horizontal_overflow_policy() == Con::HOverflowPolicy.Ignore
 		and con.get_vertical_overflow_policy() == Con::VOverflowPolicy.Ignore);
 
-	// clear: every cell a space in the default foreground and the given background.
+	// clear: every cell a space in the given color (foreground and background).
 	con.clear(dr::DefaultPaletteText16.Blue, false);
 	var all: bool = true;
 	for (var y: u32 = 0; y < rows; y++)
 		for (var x: u32 = 0; x < cols; x++) {
 			var c: u32 = cell(&con, x, y);
-			if (ch(c) != ' ' or fgOf(c) != dr::DefaultPaletteText16.Green or bgOf(c) != dr::DefaultPaletteText16.Blue or (c & 0xFF) != 0)
+			if (ch(c) != ' ' or fgOf(c) != dr::DefaultPaletteText16.Blue or bgOf(c) != dr::DefaultPaletteText16.Blue or (c & 0xFF) != 0)
 				all = false;
 		}
 	expect(20, all and at(&con, 0, 0));

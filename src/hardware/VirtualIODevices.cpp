@@ -6,6 +6,7 @@
 
 #include "../runtime/DragonRuntime.hpp"
 #include <ostd/io/Memory.hpp>
+#include <cstring>
 
 namespace dragon
 {
@@ -714,10 +715,7 @@ namespace dragon
 			bool Graphics::readVRAM_16Colors(u8 x, u8 y, Graphics::tText16_Cell& outTextCell)
 			{
 				u32 cellOffset = static_cast<u32>(CONVERT_2D_1D(x, y, VirtualDisplay::Columns)) * 4;
-				if (!readFlag(tFlags::DoubleBufferingEnabled))
-					cellOffset += m_16Color_currentFrameAddr;
-				else
-					cellOffset += m_16Color_secondFrameAddr;
+				cellOffset += m_16Color_currentFrameAddr;
 				i8 outVal = 0;
 				if (!m_videoMemory.r_Byte(cellOffset + tText16_CellStructure::character, outVal))
 					return false; //TODO: Error
@@ -747,6 +745,14 @@ namespace dragon
 				return true;
 			}
 
+			u8* Graphics::vram_span(u32 addr, u32 size)
+			{
+				ostd::ByteStream& data = m_videoMemory.getData();
+				if (cast<u64>(addr) + size > data.size())
+					return nullptr;
+				return reinterpret_cast<u8*>(data.data() + addr);
+			}
+
 			bool Graphics::writeVRAMFrame_16Colors(u32 newFrameAddr, u32 size, u32 yOffset)
 			{
 				auto& mem = DragonRuntime::memMap;
@@ -757,50 +763,96 @@ namespace dragon
 				if (readFlag(tFlags::DoubleBufferingEnabled))
 					frame_addr = m_16Color_secondFrameAddr;
 
-				const u32 srcCellSize = 4;                              // char, fg, bg, reserved
+				// The frame in RAM has the same cells as the video memory (char, fg, bg, reserved),
+				// so whole rows are copied as they are.
+				const u32 cellSize    = 4;
+				if (m_16Color_cellSize != cellSize)
+					return false; //TODO: Error
 				const u32 cols        = mem.read32(data::MemoryMapAddresses::CMOS_Start + data::CMOSRegisters::ScreenWidth);
 				if (cols == 0)
 					return false; //TODO: Error
-				const u32 cellCount   = size / m_16Color_cellSize;
+				const u32 cellCount   = size / cellSize;
 				const u32 rowCount    = cellCount / cols;
 				if (rowCount == 0 || cellCount % cols != 0)
 					return false; //TODO: Error (size isn't a whole number of rows)
 
-				const u32 srcRowBytes = cols * srcCellSize;
+				const u32 rowBytes    = cols * cellSize;
+				const u32 frameBytes  = rowCount * rowBytes;
 				yOffset %= rowCount;
+				u8* dst = vram_span(frame_addr, frameBytes);
+				if (dst == nullptr)
+					return false; //TODO: Error
 
-				u32 dst = frame_addr;
-				for (u32 row = 0; row < rowCount; row++)
+				// The ring buffer from row yOffset to its end, then its start: two copies.
+				const u32 topBytes = (rowCount - yOffset) * rowBytes;
+				if (const u8* src = mem.directSpan(newFrameAddr, frameBytes))
 				{
-					u32 srcRow = row + yOffset;
-					if (srcRow >= rowCount)
-						srcRow -= rowCount;                             // wrap without a second %
-					u32 src = newFrameAddr + srcRow * srcRowBytes;
-
-					for (u32 col = 0; col < cols; col++, dst += m_16Color_cellSize, src += srcCellSize)
-					{
-						if (!m_videoMemory.w_Byte(dst + tText16_CellStructure::character,  mem.read8(src + 0)))
-							return false; //TODO: Error
-						if (!m_videoMemory.w_Byte(dst + tText16_CellStructure::foreground, mem.read8(src + 1)))
-							return false; //TODO: Error
-						if (!m_videoMemory.w_Byte(dst + tText16_CellStructure::background, mem.read8(src + 2)))
-							return false; //TODO: Error
-					}
+					std::memcpy(dst, src + cast<size_t>(yOffset) * rowBytes, topBytes);
+					std::memcpy(dst + topBytes, src, frameBytes - topBytes);
+					return true;
 				}
+				// Not all in one memory device: byte by byte.
+				const u32 start = newFrameAddr + yOffset * rowBytes;
+				for (u32 i = 0; i < topBytes; i++)
+					dst[i] = cast<u8>(mem.read8(start + i));
+				for (u32 i = 0; i < frameBytes - topBytes; i++)
+					dst[topBytes + i] = cast<u8>(mem.read8(newFrameAddr + i));
 				return true;
 			}
 
-			bool Graphics::clearVRAM_16Colors(u8 character, u8 background, u8 foreground)
+			// Fills bytes (a whole number of 4-byte cells) with the cell: one cell, then copies of
+			// what is already filled (doubling each time).
+			static void fill_cells(u8* dst, u32 bytes, const u8 (&cell)[4])
 			{
+				if (bytes < 4)
+					return;
+				std::memcpy(dst, cell, 4);
+				u32 filled = 4;
+				while (filled < bytes)
+				{
+					const u32 n = std::min(filled, bytes - filled);
+					std::memcpy(dst + filled, dst, n);
+					filled += n;
+				}
+			}
+
+			bool Graphics::clearVRAM_16Colors(u8 character, u8 background, u8 foreground, u32 softwareBufferAddr)
+			{
+				// Cells: character, foreground, background, reserved (the video memory's and the
+				// programs' frame buffers alike).
+				u8 cell[4] = { 0, 0, 0, 0 };
+				cell[tText16_CellStructure::character] = character;
+				cell[tText16_CellStructure::foreground] = foreground;
+				cell[tText16_CellStructure::background] = background;
+
+				// The program's own frame buffer in RAM (its size: the screen's, from the CMOS),
+				// cleared too when it gives one.
+				if (softwareBufferAddr != 0)
+				{
+					auto& mem = DragonRuntime::memMap;
+					const u32 cols = mem.read32(data::MemoryMapAddresses::CMOS_Start + data::CMOSRegisters::ScreenWidth);
+					const u32 rows = mem.read32(data::MemoryMapAddresses::CMOS_Start + data::CMOSRegisters::ScreenHeight);
+					const u64 bytes = cast<u64>(cols) * rows * 4;
+					if (bytes > 0 && bytes <= m_16Color_frameSize)
+					{
+						if (u8* buffer = mem.writableSpan(softwareBufferAddr, cast<u32>(bytes)))
+							fill_cells(buffer, cast<u32>(bytes), cell);
+						else
+						{
+							// Not all in one memory device: byte by byte.
+							for (u32 i = 0; i < cast<u32>(bytes); i++)
+								mem.write8(softwareBufferAddr + i, cast<i8>(cell[i % 4]));
+						}
+					}
+				}
+
 				u32 frame_addr = m_16Color_currentFrameAddr;
 				if (readFlag(tFlags::DoubleBufferingEnabled))
 					frame_addr = m_16Color_secondFrameAddr;
-				for (i32 i = frame_addr; i < frame_addr + m_16Color_frameSize; i += 4)
-				{
-					m_videoMemory.w_Byte(i + tText16_CellStructure::character, character);
-					m_videoMemory.w_Byte(i + tText16_CellStructure::foreground, foreground);
-					m_videoMemory.w_Byte(i + tText16_CellStructure::background, background);
-				}
+				u8* dst = vram_span(frame_addr, m_16Color_frameSize);
+				if (dst == nullptr)
+					return false; //TODO: Error
+				fill_cells(dst, m_16Color_frameSize, cell);
 				return true;
 			}
 
@@ -808,16 +860,13 @@ namespace dragon
 			{
 				if (!readFlag(tFlags::DoubleBufferingEnabled))
 					return;
-				for (i32 i = m_16Color_currentFrameAddr, j = 0; i < m_16Color_currentFrameAddr + m_16Color_frameSize; i += 4, j += 4)
-				{
-					i8 outByte = 0;
-					m_videoMemory.r_Byte(m_16Color_secondFrameAddr + j, outByte);
-					m_videoMemory.w_Byte(i + tText16_CellStructure::character, outByte);
-					m_videoMemory.r_Byte(m_16Color_secondFrameAddr + j + 1, outByte);
-					m_videoMemory.w_Byte(i + tText16_CellStructure::foreground, outByte);
-					m_videoMemory.r_Byte(m_16Color_secondFrameAddr + j + 2, outByte);
-					m_videoMemory.w_Byte(i + tText16_CellStructure::background, outByte);
-				}
+				// The frame drawn goes to both buffers (the next frame starts from it), then
+				// they trade places.
+				u8* current = vram_span(m_16Color_currentFrameAddr, m_16Color_frameSize);
+				const u8* second = vram_span(m_16Color_secondFrameAddr, m_16Color_frameSize);
+				if (current == nullptr || second == nullptr)
+					return; //TODO: Error
+				std::memcpy(current, second, m_16Color_frameSize);
 				u32 tmp = m_16Color_currentFrameAddr;
 				m_16Color_currentFrameAddr = m_16Color_secondFrameAddr;
 				m_16Color_secondFrameAddr = tmp;

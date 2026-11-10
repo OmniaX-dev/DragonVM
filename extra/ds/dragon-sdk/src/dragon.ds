@@ -102,6 +102,7 @@ namespace dr {
 		var TextSingleChar: u32					= MemoryLayout.VGA + 0x0004;
 		var TextSingleInvert: u32				= MemoryLayout.VGA + 0x0005;
 		var TextSingleStr: u32					= MemoryLayout.VGA + 0x0008;
+		var ClearSoftwareBufferAddr: u32		= MemoryLayout.VGA + 0x002C;
 		var Text16Str: u32						= MemoryLayout.VGA + 0x0030;
 		var Text16Cell: u32						= MemoryLayout.VGA + 0x0034;
 		var Text16FrameAddr: u32				= MemoryLayout.VGA + 0x0038;

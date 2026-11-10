@@ -385,7 +385,7 @@ namespace dragon
 					bool readVRAM_16Colors(u8 x, u8 y, tText16_Cell& outTextCell);
 					bool writeVRAM_16Colors(u8 x, u8 y, u8 character = 0, u8 background = 0xFF, u8 foreground = 0xFF);
 					bool writeVRAMFrame_16Colors(u32 newFrameAddr, u32 size, u32 yOffset);
-					bool clearVRAM_16Colors(u8 character = 0, u8 background = 0x00, u8 foreground = 0xFF);
+					bool clearVRAM_16Colors(u8 character = 0, u8 background = 0x00, u8 foreground = 0xFF, u32 softwareBufferAddr = 0);
 					void swapBuffers_16Colors(void);
 					void scroll_16Colors(void);
 
@@ -393,6 +393,9 @@ namespace dragon
 					inline void loadState(const tState& state) { m_16Color_currentFrameAddr = state.currentFrameAddr; m_16Color_secondFrameAddr = state.secondFrameAddr; }
 
 				private:
+					// The video memory at addr..addr + size - 1 (nullptr if out of range).
+					u8* vram_span(u32 addr, u32 size);
+
 					ostd::serial::SerialIO m_videoMemory;
 
 					u32 m_vramStart { 0 };

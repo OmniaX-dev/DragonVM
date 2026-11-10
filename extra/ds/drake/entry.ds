@@ -6,11 +6,8 @@
 
 var keyBuff: u32[KEY_BUFF_SIZE];
 var keyRingBuff: dr::RingBuffer;
+var console: dr::Text16Console;
 
-var scrx: u32 = *cast<u32*>(dr::CMOSRegisters.ScreenColumns);
-var scry: u32 = *cast<u32*>(dr::CMOSRegisters.ScreenRows);
-var screenBufferSize: u32 = scrx * scry * 4;
-var screenBuffer: u8* = null;
 var pressedKey: u32 = 0;
 
 sub main() {
@@ -23,10 +20,7 @@ sub main() {
 	var boot_part: dr::DPTPartitionBlock* = get_boot_partition(&dpt_block);
 	halt_on_condition(not boot_part, "No bootable partition found.");
 
-	screenBuffer = dr::malloc(screenBufferSize);
-	halt_on_condition(not screenBuffer, "Screen buffer allocation failed.");
-	dr::Text16::print(screenBufferSize, 0, 0, dr::DefaultPaletteText16.Blue, dr::DefaultPaletteText16.Yellow);
-
+	console.new();
 	keyRingBuff.init(keyBuff, sizeof(u32), KEY_BUFF_SIZE);
 
 	dr::vga_enable_double_buffering();
@@ -34,28 +28,23 @@ sub main() {
 
 	var i: u32 = 0;
 	while(true) {
+		console.clear(dr::DefaultPaletteText16.Black, false)->xy(0, 0);
+		print_system_info(dpt_block.versionMaj, dpt_block.versionMin);
 		var key: u32 = 0;
 		if (keyRingBuff.pop(&key)) {
 			on_key_pressed(key);
 		}
-		dr::raise_interrupt(0x30, INT30_COPY_FRAME_TEXT16, cast<u32>(screenBuffer), screenBufferSize, 0);
-		dr::raise_interrupt(0x30, INT30_SWAP_BUFFERS_TEXT16);
+		console.present();
 	}
 
-	print_system_info(dpt_block.versionMaj, dpt_block.versionMin);
-
 	load_kernel0_block(boot_part);
-	dr::free(screenBuffer);
+	console.destroy();
 	low { jmp $dr::DPTBootPartStructure.CodeLoadAddr }
 }
 
 sub on_key_pressed(var key: u32) {
-	static var i: u32 = 0; // THis will eventually overflow, but it's just for testing
 	if (dr::isprint(key)) {
-		screenBuffer[i++] = cast<u8>(key);
-		screenBuffer[i++] = dr::DefaultPaletteText16.Green;
-		screenBuffer[i++] = dr::DefaultPaletteText16.Black;
-		i++; // 1 Reserved byte
+		console.print(cast<u8>(key));
 	}
 }
 
@@ -87,11 +76,9 @@ sub get_boot_partition(var dpt_block: dr::DPTBlock*) -> dr::DPTPartitionBlock* {
 }
 
 sub print_system_info(var dpt_ver_maj: u8, var dpt_ver_min: u8) {
-	dr::Text16::print("Drake 0.2 -- ", 0, 0, dr::DefaultPaletteText16.Green, dr::DefaultPaletteText16.Black);
-	dr::Text16::print("DPT Version ", 13, 0, dr::DefaultPaletteText16.Green, dr::DefaultPaletteText16.Black);
-	dr::Text16::print(cast<u32>(dpt_ver_maj), 26, 0, dr::DefaultPaletteText16.Green, dr::DefaultPaletteText16.Black);
-	dr::Text16::print('.', 27, 0, dr::DefaultPaletteText16.Green, dr::DefaultPaletteText16.Black);
-	dr::Text16::print(cast<u32>(dpt_ver_min), 28, 0, dr::DefaultPaletteText16.Green, dr::DefaultPaletteText16.Black);
+	console.bg(dr::DefaultPaletteText16.Green)->fg(dr::DefaultPaletteText16.Black);
+	console.print("Drake 0.2 -- DPT Version ")->print(cast<u32>(dpt_ver_maj))->print('.')->print(cast<u32>(dpt_ver_min));
+	console.bg(dr::DefaultPaletteText16.Black)->fg(dr::DefaultPaletteText16.Green)->nl();
 }
 
 sub halt_on_condition(var condition: bool, var err_msg: string) {

@@ -49,11 +49,19 @@ namespace dragon
 				u32 peek32(u32 addr);
 				// Returns false if the address has no backing memory.
 				bool poke8(u32 addr, u8 value);
+				// The bytes at addr..addr + size - 1, read in place (as read8 would see them), if
+				// they are all in one device's ByteStream; nullptr otherwise (several devices, a
+				// device without a ByteStream, out of range): read them with read8 then.
+				const u8* directSpan(u32 addr, u32 size);
+				// Same, to write them in place (the pages are marked as written, as poke8 does).
+				u8* writableSpan(u32 addr, u32 size);
 
 				ostd::ByteStream* getByteStream(void) override;
 
 			private:
 				tMemoryRegion* findRegion(u32 address, bool pushError = true);
+				// directSpan / writableSpan: the region and where addr is in its device's ByteStream.
+				i8* span(u32 addr, u32 size, tMemoryRegion*& region, u64& streamAddr);
 
 			private:
 				std::vector<tMemoryRegion> m_regions;

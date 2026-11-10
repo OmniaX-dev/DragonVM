@@ -157,6 +157,43 @@ namespace dragon
 			return true;
 		}
 
+		i8* MemoryMapper::span(u32 addr, u32 size, tMemoryRegion*& region, u64& streamAddr)
+		{
+			addr &= data::AddressMask;
+			if (size == 0)
+				return nullptr;
+			region = findRegion(addr, false);
+			if (region == nullptr || cast<u64>(addr) + size - 1 > region->endAddress)
+				return nullptr;
+			ostd::ByteStream* stream = region->device->getByteStream();
+			if (stream == nullptr)
+				return nullptr;
+			streamAddr = region->device->streamAddress(region->remap ? addr - region->startAddress : addr);
+			if (streamAddr + size > stream->size())
+				return nullptr;
+			return stream->data() + streamAddr;
+		}
+
+		const u8* MemoryMapper::directSpan(u32 addr, u32 size)
+		{
+			tMemoryRegion* region = nullptr;
+			u64 streamAddr = 0;
+			return reinterpret_cast<const u8*>(span(addr, size, region, streamAddr));
+		}
+
+		u8* MemoryMapper::writableSpan(u32 addr, u32 size)
+		{
+			tMemoryRegion* region = nullptr;
+			u64 streamAddr = 0;
+			i8* bytes = span(addr, size, region, streamAddr);
+			if (bytes != nullptr)
+			{
+				if (DirtyPageMap* dirty = region->device->getDirtyPages())
+					dirty->markRange(streamAddr, size);
+			}
+			return reinterpret_cast<u8*>(bytes);
+		}
+
 		MemoryMapper::tMemoryRegion* MemoryMapper::findRegion(u32 address, bool pushError)
 		{
 			// Most accesses hit the same region as the previous one (the RAM).

@@ -36,6 +36,7 @@ namespace dragon
 				inline static constexpr u8 TextSingleInvertColors = 0x05;
 				inline static constexpr u8 TextSingleString = 0x08;        // 4 bytes (address)
 
+				inline static constexpr u8 Text16ClearSoftwareBufferAddr = 0x2C;        // 4 bytes (address)
 				inline static constexpr u8 Text16String = 0x30;        // 4 bytes (address)
 				inline static constexpr u8 Text16StringCell = 0x34;        // 4 bytes (address)
 

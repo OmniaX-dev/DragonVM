@@ -99,6 +99,9 @@ namespace dragon
 					return value;
 				}
 				virtual inline ostd::ByteStream* getByteStream(void) = 0;
+				// Where the device's address addr is in its ByteStream (devices that translate
+				// their addresses, like the RAM with the CPU's offset, override it).
+				inline virtual u32 streamAddress(u32 addr) const { return addr; }
 				// Called after the ByteStream returned by getByteStream() was modified from the
 				// outside (e.g. by the debugger): devices with state derived from it update it.
 				inline virtual void syncByteStream(void) {  }

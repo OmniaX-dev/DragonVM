@@ -97,7 +97,8 @@ static void processVideoSignal(void)
 					cast<u32>(mem.read32(vga + R::Text16FrameYOffset)));
 			break;
 			case S::ClearSCreen:
-				graphics.clearVRAM_16Colors(mem.read8(vga + R::MemControllerChar), mem.read8(vga + R::MemControllerBGCol), mem.read8(vga + R::MemControllerFGCol));
+				graphics.clearVRAM_16Colors(mem.read8(vga + R::MemControllerChar), mem.read8(vga + R::MemControllerBGCol), mem.read8(vga + R::MemControllerFGCol),
+					cast<u32>(mem.read32(vga + R::Text16ClearSoftwareBufferAddr)));
 			break;
 			case S::Text16Color_SwapBuffers: graphics.swapBuffers_16Colors(); break;
 			case S::Text16Color_Scroll: graphics.scroll_16Colors(); break;

@@ -40,7 +40,7 @@ namespace dragon
 			for (u32 i = 1; i < 256; i++)
 				m_text16Palette.setColor(cast<u8>(i), m_text16_Currentpalette->getColor(cast<u8>(i)));
 
-			if (!m_font.loadFromFile(fontPath))
+			if (!m_font.loadFromFile(fontPath, 16, 16, 0))
 				return;
 			setFont(m_font);
 			enter_text_mode();
@@ -230,7 +230,8 @@ namespace dragon
 						const u8 fg = mem.read8(vga_addr + tRegisters::MemControllerFGCol);
 						const u8 bg = mem.read8(vga_addr + tRegisters::MemControllerBGCol);
 						const u8 character = mem.read8(vga_addr + tRegisters::MemControllerChar);
-						graphics.clearVRAM_16Colors(character, bg, fg);
+						const u32 softwareBufferAddr = mem.read32(vga_addr + tRegisters::Text16ClearSoftwareBufferAddr);
+						graphics.clearVRAM_16Colors(character, bg, fg, softwareBufferAddr);
 						m_redrawScreen = true;
 						break;
 					}
