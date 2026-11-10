@@ -42,17 +42,17 @@ interrupt sub __int_20_handler() {
 	else if (code == INT20_ALLOC_HEAP)
 	{
 		if (not param2) return;
-		dr::enable_interrupts();
-		*cast<u32*>(param2) = cast<u32>(Allocator::alloc(param1));
 		dr::disable_interrupts();
+		*cast<u32*>(param2) = cast<u32>(Allocator::alloc(param1));
+		dr::enable_interrupts();
 	}
 	else if (code == INT20_FREE_HEAP)
 	{
 		if (not param1) return;
-		dr::enable_interrupts();
+		dr::disable_interrupts();
 		var result: u32 = Allocator::free(cast<void*>(param1)) ? 1 : 0;
 		low { mov RV, $result }
-		dr::disable_interrupts();
+		dr::enable_interrupts();
 	}
 	else
 	{
