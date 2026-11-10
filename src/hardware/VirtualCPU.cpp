@@ -1,5 +1,6 @@
 #include "VirtualCPU.hpp"
 #include "../tools/GlobalData.hpp"
+#include "../runtime/DragonRuntime.hpp"
 
 #include <ostd/io/Memory.hpp>
 #include <cstring>
@@ -24,6 +25,28 @@ namespace dragon
 			m_stackTop = stackTop;
 			writeRegister32(data::Registers::SP, cast<i32>(stackTop));
 			writeRegister32(data::Registers::FP, cast<i32>(stackTop));
+		}
+
+		void VirtualCPU::reset(void)
+		{
+			for (i32 i = 0; i < data::Registers::Last; i++)
+				m_registers[i] = 0;
+			m_stackFrameSize = 0;
+			m_halt = false;
+			m_currentInst = 0x00;
+			m_currentAddr = 0x0000;
+			m_biosMode = true;
+			m_interruptHandlerCount = 0;
+			m_isDebugBreakPoint = false;
+			m_ramDumped = false;
+			m_subroutineCounter = 0;
+			m_debugProfilerStarted = false;
+			m_isOffsetAddressingEnabled = false;
+			m_currentOffset = 0x0000;
+			m_currentExtension = nullptr;
+			m_currentExtInst = 0x00;
+			writeRegister32(data::Registers::IP, 0x00000000);
+			setStackTop(m_stackTop);
 		}
 
 		i32 VirtualCPU::readRegister(u8 reg)
@@ -292,6 +315,16 @@ namespace dragon
 
 		bool VirtualCPU::execute(void)
 		{
+			// System signals (CMOS). Read from the CMOS itself, not through the memory map: it
+			// is checked before every instruction, and would take the RAM's place in the
+			// mapper's last-region cache. Before the halt check: a halted CPU can be rebooted.
+			ostd::BitField_16 systemSignals;
+			systemSignals.value = cast<u16>(DragonRuntime::vCMOS.read16(data::CMOSRegisters::SystemSignals));
+			if (ostd::Bits::get(systemSignals, data::SystemSignals::Reboot))
+			{
+				DragonRuntime::resetMachine();
+				return true;
+			}
 			if (m_halt) return true;
 			m_currentExtension = nullptr;
 			m_currentExtInst = 0x00;

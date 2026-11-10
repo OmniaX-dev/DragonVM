@@ -44,6 +44,10 @@ namespace dragon
 				VirtualCPU(IMemoryDevice& memory);
 				// Sets SP and FP to the top of the stack (the last word of the RAM).
 				void setStackTop(u32 stackTop);
+				// Power-on state: every register and flag 0, IP 0, SP / FP at the stack top, BIOS
+				// mode, not halted, no interrupt / subroutine pending, no offset addressing. The
+				// extensions, the debug mode and the handlers stay.
+				void reset(void);
 				inline u32 getStackTop(void) const { return m_stackTop; }
 				// `reg` is a register operand (index + view, see data::Registers): a half (RxL /
 				// RxH) reads zero-extended; writes are truncated to the view's width and change

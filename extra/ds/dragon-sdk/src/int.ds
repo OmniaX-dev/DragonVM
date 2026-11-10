@@ -9,6 +9,7 @@ const INT20_SET_NEW_INT_HANDLER: u8 				= 0x00;
 const INT20_CLEAR_INT_HANDLER: u8 					= 0x01;
 const INT20_ALLOC_HEAP: u8							= 0x20;
 const INT20_FREE_HEAP: u8 							= 0x21;
+const INT20_REBOOT: u8	 							= 0xE0;
 
 const INT30_DIRECT_PRINT_CHAR_TEXT_SINGLE: u8 		= 0x01;
 const INT30_DIRECT_NEW_LINE_TEXT_SINGLE: u8 		= 0x02;

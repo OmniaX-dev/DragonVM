@@ -270,6 +270,7 @@ namespace dragon
 		vCMOS.write8(data::CMOSRegisters::ScreenRedrawRate, machine_config.screen_redraw_rate_per_second);
 		vCMOS.write32(data::CMOSRegisters::ScreenWidth, static_cast<i32>(hw::VirtualDisplay::Columns));
 		vCMOS.write32(data::CMOSRegisters::ScreenHeight, static_cast<i32>(hw::VirtualDisplay::Rows));
+		vCMOS.write16(data::CMOSRegisters::SystemSignals, 0);	// (2 bytes: HeapStart follows)
 		vCMOS.write32(data::CMOSRegisters::StackSize, cast<i32>(std::min<u32>(data::DefaultValues::DefaultStackSize, ram_size / 2)));
 		vDiskInterface.writeBlockSize();
 		ostd::BitField_32 disk_list_bitfield;
@@ -285,6 +286,18 @@ namespace dragon
 
 		out.nl().nl();
 		return RETURN_VAL_EXIT_SUCCESS;
+	}
+
+	void DragonRuntime::resetMachine(void)
+	{
+		cpu.reset();
+		ram.init(ram.getSize());		// zeroed, every page marked as written
+		intVec.reset();
+		vGraphicsInterface.reset();
+		vKeyboard.resetState();
+		vDiskInterface.reset();
+		vCMOS.write16(data::CMOSRegisters::SystemSignals, 0);
+		s_resetCount++;
 	}
 
 	void DragonRuntime::shutdownMachine(void)

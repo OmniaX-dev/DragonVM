@@ -143,6 +143,13 @@ namespace dragon
 			connectSignal(ostd::BuiltinSignals::TextEntered);
 		}
 
+		void VirtualKeyboard::resetState(void)
+		{
+			std::fill(m_data.begin(), m_data.end(), 0x00);
+			m_modifiersBitFiels.value = 0;
+			m_inputEnabled = true;
+		}
+
 		i8 VirtualKeyboard::read8(u32 addr)
 		{
 			return stream_read8(m_data, addr, data::ErrorCodes::IntVector_InvalidAddress, "KeyboardController");
@@ -414,6 +421,16 @@ namespace dragon
 				m_data.w_Byte(tRegisters::Signal, tSignalValues::Ignore);
 			}
 
+			void Disk::reset(void)
+			{
+				ostd::ByteStream& data = m_data.getData();
+				std::fill(data.begin(), data.end(), 0x00);
+				m_data.w_Byte(tRegisters::Signal, tSignalValues::Ignore);
+				m_busy = false;
+				m_block.clear();
+				writeBlockSize();
+			}
+
 			i8 Disk::read8(u32 addr)
 			{
 				i8 value = 0;
@@ -641,6 +658,15 @@ namespace dragon
 				m_16Color_frameSize = VirtualDisplay::Columns * VirtualDisplay::Rows * m_16Color_cellSize;
 				m_16Color_currentFrameAddr = m_vramStart;
 				m_16Color_secondFrameAddr = m_vramStart + m_16Color_frameSize;
+			}
+
+			void Graphics::reset(void)
+			{
+				ostd::ByteStream& data = m_videoMemory.getData();
+				std::fill(data.begin(), data.end(), 0x00);
+				m_16Color_currentFrameAddr = m_vramStart;
+				m_16Color_secondFrameAddr = m_vramStart + m_16Color_frameSize;
+				m_16Color_doubleBufferingEnabled = false;
 			}
 
 			i8 Graphics::read8(u32 addr)

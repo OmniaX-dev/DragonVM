@@ -88,6 +88,14 @@ namespace dragon
 		{
 			auto& mem = DragonRuntime::memMap;
 			const u32 vga_addr = data::MemoryMapAddresses::VideoCardInterface_Start;
+			if (m_resetCount != DragonRuntime::getResetCount())
+			{
+				// The machine was reset: nothing of the previous run stays on the screen.
+				m_resetCount = DragonRuntime::getResetCount();
+				single_text_clear_screen();
+				m_videoMode = 0xFF;
+				m_redrawScreen = true;
+			}
 			apply_video_mode(mem.read8(vga_addr + tRegisters::VideoMode));
 			m_redrawScreen = m_redrawScreen && !DragonRuntime::vGraphicsInterface.readFlag(hw::interface::Graphics::tFlags::ScreenRedrawDisabled);
 			if (m_redrawScreen)

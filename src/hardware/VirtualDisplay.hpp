@@ -148,6 +148,7 @@ namespace dragon
 				ogfx::PixelFont m_font;
 				stdvec<u32> m_cells;
 				bool m_textModeActive { false };
+				u32 m_resetCount { 0 };		// DragonRuntime::getResetCount() last seen
 				u8 m_videoMode { 0xFF };
 
 				ColorPalette256 m_singlePalette;

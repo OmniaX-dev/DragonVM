@@ -51,6 +51,8 @@ sub on_key_pressed(var key: u32) {
 
 interrupt sub key_pressed_handler() {
 	pressedKey = *cast<u32*>(dr::KeyboardRegisters.KeyCode);
+	if (pressedKey == dr::KeyCodes.Return)
+		dr::raise_interrupt(0x20, INT20_REBOOT);
 	if (not keyRingBuff.push(&pressedKey))
 	{
 		//TODO: Handle missed key presses

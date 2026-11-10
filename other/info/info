@@ -42,6 +42,8 @@
         DisplayRedrawRate: (1 byte) 0x18
         BootDisk: (1 byte) 0x19
 
+        SystemSignals: (2 bytes) 0x72
+        	0b00000000_00000001: Reboot
         HeapStart: (4 bytes) 0x74
         HeapEnd: (4 bytes) 0x78
 

@@ -48,6 +48,14 @@ namespace dragon
 			static i32 initMachine(const tRuntimeInitInfo& info);
 			static void shutdownMachine(void);
 			static void forceLoad(const String& filePath, u32 loadAddress);
+			// Restarts the machine, as the reset line of a real one: the CPU, the RAM, the
+			// interrupt vector, the video card, the keyboard and the disk interface go back to
+			// their power-on state; the BIOS, the CMOS (but its system signals) and the disks
+			// keep their contents. Requested by the Reboot system signal (CMOS), checked before
+			// every instruction.
+			static void resetMachine(void);
+			// Incremented by every resetMachine(): lets the views (the window's display) notice.
+			inline static u32 getResetCount(void) { return s_resetCount; }
 
 			inline static bool hasError(void) { return data::ErrorHandler::hasError(); }
 			// Where the runtime prints (loading info, errors): the terminal by default; the
@@ -58,6 +66,7 @@ namespace dragon
 
 		private:
 			static void __print_application_help(void);
+			inline static u32 s_resetCount { 0 };
 
 		public:
 			inline static ostd::ConsoleOutputHandler out;

@@ -8,12 +8,16 @@
 
 alias Con = dr::Text16Console;
 
-// Text16Console's fields, in the same order.
+// Text16Console's fields, in the same order (check 1 fails when they change: update it).
 struct View {
 	var cursor_x: u16;
 	var cursor_y: u16;
+	var stored_cursor_x: u16;
+	var stored_cursor_y: u16;
 	var bg: u8;
 	var fg: u8;
+	var stored_bg: u8;
+	var stored_fg: u8;
 	var cols: u32;
 	var rows: u32;
 	var size: u32;

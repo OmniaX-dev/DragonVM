@@ -36,6 +36,8 @@ namespace dragon
 		{
 			public:
 				InterruptVector(void);
+				// Power-on state (no handlers).
+				inline void reset(void) { std::fill(m_data.begin(), m_data.end(), 0x00); }
 				i8 read8(u32 addr) override;
 				i32 read32(u32 addr) override;
 				i8 write8(u32 addr, i8 value) override;
@@ -226,6 +228,8 @@ namespace dragon
 			public:
 				inline VirtualKeyboard(void) {  }
 				void init(void);
+				// Power-on state of the registers (no key, no modifier); the host's signals stay connected.
+				void resetState(void);
 				i8 read8(u32 addr) override;
 				i32 read32(u32 addr) override;
 				i8 write8(u32 addr, i8 value) override;
@@ -330,6 +334,9 @@ namespace dragon
 					inline u32 getBlockSize(void) const { return m_blockSize; }
 					inline void setBlockSize(u32 size) { m_blockSize = std::max<u32>(size, 1); }
 					void writeBlockSize(void);
+					// Power-on state: idle, registers cleared (the block size written again); the
+					// disks stay connected.
+					void reset(void);
 
 				private:
 					ostd::serial::SerialIO m_data { data::MemoryMapAddresses::DiskInterface_End - data::MemoryMapAddresses::DiskInterface_Start + 1 };
@@ -382,6 +389,8 @@ namespace dragon
 					ostd::ByteStream* getByteStream(void) override;
 
 					inline u32 getVRAMStart(void) { return m_vramStart; }
+					// Power-on state: registers and video memory cleared, the frame buffers back in place.
+					void reset(void);
 					bool readVRAM_16Colors(u8 x, u8 y, tText16_Cell& outTextCell);
 					bool writeVRAM_16Colors(u8 x, u8 y, u8 character = 0, u8 background = 0xFF, u8 foreground = 0xFF);
 					bool writeVRAMFrame_16Colors(u32 newFrameAddr, u32 size, u32 yOffset);
