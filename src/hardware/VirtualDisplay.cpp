@@ -1,4 +1,5 @@
 #include "VirtualDisplay.hpp"
+#include "Text16Console.hpp"
 #include "../runtime/DragonRuntime.hpp"
 #include "../tools/GlobalData.hpp"
 #include <cctype>
@@ -233,9 +234,12 @@ namespace dragon
 						u8 x = mem.read8(cell_addr + 3);
 						const u8 y = mem.read8(cell_addr + 4);
 						for (char c = (char)mem.read8(char_addr); c != 0; c = (char)mem.read8(++char_addr))
-								graphics.writeVRAM_16Colors(x++, y, c, bg, fg);
+							graphics.writeVRAM_16Colors(x++, y, c, bg, fg);
 						break;
 					}
+					case tSignalValues::Text16Color_ConsolePrintString:
+						text16console::print(mem, cast<u32>(mem.read32(vga_addr + tRegisters::Text16ConsoleAddr)), cast<u32>(mem.read32(vga_addr + tRegisters::Text16String)));
+						break;
 					case tSignalValues::Text16Color_CopyFrame:
 					{
 						u32 frame_addr = cast<u32>(mem.read32(vga_addr + tRegisters::Text16FrameAddr));

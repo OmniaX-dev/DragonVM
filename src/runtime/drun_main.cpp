@@ -11,6 +11,7 @@
 // mode goes to stdout. The 16 colors text mode goes to the video memory (as with the window); --screen prints it at the end.
 
 #include "DragonRuntime.hpp"
+#include "../hardware/Text16Console.hpp"
 #include "../tools/DRX.hpp"
 #include <cstdio>
 #include <cstdlib>
@@ -99,6 +100,9 @@ static void processVideoSignal(void)
 			case S::ClearSCreen:
 				graphics.clearVRAM_16Colors(mem.read8(vga + R::MemControllerChar), mem.read8(vga + R::MemControllerBGCol), mem.read8(vga + R::MemControllerFGCol),
 					cast<u32>(mem.read32(vga + R::Text16ClearSoftwareBufferAddr)));
+			break;
+			case S::Text16Color_ConsolePrintString:
+				hw::text16console::print(mem, cast<u32>(mem.read32(vga + R::Text16ConsoleAddr)), cast<u32>(mem.read32(vga + R::Text16String)));
 			break;
 			case S::Text16Color_SwapBuffers: graphics.swapBuffers_16Colors(); break;
 			case S::Text16Color_Scroll: graphics.scroll_16Colors(); break;

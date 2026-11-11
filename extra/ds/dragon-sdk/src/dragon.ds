@@ -127,6 +127,7 @@ namespace dr {
 		var TextSingleChar: u32					= MemoryLayout.VGA + 0x0004;
 		var TextSingleInvert: u32				= MemoryLayout.VGA + 0x0005;
 		var TextSingleStr: u32					= MemoryLayout.VGA + 0x0008;
+		var Text16ConsoleAddr: u32				= MemoryLayout.VGA + 0x0028;
 		var ClearSoftwareBufferAddr: u32		= MemoryLayout.VGA + 0x002C;
 		var Text16Str: u32						= MemoryLayout.VGA + 0x0030;
 		var Text16Cell: u32						= MemoryLayout.VGA + 0x0034;
@@ -170,6 +171,7 @@ namespace dr {
 		var Scroll: u8							= 0x12;
 		var PrintString: u8						= 0x13;
 		var CopyFrame: u8						= 0x14;
+		var ConsolePrintString: u8				= 0x15;
 		var ForceRefreshScreen: u8				= 0xE0;
 		var ForceClearScreen: u8				= 0xE1;
 		var ForceRedrawScreen: u8				= 0xE2;

@@ -20,9 +20,6 @@ sub main() {
 	halt_on_condition(not dr::dpt_load_block(&dpt_block), "No valid DPT block found.");
 	get_bootable_partitions(&dpt_block, bootParts);
 	halt_on_condition(not bootParts[0], "No bootable partition found.");
-	var buff: u8[10];
-	dr::utoa(sizeof(dr::Text16Console), buff);
-	debug_print(buff);
 
 	console.new();
 	keyRingBuff.init(keyBuff, sizeof(u32), KEY_BUFF_SIZE);

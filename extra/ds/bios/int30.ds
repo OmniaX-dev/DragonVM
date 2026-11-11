@@ -2,34 +2,6 @@
 
 #import(<dragon-sdk>)
 
-struct VGARegs {
-	var mode: u8;
-	var clearColor: u8;
-	var palette: u8;
-	var signal: u8;
-	var textSingleColorChar: u8;
-	var textSingleColorInverted: u8;
-    var __padding0: u8[2];
-    var textSingleColorBufferStringAddr: u32;
-    var __padding1: u8[32];
-    var text16ColorClearSoftwareBufferAddr: u32;
-    var text16ColorBufferStringAddr: u32;
-    var text16ColorBufferStringCellAddr: u32;
-    var text16ColorFrameAddr: u32;
-    var text16ColorFrameSize: u32;
-    var text16ColorFrameYOffset: u32;
-    var __padding2: u8[56];
-    var flags: u32;
-    var text16MemoryController: struct {
-            var x: u32;
-            var y: u32;
-            var character: u8;
-            var background: u8;
-            var foreground: u8;
-    };
-    var __padding3: u8[117];
-};
-
 interrupt sub __int_30_handler() {
 	var code: u32;
 	var param1: u32;
@@ -41,8 +13,8 @@ interrupt sub __int_30_handler() {
 		mov $param2, R8
 		mov $param3, R11
 	}
-	var device: VGARegs* = cast<VGARegs*>(dr::MemoryLayout.VGA);
-	var l_textSingleStr = sub(var param: u32, var device: VGARegs*, var store: bool) {
+	var device: dr::VGADevice* = cast<dr::VGADevice*>(dr::MemoryLayout.VGA);
+	var l_textSingleStr = sub(var param: u32, var device: dr::VGADevice*, var store: bool) {
 		var str: u8* = cast<u8*>(param);
 		var c: u8 = str[0];
 		var i: i32 = 1;
@@ -190,7 +162,7 @@ sub __int30_print_integer_text16(var num: i32, var cell: dr::VGAText16Cell*, var
 }
 
 sub __int30_print_string_text16(var buff: u8*, var cell: dr::VGAText16Cell*, var allow_x_wrap: bool = true, var allow_scroll: bool = true) {
-	var device: VGARegs* = cast<VGARegs*>(dr::MemoryLayout.VGA);
+	var device: dr::VGADevice* = cast<dr::VGADevice*>(dr::MemoryLayout.VGA);
 	if (not buff) return;
 	//TODO: Add back __ensure_cell_coords_text16
 	device->text16ColorBufferStringAddr = cast<u32>(buff);
@@ -220,7 +192,7 @@ sub __ensure_cell_coords_text16(var cell: dr::VGAText16Cell*, var allow_x_wrap: 
             *cell = old_cell;
             return false;
         }
-        cast<VGARegs*>(dr::MemoryLayout.VGA)->signal = dr::VGAText16ColorSignals.Scroll;
+        cast<dr::VGADevice*>(dr::MemoryLayout.VGA)->signal = dr::VGAText16ColorSignals.Scroll;
         cell->y--;
     }
     return true;

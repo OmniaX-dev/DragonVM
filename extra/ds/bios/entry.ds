@@ -9,7 +9,7 @@
 sub main() {
 	*cast<u8*>(dr::VGARegisters.VideoMode) = dr::VGAVideoModes.TextSingleColor;
 	dr::enable_interrupts();
-	assert(sizeof(VGARegs) == 256);
+	assert(sizeof(dr::VGADevice) == 256);
 	dr::set_interrupt_vector_entry(0x20, &__int_20_handler);
 	dr::set_interrupt_vector_entry(0x30, &__int_30_handler);
 

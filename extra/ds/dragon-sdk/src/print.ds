@@ -3,6 +3,7 @@
 #include(dragon.ds)
 #include(int.ds)
 #include(mem.ds)
+#include(assert.ds)
 
 namespace dr {
 	struct TextSingle {
@@ -176,6 +177,7 @@ namespace dr {
 		priv var m_overflowPolicyV: u8 = 0;
 
 		sub new() {
+			assert(sizeof(Text16Console) == 40, "Layout of Text16Console changed.");
 			this->m_initialized = false;
 			this->m_screen_x = *cast<u32*>(CMOSRegisters.ScreenColumns);
 			this->m_screen_y = *cast<u32*>(CMOSRegisters.ScreenRows);
@@ -216,43 +218,49 @@ namespace dr {
 		sub print(var text: string) -> Text16Console* {
 			if (not this->is_valid() or this->has_error())
 				return this;
-			var cols: u32 = this->m_screen_x;
-			var x: u32 = this->m_cursor_x;
-			var attr: u32 = (cast<u32>(this->m_fg_col) << 16) | (cast<u32>(this->m_bg_col) << 8);
-			var row: u32* = cast<u32*>(this->m_screenBuffer) + ((this->m_cursor_y + this->m_yOffset) % this->m_screen_y) * cols;
-			var skip: bool = false;         // Ignore policy: past the right edge until '\n'
-			var i: u32 = 0;
-			var c: u8 = text[0];
-			while (c != 0) {
-				if (c == '\n' or (x >= cols and not skip)) {
-					if (c != '\n' and this->m_overflowPolicyH != HOverflowPolicy.Wrap) {
-						if (this->m_overflowPolicyH == HOverflowPolicy.Error) {
-							this->set_error(Errors.HorizontalOverflow);
-							break;
-						}
-						skip = true;                    // Ignore
-					}
-					else
-					{
-						this->m_cursor_x = cast<u16>(x);
-						var y0: u16 = this->m_cursor_y;
-						var s0: u32 = this->m_scrollOffset;
-						this->nl();                             // rare: the full logic (policy, scroll(false))
-						// An error, or no new line (vertical Ignore on the last row): the rest is dropped.
-						if (this->has_error() or (this->m_cursor_y == y0 and this->m_scrollOffset == s0))
-							break;
-						x = 0;
-						skip = false;
-						row = cast<u32*>(this->m_screenBuffer) + ((this->m_cursor_y + this->m_yOffset) % this->m_screen_y) * cols;
-						if (c == '\n') { c = text[++i]; continue; }
-					}
-				}
-				if (not skip)
-					row[x++] = (cast<u32>(c) << 24) | attr;
-				c = text[++i];
-			}
-			this->m_cursor_x = cast<u16>(x);
+			var device: dr::VGADevice* = cast<dr::VGADevice*>(dr::MemoryLayout.VGA);
+			device->text16ColorBufferStringAddr = cast<u32>(text);
+			device->text16ColorConsoleAddr = cast<u32>(this);
+			device->signal = VGAText16ColorSignals.ConsolePrintString;
 			return this;
+
+			// var cols: u32 = this->m_screen_x;
+			// var x: u32 = this->m_cursor_x;
+			// var attr: u32 = (cast<u32>(this->m_fg_col) << 16) | (cast<u32>(this->m_bg_col) << 8);
+			// var row: u32* = cast<u32*>(this->m_screenBuffer) + ((this->m_cursor_y + this->m_yOffset) % this->m_screen_y) * cols;
+			// var skip: bool = false;         // Ignore policy: past the right edge until '\n'
+			// var i: u32 = 0;
+			// var c: u8 = text[0];
+			// while (c != 0) {
+			// 	if (c == '\n' or (x >= cols and not skip)) {
+			// 		if (c != '\n' and this->m_overflowPolicyH != HOverflowPolicy.Wrap) {
+			// 			if (this->m_overflowPolicyH == HOverflowPolicy.Error) {
+			// 				this->set_error(Errors.HorizontalOverflow);
+			// 				break;
+			// 			}
+			// 			skip = true;                    // Ignore
+			// 		}
+			// 		else
+			// 		{
+			// 			this->m_cursor_x = cast<u16>(x);
+			// 			var y0: u16 = this->m_cursor_y;
+			// 			var s0: u32 = this->m_scrollOffset;
+			// 			this->nl();                             // rare: the full logic (policy, scroll(false))
+			// 			// An error, or no new line (vertical Ignore on the last row): the rest is dropped.
+			// 			if (this->has_error() or (this->m_cursor_y == y0 and this->m_scrollOffset == s0))
+			// 				break;
+			// 			x = 0;
+			// 			skip = false;
+			// 			row = cast<u32*>(this->m_screenBuffer) + ((this->m_cursor_y + this->m_yOffset) % this->m_screen_y) * cols;
+			// 			if (c == '\n') { c = text[++i]; continue; }
+			// 		}
+			// 	}
+			// 	if (not skip)
+			// 		row[x++] = (cast<u32>(c) << 24) | attr;
+			// 	c = text[++i];
+			// }
+			// this->m_cursor_x = cast<u16>(x);
+			// return this;
 		}
 		sub print(var c: u8) -> Text16Console* {
 			if (not this->is_valid() or this->has_error())

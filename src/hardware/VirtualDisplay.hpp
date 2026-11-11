@@ -38,6 +38,7 @@ namespace dragon
 				inline static constexpr u8 TextSingleInvertColors = 0x05;
 				inline static constexpr u8 TextSingleString = 0x08;        // 4 bytes (address)
 
+				inline static constexpr u8 Text16ConsoleAddr = 0x28;        // 4 bytes (address of a dr::Text16Console)
 				inline static constexpr u8 Text16ClearSoftwareBufferAddr = 0x2C;        // 4 bytes (address)
 				inline static constexpr u8 Text16String = 0x30;        // 4 bytes (address)
 				inline static constexpr u8 Text16StringCell = 0x34;        // 4 bytes (address)
@@ -75,6 +76,7 @@ namespace dragon
 				inline static constexpr u8 Text16Color_Scroll = 0x12;
 				inline static constexpr u8 Text16Color_PrintString = 0x13;
 				inline static constexpr u8 Text16Color_CopyFrame = 0x14;
+				inline static constexpr u8 Text16Color_ConsolePrintString = 0x15;	// Text16Console::print(Text16String), see Text16Console.hpp
 
 				inline static constexpr u8 RefreshScreen = 0xE0;
 				inline static constexpr u8 ClearSCreen = 0xE1;
@@ -151,7 +153,7 @@ namespace dragon
 				ogfx::PixelFont m_font;
 				stdvec<u32> m_cells;
 				bool m_textModeActive { false };
-				u32 m_resetCount { 0 };		// DragonRuntime::getResetCount() last seen
+				u32 m_resetCount { 0 };        // DragonRuntime::getResetCount() last seen
 				u8 m_videoMode { 0xFF };
 
 				ColorPalette256 m_singlePalette;

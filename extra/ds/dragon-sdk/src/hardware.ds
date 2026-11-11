@@ -3,6 +3,35 @@
 #include(dragon.ds)
 
 namespace dr {
+	struct VGADevice {
+		var mode: u8;
+		var clearColor: u8;
+		var palette: u8;
+		var signal: u8;
+		var textSingleColorChar: u8;
+		var textSingleColorInverted: u8;
+	    var __padding0: u8[2];
+	    var textSingleColorBufferStringAddr: u32;
+	    var __padding1: u8[28];
+	    var text16ColorConsoleAddr: u32;
+	    var text16ColorClearSoftwareBufferAddr: u32;
+	    var text16ColorBufferStringAddr: u32;
+	    var text16ColorBufferStringCellAddr: u32;
+	    var text16ColorFrameAddr: u32;
+	    var text16ColorFrameSize: u32;
+	    var text16ColorFrameYOffset: u32;
+	    var __padding2: u8[56];
+	    var flags: u32;
+	    var text16MemoryController: struct {
+	            var x: u32;
+	            var y: u32;
+	            var character: u8;
+	            var background: u8;
+	            var foreground: u8;
+	    };
+	    var __padding3: u8[117];
+	};
+
 	inline sub get_boot_disk() -> u8 {
 		return *cast<u8*>(CMOSRegisters.BootDisk);
 	}
