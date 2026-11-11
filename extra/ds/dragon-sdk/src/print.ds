@@ -415,6 +415,12 @@ namespace dr {
 			return this;
 		}
 
+		inline sub get_console_width() -> u16 {
+			return this->m_screen_x;
+		}
+		inline sub get_console_height() -> u16 {
+			return this->m_screen_y;
+		}
 		inline sub get_scroll_offset() -> u32 {
 			return this->m_scrollOffset;
 		}

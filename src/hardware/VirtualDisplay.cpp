@@ -100,6 +100,16 @@ namespace dragon
 			m_redrawScreen = m_redrawScreen && !DragonRuntime::vGraphicsInterface.readFlag(hw::interface::Graphics::tFlags::ScreenRedrawDisabled);
 			if (m_redrawScreen)
 				__redraw_screen();
+			if (m_vsyncPending)
+			{
+				// After the redraw, so the handler runs with the new frame on the screen. Skipped
+				// while the previous VSync handler is still running: a handler slower than the
+				// screen timer would otherwise be restarted (nested) at every tick, and never finish.
+				m_vsyncPending = false;
+				auto& cpu = DragonRuntime::cpu;
+				if (!cpu.isInterruptInService(data::InterruptCodes::VSync))
+					cpu.handleInterrupt(data::InterruptCodes::VSync, true);
+			}
 		}
 
 		void VirtualDisplay::refresh(void)
@@ -130,7 +140,7 @@ namespace dragon
 			*p++ = cast<u8>(bufferLen);
 			std::memcpy(p, buffer.data(), bufferLen);
 			p += Columns;
-			*p = m_redrawScreen ? 1 : 0;
+			*p = (m_redrawScreen ? 1 : 0) | (m_vsyncPending ? 2 : 0);
 		}
 
 		void VirtualDisplay::loadState(const u8* state)
@@ -150,7 +160,8 @@ namespace dragon
 			const u8 bufferLen = std::min<u8>(*p++, cast<u8>(Columns));
 			m_singleTextBuffer = String(std::string(reinterpret_cast<const char*>(p), bufferLen));
 			p += Columns;
-			m_redrawScreen = (*p != 0);
+			m_redrawScreen = (*p & 1) != 0;
+			m_vsyncPending = (*p & 2) != 0;
 		}
 
 		void VirtualDisplay::processSignal(void)
@@ -273,7 +284,6 @@ namespace dragon
 				apply_video_mode(video_mode);
 				to_cells();
 			}
-			DragonRuntime::cpu.handleInterrupt(data::InterruptCodes::Text16ModeScreenRefreshed, true);
 			m_redrawScreen = false;
 		}
 

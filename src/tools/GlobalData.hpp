@@ -257,7 +257,9 @@ namespace dragon
 				inline static constexpr u8 KeyReleased = 0xA1;
 				inline static constexpr u8 TextEntered = 0xA2;
 
-				inline static constexpr u8 Text16ModeScreenRefreshed = 0xE0;
+				// Raised at every tick of the screen timer (screen_redraw_rate_per_second), in every
+				// video mode, unless its previous handler is still running (then that tick is skipped).
+				inline static constexpr u8 VSync = 0xE0;
 
 				inline static String getInterruptName(u8 code)
 				{
@@ -267,7 +269,7 @@ namespace dragon
 						case KeyPressed:                 return "Key_Pressed";
 						case KeyReleased:                 return "Key_Released";
 						case TextEntered:                 return "Text_Entered";
-						case Text16ModeScreenRefreshed:    return "Text16_Mode_Screen_Refreshed";
+						case VSync:                       return "VSync";
 						default:                        return "UNKNOWN";
 					}
 					return "UNKNOWN";

@@ -26,7 +26,8 @@ when the card **redraws**, which mostly happens on a timer.
                            │  on redraw
                            ▼
             VirtualDisplay::__redraw_screen() -> to_cells() -> TextConsoleCanvas (ogfx)
-                                              -> hardware interrupt 0xE0
+
+            screen timer tick -> redraw + hardware interrupt 0xE0 (VSync)
 ```
 
 | Part | Where | What it is |
@@ -211,7 +212,6 @@ window only shows the new state after a **redraw**:
 __redraw_screen():
     apply_video_mode(VideoMode)      // switch palette/colors if the mode register changed
     to_cells()                       // single color: lines -> cells; 16 color: VRAM -> cells
-    cpu.handleInterrupt(0xE0, true)  // the "screen refreshed" hardware interrupt
     m_redrawScreen = false
 ```
 
@@ -219,7 +219,7 @@ __redraw_screen():
 
 | Caller | How often |
 |---|---|
-| `RuntimeWindow::runMachine()` | a `StepTimer` at `ScreenRedrawRate` per second (CMOS 0x18, from `screen_redraw_rate_per_second` in the `.dvm`; 30 in the test machine). It only **requests** one (`redrawScreen()` sets `m_redrawScreen`). |
+| `RuntimeWindow::runMachine()` | a `StepTimer` at `ScreenRedrawRate` per second (CMOS 0x18, from `screen_redraw_rate_per_second` in the `.dvm`; 30 in the test machine). It only **requests** one, plus the VSync interrupt (`vsync()` sets `m_redrawScreen` and `m_vsyncPending`). |
 | the widget's `onUpdate()` | at the window's frame rate (60 fps). With auto redraw on (the runtime's default), it calls `update()`, which redraws if one was requested. |
 | `Debugger::step_machine()` | every `clock_rate_sec / screen_redraw_rate_per_second` **cycles** (machine time, not wall time, so stepping is reproducible). Auto redraw is off; it calls `update()` itself after every cycle. |
 | signals 0x10, 0x12, 0xE2 (16 color mode) | immediately |
@@ -236,15 +236,22 @@ timer redraws are **thrown away**, not postponed: the request is lost. The immed
 program full control: set the flag, write all the cells, then send 0xE2 once. The screen never shows
 a half-drawn frame.
 
-### 5.3 The 0xE0 "screen refreshed" interrupt
+### 5.3 The 0xE0 VSync interrupt
 
-**Every** redraw raises hardware interrupt 0xE0 (`Text16ModeScreenRefreshed`), in both modes, despite
-the name. The handler runs only if entry 0xE0 of the interrupt vector is enabled (0xFF); the BIOS
-doesn't install one.
+Every tick of the screen timer raises hardware interrupt 0xE0 (`VSync`), in every video mode, after
+the tick's redraw (so the handler runs with the new frame on the screen). It is raised even while
+`ScreenRedrawDisabled` is set: it is a timing signal, the redraw is separate. Redraws asked by the
+program (signals 0x10, 0x12, 0xE1, 0xE2) **don't** raise it, so a handler that draws and presents
+a frame doesn't trigger itself.
 
-Hardware interrupts don't check the CPU's `InterruptsEnabled` flag: `handleInterrupt()` only looks at
-the vector entry. Only the `int` instruction checks the flag. So `zflg Flags.InterruptsEnabled` does
-**not** block this one (or the disk's 0x80).
+While a VSync handler is still running (entered and not yet returned with `rti`), the next ticks
+don't raise it again: they are **skipped**, not queued. A handler slower than the timer just runs at
+a lower rate (one tick in N) instead of being restarted, nested, at every tick. The CPU keeps the
+"in service" state of every interrupt (`VirtualCPU::isInterruptInService()`); the display checks it.
+
+The handler runs only if entry 0xE0 of the interrupt vector is enabled (0xFF); the BIOS doesn't
+install one. Like every interrupt, it is also dropped while the CPU's `InterruptsEnabled` flag is
+clear (`handleInterrupt()` checks it), e.g. inside an `atomic` block.
 
 ---
 

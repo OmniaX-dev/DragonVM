@@ -117,7 +117,7 @@ namespace dr {
 		var KeyReleased: u8						= 0xA1;
 		var TextEntered: u8						= 0xA2;
 
-		var Text16ScreenRefreshed: u8			= 0xE0;
+		var VSync: u8							= 0xE0;
 	};
 	const VGARegisters: struct {
 		var VideoMode: u32 						= MemoryLayout.VGA + 0x0000;

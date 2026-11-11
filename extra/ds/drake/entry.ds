@@ -8,6 +8,8 @@ var keyBuff: u32[KEY_BUFF_SIZE];
 var keyRingBuff: dr::RingBuffer;
 var console: dr::Text16Console;
 var bootParts: dr::DPTPartitionBlock*[dr::DPTStructure.MaxPartitions];
+var horizontalLine: u8* = null;
+var dpt_block: dr::DPTBlock;
 
 var pressedKey: u32 = 0;
 
@@ -15,30 +17,34 @@ sub main() {
 	dr::TextSingle::clear_screen();
 	dr::vga_set_video_mode(dr::VGAVideoModes.Text16Color);
 
-	var dpt_block: dr::DPTBlock;
 	halt_on_condition(not dr::dpt_load_block(&dpt_block), "No valid DPT block found.");
-
-	var boot_part: dr::DPTPartitionBlock* = get_bootable_partitions(&dpt_block, bootParts);
+	get_bootable_partitions(&dpt_block, bootParts);
 	halt_on_condition(not bootParts[0], "No bootable partition found.");
+	var buff: u8[10];
+	dr::utoa(sizeof(dr::Text16Console), buff);
+	debug_print(buff);
 
 	console.new();
 	keyRingBuff.init(keyBuff, sizeof(u32), KEY_BUFF_SIZE);
 
 	dr::vga_enable_double_buffering();
-	dr::set_interrupt_vector_entry(0xA0, &key_pressed_handler);
+	dr::set_interrupt_vector_entry(dr::HardwareInterrupts.KeyPressed, &key_pressed_handler);
+	dr::set_interrupt_vector_entry(dr::HardwareInterrupts.VSync, &on_draw);
 
-	var i: u32 = 0;
-	while(true) {
-		console.clear(dr::DefaultPaletteText16.Black, false)->xy(0, 0);
-		print_system_info(dpt_block.versionMaj, dpt_block.versionMin);
-		var key: u32 = 0;
-		if (keyRingBuff.pop(&key)) {
-			on_key_pressed(key);
-		}
-		console.present();
-	}
+	var screenWidth: u16 = console.get_console_width();
+	horizontalLine = dr::malloc(screenWidth + 1);
+	var verticalLine: u8* = dr::malloc(screenWidth + 1);
+	halt_on_condition(not horizontalLine, "Allocation for <horizontalLine> failed.");
+	horizontalLine[0] = dr::ASCII.BoxDownRight;
+	for (var i: u16 = 1; i < screenWidth - 1; i++)
+		horizontalLine[i] = dr::ASCII.BoxHorizontal;
+	horizontalLine[screenWidth - 1] = dr::ASCII.BoxDownLeft;
+	horizontalLine[screenWidth] = '\0';
 
-	load_kernel0_block(boot_part);
+
+	while(true);
+
+	load_kernel0_block(bootParts[0]);
 	console.destroy();
 	low { jmp $dr::DPTBootPartStructure.CodeLoadAddr }
 }
@@ -47,6 +53,25 @@ sub on_key_pressed(var key: u32) {
 	if (dr::isprint(key)) {
 		console.print(cast<u8>(key));
 	}
+}
+
+interrupt sub on_draw() {
+	low { debug_break };
+	console.clear(dr::DefaultPaletteText16.Black, false)->xy(0, 0);
+	print_system_info(dpt_block.versionMaj, dpt_block.versionMin);
+	console.print(horizontalLine);
+	console.nl();
+	console.print(horizontalLine);
+	console.nl();
+	console.print(horizontalLine);
+	console.nl();
+	console.print(horizontalLine);
+	console.nl();
+	var key: u32 = 0;
+	if (keyRingBuff.pop(&key)) {
+		on_key_pressed(key);
+	}
+	console.present();
 }
 
 interrupt sub key_pressed_handler() {
@@ -69,7 +94,7 @@ sub load_kernel0_block(var part: dr::DPTPartitionBlock*) {
 	dr::raise_interrupt(0x20, INT20_LOAD_FROM_DDD_BLOCKING, cast<u32>(&ddd));
 }
 
-sub get_bootable_partitions(var dpt_block: dr::DPTBlock*, var outEntries: dr::DPTPartitionBlock**) -> dr::DPTPartitionBlock* {
+sub get_bootable_partitions(var dpt_block: dr::DPTBlock*, var outEntries: dr::DPTPartitionBlock**) {
 	var j: i8 = 0;
 	for (; j < dr::DPTStructure.MaxPartitions; j++)
 		outEntries[j] = null;
@@ -79,7 +104,6 @@ sub get_bootable_partitions(var dpt_block: dr::DPTBlock*, var outEntries: dr::DP
 		if (dr::dpt_is_partition_bootable(&dpt_block->entries[i]))
 			outEntries[j++] = &dpt_block->entries[i];
 	}
-	return null;
 }
 
 sub print_system_info(var dpt_ver_maj: u8, var dpt_ver_min: u8) {

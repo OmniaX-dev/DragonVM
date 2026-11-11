@@ -5,8 +5,7 @@
 #include <ostd/io/Memory.hpp>
 #include <cstring>
 #include <iostream>
-
-#include "../runtime/DragonRuntime.hpp"
+#include <algorithm>
 
 namespace dragon
 {
@@ -37,6 +36,7 @@ namespace dragon
 			m_currentAddr = 0x0000;
 			m_biosMode = true;
 			m_interruptHandlerCount = 0;
+			std::memset(m_interruptInService, 0, sizeof(m_interruptInService));
 			m_isDebugBreakPoint = false;
 			m_ramDumped = false;
 			m_subroutineCounter = 0;
@@ -211,6 +211,8 @@ namespace dragon
 			pushStackFrame();
 			m_subroutineCounter++;
 			m_interruptHandlerCount++;
+			if (m_interruptInService[intValue] == 0)
+				m_interruptInService[intValue] = cast<u16>(std::min(m_interruptHandlerCount, 0xFFFF));
 			writeRegister32(data::Registers::IP, cast<i32>(handlerAddress));
 			if (m_interruptListener)
 				m_interruptListener(intValue, hardware, handlerAddress);
@@ -244,6 +246,7 @@ namespace dragon
 			outState.currentOffset = m_currentOffset;
 			outState.interruptHandlerCount = m_interruptHandlerCount;
 			outState.subroutineCounter = m_subroutineCounter;
+			std::memcpy(outState.interruptInService, m_interruptInService, sizeof(m_interruptInService));
 			outState.currentInst = m_currentInst;
 			outState.currentExtInst = m_currentExtInst;
 			outState.currentExtension = -1;
@@ -268,6 +271,7 @@ namespace dragon
 			m_currentOffset = state.currentOffset;
 			m_interruptHandlerCount = state.interruptHandlerCount;
 			m_subroutineCounter = state.subroutineCounter;
+			std::memcpy(m_interruptInService, state.interruptInService, sizeof(m_interruptInService));
 			m_currentInst = state.currentInst;
 			m_currentExtInst = state.currentExtInst;
 			m_currentExtension = (state.currentExtension >= 0 && state.currentExtension < 16 ? m_extensions[state.currentExtension] : nullptr);
@@ -1040,6 +1044,11 @@ namespace dragon
 				case data::OpCodes::RetInt:
 				{
 					m_interruptHandlerCount--;
+					for (i32 i = 0; i < 256; i++)
+					{
+						if (m_interruptInService[i] > m_interruptHandlerCount)
+							m_interruptInService[i] = 0;
+					}
 					popStackFrame();
 					m_subroutineCounter--;
 				}

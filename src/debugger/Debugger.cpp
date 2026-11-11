@@ -500,7 +500,7 @@ namespace dragon
 		DragonRuntime::vDiskInterface.cycleStep();
 		m_cycle++;
 		if (m_cycle % m_cyclesPerRedraw == 0)
-			m_display->redrawScreen();
+			m_display->vsync();
 		m_display->update();
 		if (m_historyEnabled)
 			m_history.record(m_cycle);

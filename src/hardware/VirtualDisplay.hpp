@@ -17,9 +17,11 @@ namespace dragon
 		//     swaps the two colors (of the characters written while it is set).
 		//   - Text16Colors: the BIOS writes cells into VRAM through the Graphics interface;
 		//     the screen shows VRAM, colored with the configured palette.
-		// What is shown only changes when the screen is redrawn (redrawScreen(), or a
-		// redraw/swap/scroll signal), unless redrawing is disabled by the ScreenRedrawDisabled
-		// flag; every redraw raises the Text16ModeScreenRefreshed interrupt.
+		// What is shown only changes when the screen is redrawn (a screen timer tick, vsync(), or
+		// a redraw/swap/scroll signal), unless redrawing is disabled by the ScreenRedrawDisabled
+		// flag. Every timer tick also raises the VSync interrupt (in every video mode, also while
+		// redrawing is disabled), unless its previous handler is still running: then that tick
+		// is skipped. Redraws asked by the program (signals) don't raise it.
 		//
 		// processSignal() must be called by the owner once per CPU cycle: it handles the video
 		// signal right away (the BIOS doesn't wait for it to be consumed). Redraws happen in the
@@ -98,10 +100,11 @@ namespace dragon
 
 				// Handles the pending video signal, if any (once per CPU cycle).
 				void processSignal(void);
-				// Requests a redraw (done by the next update()).
-				inline void redrawScreen(void) { m_redrawScreen = true; }
-				// The machine side of the screen: applies the video mode and does the requested
-				// redraw (raising the Text16ModeScreenRefreshed interrupt). Called by the widget's
+				// The screen timer's tick (screen_redraw_rate_per_second): requests a redraw and the
+				// VSync interrupt (both done by the next update()).
+				inline void vsync(void) { m_redrawScreen = true; m_vsyncPending = true; }
+				// The machine side of the screen: applies the video mode, does the requested redraw
+				// and raises the requested VSync interrupt. Called by the widget's
 				// update while auto redraw is on (the default); otherwise call it yourself, e.g.
 				// once per CPU cycle, so redraws happen at exact points of the program.
 				void update(void);
@@ -120,7 +123,7 @@ namespace dragon
 
 			public:
 				// lines (1) + Rows x (length (1) + Columns cells (4)) + buffer length (1) + Columns
-				// characters + pending redraw (1)
+				// characters + pending redraw / VSync (1: bit 0 redraw, bit 1 VSync)
 				inline static constexpr size_t StateSize = 1 + Rows * (1 + Columns * 4) + 1 + Columns + 1;
 
 			private:
@@ -163,6 +166,7 @@ namespace dragon
 				u8 m_currentPaletteID { 0 };
 
 				bool m_redrawScreen { true };
+				bool m_vsyncPending { false };
 				bool m_autoRedraw { true };
 		};
 	}

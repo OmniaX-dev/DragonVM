@@ -51,7 +51,7 @@ namespace dragon
 			disk.cycleStep();
 		});
 		ostd::StepTimer screenTimer(screenRedrawRate, [&](f64 dt) {
-			m_display.redrawScreen();
+			m_display.vsync();
 		});
 		while (running || disk.isBusy())
 		{

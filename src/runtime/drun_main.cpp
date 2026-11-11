@@ -132,6 +132,10 @@ static void printScreen(void)
 		std::cout << r << "\n";
 }
 
+// Cycles between two VSync interrupts (as the debugger counts them: clock_rate_sec /
+// screen_redraw_rate_per_second); 0 = never.
+static u64 s_vsyncCycles = 0;
+
 static bool step(u64& cycles)
 {
 	auto& cpu = DragonRuntime::cpu;
@@ -139,6 +143,9 @@ static bool step(u64& cycles)
 	DragonRuntime::vDiskInterface.cycleStep();
 	processVideoSignal();
 	cycles++;
+	// As VirtualDisplay raises it: skipped while the previous VSync handler is still running.
+	if (s_vsyncCycles != 0 && cycles % s_vsyncCycles == 0 && !cpu.isInterruptInService(data::InterruptCodes::VSync))
+		cpu.handleInterrupt(data::InterruptCodes::VSync, true);
 	if (data::ErrorHandler::hasError())
 	{
 		DragonRuntime::processErrors();
@@ -156,6 +163,8 @@ static void usage(void)
 				 "  --dump <address>[:n]   Prints n bytes (default 4) of memory at the end\n"
 				 "  --quiet                Only the program's output\n"
 				 "  --screen               Prints the 16 colors text mode's screen at the end (as text)\n"
+				 "  --vsync <cycles>       Cycles between VSync interrupts (default: clock_rate_sec /\n"
+				 "                         screen_redraw_rate_per_second from the .dvm; 0 = none)\n"
 				 "  -- <arguments>         The program's arguments (main(argc, argv); argv[0] is its path)\n"
 				 "Exit code: 0 if the machine halted without errors, 1 on errors, 2 when out of cycles.\n";
 }
@@ -171,6 +180,7 @@ int main(int argc, char** argv)
 	i64 at = -1;
 	bool boot = false, quiet = false, screen = false;
 	u64 maxCycles = 50000000;
+	i64 vsyncCycles = -1;
 	std::vector<std::pair<u32, u32>> dumps;
 	std::vector<std::string> programArgs;
 	for (int i = 2; i < argc; i++)
@@ -187,6 +197,7 @@ int main(int argc, char** argv)
 		else if (a == "--boot") boot = true;
 		else if (a == "--quiet") quiet = true;
 		else if (a == "--screen") screen = true;
+		else if (a == "--vsync") vsyncCycles = (i64)std::strtoull(l_value().c_str(), nullptr, 0);
 		else if (a == "--max-cycles") maxCycles = std::strtoull(l_value().c_str(), nullptr, 0);
 		else if (a == "--dump")
 		{
@@ -220,6 +231,11 @@ int main(int argc, char** argv)
 	auto& cpu = DragonRuntime::cpu;
 	auto& mem = DragonRuntime::memMap;
 	u64 cycles = 0;
+	{
+		const auto& config = DragonRuntime::machine_config;
+		s_vsyncCycles = (vsyncCycles >= 0 ? (u64)vsyncCycles
+			: std::max<u64>(1, cast<u64>(config.clock_rate_sec) / std::max<u64>(1, config.screen_redraw_rate_per_second)));
+	}
 
 	if (!programPath.empty())
 	{

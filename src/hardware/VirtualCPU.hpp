@@ -27,6 +27,7 @@ namespace dragon
 				u32 currentOffset;
 				i32 interruptHandlerCount;
 				i32 subroutineCounter;
+				u16 interruptInService[256];
 				u8 currentInst;
 				u8 currentExtInst;
 				i8 currentExtension;    // index in the extension table, -1 = none
@@ -94,6 +95,10 @@ namespace dragon
 				inline u32 getCurrentOffset(void) const { return m_currentOffset; }
 				inline u32 getStackFrameSize(void) const { return m_stackFrameSize; }
 				inline i32 getInterruptHandlerCount(void) const { return m_interruptHandlerCount; }
+				// True while a handler of the interrupt is running (entered and not yet returned
+				// with rti, also when interrupted by other handlers). Devices check it so they don't
+				// raise an interrupt again while its handler is still busy (see the display's VSync).
+				inline bool isInterruptInService(u8 code) const { return m_interruptInService[code] != 0; }
 				inline bool isDebugModeEnabled(void) const { return m_debugModeEnabled; }
 				// The extension with the given opcode (Ext01..Ext16), or nullptr.
 				data::CPUExtension* getExtension(u8 opCode) const;
@@ -122,6 +127,10 @@ namespace dragon
 				u32 m_currentAddr { 0x0000 };
 				bool m_biosMode { true };
 				i32 m_interruptHandlerCount { 0 };
+				// For each interrupt in service, the handler depth (m_interruptHandlerCount) of its
+				// outermost running handler; 0 = not in service. rti clears the entries deeper than
+				// the depth it returns to.
+				u16 m_interruptInService[256] { };
 				bool m_isDebugBreakPoint { false };
 				bool m_ramDumped { false };
 				bool m_debugModeEnabled { false };

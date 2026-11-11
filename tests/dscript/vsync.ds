@@ -1,0 +1,38 @@
+// The VSync interrupt (0xE0): raised at every screen timer tick (drun: every --vsync cycles), but
+// skipped while its previous handler is still running, so a handler much slower than the timer
+// (here, with a present() whose swap redraws the screen, which must not raise it either) is never
+// re-entered. 1 = it ran several times, never nested.
+// drun-flags: --boot --vsync 300
+// expect-rv: 1
+#import(<dragon-sdk>)
+
+var con: dr::Text16Console;
+var inside: bool = false;
+var nested: u32 = 0;
+var count: u32 = 0;
+
+interrupt sub on_vsync() {
+	if (inside)
+		nested++;
+	inside = true;
+	count++;
+	con.clear(dr::DefaultPaletteText16.Black, false)->xy(0, 0);
+	con.print("frame ")->print(count);
+	var spin: u32 = 0;
+	while (spin < 2000)
+		spin++;
+	con.present();
+	inside = false;
+}
+
+sub main() -> u32 {
+	dr::vga_set_video_mode(dr::VGAVideoModes.Text16Color);
+	con.new();
+	dr::set_interrupt_vector_entry(dr::HardwareInterrupts.VSync, &on_vsync);
+	dr::enable_interrupts();
+	while (count < 5);
+	dr::disable_interrupts();
+	if (nested != 0)
+		return 1000 + nested;
+	return 1;
+}
