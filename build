@@ -4,7 +4,6 @@ backtrack_changes() {
 	cp dragon/disk.drd ../extra/dragon/disk.drd
 	cp dragon/cmos.dr ../extra/dragon/cmos.dr
 	cp dragon/bios.bin ../extra/dragon/bios.bin
-	cp dss/sdk/bios_api.dss ../extra/dss/sdk/bios_api.dss
 }
 
 set -e

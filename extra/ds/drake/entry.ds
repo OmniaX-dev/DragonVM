@@ -7,10 +7,13 @@ var keyRingBuff: dr::RingBuffer;
 var console: dr::Text16Console;
 var bootParts: dr::DPTPartitionBlock*[dr::DPTStructure.MaxPartitions];
 var dpt_block: dr::DPTBlock;
-
+var boot_part_count: u8 = 0;
+var selected_index: u8 = 0;
+var list_entries_count: u8 = 0;
+var reboot_entry_index: u8 = 0;
 var horizontalLine: u8* = null;
-
 var pressedKey: u32 = 0;
+
 
 sub main() {
 	dr::TextSingle::clear_screen();
@@ -29,44 +32,42 @@ sub main() {
 
 	var screenWidth: u16 = console.get_console_width();
 	horizontalLine = dr::malloc(screenWidth + 1);
-	var verticalLine: u8* = dr::malloc(screenWidth + 1);
 	halt_on_condition(not horizontalLine, "Allocation for <horizontalLine> failed.");
 	for (var i: u16 = 0; i < screenWidth - 2; i++)
 		horizontalLine[i] = dr::ASCII.BoxHorizontal;
 	horizontalLine[screenWidth] = '\0';
 
-
-	while(true);
-
-	load_kernel0_block(bootParts[0]);
-	cleanup();
-	low {
-		jmp $dr::DPTBootPartStructure.CodeLoadAddr
-		hlt
+	while(true) {
+		var key: u32 = 0;
+		if (keyRingBuff.pop(&key)) {
+			on_key_pressed(key);
+		}
 	}
+
+	// Should never be reached
+	cleanup();
+	low { hlt }
 }
 
 sub on_key_pressed(var key: u32) {
-	if (dr::isprint(key)) {
-		console.print(cast<u8>(key));
-	}
+	if (key == dr::KeyCodes.DownArrow)
+		update_list_index(true);
+	else if (key == dr::KeyCodes.UpArrow)
+		update_list_index(false);
+	else if (key == dr::KeyCodes.Return)
+		execute_selected_entry();
 }
 
 interrupt sub on_draw() {
 	static var b: bool = false;
 	b = !b;
-	if (b)
-		return;
+	if (b) return;
 	console.clear(dr::DefaultPaletteText16.Black)->xy(0, 0);
 	print_system_info(dpt_block.versionMaj, dpt_block.versionMin);
 	print_top_line();
 	print_box_sides();
 	print_bottom_line();
 	print_list();
-	var key: u32 = 0;
-	if (keyRingBuff.pop(&key)) {
-		on_key_pressed(key);
-	}
 	console.present();
 }
 
@@ -99,25 +100,49 @@ inline sub print_list() {
 	console.y(2);
 	var i: u8 = 0;
 	var part = bootParts[i++];
-	while (part)
+	while (part and i < dr::DPTStructure.MaxPartitions)
 	{
-		console.x(2)->print(part->label)->nl();
+		console.x(2)->store_colors();
+		if ((i - 1) == selected_index)
+			console.fg(dr::DefaultPaletteText16.Black)->bg(dr::DefaultPaletteText16.Green)->print(" >");
+		console.print(' ')->print(part->label)->print(' ')->nl()->restore_colors();
 		part = bootParts[i++];
 	}
-	console.x(2)->print("Reboot")->nl();
+	console.x(2)->store_colors();
+	if ((i - 1) == selected_index)
+		console.fg(dr::DefaultPaletteText16.Black)->bg(dr::DefaultPaletteText16.Green)->print(" >");
+	console.print(" Reboot ")->nl()->restore_colors();
 }
 
 interrupt sub key_pressed_handler() {
 	pressedKey = *cast<u32*>(dr::KeyboardRegisters.KeyCode);
-	if (pressedKey == dr::KeyCodes.Return)
-		dr::raise_interrupt(0x20, INT20_REBOOT);
 	if (not keyRingBuff.push(&pressedKey))
 	{
 		//TODO: Handle missed key presses
 	}
 }
 
-sub cleanup() {
+inline sub update_list_index(var forward: bool) {
+	if (boot_part_count == 0)
+		return;
+	selected_index = (selected_index + (forward ? 1 : list_entries_count - 1)) % list_entries_count;
+}
+
+sub execute_selected_entry() {
+	if (selected_index == reboot_entry_index)
+		dr::raise_interrupt(0x20, INT20_REBOOT);
+	else if (selected_index < boot_part_count)
+	{
+		load_kernel0_block(bootParts[selected_index]);
+		cleanup();
+		low {
+			jmp $dr::DPTBootPartStructure.CodeLoadAddr
+			hlt
+		}
+	}
+}
+
+inline sub cleanup() {
 	dr::clear_interrupt_vector_entry(dr::HardwareInterrupts.KeyPressed);
 	dr::clear_interrupt_vector_entry(dr::HardwareInterrupts.VSync);
 	console.clear(dr::DefaultPaletteText16.Black)->xy(0, 0)->present()->destroy();
@@ -143,6 +168,9 @@ sub get_bootable_partitions(var dpt_block: dr::DPTBlock*, var outEntries: dr::DP
 		if (dr::dpt_is_partition_bootable(&dpt_block->entries[i]))
 			outEntries[j++] = &dpt_block->entries[i];
 	}
+	boot_part_count = j;
+	reboot_entry_index = j++;
+	list_entries_count = j;
 }
 
 sub print_system_info(var dpt_ver_maj: u8, var dpt_ver_min: u8) {
