@@ -1,0 +1,183 @@
+// dr::math: constants, and the f32 functions of the FPU (the extfpu CPU extension: the machine
+// config needs "cpuext = ..., extfpu"). min / max / abs / clamp also have integer overloads
+// (an integer argument picks those).
+//
+// sqrt, floor, ceil, round, trunc, abs, min, max and the arithmetic give the same bits on any
+// host (IEEE 754); sin, cos, tan, exp, log, pow, atan2 come from the host's math library and
+// can differ in the last bit between hosts.
+
+namespace dr::math {
+	const PI: f32 = 3.14159265358979;
+	const TAU: f32 = 6.28318530717959;
+	const HALF_PI: f32 = 1.57079632679490;
+	const E: f32 = 2.71828182845905;
+	const SQRT2: f32 = 1.41421356237310;
+	const LN2: f32 = 0.693147180559945;
+	const LN10: f32 = 2.30258509299405;
+	const INFINITY: f32 = 1.0 / 0.0;
+	const NAN: f32 = 0.0 / 0.0;
+	const F32_MAX: f32 = 3.40282347e38;
+	const F32_EPSILON: f32 = 1.1920929e-7;		// 1.0 to the next f32
+
+	sub sqrt(var x: f32) -> f32 {
+		low { mov R1, $x
+			fsqrt R1
+			mov $x, R1 }
+		return x;
+	}
+	sub floor(var x: f32) -> f32 {
+		low { mov R1, $x
+			ffloor R1
+			mov $x, R1 }
+		return x;
+	}
+	sub ceil(var x: f32) -> f32 {
+		low { mov R1, $x
+			fceil R1
+			mov $x, R1 }
+		return x;
+	}
+	// Halves away from zero: round(2.5) = 3, round(-2.5) = -3.
+	sub round(var x: f32) -> f32 {
+		low { mov R1, $x
+			fround R1
+			mov $x, R1 }
+		return x;
+	}
+	// Toward zero: trunc(-2.7) = -2.
+	sub trunc(var x: f32) -> f32 {
+		low { mov R1, $x
+			ftrunc R1
+			mov $x, R1 }
+		return x;
+	}
+	sub abs(var x: f32) -> f32 {
+		low { mov R1, $x
+			fabs R1
+			mov $x, R1 }
+		return x;
+	}
+	inline sub abs(var x: i32) -> i32 {
+		return x < 0 ? -x : x;
+	}
+	sub sin(var x: f32) -> f32 {
+		low { mov R1, $x
+			fsin R1
+			mov $x, R1 }
+		return x;
+	}
+	sub cos(var x: f32) -> f32 {
+		low { mov R1, $x
+			fcos R1
+			mov $x, R1 }
+		return x;
+	}
+	sub tan(var x: f32) -> f32 {
+		low { mov R1, $x
+			ftan R1
+			mov $x, R1 }
+		return x;
+	}
+	// e^x
+	sub exp(var x: f32) -> f32 {
+		low { mov R1, $x
+			fexp R1
+			mov $x, R1 }
+		return x;
+	}
+	// Natural logarithm.
+	sub log(var x: f32) -> f32 {
+		low { mov R1, $x
+			flog R1
+			mov $x, R1 }
+		return x;
+	}
+	inline sub log2(var x: f32) -> f32 {
+		return log(x) / LN2;
+	}
+	inline sub log10(var x: f32) -> f32 {
+		return log(x) / LN10;
+	}
+	// x^y
+	sub pow(var x: f32, var y: f32) -> f32 {
+		low { mov R1, $x
+			mov R2, $y
+			fpow R1, R2
+			mov $x, R1 }
+		return x;
+	}
+	// The angle of (x, y), in -PI..PI.
+	sub atan2(var y: f32, var x: f32) -> f32 {
+		low { mov R1, $y
+			mov R2, $x
+			fatan2 R1, R2
+			mov $y, R1 }
+		return y;
+	}
+	inline sub atan(var x: f32) -> f32 {
+		return atan2(x, 1.0);
+	}
+	inline sub asin(var x: f32) -> f32 {
+		return atan2(x, sqrt(1.0 - x * x));
+	}
+	inline sub acos(var x: f32) -> f32 {
+		return atan2(sqrt(1.0 - x * x), x);
+	}
+	// The remainder of x / y, with the sign of x (like C's fmod; less exact for big quotients).
+	inline sub fmod(var x: f32, var y: f32) -> f32 {
+		return x - y * trunc(x / y);
+	}
+	// The smaller / larger one (min / max of NaN and a number: the number).
+	sub min(var a: f32, var b: f32) -> f32 {
+		low { mov R1, $a
+			mov R2, $b
+			fmin R1, R2
+			mov $a, R1 }
+		return a;
+	}
+	sub max(var a: f32, var b: f32) -> f32 {
+		low { mov R1, $a
+			mov R2, $b
+			fmax R1, R2
+			mov $a, R1 }
+		return a;
+	}
+	inline sub min(var a: i32, var b: i32) -> i32 {
+		return a < b ? a : b;
+	}
+	inline sub max(var a: i32, var b: i32) -> i32 {
+		return a > b ? a : b;
+	}
+	inline sub min(var a: u32, var b: u32) -> u32 {
+		return a < b ? a : b;
+	}
+	inline sub max(var a: u32, var b: u32) -> u32 {
+		return a > b ? a : b;
+	}
+	inline sub clamp(var x: f32, var lo: f32, var hi: f32) -> f32 {
+		return min(max(x, lo), hi);
+	}
+	inline sub clamp(var x: i32, var lo: i32, var hi: i32) -> i32 {
+		return min(max(x, lo), hi);
+	}
+	// a + (b - a) * t
+	inline sub lerp(var a: f32, var b: f32, var t: f32) -> f32 {
+		return a + (b - a) * t;
+	}
+	inline sub is_nan(var x: f32) -> bool {
+		return x != x;
+	}
+	inline sub is_inf(var x: f32) -> bool {
+		return x == INFINITY or x == -INFINITY;
+	}
+	inline sub is_finite(var x: f32) -> bool {
+		return x == x and x != INFINITY and x != -INFINITY;
+	}
+	// The f32's 32 bits, and back (IEEE 754 single precision).
+	inline sub f32_bits(var x: f32) -> u32 {
+		return *cast<u32*>(&x);
+	}
+	inline sub f32_from_bits(var bits: u32) -> f32 {
+		return *cast<f32*>(&bits);
+	}
+}

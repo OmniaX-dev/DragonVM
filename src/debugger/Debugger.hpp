@@ -163,6 +163,8 @@ namespace dragon
 				// "0x1234", "1234", "$symbol" (data or label) -> address. False if invalid.
 				static bool parseAddress(const Debugger& dbg, const String& text, u32& outAddress, u32* outSize = nullptr);
 				static bool parseValue(const String& text, i64& outValue);
+				// An f32 (its bits) as text, with enough digits to read back exactly (%.9g).
+				static String floatText(u32 bits);
 		};
 		// The old TUI's screens, printed into any output handler.
 		public: class Display

@@ -22,6 +22,77 @@ namespace dr {
 		while (millis() - start < cast<u32>(ms));
 	}
 
+	// value as text, with `decimals` digits after the point (0..9, rounded): -12.500000. From
+	// 1e9 on, in scientific notation: 1.234568e+12. Also "inf", "-inf", "nan" (and -0.000000).
+	// result needs 24 bytes. An f32 has about 7 significant digits (and this is computed in
+	// f32): the digits after those are not meaningful.
+	sub ftoa(var value: f32, var result: u8*, var decimals: u32 = 6) -> string {
+		var p: u8* = result;
+		if (value != value) {
+			p[0] = 'n'; p[1] = 'a'; p[2] = 'n'; p[3] = 0;
+			return result;
+		}
+		if ((*cast<u32*>(&value) & 0x80000000) != 0) {		// also -0.0
+			*p = '-';
+			p++;
+			value = -value;
+		}
+		if (value == 1.0 / 0.0) {
+			p[0] = 'i'; p[1] = 'n'; p[2] = 'f'; p[3] = 0;
+			return result;
+		}
+		if (decimals > 9)
+			decimals = 9;
+		var exponent: u32 = 0;
+		var scientific: bool = value >= 1e9;
+		if (scientific) {
+			while (value >= 10.0) {
+				value /= 10.0;
+				exponent++;
+			}
+		}
+		var half: f32 = 0.5;
+		for (var i: u32 = 0; i < decimals; i++)
+			half /= 10.0;
+		value += half;
+		if (scientific and value >= 10.0) {
+			value /= 10.0;
+			exponent++;
+		}
+		var whole: u32 = cast<u32>(value);
+		var frac: f32 = value - whole;
+		utoa(whole, p);
+		while (*p != 0)
+			p++;
+		if (decimals > 0) {
+			*p = '.';
+			p++;
+			for (var i: u32 = 0; i < decimals; i++) {
+				frac *= 10.0;
+				var digit: u32 = cast<u32>(frac);
+				if (digit > 9)
+					digit = 9;
+				*p = cast<u8>('0' + digit);
+				p++;
+				frac -= digit;
+			}
+		}
+		if (scientific) {
+			p[0] = 'e';
+			p[1] = '+';
+			p += 2;
+			if (exponent < 10) {
+				*p = '0';
+				p++;
+			}
+			utoa(exponent, p);
+			while (*p != 0)
+				p++;
+		}
+		*p = 0;
+		return result;
+	}
+
 	sub itoa(var value: i32, var result: u8*, var base: i32 = 10) -> string
 	{
 		// check that the base if valid

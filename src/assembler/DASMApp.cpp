@@ -26,6 +26,7 @@ namespace dragon
 				args.disassembly_file_path = "";
 				bool disable_extmov = false;
 				bool disable_extalu = false;
+				bool disable_extfpu = false;
 				args.verbose_level = -1;
 				for (i32 i = 2; i < argc; i++)
 				{
@@ -79,6 +80,8 @@ namespace dragon
 						disable_extmov = true;
 					else if (edit == "--disable-extalu")
 						disable_extalu = true;
+					else if (edit == "--disable-extfpu")
+						disable_extfpu = true;
 					else if (edit == "--verbose")
 						args.verbose_level = 1;
 					else if (edit == "--verbose-2")
@@ -98,6 +101,8 @@ namespace dragon
 					args.cpu_extensions.push_back("extalu");
 				if (!disable_extmov)
 					args.cpu_extensions.push_back("extmov");
+				if (!disable_extfpu)
+					args.cpu_extensions.push_back("extfpu");
 				if (args.save_disassembly && args.disassembly_file_path == "")
 					args.disassembly_file_path = "disassembly/" + ostd::Hash::md5(args.dest_file_path) + ".dds";
 			}
@@ -136,6 +141,9 @@ namespace dragon
 			tmpCommand = "--disable-extalu";
 			tmpCommand.addRightPadding(commandLength);
 			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Disables mnemonics for the <extalu> CPU extension.").reset().nl();
+			tmpCommand = "--disable-extfpu";
+			tmpCommand.addRightPadding(commandLength);
+			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Disables mnemonics for the <extfpu> CPU extension (floating point).").reset().nl();
 			tmpCommand = "--debug, -D";
 			tmpCommand.addRightPadding(commandLength);
 			out.fg(ostd::ConsoleColors::Blue).p(tmpCommand).fg(ostd::ConsoleColors::Green).p("Used to enable debug mode.").reset().nl();

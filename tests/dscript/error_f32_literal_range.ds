@@ -1,0 +1,6 @@
+// A literal too large for an f32.
+// expect-error: floating point literal too large for an f32
+sub main() -> i32 {
+	var f: f32 = 1e39;
+	return 0;
+}

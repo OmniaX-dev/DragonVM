@@ -21,3 +21,5 @@ struct Geo {
 	priv sub reset() { this->cache = 0; }
 };
 enum Level: u8 { Low = 1, High };
+const SCALE: f32 = 1.5 * 2;
+sub grow(var v: f32 = 2) -> f32 { return v * SCALE; }

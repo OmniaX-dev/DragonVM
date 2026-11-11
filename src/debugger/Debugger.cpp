@@ -1,4 +1,6 @@
 #include "Debugger.hpp"
+#include <bit>
+#include <cstdlib>
 #include "DisassemblyLoader.hpp"
 #include "../runtime/DragonRuntime.hpp"
 #include <ostd/io/Memory.hpp>
@@ -101,8 +103,32 @@ namespace dragon
 		return name;
 	}
 
+	String Debugger::Utils::floatText(u32 bits)
+	{
+		char buf[32];
+		std::snprintf(buf, sizeof(buf), "%.9g", (double)std::bit_cast<f32>(bits));
+		return String(buf);
+	}
+
 	bool Debugger::Utils::parseValue(const String& text, i64& outValue)
 	{
+		// An f32 (1.5, -2., 1e-3, 3f, inf, nan): its 32 bits.
+		{
+			std::string t = text.new_trim().toLower().cpp_str();
+			const bool hex = t.find("0x") != std::string::npos || t.find("0b") != std::string::npos;
+			const bool special = (t == "inf" || t == "-inf" || t == "nan");
+			if (!hex && !t.empty() && (special || t.find('.') != std::string::npos || t.find('e') != std::string::npos || t.back() == 'f'))
+			{
+				if (t.back() == 'f' && !special)
+					t.pop_back();
+				char* end = nullptr;
+				const f32 f = std::strtof(t.c_str(), &end);
+				if (end == t.c_str() || *end != '\0')
+					return false;
+				outValue = cast<i64>(std::bit_cast<u32>(f));
+				return true;
+			}
+		}
 		String edit = text.new_trim().toLower();
 		bool negative = false;
 		if (edit.startsWith("-"))

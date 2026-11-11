@@ -1,0 +1,7 @@
+// % has no meaning for f32.
+// expect-error: '%' needs integers (found f32 and i32)
+sub main() -> i32 {
+	var f: f32 = 1.5;
+	var x: f32 = f % 2;
+	return 0;
+}

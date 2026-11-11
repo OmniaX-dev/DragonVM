@@ -49,6 +49,10 @@ namespace dragon
 					{
 						config.cpuext_list[ext_nr++] = new hw::cpuext::ExtAlu;
 					}
+					else if (lineEdit == "extfpu")
+					{
+						config.cpuext_list[ext_nr++] = new hw::cpuext::ExtFpu;
+					}
 					else continue; //TODO: Warning
 				}
 			}

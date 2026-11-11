@@ -1,0 +1,139 @@
+// f32 in DScript: literals, arithmetic (also mixed with integers: they convert to f32),
+// constant folding, casts (truncating, saturating), comparisons (NaN: all false but !=),
+// truthiness, ++ / -- / compound assignments, constants, struct fields, arrays, parameters,
+// return values, overloads (an integer argument picks the integer overload).
+// expect-rv: 0
+#import(<dragon-sdk>)
+
+var g_failures: i32 = 0;
+
+sub expect(var id: i32, var ok: bool) {
+	if (ok)
+		return;
+	var buff: u8[12];
+	debug_print("f32_basics: check ");
+	debug_print(dr::itoa(id, buff));
+	debug_print(" failed\n");
+	g_failures++;
+}
+
+sub bits(var f: f32) -> u32 {
+	return *cast<u32*>(&f);
+}
+
+const HALF: f32 = 0.5;
+const TWO_HALVES: f32 = HALF * 2;		// folded: 1.0
+const INF: f32 = 1.0 / 0.0;
+
+struct Vec2 {
+	var x: f32 = 1.5;
+	var y: f32 = -2;					// an integer default: converted
+};
+
+const ORIGIN: Vec2 = { 1, 2.5 };			// a struct constant: 1 converted
+var g_vec: Vec2;						// a global struct: the field defaults
+var g_scale: f32 = 3;					// global initialized with an integer
+var g_table: f32[3] = { 0.25, 1, 2e1 };
+
+sub length2(var v: Vec2*) -> f32 {
+	return v->x * v->x + v->y * v->y;
+}
+sub kind(var x: i32) -> i32 { return 1; }
+sub kind(var x: f32) -> i32 { return 2; }
+sub half(var x: f32 = 8) -> f32 { return x / 2; }
+
+sub main() -> i32 {
+	// Literals and their bits.
+	expect(1, bits(1.5) == 0x3FC00000 and bits(2.) == 0x40000000 and bits(1e-3) == 0x3A83126F and bits(3f) == 0x40400000 and bits(2.f) == 0x40000000);
+	expect(2, bits(-0.0) == 0x80000000 and bits(0.1) == 0x3DCCCCCD);
+
+	// Arithmetic (run time: the values go through variables).
+	var a: f32 = 1.5;
+	var b: f32 = 2.25;
+	expect(10, bits(a + b) == 0x40700000);			// 3.75
+	expect(11, bits(a - b) == 0xBF400000);			// -0.75
+	expect(12, bits(a * b) == 0x40580000);			// 3.375
+	expect(13, bits(b / a) == 0x3FC00000);			// 1.5
+	expect(14, bits(-a) == 0xBFC00000);
+	var zero: f32 = 0;
+	expect(15, bits(a / zero) == 0x7F800000);		// +inf, no trap
+
+	// Mixed with integers: f32 arithmetic.
+	var n: i32 = -3;
+	var u: u32 = 4000000000;
+	expect(20, bits(a + n) == 0xBFC00000);			// 1.5 + -3 = -1.5
+	expect(21, bits(n * a) == 0xC0900000);			// -4.5
+	expect(22, bits(u + zero) == 0x4F6E6B28);		// u32 converts unsigned
+	expect(23, bits(a + 1) == 0x40200000);			// 2.5 (constant operand)
+	var f: f32 = n;									// implicit int -> f32
+	expect(24, bits(f) == 0xC0400000);
+
+	// Constant folding.
+	expect(30, bits(1.5 + 2) == 0x40600000 and bits(10 / 4.0) == 0x40200000);
+	expect(31, bits(TWO_HALVES) == 0x3F800000 and bits(HALF) == 0x3F000000);
+	expect(32, bits(INF) == 0x7F800000 and bits(-INF) == 0xFF800000);
+
+	// Casts: truncate toward zero, saturate, NaN -> 0; and back.
+	var g: f32 = -2.7;
+	expect(40, cast<i32>(g) == -2 and cast<i32>(2.7) == 2);
+	expect(41, cast<u32>(g) == 0 and cast<u8>(255.9) == 255);
+	var big: f32 = 1e10;
+	expect(42, cast<i32>(big) == 0x7FFFFFFF and cast<i32>(-big) == cast<i32>(0x80000000));
+	var nan: f32 = zero / zero;
+	expect(43, cast<i32>(nan) == 0);
+	expect(44, bits(cast<f32>(7)) == 0x40E00000 and bits(cast<f32>(u)) == 0x4F6E6B28);
+	expect(45, cast<bool>(-0.0) == false and cast<bool>(g) == true);
+
+	// Comparisons, also mixed; NaN.
+	expect(50, a < b and b > a and a <= 1.5 and a >= 1.5 and a == 1.5 and a != b);
+	expect(51, not (a > b) and not (b < a) and not (a == b));
+	expect(52, n < a and a > n and 2 > a and a < 2);
+	expect(53, not (nan == nan) and nan != nan and not (nan < a) and not (nan >= a));
+	expect(54, -0.0 == zero);
+	var count: i32 = 0;
+	for (var x: f32 = 0; x < 1; x += 0.25)
+		count++;
+	expect(55, count == 4);
+
+	// Truthiness: 0.0 and -0.0 are false, NaN true.
+	var negZero: f32 = -0.0;
+	expect(60, not zero and not negZero and nan and a);
+	expect(61, (zero ? 1 : 2) == 2 and (a ? 1 : 2) == 1);
+	var t: i32 = 0;
+	if (negZero) t = 1;
+	while (zero) t = 2;
+	expect(62, t == 0 and (zero or a) and not (zero and a));
+
+	// ++ / -- / compound assignments.
+	var c: f32 = 1.5;
+	c++;
+	expect(70, bits(c) == 0x40200000);
+	--c;
+	c *= 4;
+	c -= 1;
+	c /= 2;
+	c += n;
+	expect(71, bits(c) == 0xBF000000);				// ((1.5 * 4 - 1) / 2) - 3 = -0.5
+
+	// Structs, arrays, globals, parameters, return values, defaults, overloads.
+	var v: Vec2;
+	expect(80, bits(v.x) == 0x3FC00000 and bits(v.y) == 0xC0000000);
+	expect(81, bits(length2(&v)) == 0x40C80000);	// 2.25 + 4 = 6.25
+	expect(82, bits(g_scale) == 0x40400000 and bits(g_table[0]) == 0x3E800000 and bits(g_table[1]) == 0x3F800000 and bits(g_table[2]) == 0x41A00000);
+	g_table[1] = g_table[2] * g_scale;
+	expect(83, bits(g_table[1]) == 0x42700000);	// 60
+	expect(84, kind(1) == 1 and kind(1.0) == 2 and kind(a) == 2 and kind(n) == 1);
+	expect(85, bits(half()) == 0x40800000 and bits(half(3)) == 0x3FC00000);
+	expect(87, bits(ORIGIN.x) == 0x3F800000 and bits(ORIGIN.y) == 0x40200000);
+	expect(88, bits(g_vec.x) == 0x3FC00000 and bits(g_vec.y) == 0xC0000000);
+	var k: f32 = 3;
+	var la: f32[2] = { 1, 2.5 };
+	var lv: Vec2 = { 4 };
+	expect(89, bits(k) == 0x40400000 and bits(la[0]) == 0x3F800000 and bits(la[1]) == 0x40200000 and bits(lv.x) == 0x40800000 and bits(lv.y) == 0xC0000000);
+	var arr: f32[2];
+	arr[0] = 0.5;
+	arr[1] = arr[0] + 1;
+	expect(86, bits(arr[1]) == 0x3FC00000);
+
+	return g_failures;
+}

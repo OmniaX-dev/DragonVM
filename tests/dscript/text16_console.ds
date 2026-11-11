@@ -287,5 +287,10 @@ sub main() -> i32 {
 	expect(180, con.get_error() == Con::Errors.WrongVideoMode and row_is(&con, 0, ""));
 	dr::vga_set_video_mode(dr::VGAVideoModes.Text16Color);
 
+	// print(f32): ftoa's text, then chaining.
+	reset(&con);
+	con.print(-2.5, 2)->print(" ")->print(dr::math::PI);
+	expect(190, row_is(&con, 0, "-2.50 3.141593") and at(&con, 14, 0));
+
 	return g_failures;
 }

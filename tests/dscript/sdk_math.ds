@@ -1,0 +1,61 @@
+// dr::math (math.ds) and ftoa / print(f32): the FPU functions through the SDK, the integer
+// overloads of min / max / abs / clamp, the constants, and the text of floats.
+// drun-flags: --boot
+// expect-output: 3.141593|-2.50|0.000|-0.000000|inf|-inf|nan|1.234568e+12|100|0.100000000|7|3.5
+#import(<dragon-sdk>)
+
+var g_failures: i32 = 0;
+
+sub expect(var id: i32, var ok: bool) {
+	if (ok)
+		return;
+	var buff: u8[12];
+	debug_print("sdk_math: check ");
+	debug_print(dr::itoa(id, buff));
+	debug_print(" failed\n");
+	g_failures++;
+}
+
+sub near(var a: f32, var b: f32) -> bool {
+	return dr::math::abs(a - b) < 1e-5;
+}
+
+sub main() -> i32 {
+	expect(1, dr::math::f32_bits(dr::math::sqrt(16)) == dr::math::f32_bits(4.0) and dr::math::is_nan(dr::math::sqrt(-1)));
+	expect(2, dr::math::floor(-1.5) == -2 and dr::math::ceil(-1.5) == -1 and dr::math::round(2.5) == 3 and dr::math::trunc(-2.7) == -2);
+	expect(3, dr::math::abs(-3.25) == 3.25 and dr::math::abs(-7) == 7);
+	expect(4, near(dr::math::sin(dr::math::HALF_PI), 1) and near(dr::math::cos(dr::math::PI), -1) and near(dr::math::tan(0), 0));
+	expect(5, near(dr::math::exp(1), dr::math::E) and near(dr::math::log(dr::math::E), 1) and near(dr::math::log2(8), 3) and near(dr::math::log10(1000), 3));
+	expect(6, dr::math::pow(2, 10) == 1024 and near(dr::math::atan2(1, 1), dr::math::PI / 4) and near(dr::math::atan(1), dr::math::PI / 4));
+	expect(7, near(dr::math::asin(1), dr::math::HALF_PI) and near(dr::math::acos(1), 0) and near(dr::math::fmod(7.5, 2), 1.5));
+	expect(8, dr::math::min(1.5, -2) == -2 and dr::math::max(1.5, -2) == 1.5 and dr::math::min(3, 4) == 3 and dr::math::max(cast<u32>(3), cast<u32>(4)) == 4);
+	expect(9, dr::math::clamp(5.5, 0, 1) == 1 and dr::math::clamp(-3, 0, 10) == 0 and dr::math::lerp(2, 4, 0.25) == 2.5);
+	expect(10, dr::math::is_inf(dr::math::INFINITY) and dr::math::is_inf(-dr::math::INFINITY) and not dr::math::is_finite(dr::math::NAN) and dr::math::is_finite(dr::math::F32_MAX));
+	expect(11, dr::math::f32_from_bits(0x3F800000) == 1 and dr::math::f32_bits(1.0 + dr::math::F32_EPSILON) == 0x3F800001);
+
+	dr::TextSingle::print(dr::math::PI);
+	dr::TextSingle::print("|");
+	dr::TextSingle::print(-2.5, 2);
+	dr::TextSingle::print("|");
+	dr::TextSingle::print(0.0004, 3);
+	dr::TextSingle::print("|");
+	dr::TextSingle::print(-0.0);
+	dr::TextSingle::print("|");
+	dr::TextSingle::print(dr::math::INFINITY);
+	dr::TextSingle::print("|");
+	dr::TextSingle::print(-dr::math::INFINITY);
+	dr::TextSingle::print("|");
+	dr::TextSingle::print(dr::math::NAN);
+	dr::TextSingle::print("|");
+	dr::TextSingle::print(1234567890123.0);
+	dr::TextSingle::print("|");
+	dr::TextSingle::print(99.9999, 0);
+	dr::TextSingle::print("|");
+	dr::TextSingle::print(0.1, 9);
+	dr::TextSingle::print("|");
+	dr::TextSingle::print(7);						// still the integer overload
+	dr::TextSingle::print("|");
+	var buff: u8[24];
+	dr::TextSingle::print(dr::ftoa(3.5, buff, 1));
+	return g_failures;
+}

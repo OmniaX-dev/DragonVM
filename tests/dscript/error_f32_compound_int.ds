@@ -1,0 +1,7 @@
+// An integer variable with an f32 value in a compound assignment: a cast is needed.
+// expect-error: with an f32 value needs an f32 variable
+sub main() -> i32 {
+	var i: i32 = 1;
+	i += 0.5;
+	return 0;
+}

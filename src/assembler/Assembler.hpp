@@ -186,6 +186,12 @@ namespace dragon
 				static String replaceSymbols(String line);
 				static void replaceLabelRefs(void);
 				static eOperandType parseOperand(String op, i32& outOp);
+				// An extfpu immediate: a number (1.5, -2, 1e-3, 2.5f, inf, -inf, nan), as the bits
+				// of the f32 it rounds to, or 0x... (the bits themselves). False if it isn't one.
+				static bool parseFloatImmediate(String op, i32& outBits);
+				// extfpu mnemonics (true if the line was one).
+				static bool parseFpu1Operand(const String& line, const String& inst, const String& op);
+				static bool parseFpu2Operand(const String& line, const String& inst, const String& op1, const String& op2);
 				// Appends a 32-bit word (big endian) to the code.
 				static void pushWord(i32 word);
 				// Appends a 16-bit value (big endian) to the code.

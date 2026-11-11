@@ -10,6 +10,7 @@ namespace dscript
 		Identifier,
 		Keyword,
 		Integer,		// value in Token::value (char literals too)
+		Float,			// f32 literal: its bits in Token::value, the written text in Token::text
 		String,			// decoded text in Token::text
 		Punct,			// operators and separators, text in Token::text
 		Directive,		// a whole "#..." line, raw text after '#' in Token::text

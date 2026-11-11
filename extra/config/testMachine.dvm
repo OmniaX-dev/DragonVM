@@ -2,7 +2,7 @@ Disks = dragon/disk.drd
 Bios = dragon/bios.bin
 CMOS = dragon/cmos.dr
 
-cpuext = extmov, extalu
+cpuext = extmov, extalu, extfpu
 fixed_clock = true
 clock_rate_sec = 48000
 ram_size_kb = 65536

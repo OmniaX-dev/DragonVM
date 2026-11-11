@@ -9,7 +9,7 @@ namespace dscript
 	// Types are interned: two equal types are the same Type object.
 	struct Type
 	{
-		enum class Kind { Void, Bool, I8, U8, I16, U16, I32, U32, Null, Pointer, Array, Struct, Function };
+		enum class Kind { Void, Bool, I8, U8, I16, U16, I32, U32, F32, Null, Pointer, Array, Struct, Function };
 		Kind kind { Kind::Void };
 		Type* base { nullptr };				// Pointer, Array: element type; Function: return type
 		uint32_t count { 0 };				// Array
@@ -18,10 +18,13 @@ namespace dscript
 
 		bool isInteger(void) const { return kind >= Kind::Bool && kind <= Kind::U32; }
 		bool isSigned(void) const { return kind == Kind::I8 || kind == Kind::I16 || kind == Kind::I32; }
+		bool isFloat(void) const { return kind == Kind::F32; }
+		// Integers and floats: what arithmetic and comparisons of numbers work on.
+		bool isArithmetic(void) const { return isInteger() || isFloat(); }
 		bool isPointer(void) const { return kind == Kind::Pointer || kind == Kind::Null; }
 		bool isFunction(void) const { return kind == Kind::Function; }
-		// Fits in a register (integers, pointers, function pointers).
-		bool isScalar(void) const { return isInteger() || isPointer() || isFunction(); }
+		// Fits in a register (integers, floats, pointers, function pointers).
+		bool isScalar(void) const { return isInteger() || isFloat() || isPointer() || isFunction(); }
 		bool isVoidPointer(void) const { return kind == Kind::Pointer && base->kind == Kind::Void; }
 		uint32_t size(void) const;
 		// brief: nameless structs as "struct { ... }" (without where they are declared)
@@ -66,6 +69,7 @@ namespace dscript
 			Type* u16(void) { return m_u16; }
 			Type* i32(void) { return m_i32; }
 			Type* u32(void) { return m_u32; }
+			Type* f32(void) { return m_f32; }
 			Type* nullType(void) { return m_null; }
 			Type* pointer(Type* base);
 			Type* array(Type* base, uint32_t count);
@@ -79,6 +83,6 @@ namespace dscript
 
 		private:
 			std::vector<Type*> m_types;
-			Type* m_void; Type* m_bool; Type* m_i8; Type* m_u8; Type* m_i16; Type* m_u16; Type* m_i32; Type* m_u32; Type* m_null;
+			Type* m_void; Type* m_bool; Type* m_i8; Type* m_u8; Type* m_i16; Type* m_u16; Type* m_i32; Type* m_u32; Type* m_f32; Type* m_null;
 	};
 }

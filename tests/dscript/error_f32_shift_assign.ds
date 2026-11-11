@@ -1,0 +1,7 @@
+// Compound shifts need an integer variable.
+// expect-error: '<<=' needs an integer variable
+sub main() -> i32 {
+	var f: f32 = 1.5;
+	f <<= 1;
+	return 0;
+}

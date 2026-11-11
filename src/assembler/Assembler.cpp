@@ -1,4 +1,8 @@
 #include "Assembler.hpp"
+#include <cstdlib>
+#include <unordered_map>
+#include <limits>
+#include <bit>
 #include <ostd/io/File.hpp>
 #include <iostream>
 #include <cctype>
@@ -1471,6 +1475,8 @@ namespace dragon
 			String opEdit(lineEdit.new_substr(lineEdit.indexOf(" ") + 1));
 			opEdit.trim();
 			i32 word = 0x00000000;
+			if (parseFpu1Operand(line, instEdit, opEdit))
+				return;
 			if (STDVEC_CONTAINS(cpuExtensions, "extalu"))
 			{
 				if (instEdit == "notip")
@@ -1722,6 +1728,13 @@ namespace dragon
 			opEdit.trim();
 			i32 word = 0x00000000;
 			auto st = opEdit.tokenize(",");
+			{
+				auto fst = opEdit.tokenize(",");
+				const String op1 = fst.next();
+				const String op2 = fst.next();
+				if (parseFpu2Operand(line, instEdit, op1, op2))
+					return;
+			}
 			if (STDVEC_CONTAINS(cpuExtensions, "extalu"))
 			{
 				auto st = opEdit.tokenize(",");
@@ -3301,6 +3314,120 @@ namespace dragon
 				return eOperandType::DerefMemory;
 			}
 			return eOperandType::Error;
+		}
+
+		bool Assembler::parseFloatImmediate(String op, i32& outBits)
+		{
+			std::string text = op.new_trim().cpp_str();
+			if (text.empty())
+				return false;
+			if (text.size() > 2 && text[0] == '0' && (text[1] == 'x' || text[1] == 'X'))
+			{
+				char* end = nullptr;
+				const unsigned long long bits = std::strtoull(text.c_str() + 2, &end, 16);
+				if (end == nullptr || *end != '\0' || bits > 0xFFFFFFFFull)
+					return false;
+				outBits = cast<i32>(cast<u32>(bits));
+				return true;
+			}
+			if (text.size() > 1 && (text.back() == 'f' || text.back() == 'F') && text != "inf" && text != "-inf")
+				text.pop_back();
+			std::string lower = text;
+			for (auto& c : lower)
+				c = cast<char>(std::tolower(cast<unsigned char>(c)));
+			f32 value = 0.0f;
+			if (lower == "inf" || lower == "+inf")
+				value = std::numeric_limits<f32>::infinity();
+			else if (lower == "-inf")
+				value = -std::numeric_limits<f32>::infinity();
+			else if (lower == "nan")
+				value = std::numeric_limits<f32>::quiet_NaN();
+			else
+			{
+				char* end = nullptr;
+				value = std::strtof(text.c_str(), &end);
+				if (end == text.c_str() || *end != '\0')
+					return false;
+			}
+			outBits = std::bit_cast<i32>(value);
+			return true;
+		}
+
+		bool Assembler::parseFpu1Operand(const String& line, const String& inst, const String& op)
+		{
+			using F = hw::cpuext::ExtFpu::OpCodes;
+			static const std::unordered_map<std::string, u8> ops = {
+				{ "fneg", F::fneg_reg }, { "fabs", F::fabs_reg }, { "fsqrt", F::fsqrt_reg }, { "ffloor", F::ffloor_reg },
+				{ "fceil", F::fceil_reg }, { "fround", F::fround_reg }, { "ftrunc", F::ftrunc_reg }, { "fsin", F::fsin_reg },
+				{ "fcos", F::fcos_reg }, { "ftan", F::ftan_reg }, { "fexp", F::fexp_reg }, { "flog", F::flog_reg },
+				{ "itof", F::itof_reg }, { "utof", F::utof_reg }, { "ftoi", F::ftoi_reg }, { "ftou", F::ftou_reg }
+			};
+			auto it = ops.find(inst.cpp_str());
+			if (it == ops.end())
+				return false;
+			if (!STDVEC_CONTAINS(cpuExtensions, "extfpu"))
+			{
+				std::cout << "ExtFpu instruction detected, but the extfpu extension is disabled: " << line << "\n";
+				exit(1);
+			}
+			i32 reg = 0;
+			if (parseOperand(op, reg) != eOperandType::Register)
+			{
+				std::cout << "Invalid operand type; " << line << " (" << op << ")  ->  Register required\n";
+				exit(1);
+			}
+			m_code.push_back(data::OpCodes::Ext03);
+			m_code.push_back(it->second);
+			m_code.push_back(cast<u8>(reg));
+			return true;
+		}
+
+		bool Assembler::parseFpu2Operand(const String& line, const String& inst, const String& op1, const String& op2)
+		{
+			using F = hw::cpuext::ExtFpu::OpCodes;
+			// mnemonic -> (register form, immediate form)
+			static const std::unordered_map<std::string, std::pair<u8, u8>> ops = {
+				{ "fadd", { F::fadd_reg_in_reg, F::fadd_imm_in_reg } }, { "fsub", { F::fsub_reg_in_reg, F::fsub_imm_in_reg } },
+				{ "fmul", { F::fmul_reg_in_reg, F::fmul_imm_in_reg } }, { "fdiv", { F::fdiv_reg_in_reg, F::fdiv_imm_in_reg } },
+				{ "fmin", { F::fmin_reg_in_reg, F::fmin_imm_in_reg } }, { "fmax", { F::fmax_reg_in_reg, F::fmax_imm_in_reg } },
+				{ "fpow", { F::fpow_reg_in_reg, F::fpow_imm_in_reg } }, { "fatan2", { F::fatan2_reg_in_reg, F::fatan2_imm_in_reg } },
+				{ "feq", { F::feq_reg_reg, F::feq_reg_imm } }, { "flt", { F::flt_reg_reg, F::flt_reg_imm } },
+				{ "fle", { F::fle_reg_reg, F::fle_reg_imm } }
+			};
+			auto it = ops.find(inst.cpp_str());
+			if (it == ops.end())
+				return false;
+			if (!STDVEC_CONTAINS(cpuExtensions, "extfpu"))
+			{
+				std::cout << "ExtFpu instruction detected, but the extfpu extension is disabled: " << line << "\n";
+				exit(1);
+			}
+			i32 reg = 0;
+			if (parseOperand(op1, reg) != eOperandType::Register)
+			{
+				std::cout << "Invalid operand type; " << line << " (" << op1 << ")  ->  Register required\n";
+				exit(1);
+			}
+			i32 second = 0;
+			m_code.push_back(data::OpCodes::Ext03);
+			if (parseRegister(op2) != data::Registers::Last && parseOperand(op2, second) == eOperandType::Register)
+			{
+				m_code.push_back(it->second.first);
+				m_code.push_back(cast<u8>(reg));
+				m_code.push_back(cast<u8>(second));
+			}
+			else if (parseFloatImmediate(op2, second))
+			{
+				m_code.push_back(it->second.second);
+				m_code.push_back(cast<u8>(reg));
+				pushWord(second);
+			}
+			else
+			{
+				std::cout << "Invalid operand type; " << line << " (" << op2 << ")  ->  Register or float immediate required\n";
+				exit(1);
+			}
+			return true;
 		}
 
 		u8 Assembler::parseRegister(String op)

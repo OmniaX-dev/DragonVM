@@ -9,7 +9,7 @@ namespace dscript
 			case Kind::Void: return 0;
 			case Kind::Bool: case Kind::I8: case Kind::U8: return 1;
 			case Kind::I16: case Kind::U16: return 2;
-			case Kind::I32: case Kind::U32: case Kind::Null: case Kind::Pointer: case Kind::Function: return 4;
+			case Kind::I32: case Kind::U32: case Kind::F32: case Kind::Null: case Kind::Pointer: case Kind::Function: return 4;
 			case Kind::Array: return base->size() * count;
 			case Kind::Struct: return structInfo->size;
 		}
@@ -28,6 +28,7 @@ namespace dscript
 			case Kind::U16: return "u16";
 			case Kind::I32: return "i32";
 			case Kind::U32: return "u32";
+			case Kind::F32: return "f32";
 			case Kind::Null: return "null";
 			case Kind::Pointer: return (base->kind == Kind::Function ? "(" + base->name(brief) + ")" : base->name(brief)) + "*";
 			case Kind::Array: return base->name(brief) + "[" + std::to_string(count) + "]";
@@ -70,6 +71,7 @@ namespace dscript
 		m_u16 = make(Type::Kind::U16);
 		m_i32 = make(Type::Kind::I32);
 		m_u32 = make(Type::Kind::U32);
+		m_f32 = make(Type::Kind::F32);
 		m_null = make(Type::Kind::Null);
 	}
 
@@ -141,6 +143,7 @@ namespace dscript
 		if (name == "u16") return m_u16;
 		if (name == "i32" || name == "int") return m_i32;
 		if (name == "u32" || name == "uint") return m_u32;
+		if (name == "f32" || name == "float") return m_f32;
 		if (name == "string") return pointer(m_u8);
 		return nullptr;
 	}

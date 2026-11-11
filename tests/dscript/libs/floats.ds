@@ -1,0 +1,17 @@
+// A library with f32 in its interface: constants (also infinities and NaN), defaults,
+// struct fields, overloads, inline subs.
+namespace Fl {
+	const PI: f32 = 3.14159265;
+	const THIRD: f32 = 1.0 / 3.0;
+	const BIG: f32 = 1e30;
+	const INF: f32 = 1.0 / 0.0;
+	const NAN: f32 = 0.0 / 0.0;
+	struct P {
+		var x: f32 = 0.1;
+		var y: f32 = -2;
+	};
+	sub scale(var v: f32, var by: f32 = 2.5) -> f32 { return v * by; }
+	sub which(var x: i32) -> i32 { return 1; }
+	sub which(var x: f32) -> i32 { return 2; }
+	inline sub twice(var v: f32) -> f32 { return v + v; }
+}

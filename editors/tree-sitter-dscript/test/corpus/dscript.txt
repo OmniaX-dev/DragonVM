@@ -818,3 +818,37 @@ atomic sub bump() { atomic { n++; } }
           (expression_statement
             (update_expression
               (identifier))))))))
+
+================================================================================
+Floats
+================================================================================
+
+const PI: f32 = 3.14159;
+var a: float = 2.;
+var b: f32 = 1e-3;
+var c: f32 = 2.5e+4f;
+var d: f32 = 3f;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (const_declaration
+    (identifier)
+    (primitive_type)
+    (number_literal))
+  (variable_declaration
+    (identifier)
+    (primitive_type)
+    (number_literal))
+  (variable_declaration
+    (identifier)
+    (primitive_type)
+    (number_literal))
+  (variable_declaration
+    (identifier)
+    (primitive_type)
+    (number_literal))
+  (variable_declaration
+    (identifier)
+    (primitive_type)
+    (number_literal)))

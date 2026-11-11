@@ -119,6 +119,70 @@ namespace dragon
 					u8 getInstructionSIze(u8 opCode) override;
 					bool execute(VirtualCPU& vcpu) override;
 			};
+
+			// Floating point (f32, IEEE 754 single precision), on the general registers: a
+			// register holds the float's 32 bits, so loads, stores, moves and calls are the
+			// usual ones. Results go in the first register (in place), like extalu; the
+			// comparisons write 1 / 0 in ACC (false when an operand is NaN). No traps: dividing
+			// by zero gives an infinity. imm: the float's 32 bits.
+			class ExtFpu : public data::CPUExtension
+			{
+				public: class OpCodes
+				{
+					public:
+						// rd = rd op rs / imm
+						inline static constexpr u8 fadd_reg_in_reg		=	0x10;
+						inline static constexpr u8 fadd_imm_in_reg		=	0x11;
+						inline static constexpr u8 fsub_reg_in_reg		=	0x12;
+						inline static constexpr u8 fsub_imm_in_reg		=	0x13;
+						inline static constexpr u8 fmul_reg_in_reg		=	0x14;
+						inline static constexpr u8 fmul_imm_in_reg		=	0x15;
+						inline static constexpr u8 fdiv_reg_in_reg		=	0x16;
+						inline static constexpr u8 fdiv_imm_in_reg		=	0x17;
+						inline static constexpr u8 fmin_reg_in_reg		=	0x18;
+						inline static constexpr u8 fmin_imm_in_reg		=	0x19;
+						inline static constexpr u8 fmax_reg_in_reg		=	0x1A;
+						inline static constexpr u8 fmax_imm_in_reg		=	0x1B;
+						inline static constexpr u8 fpow_reg_in_reg		=	0x1C;
+						inline static constexpr u8 fpow_imm_in_reg		=	0x1D;
+						inline static constexpr u8 fatan2_reg_in_reg	=	0x1E;	// rd = atan2(rd, rs)
+						inline static constexpr u8 fatan2_imm_in_reg	=	0x1F;
+
+						// rd = op(rd)
+						inline static constexpr u8 fneg_reg				=	0x20;
+						inline static constexpr u8 fabs_reg				=	0x21;
+						inline static constexpr u8 fsqrt_reg			=	0x22;
+						inline static constexpr u8 ffloor_reg			=	0x23;
+						inline static constexpr u8 fceil_reg			=	0x24;
+						inline static constexpr u8 fround_reg			=	0x25;	// halves away from zero
+						inline static constexpr u8 ftrunc_reg			=	0x26;
+						inline static constexpr u8 fsin_reg				=	0x27;
+						inline static constexpr u8 fcos_reg				=	0x28;
+						inline static constexpr u8 ftan_reg				=	0x29;
+						inline static constexpr u8 fexp_reg				=	0x2A;
+						inline static constexpr u8 flog_reg				=	0x2B;	// natural logarithm
+
+						// Conversions, in place. ftoi / ftou truncate toward zero and saturate
+						// (out of range: the nearest limit; NaN: 0).
+						inline static constexpr u8 itof_reg				=	0x30;	// i32 -> f32
+						inline static constexpr u8 utof_reg				=	0x31;	// u32 -> f32
+						inline static constexpr u8 ftoi_reg				=	0x32;	// f32 -> i32
+						inline static constexpr u8 ftou_reg				=	0x33;	// f32 -> u32
+
+						// ACC = (ra op rb / imm) ? 1 : 0
+						inline static constexpr u8 feq_reg_reg			=	0x40;
+						inline static constexpr u8 feq_reg_imm			=	0x41;
+						inline static constexpr u8 flt_reg_reg			=	0x42;
+						inline static constexpr u8 flt_reg_imm			=	0x43;
+						inline static constexpr u8 fle_reg_reg			=	0x44;
+						inline static constexpr u8 fle_reg_imm			=	0x45;
+				};
+				public:
+					inline ExtFpu(void) : data::CPUExtension(data::OpCodes::Ext03, "extfpu") {  }
+					String getOpCodeString(u8 opCode) override;
+					u8 getInstructionSIze(u8 opCode) override;
+					bool execute(VirtualCPU& vcpu) override;
+			};
 		}	
 
 		

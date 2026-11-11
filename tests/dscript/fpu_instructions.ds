@@ -1,0 +1,159 @@
+// The extfpu instructions, straight from low blocks (assembler mnemonics, float immediates,
+// the CPU): every result is checked as its exact f32 bits. Edge cases: infinities, NaN in
+// comparisons, -0.0, saturating conversions, rounding halves away from zero.
+// expect-rv: 0
+#import(<dragon-sdk>)
+
+var g_failures: i32 = 0;
+
+sub expect(var id: i32, var ok: bool) {
+	if (ok)
+		return;
+	var buff: u8[12];
+	debug_print("fpu_instructions: check ");
+	debug_print(dr::itoa(id, buff));
+	debug_print(" failed\n");
+	g_failures++;
+}
+
+sub main() -> i32 {
+	var r: u32 = 0;
+	var acc: u32 = 0;
+
+	// Arithmetic, immediate and register forms.
+	low { mov R1, 0x3FC00000
+		fadd R1, 2.25
+		mov $r, R1 }
+	expect(1, r == 0x40700000);			// 1.5 + 2.25 = 3.75
+	low { mov R1, 0x40700000
+		mov R2, 0x40000000
+		fmul R1, R2
+		mov $r, R1 }
+	expect(2, r == 0x40F00000);			// 3.75 * 2 = 7.5
+	low { mov R1, 0x40F00000
+		fsub R1, 10
+		mov $r, R1 }
+	expect(3, r == 0xC0200000);			// 7.5 - 10 = -2.5
+	low { mov R1, 0x3F800000
+		fdiv R1, 0.0
+		mov $r, R1 }
+	expect(4, r == 0x7F800000);			// 1 / 0 = +inf (no trap)
+	low { mov R1, 0x3F800000
+		fdiv R1, 3.0f
+		mov $r, R1 }
+	expect(5, r == 0x3EAAAAAB);			// 1 / 3
+	low { mov R1, 0x40000000
+		fmin R1, -1e3
+		mov $r, R1 }
+	expect(6, r == 0xC47A0000);			// min(2, -1000)
+	low { mov R1, 0x40000000
+		fmax R1, 0x40400000
+		mov $r, R1 }
+	expect(7, r == 0x40400000);			// max(2, 3) (hex immediate: raw bits)
+	low { mov R1, 0x40000000
+		fpow R1, 10
+		mov $r, R1 }
+	expect(8, r == 0x44800000);			// 2^10 = 1024
+
+	// One operand.
+	low { mov R1, 0x40000000
+		fsqrt R1
+		mov $r, R1 }
+	expect(10, r == 0x3FB504F3);		// sqrt(2)
+	low { mov R1, 0
+		fneg R1
+		mov $r, R1 }
+	expect(11, r == 0x80000000);		// -0.0
+	low { mov R1, 0xC0200000
+		fabs R1
+		mov $r, R1 }
+	expect(12, r == 0x40200000);		// |-2.5|
+	low { mov R1, 0xC0200000
+		fround R1
+		mov $r, R1 }
+	expect(13, r == 0xC0400000);		// round(-2.5) = -3 (halves away from zero)
+	low { mov R1, 0xBF000000
+		ffloor R1
+		mov $r, R1 }
+	expect(14, r == 0xBF800000);		// floor(-0.5) = -1
+	low { mov R1, 0x3F000001
+		fceil R1
+		mov $r, R1 }
+	expect(15, r == 0x3F800000);		// ceil(0.50000006) = 1
+	low { mov R1, 0xC0200000
+		ftrunc R1
+		mov $r, R1 }
+	expect(16, r == 0xC0000000);		// trunc(-2.5) = -2
+	low { mov R1, 0
+		fcos R1
+		mov $r, R1 }
+	expect(17, r == 0x3F800000);		// cos(0) = 1
+	low { mov R1, 0
+		fexp R1
+		flog R1
+		mov $r, R1 }
+	expect(18, r == 0);					// log(exp(0)) = 0
+
+	// Conversions (saturating, NaN -> 0).
+	low { mov R1, 0xFFFFFFFD
+		itof R1
+		mov $r, R1 }
+	expect(20, r == 0xC0400000);		// -3 -> -3.0
+	low { mov R1, 0xFFFFFFFF
+		utof R1
+		mov $r, R1 }
+	expect(21, r == 0x4F800000);		// 4294967295 -> 4294967296.0 (nearest f32)
+	low { mov R1, 0xC02CCCCD
+		ftoi R1
+		mov $r, R1 }
+	expect(22, cast<i32>(r) == -2);		// -2.7 -> -2
+	low { mov R1, 0x501502F9
+		ftoi R1
+		mov $r, R1 }
+	expect(23, r == 0x7FFFFFFF);		// 1e10 -> i32 max
+	low { mov R1, 0xD01502F9
+		ftoi R1
+		mov $r, R1 }
+	expect(24, r == 0x80000000);		// -1e10 -> i32 min
+	low { mov R1, 0x7FC00000
+		ftoi R1
+		mov $r, R1 }
+	expect(25, r == 0);					// NaN -> 0
+	low { mov R1, 0xBF800000
+		ftou R1
+		mov $r, R1 }
+	expect(26, r == 0);					// -1.0 -> u32: 0
+	low { mov R1, 0x4F000000
+		ftou R1
+		mov $r, R1 }
+	expect(27, r == 0x80000000);		// 2147483648.0 -> u32 2147483648
+
+	// Comparisons: ACC = 1 / 0, false with NaN.
+	low { mov R1, 0x3F800000
+		mov R2, 0x40000000
+		flt R1, R2
+		mov $acc, ACC }
+	expect(30, acc == 1);				// 1 < 2
+	low { mov R1, 0x40000000
+		flt R1, 1.0
+		mov $acc, ACC }
+	expect(31, acc == 0);				// 2 < 1
+	low { mov R1, 0x40000000
+		fle R1, 2.0
+		mov $acc, ACC }
+	expect(32, acc == 1);				// 2 <= 2
+	low { mov R1, 0x7FC00000
+		feq R1, R1
+		mov $acc, ACC }
+	expect(33, acc == 0);				// NaN == NaN is false
+	low { mov R1, 0x7FC00000
+		fle R1, inf
+		mov $acc, ACC }
+	expect(34, acc == 0);				// NaN <= inf is false
+	low { mov R1, 0x80000000
+		feq R1, 0.0
+		mov $acc, ACC }
+	expect(35, acc == 1);				// -0.0 == 0.0
+
+	return g_failures;
+}

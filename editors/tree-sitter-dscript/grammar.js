@@ -197,7 +197,7 @@ module.exports = grammar({
 			'::',
 			field('name', choice(alias($.identifier, $.type_identifier), $.scoped_type_identifier)),
 		),
-		primitive_type: _ => choice('i8', 'u8', 'i16', 'u16', 'i32', 'u32', 'bool', 'char', 'string', 'int', 'uint', 'void'),
+		primitive_type: _ => choice('i8', 'u8', 'i16', 'u16', 'i32', 'u32', 'f32', 'bool', 'char', 'string', 'int', 'uint', 'float', 'void'),
 		pointer_type: $ => prec(2, seq(field('type', $._type), '*')),
 		// T[]: the size comes from the value
 		array_type: $ => prec(2, seq(field('element', $._type), '[', optional(field('size', $._expression)), ']')),
@@ -381,6 +381,10 @@ module.exports = grammar({
 			/0[xX][0-9a-fA-F][0-9a-fA-F_]*/,
 			/0[bB][01][01_]*/,
 			/[0-9][0-9_]*/,
+			// f32: 1.5, 2., 1e-3, 2.5e+4, 3f, 0.5f
+			/[0-9][0-9_]*\.[0-9_]*([eE][+-]?[0-9]+)?[fF]?/,
+			/[0-9][0-9_]*[eE][+-]?[0-9]+[fF]?/,
+			/[0-9][0-9_]*[fF]/,
 		)),
 		char_literal: $ => seq("'", choice($.escape_sequence, token.immediate(/[^'\\\n]/)), token.immediate("'")),
 		string_literal: $ => seq(

@@ -1,4 +1,8 @@
 #include "Lexer.hpp"
+#include <cstdlib>
+#include <cmath>
+#include <cerrno>
+#include <bit>
 #include <cctype>
 #include <iostream>
 
@@ -195,6 +199,7 @@ namespace dscript
 			advance();
 		}
 		int digits = 0;
+		bool tooLarge = false;
 		while (true)
 		{
 			char c = peek();
@@ -204,16 +209,65 @@ namespace dscript
 			else if (base == 16 && std::isxdigit((unsigned char)c)) d = 10 + (std::tolower((unsigned char)c) - 'a');
 			if (d < 0 || d >= base)
 				break;
-			value = value * base + d;
+			if (value <= 0xFFFFFFFFull)
+				value = value * base + d;
 			if (value > 0xFFFFFFFFull)
-				error(t.pos, "integer literal too large (32 bits at most)");
+				tooLarge = true;		// an error unless it turns out to be a float (1e12 / 1234567890123.0)
 			digits++;
 			t.text += advance();
 		}
 		if (digits == 0)
 			error(t.pos, "invalid integer literal");
+		// A decimal number with a fraction, an exponent or the f suffix is an f32:
+		// 1.5, 2., 1e-3, 2.5e+4, 3f, 0.5f
+		if (base == 10 && (peek() == '.' || peek() == 'e' || peek() == 'E' || peek() == 'f' || peek() == 'F'))
+		{
+			std::string text = t.text;
+			bool isFloat = false;
+			const bool dotF = (peek(1) == 'f' || peek(1) == 'F') && !std::isalnum((unsigned char)peek(2)) && peek(2) != '_';	// 2.f
+			if (peek() == '.' && ((!std::isalpha((unsigned char)peek(1)) && peek(1) != '_' && peek(1) != '.') || dotF))
+			{
+				isFloat = true;
+				text += advance();
+				while (std::isdigit((unsigned char)peek()) || peek() == '_')
+				{
+					char c = advance();
+					if (c != '_')
+						text += c;
+				}
+			}
+			if ((peek() == 'e' || peek() == 'E') && (std::isdigit((unsigned char)peek(1)) || ((peek(1) == '+' || peek(1) == '-') && std::isdigit((unsigned char)peek(2)))))
+			{
+				isFloat = true;
+				text += advance();
+				if (peek() == '+' || peek() == '-')
+					text += advance();
+				while (std::isdigit((unsigned char)peek()))
+					text += advance();
+			}
+			if (peek() == 'f' || peek() == 'F')
+			{
+				isFloat = true;
+				advance();
+			}
+			if (isFloat)
+			{
+				if (std::isalnum((unsigned char)peek()) || peek() == '_' || peek() == '.')
+					error(t.pos, "invalid character in floating point literal");
+				errno = 0;
+				const float f = std::strtof(text.c_str(), nullptr);
+				if (errno == ERANGE && std::isinf(f))
+					error(t.pos, "floating point literal too large for an f32: " + text);
+				t.kind = TokenKind::Float;
+				t.text = text;
+				t.value = (int64_t)std::bit_cast<uint32_t>(f);
+				return t;
+			}
+		}
+		if (tooLarge)
+			error(t.pos, "integer literal too large (32 bits at most)");
 		if (std::isalnum((unsigned char)peek()) || peek() == '.')
-			error(t.pos, peek() == '.' ? "floating point numbers are not supported (the machine has no FPU)" : "invalid character in integer literal");
+			error(t.pos, peek() == '.' ? "invalid '.' after an integer literal" : "invalid character in integer literal");
 		t.value = (int64_t)value;
 		return t;
 	}

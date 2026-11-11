@@ -30,6 +30,13 @@ namespace dr {
 			}
 			TextSingle::print(cast<u32>(n));
 		}
+		static sub print(var f: f32, var decimals: u32 = 6) {
+			if (!vga_is_textSingle())
+				return;
+			var buff: u8[24];
+			ftoa(f, buff, decimals);
+			TextSingle::print(cast<string>(buff));
+		}
 		static sub new_line() {
 			if (!vga_is_textSingle())
 				return;
@@ -103,6 +110,13 @@ namespace dr {
 			var buff: u8[12];
 			itoa(n, buff);
 			Text16::print(buff, x, y, fg, bg);
+		}
+		static sub print(var f: f32, var x: u8, var y: u8, var fg: u8, var bg: u8, var decimals: u32 = 6) {
+			if (!vga_is_text16())
+				return;
+			var buff: u8[24];
+			ftoa(f, buff, decimals);
+			Text16::print(cast<string>(buff), x, y, fg, bg);
 		}
 		static sub clear_screen(var color: u8) {
 			if (!vga_is_text16())
@@ -231,6 +245,13 @@ namespace dr {
 			var buff: u8[12];
 			itoa(n, buff);
 			return this->print(buff);
+		}
+		sub print(var f: f32, var decimals: u32 = 6) -> Text16Console* {
+			if (not this->is_valid() or this->has_error())
+				return this;
+			var buff: u8[24];
+			ftoa(f, buff, decimals);
+			return this->print(cast<string>(buff));
 		}
 		sub nl() -> Text16Console* {
 			if (not this->is_valid() or this->has_error())

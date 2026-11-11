@@ -5502,12 +5502,20 @@
     "named": true
   },
   {
+    "type": "f32",
+    "named": false
+  },
+  {
     "type": "false",
     "named": false
   },
   {
     "type": "field_identifier",
     "named": true
+  },
+  {
+    "type": "float",
+    "named": false
   },
   {
     "type": "for",

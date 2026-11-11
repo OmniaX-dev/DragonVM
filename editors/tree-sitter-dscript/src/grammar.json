@@ -1290,6 +1290,10 @@
         },
         {
           "type": "STRING",
+          "value": "f32"
+        },
+        {
+          "type": "STRING",
           "value": "bool"
         },
         {
@@ -1307,6 +1311,10 @@
         {
           "type": "STRING",
           "value": "uint"
+        },
+        {
+          "type": "STRING",
+          "value": "float"
         },
         {
           "type": "STRING",
@@ -3159,6 +3167,18 @@
           {
             "type": "PATTERN",
             "value": "[0-9][0-9_]*"
+          },
+          {
+            "type": "PATTERN",
+            "value": "[0-9][0-9_]*\\.[0-9_]*([eE][+-]?[0-9]+)?[fF]?"
+          },
+          {
+            "type": "PATTERN",
+            "value": "[0-9][0-9_]*[eE][+-]?[0-9]+[fF]?"
+          },
+          {
+            "type": "PATTERN",
+            "value": "[0-9][0-9_]*[fF]"
           }
         ]
       }

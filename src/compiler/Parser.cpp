@@ -96,6 +96,7 @@ namespace dscript
 		{
 			case TokenKind::End: return "end of file";
 			case TokenKind::Integer: return "number";
+			case TokenKind::Float: return "number";
 			case TokenKind::String: return "string";
 			case TokenKind::LowBlock: return "low block";
 			case TokenKind::Directive: return "directive";
@@ -665,7 +666,7 @@ namespace dscript
 			return t.text == "void" || t.text == "sub" || t.text == "struct";
 		if (t.kind != TokenKind::Identifier)
 			return false;
-		static const char* names[] = { "i8", "u8", "i16", "u16", "i32", "u32", "bool", "char", "string", "int", "uint", nullptr };
+		static const char* names[] = { "i8", "u8", "i16", "u16", "i32", "u32", "f32", "bool", "char", "string", "int", "uint", "float", nullptr };
 		for (int i = 0; names[i] != nullptr; i++)
 		{
 			if (t.text == names[i])
@@ -942,7 +943,7 @@ namespace dscript
 		static const std::set<std::string> noSpaceBefore = { ")", "]", ",", ".", "->", "::", "[", "++", "--" };
 		auto l_is = [](const Token* t, TokenKind kind, const char* text) { return t && t->kind == kind && t->text == text; };
 		auto l_endsValue = [](const Token* t) {	// a token after which an operator is binary
-			return t && (t->kind == TokenKind::Identifier || t->kind == TokenKind::Integer || t->kind == TokenKind::String ||
+			return t && (t->kind == TokenKind::Identifier || t->kind == TokenKind::Integer || t->kind == TokenKind::Float || t->kind == TokenKind::String ||
 				(t->kind == TokenKind::Punct && (t->text == ")" || t->text == "]" || t->text == "++" || t->text == "--")) ||
 				(t->kind == TokenKind::Keyword && (t->text == "true" || t->text == "false" || t->text == "null")));
 		};
@@ -1354,6 +1355,14 @@ namespace dscript
 			Node* n = make(NodeKind::IntLit, t.pos);
 			n->value = t.value;
 			n->name = t.isChar ? "char" : "";
+			next();
+			return n;
+		}
+		if (t.kind == TokenKind::Float)
+		{
+			Node* n = make(NodeKind::FloatLit, t.pos);
+			n->value = t.value;		// the f32's bits
+			n->text = t.text;
 			next();
 			return n;
 		}

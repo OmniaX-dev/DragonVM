@@ -1,0 +1,7 @@
+// f32 <-> pointers has no meaning.
+// expect-error: cannot cast f32 to u8*
+sub main() -> i32 {
+	var f: f32 = 1.5;
+	var p: u8* = cast<u8*>(f);
+	return 0;
+}

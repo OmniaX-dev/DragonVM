@@ -1,4 +1,6 @@
 #include "CodeGen.hpp"
+#include <cmath>
+#include <bit>
 #include <cstdio>
 #include <algorithm>
 #include <filesystem>
@@ -232,6 +234,69 @@ namespace dscript
 			case Type::Kind::I32: return (int32_t)value;
 			default: return (uint32_t)value;
 		}
+	}
+
+	// ===== f32 constants: their value is their 32 bits =====
+	static float f32Of(int64_t bits) { return std::bit_cast<float>((uint32_t)bits); }
+	static int64_t bitsOf(float value) { return (int64_t)std::bit_cast<uint32_t>(value); }
+	// f32 -> integer as the CPU does it (ftoi / ftou): truncated, saturated, NaN -> 0.
+	static int64_t floatToInt(float f, bool isUnsigned)
+	{
+		if (std::isnan(f)) return 0;
+		if (isUnsigned)
+		{
+			if (f <= 0.0f) return 0;
+			if (f >= 4294967296.0f) return 0xFFFFFFFF;
+			return (int64_t)(uint32_t)f;
+		}
+		if (f >= 2147483648.0f) return 0x7FFFFFFF;
+		if (f <= -2147483648.0f) return -2147483648LL;
+		return (int64_t)(int32_t)f;
+	}
+	static bool isUnsignedKind(const Type* t)
+	{
+		return t->kind == Type::Kind::U8 || t->kind == Type::Kind::U16 || t->kind == Type::Kind::U32;
+	}
+	// A constant of type `from` as a value of type `to` (wrapTo, plus the int <-> f32 conversions).
+	static int64_t constConvert(int64_t value, const Type* from, Type* to)
+	{
+		if (to->isFloat())
+		{
+			if (from == nullptr || from->isFloat())
+				return (uint32_t)value;
+			if (from->kind == Type::Kind::U32)
+				return bitsOf((float)(uint32_t)value);
+			return bitsOf((float)(int32_t)value);
+		}
+		if (from != nullptr && from->isFloat())
+		{
+			const float f = f32Of(value);
+			if (to->kind == Type::Kind::Bool)
+				return f != 0.0f;
+			return wrapTo(floatToInt(f, isUnsignedKind(to)), to);
+		}
+		return wrapTo(value, to);
+	}
+	// Is a constant of type t true (not 0; for f32: not 0.0 / -0.0)?
+	static bool constTruth(int64_t value, const Type* t)
+	{
+		if (t != nullptr && t->isFloat())
+			return f32Of(value) != 0.0f;
+		return value != 0;
+	}
+	// An f32 written so that it reads back as the same f32 (a literal, or 1.0 / 0.0 for the
+	// infinities, 0.0 / 0.0 for NaN).
+	static std::string floatText(int64_t bits)
+	{
+		const float f = f32Of(bits);
+		if (std::isnan(f)) return "(0.0 / 0.0)";
+		if (std::isinf(f)) return f > 0 ? "(1.0 / 0.0)" : "(-1.0 / 0.0)";
+		char buf[48];
+		std::snprintf(buf, sizeof(buf), "%.9g", (double)f);
+		std::string text = buf;
+		if (text.find_first_of(".en") == std::string::npos)
+			text += ".0";
+		return text;
 	}
 
 	CodeGen::CodeGen(const CodeGenOptions& options) : m_options(options)
@@ -671,8 +736,8 @@ namespace dscript
 	int64_t CodeGen::constExpr(Node* e, const std::string& what)
 	{
 		check(e);
-		if (!e->isConst || !(e->type->isInteger() || e->type->kind == Type::Kind::Null))
-			error(e->pos, what + " must be an integer constant");
+		if (!e->isConst || !(e->type->isInteger() || e->type->isFloat() || e->type->kind == Type::Kind::Null))
+			error(e->pos, what + " must be a constant number");
 		return e->constValue;
 	}
 
@@ -718,9 +783,11 @@ namespace dscript
 		int64_t value = constExpr(c.decl->a, "the value of constant '" + name + "'");
 		if (t == nullptr)
 			t = promote(c.decl->a->type);
-		if (!t->isInteger())
-			error(c.decl->pos, "constants are integers");
-		c.value = wrapTo(value, t);
+		if (!t->isInteger() && !t->isFloat())
+			error(c.decl->pos, "constants are numbers (integers or f32), strings or structs");
+		if (c.decl->a->type->isFloat() && !t->isFloat())
+			error(c.decl->a->pos, "cannot convert f32 to " + t->name() + " in the value of constant '" + name + "' (use cast<" + t->name() + ">(...))");
+		c.value = constConvert(value, c.decl->a->type, t);
 		c.type = t;
 		c.resolved = true;
 		c.resolving = false;
@@ -765,7 +832,7 @@ namespace dscript
 					error(v->pos, "constant '" + constName + "': the value of field '" + path + "' must be a constant");
 				value = v->constValue;
 			}
-			c.fields[path] = wrapTo(value, field.type);
+			c.fields[path] = constConvert(value, v != nullptr ? v->type : nullptr, field.type);
 		}
 	}
 
@@ -1026,6 +1093,8 @@ namespace dscript
 
 	Type* CodeGen::arithmeticType(Type* a, Type* b)
 	{
+		if (a->isFloat() || b->isFloat())
+			return m_types.f32();
 		if (promote(a)->kind == Type::Kind::U32 || promote(b)->kind == Type::Kind::U32)
 			return m_types.u32();
 		return m_types.i32();
@@ -1068,6 +1137,12 @@ namespace dscript
 			if (to->isVoidPointer()) return 2;
 			return -1;
 		}
+		// int -> f32: implicit (worse than any int -> int, so overloads prefer the integer
+		// ones for integers); f32 -> anything else needs a cast.
+		if (f->isInteger() && to->isFloat())
+			return 4;
+		if (f->isFloat())
+			return -1;
 		if (f->isInteger() && to->isInteger())
 		{
 			if (to->kind == Type::Kind::Bool) return 3;
@@ -1099,6 +1174,8 @@ namespace dscript
 			hint = " (use cast<" + to->name() + ">(...))";
 		else if (from->type && to->isInteger() && (from->type->isPointer() || from->type->isFunction()))
 			hint = " (use cast<" + to->name() + ">(...))";
+		else if (from->type && from->type->isFloat() && to->isInteger())
+			hint = " (use cast<" + to->name() + ">(...): it truncates toward zero)";
 		else if (from->type && from->type->isPointer() && to->isPointer())
 			hint = " (use cast<" + to->name() + ">(...))";
 		error(from->pos, "cannot convert " + fromName + " to " + to->name() + " " + context + hint);
@@ -1169,6 +1246,11 @@ namespace dscript
 				e->isConst = true;
 				e->constValue = e->value;
 			break;
+			case NodeKind::FloatLit:
+				e->type = m_types.f32();
+				e->isConst = true;
+				e->constValue = (uint32_t)e->value;
+			break;
 			case NodeKind::StrLit:
 				e->type = m_types.pointer(m_types.u8());
 			break;
@@ -1207,7 +1289,7 @@ namespace dscript
 				Type* tc = decay(e->c->type);
 				if (tb == nullptr || tc == nullptr)
 					error(e->pos, "ambiguous overloaded sub in ?:");
-				if (tb->isInteger() && tc->isInteger())
+				if (tb->isArithmetic() && tc->isArithmetic())
 					e->type = (tb == tc ? tb : arithmeticType(tb, tc));
 				else if (tb == tc && tb->isScalar())
 					e->type = tb;
@@ -1222,7 +1304,8 @@ namespace dscript
 				if (e->a->isConst && e->b->isConst && e->c->isConst)
 				{
 					e->isConst = true;
-					e->constValue = wrapTo(e->a->constValue ? e->b->constValue : e->c->constValue, e->type);
+					Node* chosen = constTruth(e->a->constValue, decay(e->a->type)) ? e->b : e->c;
+					e->constValue = constConvert(chosen->constValue, decay(chosen->type), e->type);
 				}
 			}
 			break;
@@ -1250,13 +1333,16 @@ namespace dscript
 				if (from == nullptr)
 					error(e->a->pos, "ambiguous overloaded sub in cast");
 				bool ok = (to->kind == Type::Kind::Void) || (from->isScalar() && to->isScalar());
+				// f32 <-> pointers: no meaning (to look at a float's bits: *cast<u32*>(&f)).
+				if ((from->isFloat() && !to->isArithmetic() && to->kind != Type::Kind::Void) || (to->isFloat() && !from->isArithmetic()))
+					ok = false;
 				if (!ok)
 					error(e->pos, "cannot cast " + from->name() + " to " + to->name());
 				e->type = to;
-				if (e->a->isConst && to->isInteger())
+				if (e->a->isConst && to->isArithmetic())
 				{
 					e->isConst = true;
-					e->constValue = wrapTo(e->a->constValue, to);
+					e->constValue = constConvert(e->a->constValue, from, to);
 				}
 				else if ((e->a->isConst || e->a->constPtr) && to->isPointer())
 				{
@@ -1313,8 +1399,8 @@ namespace dscript
 					error(e->pos, "++ and -- need a variable");
 				if (e->a->readOnly)
 					error(e->pos, "cannot change a constant array");
-				if (!e->a->type->isInteger() && e->a->type->kind != Type::Kind::Pointer)
-					error(e->pos, "++ and -- work on integers and pointers");
+				if (!e->a->type->isArithmetic() && e->a->type->kind != Type::Kind::Pointer)
+					error(e->pos, "++ and -- work on numbers and pointers");
 				e->type = e->a->type;
 			}
 			break;
@@ -1438,12 +1524,22 @@ namespace dscript
 		if (op == "!")
 		{
 			if (!t->isScalar())
-				error(e->pos, "! needs an integer or a pointer");
+				error(e->pos, "! needs a number or a pointer");
 			e->type = m_types.boolType();
 			if (e->a->isConst)
 			{
 				e->isConst = true;
-				e->constValue = e->a->constValue == 0;
+				e->constValue = !constTruth(e->a->constValue, t);
+			}
+			return;
+		}
+		if (t->isFloat() && op == "-")
+		{
+			e->type = t;
+			if (e->a->isConst)
+			{
+				e->isConst = true;
+				e->constValue = (uint32_t)e->a->constValue ^ 0x80000000u;	// the sign bit
 			}
 			return;
 		}
@@ -1474,18 +1570,19 @@ namespace dscript
 		if (op == "&&" || op == "||")
 		{
 			if (!ta->isScalar() || !tb->isScalar())
-				error(e->pos, op + " needs integers or pointers");
+				error(e->pos, op + " needs numbers or pointers");
 			e->type = m_types.boolType();
 			if (e->a->isConst && e->b->isConst)
 			{
 				e->isConst = true;
-				e->constValue = (op == "&&") ? (e->a->constValue && e->b->constValue) : (e->a->constValue || e->b->constValue);
+				const bool x = constTruth(e->a->constValue, ta), y = constTruth(e->b->constValue, tb);
+				e->constValue = (op == "&&") ? (x && y) : (x || y);
 			}
 			return;
 		}
 		if (isComparison(op))
 		{
-			bool ok = (ta->isInteger() && tb->isInteger());
+			bool ok = (ta->isArithmetic() && tb->isArithmetic());
 			if (ta->isPointer() && tb->isPointer())
 				ok = (ta == tb || ta->kind == Type::Kind::Null || tb->kind == Type::Kind::Null || ta->isVoidPointer() || tb->isVoidPointer());
 			if ((ta->isFunction() || tb->isFunction()) && (op == "==" || op == "!="))
@@ -1495,7 +1592,17 @@ namespace dscript
 			if (!ok)
 				error(e->pos, "cannot compare " + ta->name() + " and " + tb->name());
 			e->type = m_types.boolType();
-			if (e->a->isConst && e->b->isConst && ta->isInteger() && tb->isInteger())
+			if (e->a->isConst && e->b->isConst && (ta->isFloat() || tb->isFloat()))
+			{
+				const float x = f32Of(constConvert(e->a->constValue, ta, m_types.f32()));
+				const float y = f32Of(constConvert(e->b->constValue, tb, m_types.f32()));
+				bool r = false;
+				if (op == "==") r = x == y; else if (op == "!=") r = x != y; else if (op == "<") r = x < y;
+				else if (op == "<=") r = x <= y; else if (op == ">") r = x > y; else r = x >= y;
+				e->isConst = true;
+				e->constValue = r;
+			}
+			else if (e->a->isConst && e->b->isConst && ta->isInteger() && tb->isInteger())
 			{
 				bool isUnsigned = arithmeticType(ta, tb)->kind == Type::Kind::U32;
 				int64_t x = isUnsigned ? (int64_t)(uint32_t)e->a->constValue : (int64_t)(int32_t)e->a->constValue;
@@ -1517,6 +1624,22 @@ namespace dscript
 			if (ta != tb)
 				error(e->pos, "cannot subtract " + tb->name() + " from " + ta->name());
 			e->type = m_types.i32();
+			return;
+		}
+		if ((ta->isFloat() || tb->isFloat()) && ta->isArithmetic() && tb->isArithmetic())
+		{
+			if (op != "+" && op != "-" && op != "*" && op != "/")
+				error(e->pos, "'" + op + "' needs integers (found " + ta->name() + " and " + tb->name() + ")");
+			e->type = m_types.f32();
+			if (e->a->isConst && e->b->isConst)
+			{
+				const float x = f32Of(constConvert(e->a->constValue, ta, e->type));
+				const float y = f32Of(constConvert(e->b->constValue, tb, e->type));
+				float r = 0.0f;
+				if (op == "+") r = x + y; else if (op == "-") r = x - y; else if (op == "*") r = x * y; else r = x / y;
+				e->isConst = true;
+				e->constValue = bitsOf(r);
+			}
 			return;
 		}
 		if (!ta->isInteger() || !tb->isInteger())
@@ -1559,6 +1682,17 @@ namespace dscript
 		}
 		check(e->b);
 		Type* tb = decay(e->b->type);
+		if (t->isFloat())
+		{
+			if (e->name != "+=" && e->name != "-=" && e->name != "*=" && e->name != "/=")
+				error(e->pos, "'" + e->name + "' needs an integer variable");
+			if (tb == nullptr || !tb->isArithmetic())
+				error(e->b->pos, "'" + e->name + "' needs a number");
+			e->type = t;
+			return;
+		}
+		if (tb != nullptr && tb->isFloat() && t->isInteger())
+			error(e->b->pos, "'" + e->name + "' with an f32 value needs an f32 variable (cast the value: cast<" + t->name() + ">(...))");
 		if (tb == nullptr || !tb->isInteger())
 			error(e->b->pos, "'" + e->name + "' needs an integer value");
 		bool pointerOk = (e->name == "+=" || e->name == "-=") && t->kind == Type::Kind::Pointer;
@@ -1943,7 +2077,30 @@ namespace dscript
 
 	void CodeGen::convert(const Reg& r, Type* from, Type* to)
 	{
-		if (from == to || !to->isInteger() || from == nullptr)
+		if (from == to || from == nullptr)
+			return;
+		if (to->isFloat())
+		{
+			if (from->isInteger())
+				emit((from->kind == Type::Kind::U32 ? "utof " : "itof ") + r);
+			return;
+		}
+		if (from->isFloat() && to->isInteger())
+		{
+			if (to->kind == Type::Kind::Bool)
+			{
+				// f != 0.0 (also for -0.0)
+				emit("feq " + r + ", 0x00000000");
+				emit("mov " + r + ", ACC");
+				emit("xorip " + r + ", 1");
+				return;
+			}
+			emit((isUnsignedKind(to) ? "ftou " : "ftoi ") + r);
+			if (to->size() < 4)
+				normalize(r, to);
+			return;
+		}
+		if (!to->isInteger())
 			return;
 		const Type::Kind f = from->kind;
 		switch (to->kind)
@@ -2098,7 +2255,7 @@ namespace dscript
 
 	CodeGen::Reg CodeGen::gen(Node* e)
 	{
-		if ((e->isConst && e->type && (e->type->isInteger() || e->type->kind == Type::Kind::Null)) || e->constPtr)
+		if ((e->isConst && e->type && (e->type->isArithmetic() || e->type->kind == Type::Kind::Null)) || e->constPtr)
 		{
 			Reg r = alloc(e->pos);
 			emit("mov " + r + ", " + imm(e->constValue));
@@ -2133,7 +2290,14 @@ namespace dscript
 					return genAddr(e->a);
 				}
 				Reg r = gen(e->a);
-				if (op == "-")
+				if (op == "-" && e->type->isFloat())
+					emit("fneg " + r);
+				else if (op == "!" && decay(e->a->type)->isFloat())
+				{
+					emit("feq " + r + ", 0x00000000");	// 1 when 0.0 / -0.0
+					emit("mov " + r + ", ACC");
+				}
+				else if (op == "-")
 					emit("neg " + r);
 				else if (op == "~")
 					emit("notip " + r);
@@ -2253,7 +2417,7 @@ namespace dscript
 	{
 		if (e->isConst)
 		{
-			if ((e->constValue != 0) == jumpIfTrue)
+			if (constTruth(e->constValue, decay(e->type)) == jumpIfTrue)
 				emit("jmp $" + target);
 			return;
 		}
@@ -2278,6 +2442,29 @@ namespace dscript
 				genBranch(e->b, target, jumpIfTrue);
 				label(skip);
 			}
+			return;
+		}
+		if (e->kind == NodeKind::Binary && isComparison(e->name) && (decay(e->a->type)->isFloat() || decay(e->b->type)->isFloat()))
+		{
+			// feq / flt / fle set ACC to 1 / 0 (0 when an operand is NaN, so every comparison
+			// with NaN is false, and != true). > and >= swap the operands.
+			Type* f = m_types.f32();
+			Reg a = gen(e->a);
+			convert(a, decay(e->a->type), f);
+			Reg b = gen(e->b);
+			convert(b, decay(e->b->type), f);
+			const std::string& op = e->name;
+			bool negate = false;
+			if (op == "==") emit("feq " + a + ", " + b);
+			else if (op == "!=") { emit("feq " + a + ", " + b); negate = true; }
+			else if (op == "<") emit("flt " + a + ", " + b);
+			else if (op == "<=") emit("fle " + a + ", " + b);
+			else if (op == ">") emit("flt " + b + ", " + a);
+			else emit("fle " + b + ", " + a);
+			const bool jumpOnOne = (jumpIfTrue != negate);
+			emit(std::string(jumpOnOne ? "jne" : "jeq") + " $" + target + ", 0");
+			release(b);
+			release(a);
 			return;
 		}
 		if (e->kind == NodeKind::Binary && isComparison(e->name))
@@ -2307,6 +2494,14 @@ namespace dscript
 			return;
 		}
 		Reg r = gen(e);
+		if (decay(e->type)->isFloat())
+		{
+			// True when not 0.0 / -0.0 (NaN is true): feq gives 1 for zero.
+			emit("feq " + r + ", 0x00000000");
+			emit(std::string(jumpIfTrue ? "jeq" : "jne") + " $" + target + ", 0");
+			release(r);
+			return;
+		}
 		emit("mov ACC, " + r);
 		emit(std::string(jumpIfTrue ? "jne" : "jeq") + " $" + target + ", 0");
 		release(r);
@@ -2375,6 +2570,25 @@ namespace dscript
 			}
 			release(i);
 			return p;
+		}
+		if (e->type->isFloat())
+		{
+			Reg a = gen(e->a);
+			convert(a, ta, e->type);
+			Reg b;
+			std::string operand;
+			if (e->b->isConst)
+				operand = imm(constConvert(e->b->constValue, tb, e->type));	// the f32's bits
+			else
+			{
+				b = gen(e->b);
+				convert(b, tb, e->type);
+				operand = b;
+			}
+			const char* inst = (op == "+") ? "fadd " : (op == "-") ? "fsub " : (op == "*") ? "fmul " : "fdiv ";
+			emit(inst + a + ", " + operand);
+			release(b);
+			return a;
 		}
 		const bool isUnsigned = e->type->kind == Type::Kind::U32;
 		Reg a = gen(e->a);
@@ -2451,6 +2665,28 @@ namespace dscript
 			return d;
 		}
 		const std::string op = e->name.substr(0, e->name.size() - 1);
+		if (t->isFloat())
+		{
+			Reg v = alloc(e->pos);
+			load(v, d, t);
+			Reg x;
+			std::string operand;
+			if (e->b->isConst)
+				operand = imm(constConvert(e->b->constValue, decay(e->b->type), t));
+			else
+			{
+				x = gen(e->b);
+				convert(x, decay(e->b->type), t);
+				operand = x;
+			}
+			const char* inst = (op == "+") ? "fadd " : (op == "-") ? "fsub " : (op == "*") ? "fmul " : "fdiv ";
+			emit(inst + v + ", " + operand);
+			release(x);
+			store(d, v, t);
+			emit("mov " + d + ", " + v);
+			release(v);
+			return d;
+		}
 		Reg v = alloc(e->pos);
 		load(v, d, t);
 		Reg x;
@@ -2531,7 +2767,10 @@ namespace dscript
 		load(v, d, t);
 		Reg n = alloc(e->pos);
 		emit("mov " + n + ", " + v);
-		addImmediate(n, inc ? step : -step);
+		if (t->isFloat())
+			emit("fadd " + n + ", " + imm(bitsOf(inc ? 1.0f : -1.0f)));
+		else
+			addImmediate(n, inc ? step : -step);
 		if (t->isInteger())
 			normalize(n, t);
 		store(d, n, t);
@@ -2613,7 +2852,7 @@ namespace dscript
 				if (def->kind == NodeKind::StrLit)
 					emit("mov " + r + ", $" + stringLiteral(def->text));
 				else
-					emit("mov " + r + ", " + imm(wrapTo(def->constValue, params[i])));
+					emit("mov " + r + ", " + imm(constConvert(def->constValue, decay(def->type), params[i])));
 			}
 			Reg a = alloc(e->pos);
 			varAddress(a, v);
@@ -2702,7 +2941,7 @@ namespace dscript
 			if (def->kind == NodeKind::StrLit)
 				emit("push $" + stringLiteral(def->text));
 			else
-				emit("push " + imm(wrapTo(def->constValue, params[i])));
+				emit("push " + imm(constConvert(def->constValue, decay(def->type), params[i])));
 		}
 		emit("push " + std::to_string(params.size()));
 		if (f)
@@ -2864,7 +3103,7 @@ namespace dscript
 					else if (d.second->init->kind == NodeKind::Ident && d.second->init->func != nullptr)
 						emit("mov " + val + ", $" + d.second->init->func->label);
 					else
-						emit("mov " + val + ", " + imm(wrapTo(d.second->init->constValue, d.second->type)));
+						emit("mov " + val + ", " + imm(constConvert(d.second->init->constValue, decay(d.second->init->type), d.second->type)));
 					Reg p = alloc(s->pos);
 					emit("mov " + p + ", " + a);
 					addImmediate(p, d.first);
@@ -3528,7 +3767,10 @@ namespace dscript
 					else if (def.second->init->kind == NodeKind::Ident && def.second->init->func != nullptr)
 						refs[(uint32_t)def.first] = def.second->init->func->label;
 					else
-						putBytes(bytes, def.first, def.second->type->size(), def.second->init->constValue);
+					{
+						Node* init = def.second->init;
+						putBytes(bytes, def.first, def.second->type->size(), init->isConst ? constConvert(init->constValue, decay(init->type), def.second->type) : init->constValue);
+					}
 				}
 				// Walk the initializer.
 				std::vector<Pending> work;
@@ -3585,7 +3827,7 @@ namespace dscript
 					}
 					refs.erase(p.offset);	// replaces a default
 					if (init->isConst || init->constPtr)
-						putBytes(bytes, p.offset, p.type->size(), init->isConst ? wrapTo(init->constValue, p.type) : init->constValue);
+						putBytes(bytes, p.offset, p.type->size(), init->isConst ? constConvert(init->constValue, decay(init->type), p.type) : init->constValue);
 					else
 					{
 						if (v->readOnly)
@@ -3777,6 +4019,8 @@ namespace dscript
 			};
 			return head + ": " + c.type->name(true) + note + " = " + l_fields(c.type->structInfo, "", "");
 		}
+		if (c.type->isFloat())
+			return head + ": " + c.type->name(true) + " = " + floatText(c.value) + note;
 		return head + ": " + c.type->name(true) + " = " + number(c.value) + note;
 	}
 
@@ -4116,6 +4360,8 @@ namespace dscript
 			return value ? "true" : "false";
 		if (t != nullptr && (t->isPointer() || t->isFunction()))
 			return value == 0 ? "null" : "cast<" + interfaceType(t) + ">(" + std::to_string((uint32_t)value) + ")";
+		if (t != nullptr && t->isFloat())
+			return floatText(value);
 		return std::to_string(value);
 	}
 
@@ -4126,7 +4372,9 @@ namespace dscript
 			return dscript::quoted(init->text);
 		if (init->kind == NodeKind::Ident && init->func != nullptr)
 			return init->func->decl->name.rfind("__lambda_", 0) == 0 ? "null" : "::" + init->func->decl->name;
-		if (init->isConst || init->constPtr)
+		if (init->isConst)
+			return interfaceNumber(t != nullptr ? constConvert(init->constValue, decay(init->type), t) : init->constValue, t);
+		if (init->constPtr)
 			return interfaceNumber(init->constValue, t);
 		return "0";
 	}

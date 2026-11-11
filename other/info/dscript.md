@@ -57,6 +57,7 @@ the source refers to (`src/compiler/Index.hpp`).
 | Type | Size | Notes |
 |---|---|---|
 | `i8` `u8` `i16` `u16` `i32` `u32` | 1, 2, 4 | `char` = `u8`, `int` = `i32`, `uint` = `u32` |
+| `f32` | 4 | IEEE 754 single precision (`float` = `f32`), see "Floating point" |
 | `bool` | 1 | `true` / `false` |
 | `T*` | 4 | pointers; `void*` converts to and from any pointer |
 | `string` | 4 | the same as `u8*` (null-terminated) |
@@ -67,7 +68,28 @@ the source refers to (`src/compiler/Index.hpp`).
 | `sub(T1, T2) -> R` | 4 | sub pointers; `(sub(i32) -> i32)[4]` for an array of them |
 | enums | 4, or the size of their type | their values are constants of the enum's type (`i32` by default): `Color.Red`; `enum Kind: u8 { ... }` gives them a type (i8, i16, i32, u8, u16, u32) |
 
-There is no floating point (the machine has no FPU).
+### Floating point
+
+`f32` runs on the FPU (the `extfpu` CPU extension). An `f32` lives in the general registers like
+a `u32` (its 32 bits), so it is passed, returned, stored and copied like one.
+
+- Literals: `1.5`, `2.`, `1e-3`, `2.5e+4`, `3f`, `0.5f` (an `f` suffix or a `.` / exponent makes
+  an `f32`; there is no 64-bit float).
+- Integers convert to `f32` implicitly (in arithmetic, assignments, arguments): `f + 1`,
+  `var f: f32 = n;`. An `f32` converts to an integer only with `cast`: it truncates toward zero
+  and saturates (out of range: the type's nearest limit; NaN: 0). `cast<bool>(f)` is `f != 0.0`.
+- Operators: `+ - * /` (`/` by zero gives an infinity, no error), unary `-`, comparisons,
+  `! && ||`, `?:`, `++ --` (by 1.0), `+= -= *= /=`. Not `%`, the bitwise ones or the shifts.
+- Comparisons follow IEEE: every comparison with NaN is false, except `!=`; `-0.0 == 0.0`.
+  As a condition, an `f32` is true unless it is `0.0` / `-0.0` (NaN is true).
+- Constants fold at compile time (`const HALF: f32 = 1.0 / 2;`), also in struct constants and
+  default values. An overloaded sub called with an integer prefers its integer overload.
+- To look at the bits: `*cast<u32*>(&f)` (or `dr::math::f32_bits(f)` / `dr::math::f32_from_bits(bits)`).
+- The SDK's `math.ds`, in `dr::math`: `sqrt`, `floor`, `ceil`, `round`, `trunc`, `abs`, `min`, `max`,
+  `clamp`, `lerp`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `exp`, `log`, `log2`,
+  `log10`, `pow`, `fmod`, `is_nan`, `is_inf`, `is_finite`, and `PI`, `TAU`, `E`, `INFINITY`,
+  `NAN`, ... `dr::ftoa(f, buffer, decimals)` writes one as text; `print(f32)` prints one
+  (`TextSingle`, `Text16`, `Text16Console`; 6 decimals by default).
 
 ### Declarations (top level)
 ```
@@ -424,17 +446,18 @@ C operators and precedence: `= += -= *= /= %= &= |= ^= <<= >>=`, `?:`, `|| &&` (
 `and`, short-circuit), `| ^ &`, `== != < <= > >=`, `<< >>`, `+ -`, `* / %`, unary `- ! ~ * &`
 (`not` = `!`), `++ --` (prefix and postfix), calls, `a[i]`, `s.field`, `p->field`.
 
-- `cast<T>(value)`: conversions between integers, pointers and sub pointers. `cast<T*>(constant)`
+- `cast<T>(value)`: conversions between integers, `f32`, pointers and sub pointers (not between
+  `f32` and pointers). `cast<T*>(constant)`
   is a constant address (it can be a field's default value).
 - `sizeof(type or value)`, `sizeof<type>`: a `u32` constant.
-- Literals: `42`, `0x2A`, `0b101010`, `1_000` (underscores), `'a'` (a `u8`), `"text"`
+- Literals: `42`, `0x2A`, `0b101010`, `1_000` (underscores), `1.5` / `1e-3` / `2f` (`f32`), `'a'` (a `u8`), `"text"`
   (escapes `\n \t \r \0 \\ \' \" \xNN`, adjacent strings are joined), `true`, `false`, `null`.
 - Integer arithmetic is 32-bit: smaller types are widened (`i8`, `i16` sign-extended), the result
   is `u32` if an operand is `u32`, `i32` otherwise. Values are truncated when stored.
   Division, `%`, `>>` and comparisons are unsigned on `u32` (and pointers), signed otherwise.
 - Pointer arithmetic: `p + n` / `p - n` move by `n` elements, `p - q` counts elements, `p[i]` is
   `*(p + i)`.
-- Implicit conversions: between integer types, `null` / `0` to pointers, arrays to pointers,
+- Implicit conversions: between integer types, integers to `f32`, `null` / `0` to pointers, arrays to pointers,
   `void*` to and from pointers. Everything else needs `cast`.
 - Structs can be assigned (copied) and initialized from another struct; they are passed to and
   returned from subs through pointers.
@@ -523,7 +546,8 @@ var m: i32 = MAX(x, y + 1);
 - **Locals** are at `FP + offset` (offset <= 0): the sub moves SP below them first.
 - **Registers**: R1..R16 hold the temporaries of an expression (as a stack; an expression can
   need 16 at most), R17..R20 are scratch, S1 / S2 hold the `$var`s of low blocks.
-- Needs the `extmov` and `extalu` CPU extensions (`cpuext = extmov, extalu` in the machine config).
+- Needs the `extmov` and `extalu` CPU extensions, and `extfpu` for programs using `f32`
+  (`cpuext = extmov, extalu, extfpu` in the machine config).
 - Layout: `jmp __ds_start`, the data (globals, string literals), `__ds_start` (calls `__ds_init`,
   then `main`; then `ret` in a DRX, `hlt` in a raw binary), the top-level low blocks, the subs,
   and the runtime helpers used (`__ds_shru`: the `>>` of a `u32` by a variable).
@@ -628,7 +652,7 @@ machine config (e.g. one with a known-good BIOS).
 - One source file (plus includes) per program or library; libraries are linked statically
   (into the program, by dsc), not loaded at run time.
 - `#define` has no stringizing or token pasting.
-- No `switch`, `goto`, unions, floating point, variadic subs.
+- No `switch`, `goto`, unions, 64-bit floats, variadic subs.
 - Structs are passed and returned through pointers.
 - Lambdas do not capture the variables of the sub around them.
 - Uninitialized global arrays are stored in the program (zeroes).
@@ -647,7 +671,7 @@ before it can run on the machine:
 3. **Files**: reading the sources and writing the output through the OS (the disk driver and a
    file system on a partition).
 4. **The assembler**: port it too, or let the DScript compiler emit machine code directly
-   (the instruction encodings are in `src/tools/GlobalData.*` and `src/hardware/CPUExtensions.*`).
+   (the instruction encodings are in `src/tools/GlobalData.*` and `src/hardware/CPUExtensions.*`). The FPU: `other/info/fpu.md`.
 5. **Language features that would help**: `switch`, unions, and a linker / object format
    (DRX could gain a symbol table) to compile big programs in pieces.
 

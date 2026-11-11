@@ -602,6 +602,7 @@ namespace dragon
 			const u32 v = value_of(m_hovered);
 			String info = s_registers[m_hovered].name;
 			info.add(" = ").add(String::getHexStr(v, true, 4)).add(" = ").add(v).add(" (unsigned) = ").add(cast<i32>(v)).add(" (signed) = ").add(String::getBinStr(v, true, 4));
+			info.add(" = ").add(Debugger::Utils::floatText(v)).add(" (f32)");
 			const char hi = cast<char>(v >> 8), lo = cast<char>(v & 0xFF);
 			info.add(" = '").addChar(std::isprint(cast<u8>(hi)) ? hi : '.').addChar(std::isprint(cast<u8>(lo)) ? lo : '.').add("'");
 			String symbol = Debugger::Utils::findNearestSymbol(m_debugger.data().labels, v);
@@ -745,7 +746,7 @@ namespace dragon
 	TrackerView::TrackerView(Window& window, Debugger& debugger) : DebugListView(window), m_debugger(debugger)
 	{
 		setTypeName("dragon::TrackerView");
-		setColumns({ { "W", 3 }, { "Symbol", 26 }, { "Size", 6 }, { "Address", 9 }, { "Region", 9 }, { "Previous", 26 }, { "Current", 26 }, { "Text", 10 } });
+		setColumns({ { "W", 3 }, { "Symbol", 26 }, { "Size", 6 }, { "Address", 9 }, { "Region", 9 }, { "Previous", 26 }, { "Current", 26 }, { "Value", 24 }, { "Text", 10 } });
 	}
 
 	i32 TrackerView::getRowCount(void) const
@@ -845,6 +846,23 @@ namespace dragon
 			case 5: l_bytes(true); break;
 			case 6: l_bytes(false); break;
 			case 7:
+			{
+				// The current value as a number (big-endian): 1 / 2 bytes as integers, 4 bytes as
+				// an i32 and an f32 (the tracker doesn't know the type).
+				if (item.size != 1 && item.size != 2 && item.size != 4)
+					break;
+				u32 v = 0;
+				for (u32 j = 0; j < item.size; j++)
+					v = (v << 8) | DragonRuntime::memMap.peek8(cast<u32>(item.address + j));
+				String str = "";
+				if (item.size == 4)
+					str.add(cast<i32>(v)).add("  ").add(Debugger::Utils::floatText(v)).add("f");
+				else
+					str.add(v);
+				text(gfx, str, bounds.x, bounds.y, Color(150, 200, 240));
+				break;
+			}
+			case 8:
 			{
 				String str = "";
 				for (u32 j = 0; j < item.size && j < 64; j++)

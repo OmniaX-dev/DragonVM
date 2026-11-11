@@ -31,7 +31,7 @@ namespace dscript
 		// Statements
 		Block, If, While, DoWhile, For, Return, Break, Continue, ExprStmt, LowBlock, Assert, DebugPrint, Defer,
 		// Expressions
-		IntLit, StrLit, BoolLit, Null, Ident, Unary, Binary, Assign, Ternary, Call, Index,
+		IntLit, FloatLit, StrLit, BoolLit, Null, Ident, Unary, Binary, Assign, Ternary, Call, Index,
 		Member, Cast, SizeofType, SizeofExpr, PreInc, PreDec, PostInc, PostDec, InitList
 	};
 

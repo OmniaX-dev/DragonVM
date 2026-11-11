@@ -78,7 +78,7 @@ namespace dscript
 			return r;
 		};
 		auto isOperand = [](const Token& t) {
-			return t.kind == TokenKind::Identifier || t.kind == TokenKind::Integer || t.kind == TokenKind::String
+			return t.kind == TokenKind::Identifier || t.kind == TokenKind::Integer || t.kind == TokenKind::Float || t.kind == TokenKind::String
 				|| (t.kind == TokenKind::Keyword && t.text != "not" && t.text != "and" && t.text != "or")
 				|| (t.kind == TokenKind::Punct && (t.text == ")" || t.text == "]"));
 		};

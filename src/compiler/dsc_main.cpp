@@ -625,7 +625,7 @@ int main(int argc, char** argv)
 		lines.push_back(String(line));
 	if (!loadDasmArgs(o))
 		return 2;
-	dragon::code::Assembler::cpuExtensions = { "extmov", "extalu" };
+	dragon::code::Assembler::cpuExtensions = { "extmov", "extalu", "extfpu" };
 	dragon::code::Assembler::debugMode = o.debug || dragon::code::Assembler::Application::args.debug_mode;
 	dragon::code::Assembler::saveExports = false;
 	const std::string directory = std::filesystem::path(o.input).parent_path().string();

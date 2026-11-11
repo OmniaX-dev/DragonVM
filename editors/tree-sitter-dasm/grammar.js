@@ -145,7 +145,7 @@ module.exports = grammar({
 		),
 
 		// ===== Tokens =====
-		number: _ => token(seq(optional('-'), choice(/0[xX][0-9a-fA-F]+/, /0[bB][01]+/, /[0-9]+/))),
+		number: _ => token(seq(optional('-'), choice(/0[xX][0-9a-fA-F]+/, /0[bB][01]+/, /[0-9]+/, /[0-9]+\.[0-9]*([eE][+-]?[0-9]+)?[fF]?/, /[0-9]+[eE][+-]?[0-9]+[fF]?/, /[0-9]+[fF]/))),	// floats: extfpu immediates
 		string: _ => /"[^"\n]*"/,
 		symbol: _ => token(seq('$', NAME, repeat(seq('.', NAME)))),
 		identifier: _ => token(seq(NAME, repeat(seq('.', NAME)))),

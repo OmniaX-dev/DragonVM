@@ -1,4 +1,7 @@
 #include "CPUExtensions.hpp"
+#include <cmath>
+#include <bit>
+#include <limits>
 #include "VirtualCPU.hpp"
 #include "../runtime/DragonRuntime.hpp"
 
@@ -961,6 +964,332 @@ namespace dragon
 				return true;
 			}
 
+			// f32 -> i32 / u32: truncated toward zero, saturated, NaN -> 0 (no undefined behavior).
+			static i32 toI32(f32 v)
+			{
+				if (std::isnan(v)) return 0;
+				if (v >= 2147483648.0f) return std::numeric_limits<i32>::max();
+				if (v <= -2147483648.0f) return std::numeric_limits<i32>::min();
+				return cast<i32>(v);
+			}
+			static u32 toU32(f32 v)
+			{
+				if (std::isnan(v) || v <= 0.0f) return 0;
+				if (v >= 4294967296.0f) return std::numeric_limits<u32>::max();
+				return cast<u32>(v);
+			}
+
+			String ExtFpu::getOpCodeString(u8 opCode)
+			{
+				switch (opCode)
+				{
+					case OpCodes::fadd_reg_in_reg:	return m_name + "_fadd_reg_in_reg";
+					case OpCodes::fadd_imm_in_reg:	return m_name + "_fadd_imm_in_reg";
+					case OpCodes::fsub_reg_in_reg:	return m_name + "_fsub_reg_in_reg";
+					case OpCodes::fsub_imm_in_reg:	return m_name + "_fsub_imm_in_reg";
+					case OpCodes::fmul_reg_in_reg:	return m_name + "_fmul_reg_in_reg";
+					case OpCodes::fmul_imm_in_reg:	return m_name + "_fmul_imm_in_reg";
+					case OpCodes::fdiv_reg_in_reg:	return m_name + "_fdiv_reg_in_reg";
+					case OpCodes::fdiv_imm_in_reg:	return m_name + "_fdiv_imm_in_reg";
+					case OpCodes::fmin_reg_in_reg:	return m_name + "_fmin_reg_in_reg";
+					case OpCodes::fmin_imm_in_reg:	return m_name + "_fmin_imm_in_reg";
+					case OpCodes::fmax_reg_in_reg:	return m_name + "_fmax_reg_in_reg";
+					case OpCodes::fmax_imm_in_reg:	return m_name + "_fmax_imm_in_reg";
+					case OpCodes::fpow_reg_in_reg:	return m_name + "_fpow_reg_in_reg";
+					case OpCodes::fpow_imm_in_reg:	return m_name + "_fpow_imm_in_reg";
+					case OpCodes::fatan2_reg_in_reg:	return m_name + "_fatan2_reg_in_reg";
+					case OpCodes::fatan2_imm_in_reg:	return m_name + "_fatan2_imm_in_reg";
+					case OpCodes::fneg_reg:	return m_name + "_fneg_reg";
+					case OpCodes::fabs_reg:	return m_name + "_fabs_reg";
+					case OpCodes::fsqrt_reg:	return m_name + "_fsqrt_reg";
+					case OpCodes::ffloor_reg:	return m_name + "_ffloor_reg";
+					case OpCodes::fceil_reg:	return m_name + "_fceil_reg";
+					case OpCodes::fround_reg:	return m_name + "_fround_reg";
+					case OpCodes::ftrunc_reg:	return m_name + "_ftrunc_reg";
+					case OpCodes::fsin_reg:	return m_name + "_fsin_reg";
+					case OpCodes::fcos_reg:	return m_name + "_fcos_reg";
+					case OpCodes::ftan_reg:	return m_name + "_ftan_reg";
+					case OpCodes::fexp_reg:	return m_name + "_fexp_reg";
+					case OpCodes::flog_reg:	return m_name + "_flog_reg";
+					case OpCodes::itof_reg:	return m_name + "_itof_reg";
+					case OpCodes::utof_reg:	return m_name + "_utof_reg";
+					case OpCodes::ftoi_reg:	return m_name + "_ftoi_reg";
+					case OpCodes::ftou_reg:	return m_name + "_ftou_reg";
+					case OpCodes::feq_reg_reg:	return m_name + "_feq_reg_reg";
+					case OpCodes::feq_reg_imm:	return m_name + "_feq_reg_imm";
+					case OpCodes::flt_reg_reg:	return m_name + "_flt_reg_reg";
+					case OpCodes::flt_reg_imm:	return m_name + "_flt_reg_imm";
+					case OpCodes::fle_reg_reg:	return m_name + "_fle_reg_reg";
+					case OpCodes::fle_reg_imm:	return m_name + "_fle_reg_imm";
+					default: return m_name + "_UNKNOWN_INST";
+				}
+			}
+
+			u8 ExtFpu::getInstructionSIze(u8 opCode)
+			{
+				switch (opCode)
+				{
+					case OpCodes::fadd_reg_in_reg:	return 3;
+					case OpCodes::fadd_imm_in_reg:	return 6;
+					case OpCodes::fsub_reg_in_reg:	return 3;
+					case OpCodes::fsub_imm_in_reg:	return 6;
+					case OpCodes::fmul_reg_in_reg:	return 3;
+					case OpCodes::fmul_imm_in_reg:	return 6;
+					case OpCodes::fdiv_reg_in_reg:	return 3;
+					case OpCodes::fdiv_imm_in_reg:	return 6;
+					case OpCodes::fmin_reg_in_reg:	return 3;
+					case OpCodes::fmin_imm_in_reg:	return 6;
+					case OpCodes::fmax_reg_in_reg:	return 3;
+					case OpCodes::fmax_imm_in_reg:	return 6;
+					case OpCodes::fpow_reg_in_reg:	return 3;
+					case OpCodes::fpow_imm_in_reg:	return 6;
+					case OpCodes::fatan2_reg_in_reg:	return 3;
+					case OpCodes::fatan2_imm_in_reg:	return 6;
+					case OpCodes::fneg_reg:	return 2;
+					case OpCodes::fabs_reg:	return 2;
+					case OpCodes::fsqrt_reg:	return 2;
+					case OpCodes::ffloor_reg:	return 2;
+					case OpCodes::fceil_reg:	return 2;
+					case OpCodes::fround_reg:	return 2;
+					case OpCodes::ftrunc_reg:	return 2;
+					case OpCodes::fsin_reg:	return 2;
+					case OpCodes::fcos_reg:	return 2;
+					case OpCodes::ftan_reg:	return 2;
+					case OpCodes::fexp_reg:	return 2;
+					case OpCodes::flog_reg:	return 2;
+					case OpCodes::itof_reg:	return 2;
+					case OpCodes::utof_reg:	return 2;
+					case OpCodes::ftoi_reg:	return 2;
+					case OpCodes::ftou_reg:	return 2;
+					case OpCodes::feq_reg_reg:	return 3;
+					case OpCodes::feq_reg_imm:	return 6;
+					case OpCodes::flt_reg_reg:	return 3;
+					case OpCodes::flt_reg_imm:	return 6;
+					case OpCodes::fle_reg_reg:	return 3;
+					case OpCodes::fle_reg_imm:	return 6;
+					default: return 0;
+				}
+			}
+
+			bool ExtFpu::execute(VirtualCPU& vcpu)
+			{
+				auto l_float = [](u32 bits) -> f32 { return std::bit_cast<f32>(bits); };
+				auto l_bits = [](f32 value) -> i32 { return std::bit_cast<i32>(value); };
+				const u8 inst = vcpu.fetch8();
+				switch (inst)
+				{
+					case OpCodes::fadd_reg_in_reg:
+					case OpCodes::fadd_imm_in_reg:
+					{
+						const u8 dest_reg = vcpu.fetch8();
+						const f32 b = (inst == OpCodes::fadd_imm_in_reg ? l_float(cast<u32>(vcpu.fetch32())) : l_float(cast<u32>(vcpu.readRegister(vcpu.fetch8()))));
+						const f32 a = l_float(cast<u32>(vcpu.readRegister(dest_reg)));
+						vcpu.writeRegister32(dest_reg, l_bits(a + b));
+					}
+					break;
+					case OpCodes::fsub_reg_in_reg:
+					case OpCodes::fsub_imm_in_reg:
+					{
+						const u8 dest_reg = vcpu.fetch8();
+						const f32 b = (inst == OpCodes::fsub_imm_in_reg ? l_float(cast<u32>(vcpu.fetch32())) : l_float(cast<u32>(vcpu.readRegister(vcpu.fetch8()))));
+						const f32 a = l_float(cast<u32>(vcpu.readRegister(dest_reg)));
+						vcpu.writeRegister32(dest_reg, l_bits(a - b));
+					}
+					break;
+					case OpCodes::fmul_reg_in_reg:
+					case OpCodes::fmul_imm_in_reg:
+					{
+						const u8 dest_reg = vcpu.fetch8();
+						const f32 b = (inst == OpCodes::fmul_imm_in_reg ? l_float(cast<u32>(vcpu.fetch32())) : l_float(cast<u32>(vcpu.readRegister(vcpu.fetch8()))));
+						const f32 a = l_float(cast<u32>(vcpu.readRegister(dest_reg)));
+						vcpu.writeRegister32(dest_reg, l_bits(a * b));
+					}
+					break;
+					case OpCodes::fdiv_reg_in_reg:
+					case OpCodes::fdiv_imm_in_reg:
+					{
+						const u8 dest_reg = vcpu.fetch8();
+						const f32 b = (inst == OpCodes::fdiv_imm_in_reg ? l_float(cast<u32>(vcpu.fetch32())) : l_float(cast<u32>(vcpu.readRegister(vcpu.fetch8()))));
+						const f32 a = l_float(cast<u32>(vcpu.readRegister(dest_reg)));
+						vcpu.writeRegister32(dest_reg, l_bits(a / b));
+					}
+					break;
+					case OpCodes::fmin_reg_in_reg:
+					case OpCodes::fmin_imm_in_reg:
+					{
+						const u8 dest_reg = vcpu.fetch8();
+						const f32 b = (inst == OpCodes::fmin_imm_in_reg ? l_float(cast<u32>(vcpu.fetch32())) : l_float(cast<u32>(vcpu.readRegister(vcpu.fetch8()))));
+						const f32 a = l_float(cast<u32>(vcpu.readRegister(dest_reg)));
+						vcpu.writeRegister32(dest_reg, l_bits(std::fmin(a, b)));
+					}
+					break;
+					case OpCodes::fmax_reg_in_reg:
+					case OpCodes::fmax_imm_in_reg:
+					{
+						const u8 dest_reg = vcpu.fetch8();
+						const f32 b = (inst == OpCodes::fmax_imm_in_reg ? l_float(cast<u32>(vcpu.fetch32())) : l_float(cast<u32>(vcpu.readRegister(vcpu.fetch8()))));
+						const f32 a = l_float(cast<u32>(vcpu.readRegister(dest_reg)));
+						vcpu.writeRegister32(dest_reg, l_bits(std::fmax(a, b)));
+					}
+					break;
+					case OpCodes::fpow_reg_in_reg:
+					case OpCodes::fpow_imm_in_reg:
+					{
+						const u8 dest_reg = vcpu.fetch8();
+						const f32 b = (inst == OpCodes::fpow_imm_in_reg ? l_float(cast<u32>(vcpu.fetch32())) : l_float(cast<u32>(vcpu.readRegister(vcpu.fetch8()))));
+						const f32 a = l_float(cast<u32>(vcpu.readRegister(dest_reg)));
+						vcpu.writeRegister32(dest_reg, l_bits(std::pow(a, b)));
+					}
+					break;
+					case OpCodes::fatan2_reg_in_reg:
+					case OpCodes::fatan2_imm_in_reg:
+					{
+						const u8 dest_reg = vcpu.fetch8();
+						const f32 b = (inst == OpCodes::fatan2_imm_in_reg ? l_float(cast<u32>(vcpu.fetch32())) : l_float(cast<u32>(vcpu.readRegister(vcpu.fetch8()))));
+						const f32 a = l_float(cast<u32>(vcpu.readRegister(dest_reg)));
+						vcpu.writeRegister32(dest_reg, l_bits(std::atan2(a, b)));
+					}
+					break;
+					case OpCodes::fneg_reg:
+					{
+						const u8 reg = vcpu.fetch8();
+						const f32 a = l_float(cast<u32>(vcpu.readRegister(reg)));
+						vcpu.writeRegister32(reg, l_bits(-a));
+					}
+					break;
+					case OpCodes::fabs_reg:
+					{
+						const u8 reg = vcpu.fetch8();
+						const f32 a = l_float(cast<u32>(vcpu.readRegister(reg)));
+						vcpu.writeRegister32(reg, l_bits(std::fabs(a)));
+					}
+					break;
+					case OpCodes::fsqrt_reg:
+					{
+						const u8 reg = vcpu.fetch8();
+						const f32 a = l_float(cast<u32>(vcpu.readRegister(reg)));
+						vcpu.writeRegister32(reg, l_bits(std::sqrt(a)));
+					}
+					break;
+					case OpCodes::ffloor_reg:
+					{
+						const u8 reg = vcpu.fetch8();
+						const f32 a = l_float(cast<u32>(vcpu.readRegister(reg)));
+						vcpu.writeRegister32(reg, l_bits(std::floor(a)));
+					}
+					break;
+					case OpCodes::fceil_reg:
+					{
+						const u8 reg = vcpu.fetch8();
+						const f32 a = l_float(cast<u32>(vcpu.readRegister(reg)));
+						vcpu.writeRegister32(reg, l_bits(std::ceil(a)));
+					}
+					break;
+					case OpCodes::fround_reg:
+					{
+						const u8 reg = vcpu.fetch8();
+						const f32 a = l_float(cast<u32>(vcpu.readRegister(reg)));
+						vcpu.writeRegister32(reg, l_bits(std::round(a)));
+					}
+					break;
+					case OpCodes::ftrunc_reg:
+					{
+						const u8 reg = vcpu.fetch8();
+						const f32 a = l_float(cast<u32>(vcpu.readRegister(reg)));
+						vcpu.writeRegister32(reg, l_bits(std::trunc(a)));
+					}
+					break;
+					case OpCodes::fsin_reg:
+					{
+						const u8 reg = vcpu.fetch8();
+						const f32 a = l_float(cast<u32>(vcpu.readRegister(reg)));
+						vcpu.writeRegister32(reg, l_bits(std::sin(a)));
+					}
+					break;
+					case OpCodes::fcos_reg:
+					{
+						const u8 reg = vcpu.fetch8();
+						const f32 a = l_float(cast<u32>(vcpu.readRegister(reg)));
+						vcpu.writeRegister32(reg, l_bits(std::cos(a)));
+					}
+					break;
+					case OpCodes::ftan_reg:
+					{
+						const u8 reg = vcpu.fetch8();
+						const f32 a = l_float(cast<u32>(vcpu.readRegister(reg)));
+						vcpu.writeRegister32(reg, l_bits(std::tan(a)));
+					}
+					break;
+					case OpCodes::fexp_reg:
+					{
+						const u8 reg = vcpu.fetch8();
+						const f32 a = l_float(cast<u32>(vcpu.readRegister(reg)));
+						vcpu.writeRegister32(reg, l_bits(std::exp(a)));
+					}
+					break;
+					case OpCodes::flog_reg:
+					{
+						const u8 reg = vcpu.fetch8();
+						const f32 a = l_float(cast<u32>(vcpu.readRegister(reg)));
+						vcpu.writeRegister32(reg, l_bits(std::log(a)));
+					}
+					break;
+					case OpCodes::itof_reg:
+					{
+						const u8 reg = vcpu.fetch8();
+						vcpu.writeRegister32(reg, l_bits(cast<f32>(vcpu.readRegister(reg))));
+					}
+					break;
+					case OpCodes::utof_reg:
+					{
+						const u8 reg = vcpu.fetch8();
+						vcpu.writeRegister32(reg, l_bits(cast<f32>(cast<u32>(vcpu.readRegister(reg)))));
+					}
+					break;
+					case OpCodes::ftoi_reg:
+					{
+						const u8 reg = vcpu.fetch8();
+						vcpu.writeRegister32(reg, toI32(l_float(cast<u32>(vcpu.readRegister(reg)))));
+					}
+					break;
+					case OpCodes::ftou_reg:
+					{
+						const u8 reg = vcpu.fetch8();
+						vcpu.writeRegister32(reg, cast<i32>(toU32(l_float(cast<u32>(vcpu.readRegister(reg))))));
+					}
+					break;
+					case OpCodes::feq_reg_reg:
+					case OpCodes::feq_reg_imm:
+					{
+						const f32 a = l_float(cast<u32>(vcpu.readRegister(vcpu.fetch8())));
+						const f32 b = (inst == OpCodes::feq_reg_imm ? l_float(cast<u32>(vcpu.fetch32())) : l_float(cast<u32>(vcpu.readRegister(vcpu.fetch8()))));
+						vcpu.writeRegister32(data::Registers::ACC, (a == b) ? 1 : 0);
+					}
+					break;
+					case OpCodes::flt_reg_reg:
+					case OpCodes::flt_reg_imm:
+					{
+						const f32 a = l_float(cast<u32>(vcpu.readRegister(vcpu.fetch8())));
+						const f32 b = (inst == OpCodes::flt_reg_imm ? l_float(cast<u32>(vcpu.fetch32())) : l_float(cast<u32>(vcpu.readRegister(vcpu.fetch8()))));
+						vcpu.writeRegister32(data::Registers::ACC, (a < b) ? 1 : 0);
+					}
+					break;
+					case OpCodes::fle_reg_reg:
+					case OpCodes::fle_reg_imm:
+					{
+						const f32 a = l_float(cast<u32>(vcpu.readRegister(vcpu.fetch8())));
+						const f32 b = (inst == OpCodes::fle_reg_imm ? l_float(cast<u32>(vcpu.fetch32())) : l_float(cast<u32>(vcpu.readRegister(vcpu.fetch8()))));
+						vcpu.writeRegister32(data::Registers::ACC, (a <= b) ? 1 : 0);
+					}
+					break;
+					default:
+					{
+						data::ErrorHandler::pushError(data::ErrorCodes::CPU_UnknownInstruction, String("Unknown extfpu instruction: ").add(String::getHexStr(inst, true, 1)));
+						return false;
+					}
+				}
+				return true;
+			}
 		}
 	}
 }

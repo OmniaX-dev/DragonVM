@@ -1,0 +1,24 @@
+// f32 through a compiled library: its interface keeps constants (exactly: same bits, also
+// infinities and NaN), default values, field defaults, overloads and inline subs.
+// dsc-lib: libs/floats.ds
+// expect-rv: 0
+#import(<floats>)
+
+sub bits(var f: f32) -> u32 {
+	return *cast<u32*>(&f);
+}
+
+sub main() -> i32 {
+	var fails: i32 = 0;
+	if (bits(Fl::PI) != 0x40490FDB) fails += 1;
+	if (bits(Fl::THIRD) != 0x3EAAAAAB) fails += 2;
+	if (bits(Fl::BIG) != 0x7149F2CA) fails += 4;
+	if (bits(Fl::INF) != 0x7F800000) fails += 8;
+	if (Fl::NAN == Fl::NAN) fails += 16;
+	var p: Fl::P;
+	if (bits(p.x) != 0x3DCCCCCD or bits(p.y) != 0xC0000000) fails += 32;
+	if (bits(Fl::scale(2)) != 0x40A00000 or bits(Fl::scale(2, 0.5)) != 0x3F800000) fails += 64;
+	if (Fl::which(3) != 1 or Fl::which(3.0) != 2) fails += 128;
+	if (bits(Fl::twice(1.25)) != 0x40200000) fails += 256;
+	return fails;
+}
