@@ -7,8 +7,6 @@
 // case (CCedilla: Ç, cCedilla: ç), Greek letters too (Sigma: Σ, sigma: σ).
 // At the end, 1..31 and 127 again, named after their pictures: dr::ASCII.Escape and
 // dr::ASCII.ArrowLeft are both 0x1B.
-
-#once
 namespace dr {
 	const ASCII: struct {
 		var Null: u8										= 0x00;	// (blank)

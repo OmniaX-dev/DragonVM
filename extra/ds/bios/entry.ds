@@ -1,5 +1,3 @@
-#once
-
 #import(<dragon-sdk>)
 
 #include(int20.ds)
@@ -20,21 +18,9 @@ sub main() {
 
 	__print_machine_info(stack_size + heap_size);
 	__load_mbr_data_block();
-	low { debug_break };
 
-	// var dpt_block: DPTBlock;
-	// dpt_load_block(&dpt_block);
-	// var buff: u8[12];
-	// for (var i: i8 = 0; i < dpt_block.partitionCount; i++)
-	// {
-	// 	if (dpt_is_partition_bootable(&dpt_block.entries[i]))
-	// 		println(dpt_block.entries[i].label);
-	// 	else
-	// 		println("false");
-	// }
-	// low { hlt }
+	dr::sleep(2000); //This is just for show
 
-	// Exit BIOS mode
 	low {
 		%low $INST_BIOS_NODE_TOGGLE 0x00
 		jmp $dr::MemoryLayout.RAM

@@ -212,6 +212,16 @@ namespace dragon
 			else if (video_mode == tVideoModeValues::Text16Colors)
 			{
 				auto& graphics = DragonRuntime::vGraphicsInterface;
+				auto l_copyFrame = [&](void) {
+					u32 frame_addr = cast<u32>(mem.read32(vga_addr + tRegisters::Text16FrameAddr));
+					u32 frame_size = cast<u32>(mem.read32(vga_addr + tRegisters::Text16FrameSize));
+					u32 frame_y_offset = cast<u32>(mem.read32(vga_addr + tRegisters::Text16FrameYOffset));
+					graphics.writeVRAMFrame_16Colors(frame_addr, frame_size, frame_y_offset);
+				};
+				auto l_swapBuffers = [&](void) {
+					graphics.swapBuffers_16Colors();
+					__redraw_screen();
+				};
 				switch (signal)
 				{
 					case tSignalValues::Text16Color_WriteMemory:
@@ -242,10 +252,13 @@ namespace dragon
 						break;
 					case tSignalValues::Text16Color_CopyFrame:
 					{
-						u32 frame_addr = cast<u32>(mem.read32(vga_addr + tRegisters::Text16FrameAddr));
-						u32 frame_size = cast<u32>(mem.read32(vga_addr + tRegisters::Text16FrameSize));
-						u32 frame_y_offset = cast<u32>(mem.read32(vga_addr + tRegisters::Text16FrameYOffset));
-						graphics.writeVRAMFrame_16Colors(frame_addr, frame_size, frame_y_offset);
+						l_copyFrame();
+						break;
+					}
+					case tSignalValues::Text16Color_CopyFrameAndSwap:
+					{
+						l_copyFrame();
+						l_swapBuffers();
 						break;
 					}
 					case tSignalValues::ClearSCreen:
@@ -262,8 +275,7 @@ namespace dragon
 						__redraw_screen();
 						break;
 					case tSignalValues::Text16Color_SwapBuffers:
-						graphics.swapBuffers_16Colors();
-						__redraw_screen();
+						l_swapBuffers();
 						break;
 					case tSignalValues::Text16Color_Scroll:
 						graphics.scroll_16Colors();

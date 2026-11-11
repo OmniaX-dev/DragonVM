@@ -1,6 +1,4 @@
 // DScript SDK: memory and string helpers.
-#once
-
 #include(int.ds)
 
 namespace dr {

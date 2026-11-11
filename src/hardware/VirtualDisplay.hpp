@@ -76,7 +76,8 @@ namespace dragon
 				inline static constexpr u8 Text16Color_Scroll = 0x12;
 				inline static constexpr u8 Text16Color_PrintString = 0x13;
 				inline static constexpr u8 Text16Color_CopyFrame = 0x14;
-				inline static constexpr u8 Text16Color_ConsolePrintString = 0x15;	// Text16Console::print(Text16String), see Text16Console.hpp
+				inline static constexpr u8 Text16Color_ConsolePrintString = 0x15;    // Text16Console::print(Text16String), see Text16Console.hpp
+				inline static constexpr u8 Text16Color_CopyFrameAndSwap = 0x16;
 
 				inline static constexpr u8 RefreshScreen = 0xE0;
 				inline static constexpr u8 ClearSCreen = 0xE1;

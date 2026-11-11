@@ -1,4 +1,3 @@
-#once
 namespace dr {
 	const KeyCodes: struct {
 		var Delete: u32							= 0x7F;

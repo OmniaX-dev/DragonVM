@@ -1,5 +1,3 @@
-#once
-
 // assert(condition) / assert(condition, "message"): when the condition is false, the program
 // calls __assert_fail with where it is and what failed. This default prints it to the host's
 // terminal (with debug_print: it doesn't need the VGA stack) and stops the machine; with dsc -g,

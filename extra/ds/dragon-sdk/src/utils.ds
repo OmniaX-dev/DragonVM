@@ -1,6 +1,20 @@
-#once
+#include(hardware.ds)
 
 namespace dr {
+	atomic sub sleep(var ms: i32) {
+		var clock_speed_hz: u32 = read_cmos(dr::CMOSRegisters.ClockSpeed);
+		var cycles_per_ms: u32 = clock_speed_hz / 1000;
+		var sleep_cycles: u32 = ms * cycles_per_ms;
+		sleep_cycles /= 2; // The loop is 2 instructions
+		low {
+			mov ACC, 0
+			mov R9, $sleep_cycles
+			___sleep_loop___:
+				dec R
+				jgr $___sleep_loop___, R9
+		}
+	}
+
 	sub itoa(var value: i32, var result: u8*, var base: i32 = 10) -> string
 	{
 		// check that the base if valid

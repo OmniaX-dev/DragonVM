@@ -1,5 +1,3 @@
-#once
-
 #import(<dragon-sdk>)
 
 #define(KEY_BUFF_SIZE = 128)
@@ -8,8 +6,9 @@ var keyBuff: u32[KEY_BUFF_SIZE];
 var keyRingBuff: dr::RingBuffer;
 var console: dr::Text16Console;
 var bootParts: dr::DPTPartitionBlock*[dr::DPTStructure.MaxPartitions];
-var horizontalLine: u8* = null;
 var dpt_block: dr::DPTBlock;
+
+var horizontalLine: u8* = null;
 
 var pressedKey: u32 = 0;
 
@@ -32,18 +31,19 @@ sub main() {
 	horizontalLine = dr::malloc(screenWidth + 1);
 	var verticalLine: u8* = dr::malloc(screenWidth + 1);
 	halt_on_condition(not horizontalLine, "Allocation for <horizontalLine> failed.");
-	horizontalLine[0] = dr::ASCII.BoxDownRight;
-	for (var i: u16 = 1; i < screenWidth - 1; i++)
+	for (var i: u16 = 0; i < screenWidth - 2; i++)
 		horizontalLine[i] = dr::ASCII.BoxHorizontal;
-	horizontalLine[screenWidth - 1] = dr::ASCII.BoxDownLeft;
 	horizontalLine[screenWidth] = '\0';
 
 
 	while(true);
 
 	load_kernel0_block(bootParts[0]);
-	console.destroy();
-	low { jmp $dr::DPTBootPartStructure.CodeLoadAddr }
+	cleanup();
+	low {
+		jmp $dr::DPTBootPartStructure.CodeLoadAddr
+		hlt
+	}
 }
 
 sub on_key_pressed(var key: u32) {
@@ -53,22 +53,58 @@ sub on_key_pressed(var key: u32) {
 }
 
 interrupt sub on_draw() {
-	low { debug_break };
-	console.clear(dr::DefaultPaletteText16.Black, false)->xy(0, 0);
+	static var b: bool = false;
+	b = !b;
+	if (b)
+		return;
+	console.clear(dr::DefaultPaletteText16.Black)->xy(0, 0);
 	print_system_info(dpt_block.versionMaj, dpt_block.versionMin);
-	console.print(horizontalLine);
-	console.nl();
-	console.print(horizontalLine);
-	console.nl();
-	console.print(horizontalLine);
-	console.nl();
-	console.print(horizontalLine);
-	console.nl();
+	print_top_line();
+	print_box_sides();
+	print_bottom_line();
+	print_list();
 	var key: u32 = 0;
 	if (keyRingBuff.pop(&key)) {
 		on_key_pressed(key);
 	}
 	console.present();
+}
+
+inline sub print_top_line() {
+	console.print(dr::ASCII.BoxDownRight);
+	console.print(horizontalLine);
+	console.print(dr::ASCII.BoxDownLeft);
+	console.nl();
+}
+
+inline sub print_bottom_line() {
+	console.print(dr::ASCII.BoxUpRight);
+	console.print(horizontalLine);
+	console.print(dr::ASCII.BoxUpLeft);
+	console.nl();
+}
+
+inline sub print_box_sides() {
+	for (var y: u16 = 2; y < 12; y++)
+	{
+		console.xy(0, y);
+		console.print(dr::ASCII.BoxVertical);
+		console.xy(console.get_console_width() - 1, y);
+		console.print(dr::ASCII.BoxVertical);
+	}
+	console.nl();
+}
+
+inline sub print_list() {
+	console.y(2);
+	var i: u8 = 0;
+	var part = bootParts[i++];
+	while (part)
+	{
+		console.x(2)->print(part->label)->nl();
+		part = bootParts[i++];
+	}
+	console.x(2)->print("Reboot")->nl();
 }
 
 interrupt sub key_pressed_handler() {
@@ -79,6 +115,12 @@ interrupt sub key_pressed_handler() {
 	{
 		//TODO: Handle missed key presses
 	}
+}
+
+sub cleanup() {
+	dr::clear_interrupt_vector_entry(dr::HardwareInterrupts.KeyPressed);
+	dr::clear_interrupt_vector_entry(dr::HardwareInterrupts.VSync);
+	console.clear(dr::DefaultPaletteText16.Black)->xy(0, 0)->present()->destroy();
 }
 
 sub load_kernel0_block(var part: dr::DPTPartitionBlock*) {
@@ -105,7 +147,7 @@ sub get_bootable_partitions(var dpt_block: dr::DPTBlock*, var outEntries: dr::DP
 
 sub print_system_info(var dpt_ver_maj: u8, var dpt_ver_min: u8) {
 	console.bg(dr::DefaultPaletteText16.Green)->fg(dr::DefaultPaletteText16.Black);
-	console.print("Drake 0.2 -- DPT Version ")->print(cast<u32>(dpt_ver_maj))->print('.')->print(cast<u32>(dpt_ver_min));
+	console.print(" Drake 0.2 -- DPT Version ")->print(cast<u32>(dpt_ver_maj))->print('.')->print(cast<u32>(dpt_ver_min))->print(' ');
 	console.bg(dr::DefaultPaletteText16.Black)->fg(dr::DefaultPaletteText16.Green)->nl();
 }
 

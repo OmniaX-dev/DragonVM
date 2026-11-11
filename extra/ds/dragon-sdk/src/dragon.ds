@@ -1,7 +1,5 @@
 // DScript SDK: the BIOS text output (int 0x30, single color text mode).
 // The BIOS must have run (it installs the interrupt handlers).
-#once
-
 #include(utils.ds)
 #include(print.ds)
 #include(hardware.ds)
@@ -172,6 +170,7 @@ namespace dr {
 		var PrintString: u8						= 0x13;
 		var CopyFrame: u8						= 0x14;
 		var ConsolePrintString: u8				= 0x15;
+		var CopyFrameAndSwap: u8				= 0x16;
 		var ForceRefreshScreen: u8				= 0xE0;
 		var ForceClearScreen: u8				= 0xE1;
 		var ForceRedrawScreen: u8				= 0xE2;

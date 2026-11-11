@@ -1,5 +1,3 @@
-#once
-
 #import(<dragon-sdk>)
 
 struct __block {

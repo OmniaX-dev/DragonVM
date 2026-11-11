@@ -1,5 +1,3 @@
-#once
-
 const S_REG_1 = 0x07;
 const S_REG_2 = 0x08;
 const S_REG_OFFSET = 0x09;

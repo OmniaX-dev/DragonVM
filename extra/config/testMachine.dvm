@@ -4,7 +4,7 @@ CMOS = dragon/cmos.dr
 
 cpuext = extmov, extalu
 fixed_clock = true
-clock_rate_sec = 24000
+clock_rate_sec = 48000
 ram_size_kb = 65536
 # Bytes the disk interface copies per cycle (default 1024)
 disk_block_size = 1024

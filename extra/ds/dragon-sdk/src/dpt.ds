@@ -1,5 +1,3 @@
-#once
-
 #include(dragon.ds)
 #include(mem.ds)
 
