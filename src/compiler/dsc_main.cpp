@@ -154,6 +154,11 @@ static int parseArgs(int argc, char** argv, Options& o)
 		std::cerr << "dsc: --load, --fixed, --header and --save-disassembly need --raw\n";
 		return 2;
 	}
+	if (!o.header.empty() && dragon::code::Assembler::headerBytes(o.header).empty())
+	{
+		std::cerr << "dsc: unknown --header " << o.header << " (known: KERNEL0_BOOT)\n";
+		return 2;
+	}
 	if (o.library && o.raw)
 	{
 		std::cerr << "dsc: a library (--lib) is relocatable: --raw and --rom are for programs\n";
@@ -591,8 +596,8 @@ int main(int argc, char** argv)
 			// With libraries, the padding is done after they are linked.
 			if (!o.fixed.empty() && pp.imports().empty())
 				cg.directives.push_back(".fixed " + o.fixed);
-			if (!o.header.empty())
-				cg.directives.push_back(".header " + o.header);
+			// The header (--header) is added by the link step, in front of everything: the
+			// addresses (the program's and the libraries') are those of the code after it.
 		}
 		cg.library = o.library;
 		cg.libraries = o.library ? 0 : (int)pp.imports().size();
@@ -776,6 +781,11 @@ int main(int argc, char** argv)
 				return 1;
 			}
 			image.resize(size, fill);
+		}
+		if (!o.header.empty())
+		{
+			const ostd::ByteStream header = dragon::code::Assembler::headerBytes(o.header);
+			image.insert(image.begin(), header.begin(), header.end());
 		}
 		if (!writeFile(o.output, image))
 		{

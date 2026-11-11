@@ -18,7 +18,7 @@ printf "\n${green}Compiling Drake...\n${clear}"
 
 printf "\n${green}Compiling DragonOS...\n${clear}"
 printf "\n${green}1) kernel0.dss\n${clear}"
-./dasm dss/DragonOS/kernel0/kernel0.dss -o dragon/kernel0.bin -I dss --save-final-stage ./kernel0_final_stage.txt $1
+./dsc ./ds/dragon-os/kernel0/kernel0.ds -L ds/dragon-sdk/lib --verbose -o dragon/kernel0.bin --raw --header KERNEL0_BOOT --load 0x01410000 --fixed 1048576,0xFF --save-disassembly disassembly/ -Wa,$1
 ./dtools load-binary dragon/disk.drd dragon/kernel0.bin 0x00700200
 ./dtools load-binary dragon/disk.drd dragon/kernel0.bin 0x01600200
 

@@ -375,7 +375,7 @@ namespace dragon
 				inline static constexpr u16 BootPart_IDAddr                    = 0x0000;
 				inline static constexpr u16 BootPart_CodeStart                    = 0x0020;
 				inline static constexpr u16 BootPart_ID_CODE                    = 0xF1C4;
-				inline static constexpr u32 BootPart_CodeSizeBytes                = 131072;
+				inline static constexpr u32 BootPart_CodeSizeBytes                = 1048576;
 				inline static constexpr u8 BootPart_HeaderSizeBytes            = 32;
 		};
 

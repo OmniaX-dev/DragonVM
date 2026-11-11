@@ -37,7 +37,7 @@ namespace dr {
 		var IDAddr: u32 						= 0x0000;
 		var CodeStart: u32			 			= 0x0020;
 
-		var CodeSize: u32  						= 131072;
+		var CodeSize: u32  						= 1048576;
 		var HeaderSize: u32						= 32;
 		var CodeLoadAddr: u32					= 0x01410000;
 

@@ -285,27 +285,32 @@ namespace dragon
 
 
 
-		void Assembler::insertHeader(void)
+		ostd::ByteStream Assembler::headerBytes(String name)
 		{
-			if (m_code.size() == 0) return;
 			ostd::ByteStream header;
-
-			m_headerStr.toLower().trim();
-			if (m_headerStr == "") return;
+			name.toLower().trim();
 			//TODO: Expand header functionality to allow for custom values maybe
-			if (m_headerStr == "kernel0_boot")
+			if (name == "kernel0_boot")
 			{
 				header.push_back((u8)((data::DPTStructure::BootPart_ID_CODE & 0xFF00) >> 8));
 				header.push_back((u8)(data::DPTStructure::BootPart_ID_CODE & 0x00FF));
 				for (i32 i = 0; i < 30; i++)
 					header.push_back(0xFF);
 			}
-			else
+			return header;
+		}
+
+		void Assembler::insertHeader(void)
+		{
+			if (m_code.size() == 0) return;
+			m_headerStr.toLower().trim();
+			if (m_headerStr == "") return;
+			ostd::ByteStream header = headerBytes(m_headerStr);
+			if (header.empty())
 			{
 				std::cout << "Invalid .header value: " << m_headerStr << "\n";
 				return;
 			}
-
 			m_code.insert(m_code.begin(), header.begin(), header.end());
 		}
 

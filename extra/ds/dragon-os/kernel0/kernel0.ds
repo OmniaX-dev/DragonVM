@@ -1,0 +1,9 @@
+#import(<dragon-sdk>)
+
+sub main() {
+	dr::vga_set_video_mode(dr::VGAVideoModes.Text16Color);
+	dr::vga_enable_double_buffering(false);
+	dr::Text16.clear_screen(dr::DefaultPaletteText16.Black);
+	dr::Text16.print("Hello DragonOS :)", 0, 0, dr::DefaultPaletteText16.Blue, dr::DefaultPaletteText16.Black);
+	while(true);
+}
