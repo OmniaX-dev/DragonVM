@@ -4,6 +4,7 @@
 #include "../tools/GlobalData.hpp"
 #include "../tools/LegacyOstdSerial.hpp"
 #include <fstream>
+#include <chrono>
 #include <unordered_map>
 
 namespace dragon
@@ -253,6 +254,50 @@ namespace dragon
 				ostd::BitField_16 m_modifiersBitFiels;
 				bool m_inputEnabled { true };
 		};
+		// The machine's clock: how long it has been running, and how many cycles it has executed,
+		// since it started (or was reset). Read-only for the CPU (writes are errors, also in BIOS
+		// mode). The owner calls cycleStep() once per CPU cycle.
+		//   0x00 Milliseconds (4 bytes): wraps after about 49.7 days; compute intervals as
+		//        now - start (unsigned), which stays right across the wrap.
+		//   0x04 Cycles (8 bytes, big-endian: high word at 0x04, low word at 0x08).
+		// The milliseconds come from the time source: WallClock (the host's real time; right at
+		// any clock speed, also uncapped: the runtime) or MachineTime (cycles / clock rate:
+		// reproducible, the debugger and drun). With MachineTime, the whole state is the device's
+		// memory, so the debugger's history restores it.
+		class VirtualTimer : public IMemoryDevice
+		{
+			public: struct tRegisters
+			{
+				inline static constexpr u32 Milliseconds = 0x00;	// 4 bytes
+				inline static constexpr u32 CyclesHigh = 0x04;		// 4 bytes
+				inline static constexpr u32 CyclesLow = 0x08;		// 4 bytes
+			};
+			public: enum class eTimeSource { WallClock = 0, MachineTime };
+
+			public:
+				void init(void);
+				// Back to 0 (milliseconds and cycles).
+				void reset(void);
+				// clockRate: cycles per second (MachineTime). Restarts the wall clock.
+				void setTimeSource(eTimeSource source, u32 clockRate);
+				inline eTimeSource getTimeSource(void) const { return m_source; }
+				void cycleStep(void);
+				u64 getCycles(void) const;
+				u32 getMilliseconds(void) const;
+
+				i8 read8(u32 addr) override;
+				i32 read32(u32 addr) override;
+				i8 write8(u32 addr, i8 value) override;
+				i32 write32(u32 addr, i32 value) override;
+				ostd::ByteStream* getByteStream(void) override;
+
+			private:
+				ostd::ByteStream m_data;
+				eTimeSource m_source { eTimeSource::WallClock };
+				u64 m_clockRate { 1 };
+				std::chrono::steady_clock::time_point m_wallStart { std::chrono::steady_clock::now() };
+		};
+
 		class VirtualMouse : public IMemoryDevice
 		{
 			public:

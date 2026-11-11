@@ -79,6 +79,7 @@ namespace dragon
 			inline static hw::VirtualBIOS vBIOS;
 			inline static hw::interface::CMOS vCMOS;
 			inline static hw::VirtualKeyboard vKeyboard;
+			inline static hw::VirtualTimer vTimer;
 			inline static hw::VirtualMouse vMouse;
 			inline static hw::interface::Disk vDiskInterface { memMap, cpu };
 			inline static hw::interface::Graphics vGraphicsInterface;

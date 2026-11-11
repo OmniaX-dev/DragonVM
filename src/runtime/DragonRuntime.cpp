@@ -183,6 +183,18 @@ namespace dragon
 		memMap.mapDevice(vMouse, dragon::data::MemoryMapAddresses::Mouse_Start, dragon::data::MemoryMapAddresses::Mouse_End, false, "Mouse");
 		if (info.verboseLoad)
 		{
+			out.fg(ostd::ConsoleColors::Magenta).p("    vTimer: ");
+			out.fg(ostd::ConsoleColors::BrightYellow);
+			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::Timer_Start, true, 4).cpp_str());
+			out.p(" to ");
+			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::Timer_End, true, 4).cpp_str());
+			out.p(" (remap=true)").nl();
+		}
+		vTimer.init();
+		vTimer.setTimeSource(hw::VirtualTimer::eTimeSource::WallClock, machine_config.clock_rate_sec);
+		memMap.mapDevice(vTimer, dragon::data::MemoryMapAddresses::Timer_Start, dragon::data::MemoryMapAddresses::Timer_End, true, "Timer");
+		if (info.verboseLoad)
+		{
 			out.fg(ostd::ConsoleColors::Magenta).p("    vDiskInterface: ");
 			out.fg(ostd::ConsoleColors::BrightYellow);
 			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::DiskInterface_Start, true, 4).cpp_str());
@@ -295,6 +307,7 @@ namespace dragon
 		intVec.reset();
 		vGraphicsInterface.reset();
 		vKeyboard.resetState();
+		vTimer.reset();
 		vDiskInterface.reset();
 		vCMOS.write16(data::CMOSRegisters::SystemSignals, 0);
 		s_resetCount++;

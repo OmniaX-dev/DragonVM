@@ -66,6 +66,9 @@ namespace dragon
 				inline static constexpr u64 Graphics_MemoryReadFailed            =             0x8000000000000000;
 				inline static constexpr u64 Graphics_MemoryWriteFailed            =             0x8000000000000001;
 
+				inline static constexpr u64 Timer_InvalidAddress                 =             0x9000000000000000;
+				inline static constexpr u64 Timer_WriteAttempt                   =             0x9000000000000001;
+
 		};
 
 		class ErrorHandler
@@ -112,7 +115,11 @@ namespace dragon
 				inline static constexpr u32 Mouse_Start = 0x01000660;
 				inline static constexpr u32 Mouse_End   = 0x0100067F;
 
-				// 0x01000680 - 0x0100087F: unused (the old MBR zone; the BIOS now loads the boot
+				// Read-only: the time since the machine started, and the cycle count (see hw::VirtualTimer).
+				inline static constexpr u32 Timer_Start = 0x01000680;
+				inline static constexpr u32 Timer_End   = 0x0100069F;
+
+				// 0x010006A0 - 0x0100087F: unused (the old MBR zone; the BIOS now loads the boot
 				// area of the disk at Memory_Start, see DPTStructure::BootAreaSize).
 
 				inline static constexpr u32 DiskInterface_Start = 0x01000880;

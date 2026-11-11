@@ -150,6 +150,80 @@ namespace dragon
 			m_inputEnabled = true;
 		}
 
+		void VirtualTimer::init(void)
+		{
+			m_data.assign(data::MemoryMapAddresses::Timer_End - data::MemoryMapAddresses::Timer_Start + 1, 0x00);
+			reset();
+		}
+
+		void VirtualTimer::reset(void)
+		{
+			std::fill(m_data.begin(), m_data.end(), 0x00);
+			m_wallStart = std::chrono::steady_clock::now();
+		}
+
+		void VirtualTimer::setTimeSource(eTimeSource source, u32 clockRate)
+		{
+			m_source = source;
+			m_clockRate = std::max<u64>(1, clockRate);
+			m_wallStart = std::chrono::steady_clock::now() - std::chrono::milliseconds(getMilliseconds());
+		}
+
+		u64 VirtualTimer::getCycles(void) const
+		{
+			i32 high = 0, low = 0;
+			bytes::read32(m_data, tRegisters::CyclesHigh, high);
+			bytes::read32(m_data, tRegisters::CyclesLow, low);
+			return (cast<u64>(cast<u32>(high)) << 32) | cast<u32>(low);
+		}
+
+		u32 VirtualTimer::getMilliseconds(void) const
+		{
+			i32 ms = 0;
+			bytes::read32(m_data, tRegisters::Milliseconds, ms);
+			return cast<u32>(ms);
+		}
+
+		void VirtualTimer::cycleStep(void)
+		{
+			const u64 cycles = getCycles() + 1;
+			bytes::write32(m_data, tRegisters::CyclesHigh, cast<i32>(cast<u32>(cycles >> 32)));
+			bytes::write32(m_data, tRegisters::CyclesLow, cast<i32>(cast<u32>(cycles)));
+			u64 ms = 0;
+			if (m_source == eTimeSource::MachineTime)
+				ms = cycles * 1000 / m_clockRate;
+			else
+				ms = cast<u64>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - m_wallStart).count());
+			bytes::write32(m_data, tRegisters::Milliseconds, cast<i32>(cast<u32>(ms)));
+		}
+
+		i8 VirtualTimer::read8(u32 addr)
+		{
+			return stream_read8(m_data, addr, data::ErrorCodes::Timer_InvalidAddress, "Timer");
+		}
+
+		i32 VirtualTimer::read32(u32 addr)
+		{
+			return stream_read32(m_data, addr, data::ErrorCodes::Timer_InvalidAddress, "Timer");
+		}
+
+		i8 VirtualTimer::write8(u32 addr, i8 value)
+		{
+			data::ErrorHandler::pushError(data::ErrorCodes::Timer_WriteAttempt, String("Attempting to write byte to the Timer (read-only). Address: ").add(String::getHexStr(addr, true, 4)));
+			return 0;
+		}
+
+		i32 VirtualTimer::write32(u32 addr, i32 value)
+		{
+			data::ErrorHandler::pushError(data::ErrorCodes::Timer_WriteAttempt, String("Attempting to write word to the Timer (read-only). Address: ").add(String::getHexStr(addr, true, 4)));
+			return 0;
+		}
+
+		ostd::ByteStream* VirtualTimer::getByteStream(void)
+		{
+			return &m_data;
+		}
+
 		i8 VirtualKeyboard::read8(u32 addr)
 		{
 			return stream_read8(m_data, addr, data::ErrorCodes::IntVector_InvalidAddress, "KeyboardController");

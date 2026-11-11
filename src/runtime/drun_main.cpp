@@ -104,6 +104,11 @@ static void processVideoSignal(void)
 			case S::Text16Color_ConsolePrintString:
 				hw::text16console::print(mem, cast<u32>(mem.read32(vga + R::Text16ConsoleAddr)), cast<u32>(mem.read32(vga + R::Text16String)));
 			break;
+			case S::Text16Color_CopyFrameAndSwap:
+				graphics.writeVRAMFrame_16Colors(cast<u32>(mem.read32(vga + R::Text16FrameAddr)), cast<u32>(mem.read32(vga + R::Text16FrameSize)),
+					cast<u32>(mem.read32(vga + R::Text16FrameYOffset)));
+				graphics.swapBuffers_16Colors();
+			break;
 			case S::Text16Color_SwapBuffers: graphics.swapBuffers_16Colors(); break;
 			case S::Text16Color_Scroll: graphics.scroll_16Colors(); break;
 			default: break;
@@ -145,6 +150,7 @@ static bool step(u64& cycles)
 	auto& cpu = DragonRuntime::cpu;
 	cpu.execute();
 	DragonRuntime::vDiskInterface.cycleStep();
+	DragonRuntime::vTimer.cycleStep();
 	processVideoSignal();
 	cycles++;
 	// As VirtualDisplay raises it: skipped while the previous VSync handler is still running.
@@ -237,6 +243,8 @@ int main(int argc, char** argv)
 	u64 cycles = 0;
 	{
 		const auto& config = DragonRuntime::machine_config;
+		// Machine time (cycles / clock rate): runs don't depend on the host's speed.
+		DragonRuntime::vTimer.setTimeSource(hw::VirtualTimer::eTimeSource::MachineTime, config.clock_rate_sec);
 		s_vsyncCycles = (vsyncCycles >= 0 ? (u64)vsyncCycles
 			: std::max<u64>(1, cast<u64>(config.clock_rate_sec) / std::max<u64>(1, config.screen_redraw_rate_per_second)));
 	}

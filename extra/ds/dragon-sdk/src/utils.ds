@@ -1,18 +1,25 @@
 #include(hardware.ds)
 
 namespace dr {
-	atomic sub sleep(var ms: i32) {
-		var clock_speed_hz: u32 = read_cmos(dr::CMOSRegisters.ClockSpeed);
-		var cycles_per_ms: u32 = clock_speed_hz / 1000;
-		var sleep_cycles: u32 = ms * cycles_per_ms;
-		sleep_cycles /= 2; // The loop is 2 instructions
-		low {
-			mov ACC, 0
-			mov R9, $sleep_cycles
-			___sleep_loop___:
-				dec R
-				jgr $___sleep_loop___, R9
-		}
+	// Milliseconds since the machine started (the timer device). Wraps after about 49.7 days:
+	// measure intervals as millis() - start, which stays right across the wrap.
+	inline sub millis() -> u32 {
+		return *cast<u32*>(TimerRegisters.Milliseconds);
+	}
+
+	// The low 32 bits of the cycles executed since the machine started (for short measurements:
+	// cycles() - start is right up to 2^32 cycles).
+	inline sub cycles() -> u32 {
+		return *cast<u32*>(TimerRegisters.CyclesLow);
+	}
+
+	// Waits ms milliseconds, by the timer: right at any clock speed (also uncapped). Interrupts
+	// keep running meanwhile (their handlers' time counts as part of the wait).
+	sub sleep(var ms: i32) {
+		if (ms <= 0)
+			return;
+		var start: u32 = millis();
+		while (millis() - start < cast<u32>(ms));
 	}
 
 	sub itoa(var value: i32, var result: u8*, var base: i32 = 10) -> string

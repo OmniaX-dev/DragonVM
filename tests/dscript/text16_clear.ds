@@ -8,7 +8,7 @@
 sub main() -> void {
 	dr::vga_set_video_mode(dr::VGAVideoModes.Text16Color);
 	var con: dr::Text16Console();
-	con.clear(dr::DefaultPaletteText16.Black, false);
+	con.clear(dr::DefaultPaletteText16.Black);
 	con.println("this line")->println("and this one")->print("are presented first");
 	con.present();
 	dr::Text16::clear_screen(dr::DefaultPaletteText16.Blue);

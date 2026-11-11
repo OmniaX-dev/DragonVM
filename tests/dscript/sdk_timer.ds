@@ -1,0 +1,26 @@
+// The timer device and dr::sleep / millis / cycles. drun counts machine time (cycles / clock
+// rate), so the numbers are exact: sleep(250) lasts 250 ms (plus the last check of the loop),
+// and that many milliseconds are 250 * clock / 1000 cycles. Interrupts stay enabled.
+// 1 = all right; 2: millis wrong; 3: cycles don't match the clock; 4: sleep(0) / sleep(-5) waited.
+// expect-rv: 1
+#import(<dragon-sdk>)
+
+sub main() -> u32 {
+	var clock: u32 = *cast<u32*>(dr::CMOSRegisters.ClockSpeed);
+	var t0: u32 = dr::millis();
+	var c0: u32 = dr::cycles();
+	dr::sleep(250);
+	var ms: u32 = dr::millis() - t0;
+	var cyc: u32 = dr::cycles() - c0;
+	if (ms < 250 or ms > 252)
+		return 2;
+	var expected: u32 = 250 * (clock / 1000);
+	if (cyc < expected or cyc > expected + (clock / 1000) * 2 + 200)
+		return 3;
+	var t1: u32 = dr::millis();
+	dr::sleep(0);
+	dr::sleep(-5);
+	if (dr::millis() - t1 > 1)
+		return 4;
+	return 1;
+}

@@ -42,6 +42,9 @@ namespace dragon
 	{
 		auto& cpu = DragonRuntime::cpu;
 		auto& disk = DragonRuntime::vDiskInterface;
+		auto& timer = DragonRuntime::vTimer;
+		// Real time, also uncapped: the machine's milliseconds count from here.
+		timer.reset();
 		bool running = true;
 		u8 screenRedrawRate = DragonRuntime::vCMOS.read8(data::CMOSRegisters::ScreenRedrawRate);
 		f64 cycleUPS = (DragonRuntime::machine_config.fixed_clock ? DragonRuntime::machine_config.clock_rate_sec : -1.0);
@@ -49,6 +52,7 @@ namespace dragon
 			mainLoop();
 			running = cpu.execute() && isRunning();
 			disk.cycleStep();
+			timer.cycleStep();
 		});
 		ostd::StepTimer screenTimer(screenRedrawRate, [&](f64 dt) {
 			m_display.vsync();

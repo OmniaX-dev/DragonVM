@@ -74,7 +74,7 @@ sub reset(var con: Con*) {
 	con->set_horizontal_overflow_policy(Con::HOverflowPolicy.Ignore);
 	con->set_vertical_overflow_policy(Con::VOverflowPolicy.Ignore);
 	con->fg(dr::DefaultPaletteText16.Green)->bg(dr::DefaultPaletteText16.Black);
-	con->clear(dr::DefaultPaletteText16.Black, false);
+	con->clear(dr::DefaultPaletteText16.Black);
 	con->xy(0, 0);
 }
 
@@ -107,7 +107,7 @@ sub main() -> i32 {
 		and con.get_vertical_overflow_policy() == Con::VOverflowPolicy.Ignore);
 
 	// clear: every cell a space in the given color (foreground and background).
-	con.clear(dr::DefaultPaletteText16.Blue, false);
+	con.clear(dr::DefaultPaletteText16.Blue);
 	var all: bool = true;
 	for (var y: u32 = 0; y < rows; y++)
 		for (var x: u32 = 0; x < cols; x++) {

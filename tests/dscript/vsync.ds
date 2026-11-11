@@ -16,7 +16,7 @@ interrupt sub on_vsync() {
 		nested++;
 	inside = true;
 	count++;
-	con.clear(dr::DefaultPaletteText16.Black, false)->xy(0, 0);
+	con.clear(dr::DefaultPaletteText16.Black)->xy(0, 0);
 	con.print("frame ")->print(count);
 	var spin: u32 = 0;
 	while (spin < 2000)

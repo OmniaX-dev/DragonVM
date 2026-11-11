@@ -77,7 +77,15 @@
     0x01000660 MOUSE MAPPING (32 Bytes)
     0x0100067F
     -------
-    0x01000680 (unused, was the MBR)
+    0x01000680 TIMER (32 Bytes) (read-only: writes are errors, also in BIOS Mode)
+        0x00: Milliseconds since the machine started or was reset (4 bytes, wraps after ~49.7 days)
+        0x04: Cycles executed since the machine started or was reset, high word (4 bytes)
+        0x08: Cycles, low word (4 bytes)
+        (dvm: real time, right at any clock speed, also uncapped; ddb and drun: machine time,
+        cycles / clock_rate_sec, so runs and the debugger's history are reproducible)
+    0x0100069F
+    -------
+    0x010006A0 (unused, was the MBR)
     0x0100087F
     -------
     0x01000880 DISK INTERFACE (128 Bytes)

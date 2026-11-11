@@ -9,10 +9,10 @@ sub main() -> void {
 	dr::vga_set_video_mode(dr::VGAVideoModes.Text16Color);
 	var con: dr::Text16Console();
 	con.set_vertical_overflow_policy(dr::Text16Console::VOverflowPolicy.Scroll);
-	con.clear(dr::DefaultPaletteText16.Black, false);
+	con.clear(dr::DefaultPaletteText16.Black);
 	con.println("before the first present");
 	con.present();
-	con.clear(dr::DefaultPaletteText16.Black, false);
+	con.clear(dr::DefaultPaletteText16.Black);
 	con.xy(0, 0);
 	for (var i: i32 = 0; i < 25; i++) {
 		con.print("row ")->print(i)->nl();

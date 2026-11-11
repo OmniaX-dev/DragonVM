@@ -291,6 +291,9 @@ namespace dragon
 		m_clockRate = std::max<f64>(1.0, cast<f64>(config.clock_rate_sec));
 		m_maxSpeed = m_data.args.max_speed || !config.fixed_clock;
 		m_cyclesPerRedraw = std::max<u64>(1, cast<u64>(config.clock_rate_sec) / std::max<u64>(1, config.screen_redraw_rate_per_second));
+		// Machine time (cycles / clock rate), like the redraws: stepping, max speed and the
+		// history all see the same, reproducible time.
+		DragonRuntime::vTimer.setTimeSource(hw::VirtualTimer::eTimeSource::MachineTime, config.clock_rate_sec);
 		display.enableAutoRedraw(false);
 
 		DragonRuntime::cpu.setDebugPrintHandler([this](const std::string& text) { debug_print(text); });
@@ -347,6 +350,7 @@ namespace dragon
 		add_device("VRAM", DragonRuntime::vGraphicsInterface);
 		add_device("IntVector", DragonRuntime::intVec);
 		add_device("Keyboard", DragonRuntime::vKeyboard);
+		add_device("Timer", DragonRuntime::vTimer);
 		add_device("DiskInterface", DragonRuntime::vDiskInterface);
 		add_device("CMOS", DragonRuntime::vCMOS);
 		m_history.addSegment("CPU", reinterpret_cast<u8*>(&m_cpuState), sizeof(m_cpuState),
@@ -498,6 +502,7 @@ namespace dragon
 		cpu.execute();
 		m_display->processSignal();
 		DragonRuntime::vDiskInterface.cycleStep();
+		DragonRuntime::vTimer.cycleStep();
 		m_cycle++;
 		if (m_cycle % m_cyclesPerRedraw == 0)
 			m_display->vsync();

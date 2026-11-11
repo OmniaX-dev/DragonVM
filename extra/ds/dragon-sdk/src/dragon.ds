@@ -85,6 +85,7 @@ namespace dr {
 		var CMOS: u32							= 0x01000000;
 		var VGA: u32							= 0x01000900;
 		var Keyboard: u32						= 0x01000580;
+		var Timer: u32							= 0x01000680;
 	};
 	const InterruptVectorData: struct {
 		var EntrySize: u32						= 0x5;
@@ -141,6 +142,12 @@ namespace dr {
 		var MemoryControllerBGCol: u32			= MemoryLayout.VGA + 0x0089;
 		var MemoryControllerFGCol: u32			= MemoryLayout.VGA + 0x008A;
 		var BufferStart: u32					= MemoryLayout.VGA + 0x00E0;
+	};
+	// Read-only (writes are errors, also in BIOS mode).
+	const TimerRegisters: struct {
+		var Milliseconds: u32					= MemoryLayout.Timer + 0x0000;	// since the machine started (wraps after ~49.7 days)
+		var CyclesHigh: u32						= MemoryLayout.Timer + 0x0004;	// cycles executed since the machine started: high word
+		var CyclesLow: u32						= MemoryLayout.Timer + 0x0008;	// low word
 	};
 	const KeyboardRegisters: struct {
 		var ModifiersBitfield: u32				= MemoryLayout.Keyboard + 0x0000;
