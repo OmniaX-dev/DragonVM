@@ -12,12 +12,12 @@ authors = ["OmniaX-Dev"]
 
 [grammars.dscript]
 repository = "file:///home/sylar/GitRepos/Dragon/DragonVM"
-rev = "e4df4833d8f1de198f35395ad4736c6dc78af2e3"
+rev = "8275ec4a893b2e4c8b587e6f6ba37bb345f9e75a"
 path = "editors/tree-sitter-dscript"
 
 [grammars.dasm]
 repository = "file:///home/sylar/GitRepos/Dragon/DragonVM"
-rev = "036d95e320792ccf4ee47405134fcb89e8f6e85b"
+rev = "8275ec4a893b2e4c8b587e6f6ba37bb345f9e75a"
 path = "editors/tree-sitter-dasm"
 
 # dsls, the DScript language server (bin/dsls; see src/lib.rs for how it is found): errors as
