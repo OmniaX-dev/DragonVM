@@ -76,6 +76,8 @@ namespace dragon
 				void setFlag(u8 flg, bool val = true);
 
 				bool handleInterrupt(u8 intValue, bool hardware);
+				// Pushed under an interrupt's stack frame: hardware (the saved registers follow) or 0.
+				inline static constexpr u32 HardwareInterruptMarker = 0x48574952;
 
 				bool loadExtension(void);
 				bool execute(void);

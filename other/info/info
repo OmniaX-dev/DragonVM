@@ -215,6 +215,9 @@
 
     Machine Specific - Hardware Interrupts:
     =======================================
+    (They come between any two instructions: besides the stack frame (R1-R20, PP, ACC, IP, FP), the CPU keeps
+    RV, S1, S2, OFFSET, FL and the BIOS mode for the interrupted code; rti puts them back. A software interrupt
+    (int) is a call: RV, S1, S2, OFFSET, FL can come back changed, e.g. 0x20/0x21 returns its result in RV.)
     MAX INTERRUPT 0xFF
     0x80: Disk Interface Finished
     0xA0: Keyboard Interface - Key Pressed

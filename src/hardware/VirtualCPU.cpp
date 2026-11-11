@@ -207,6 +207,20 @@ namespace dragon
 			u8 interruptStatus = cast<u8>(m_memory.read8(entryPointer));
 			if (interruptStatus != 0xFF) return false;
 			u32 handlerAddress = cast<u32>(m_memory.read32(entryPointer + 1));
+			// A hardware interrupt comes between any two instructions, so it also keeps what the
+			// stack frame doesn't (rti puts it back): RV (e.g. between a call and the mov that
+			// reads its return value), S1 / S2 (low blocks), OFFSET, FL and the BIOS mode. A
+			// software interrupt (int) is a call: it can return a value in RV (and flags).
+			if (hardware)
+			{
+				pushToStack(readRegister(data::Registers::RV));
+				pushToStack(readRegister(data::Registers::S1));
+				pushToStack(readRegister(data::Registers::S2));
+				pushToStack(readRegister(data::Registers::OFFSET));
+				pushToStack(readRegister(data::Registers::FL));
+				pushToStack(m_biosMode ? 1 : 0);
+			}
+			pushToStack(hardware ? HardwareInterruptMarker : 0);
 			pushToStack(0);
 			pushStackFrame();
 			m_subroutineCounter++;
@@ -1050,6 +1064,15 @@ namespace dragon
 							m_interruptInService[i] = 0;
 					}
 					popStackFrame();
+					if (cast<u32>(popFromStack()) == HardwareInterruptMarker)
+					{
+						m_biosMode = popFromStack() != 0;
+						writeRegister32(data::Registers::FL, popFromStack());
+						writeRegister32(data::Registers::OFFSET, popFromStack());
+						writeRegister32(data::Registers::S2, popFromStack());
+						writeRegister32(data::Registers::S1, popFromStack());
+						writeRegister32(data::Registers::RV, popFromStack());
+					}
 					m_subroutineCounter--;
 				}
 				break;

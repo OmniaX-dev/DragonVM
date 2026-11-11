@@ -1,0 +1,48 @@
+// A hardware interrupt comes between any two instructions: the CPU must keep for the
+// interrupted code what the stack frame doesn't, among them RV (between a call and the mov
+// that reads its return value) and S1 / S2 (the $variables of low blocks). The VSync handler
+// here (every 7 cycles: it lands everywhere) changes both; main checks they never change under it.
+// drun-flags: --vsync 7
+// expect-rv: 1
+#import(<dragon-sdk>)
+
+var handled: u32 = 0;
+
+sub other() -> u32 {
+	return 0xDEAD;
+}
+
+interrupt sub on_vsync() {
+	var x: u32 = other();		// RV = 0xDEAD
+	var y: u32 = 0xBEEF;
+	low { mov $x, $y }			// S1 / S2
+	handled++;
+}
+
+sub value(var n: u32) -> u32 {
+	return n * 3;
+}
+
+sub main() -> u32 {
+	dr::set_interrupt_vector_entry(dr::HardwareInterrupts.VSync, &on_vsync);
+	dr::enable_interrupts();
+	var bad: u32 = 0;
+	var i: u32 = 0;
+	while (i < 3000)
+	{
+		if (value(i) != i * 3)
+			bad++;
+		var a: u32 = i;
+		var b: u32 = 0;
+		low { mov $b, $a }
+		if (b != i)
+			bad++;
+		i++;
+	}
+	dr::disable_interrupts();
+	if (handled < 100)
+		return 2000 + handled;
+	if (bad != 0)
+		return 1000 + bad;
+	return 1;
+}
