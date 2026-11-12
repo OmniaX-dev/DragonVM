@@ -2289,6 +2289,10 @@
         {
           "type": "priv_modifier",
           "named": true
+        },
+        {
+          "type": "readonly_modifier",
+          "named": true
         }
       ]
     }
@@ -5593,6 +5597,10 @@
   },
   {
     "type": "priv_modifier",
+    "named": true
+  },
+  {
+    "type": "readonly_modifier",
     "named": true
   },
   {

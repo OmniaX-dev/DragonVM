@@ -1,0 +1,3 @@
+// expect-error: a field is either priv or readonly
+struct Snake { priv readonly var length: u32 = 3; };
+sub main() -> void { }

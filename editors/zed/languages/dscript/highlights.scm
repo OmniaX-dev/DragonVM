@@ -50,6 +50,7 @@
 (inline_modifier) @keyword
 (static_modifier) @keyword
 (priv_modifier) @keyword
+(readonly_modifier) @keyword
 
 ; Types
 (primitive_type) @type.builtin

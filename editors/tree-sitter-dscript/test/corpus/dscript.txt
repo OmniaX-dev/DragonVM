@@ -610,6 +610,26 @@ struct Account {
             (boolean_literal)))))))
 
 ================================================================================
+readonly fields
+================================================================================
+
+struct Snake {
+	readonly var length: u32 = 3;
+};
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (struct_declaration
+    (type_identifier)
+    (field_list
+      (field_declaration
+        (readonly_modifier)
+        (field_identifier)
+        (primitive_type)
+        (number_literal)))))
+
+================================================================================
 Typed enums and assert
 ================================================================================
 

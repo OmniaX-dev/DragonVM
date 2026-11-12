@@ -1,0 +1,3 @@
+// expect-error: readonly is for struct fields: 'var' expected after it
+struct Snake { readonly sub f() { } };
+sub main() -> void { }

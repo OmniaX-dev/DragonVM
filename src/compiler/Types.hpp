@@ -40,6 +40,7 @@ namespace dscript
 		SourcePos pos;
 		SourcePos namePos;
 		bool isPrivate { false };	// priv var: only the struct's own subs can use it
+		bool isReadonly { false };	// readonly var: everyone reads it, only the struct's own subs change it
 	};
 
 	struct StructInfo

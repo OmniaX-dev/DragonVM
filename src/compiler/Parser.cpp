@@ -336,8 +336,26 @@ namespace dscript
 			m_scope = decl->name;
 		while (!acceptPunct("}"))
 		{
-			// priv var / priv sub: only the struct's own subs can use it.
+			// priv var / priv sub: only the struct's own subs can use it. readonly var: everyone
+			// can read it, only the struct's own subs can change it.
 			const bool priv = acceptKeyword("priv");
+			if (isKeyword("readonly"))
+			{
+				const Token& ro = next();
+				if (priv || isKeyword("priv"))
+					error(ro.pos, "a field is either priv or readonly: priv already keeps others from changing it (and from reading it)");
+				if (decl->value != 0)
+					error(ro.pos, "readonly fields need a named struct (struct Name { ... }): only its subs can change them");
+				if (!isKeyword("var"))
+					error(peek().pos, "readonly is for struct fields: 'var' expected after it, found " + describe(peek()));
+				Node* field = parseVarDecl(false);
+				field->isReadonly = true;
+				field->shortName = field->name;
+				field->scope = m_scope;
+				expectPunct(";", "after the struct field");
+				decl->list.push_back(field);
+				continue;
+			}
 			if (isKeyword("struct") || isKeyword("enum"))
 			{
 				// A nested struct / enum: <Struct>::<name> (priv: only usable in the struct).

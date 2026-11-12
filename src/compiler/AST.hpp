@@ -52,6 +52,7 @@ namespace dscript
 		Node* d { nullptr };
 		std::vector<Node*> list;		// Program / Block / struct fields / params / call arguments / ...
 		bool isPrivate { false };		// a struct field declared priv (methods: FuncDecl flag 16); a priv nested struct / enum
+		bool isReadonly { false };		// a struct field declared readonly
 
 		// Names and scopes (namespaces, structs).
 		// Declarations: name is the full name (Bios::Text16::print), shortName the name as declared
@@ -76,7 +77,8 @@ namespace dscript
 		// Filled in by the code generator.
 		Type* type { nullptr };
 		bool lvalue { false };
-		bool readOnly { false };		// in a constant array (assignments are errors)
+		bool readOnly { false };		// in a constant array, or a readonly field outside its struct (assignments are errors)
+		std::string readOnlyWhy;		// readOnly: the error for a change (empty: a constant array)
 		VarInfo* var { nullptr };		// Ident naming a variable
 		FuncInfo* func { nullptr };		// Ident / Call naming a function
 		bool isConst { false };			// a compile-time integer constant

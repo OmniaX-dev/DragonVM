@@ -1,0 +1,4 @@
+// expect-error: 'head' is readonly: only the subs of Snake can change it
+struct Pos { var x: i32; var y: i32; };
+struct Snake { readonly var head: Pos; };
+sub main() -> void { var s: Snake; s.head.x = 1; }

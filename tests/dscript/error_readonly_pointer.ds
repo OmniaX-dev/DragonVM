@@ -1,0 +1,3 @@
+// expect-error: 'length' is readonly: only the subs of Snake can change it
+struct Snake { readonly var length: u32 = 3; };
+sub main() -> void { var s: Snake; var p: Snake* = &s; p->length += 1; }

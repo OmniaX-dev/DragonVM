@@ -697,6 +697,7 @@ namespace dscript
 			field.pos = f->pos;
 			field.namePos = f->namePos;
 			field.isPrivate = f->isPrivate;
+			field.isReadonly = f->isReadonly;
 			field.type = resolveType(f->typeSyntax);
 			if (field.type->kind == Type::Kind::Void)
 				error(f->pos, "fields cannot be void");
@@ -1239,6 +1240,7 @@ namespace dscript
 		e->constPtr = false;
 		e->lvalue = false;
 		e->readOnly = false;
+		e->readOnlyWhy.clear();
 		switch (e->kind)
 		{
 			case NodeKind::IntLit:
@@ -1323,6 +1325,8 @@ namespace dscript
 				e->type = ta->base;
 				e->lvalue = true;
 				e->readOnly = e->a->readOnly && e->a->type->kind == Type::Kind::Array;
+				if (e->readOnly)
+					e->readOnlyWhy = e->a->readOnlyWhy;
 			}
 			break;
 			case NodeKind::Cast:
@@ -1398,7 +1402,7 @@ namespace dscript
 				if (!e->a->lvalue || e->a->type->kind == Type::Kind::Array)
 					error(e->pos, "++ and -- need a variable");
 				if (e->a->readOnly)
-					error(e->pos, "cannot change a constant array");
+					error(e->pos, e->a->readOnlyWhy.empty() ? "cannot change a constant array" : e->a->readOnlyWhy);
 				if (!e->a->type->isArithmetic() && e->a->type->kind != Type::Kind::Pointer)
 					error(e->pos, "++ and -- work on numbers and pointers");
 				e->type = e->a->type;
@@ -1504,6 +1508,8 @@ namespace dscript
 			check(e->a);
 			if (!e->a->lvalue)
 				error(e->pos, "& needs a variable (or something stored in memory)");
+			if (e->a->readOnly && !e->a->readOnlyWhy.empty())
+				error(e->pos, e->a->readOnlyWhy + " (a pointer to it could change it)");
 			e->type = m_types.pointer(e->a->type);
 			return;
 		}
@@ -1670,7 +1676,7 @@ namespace dscript
 		if (!e->a->lvalue)
 			error(e->a->pos, "cannot assign to this (not a variable)");
 		if (e->a->readOnly)
-			error(e->a->pos, "cannot assign to a constant array");
+			error(e->a->pos, e->a->readOnlyWhy.empty() ? "cannot assign to a constant array" : e->a->readOnlyWhy);
 		if (t->kind == Type::Kind::Array)
 			error(e->pos, "cannot assign to an array (assign its elements)");
 		if (e->name == "=")
@@ -1957,6 +1963,13 @@ namespace dscript
 		e->type = f->type;
 		e->lvalue = (e->value == 1) || e->a->lvalue;
 		e->readOnly = (e->value == 0) && e->a->readOnly;
+		if (e->readOnly)
+			e->readOnlyWhy = e->a->readOnlyWhy;
+		if (f->isReadonly && !insideStruct(t->structInfo))
+		{
+			e->readOnly = true;
+			e->readOnlyWhy = "'" + e->name + "' is readonly: only the subs of " + t->structInfo->name + " can change it";
+		}
 	}
 
 	// ==================================== Code generation ===================================
@@ -4031,7 +4044,7 @@ namespace dscript
 			return s;
 		s += " {  // " + bytes(info->size) + "\n";
 		for (const StructField& f : info->fields)
-			s += std::string("\t") + (f.isPrivate ? "priv " : "") + "var " + f.name + ": " + (f.type ? f.type->name(true) : "?") + ";  // +" + std::to_string(f.offset) + "\n";
+			s += std::string("\t") + (f.isPrivate ? "priv " : "") + (f.isReadonly ? "readonly " : "") + "var " + f.name + ": " + (f.type ? f.type->name(true) : "?") + ";  // +" + std::to_string(f.offset) + "\n";
 		// Its methods and static subs (the signature, without the comment).
 		for (FuncInfo* f : m_funcList)
 		{
@@ -4050,7 +4063,7 @@ namespace dscript
 	std::string CodeGen::hoverField(StructInfo* info, const StructField& f)
 	{
 		const std::string owner = info->anonymous ? "struct { ... }" : info->name;
-		return std::string(f.isPrivate ? "priv " : "") + "var " + f.name + ": " + (f.type ? f.type->name(true) : "?") + comment({ "field of " + owner + " at +" + std::to_string(f.offset),
+		return std::string(f.isPrivate ? "priv " : "") + (f.isReadonly ? "readonly " : "") + "var " + f.name + ": " + (f.type ? f.type->name(true) : "?") + comment({ "field of " + owner + " at +" + std::to_string(f.offset),
 			f.type ? bytes(f.type->size()) : "" });
 	}
 
@@ -4503,7 +4516,7 @@ namespace dscript
 			l_line(head + declaredName(d) + " {", &d->namePos, head.size());
 			for (const StructField& f : info->fields)
 			{
-				const std::string h = indent + "\t" + (f.isPrivate ? "priv " : "") + "var ";
+				const std::string h = indent + "\t" + (f.isPrivate ? "priv " : "") + (f.isReadonly ? "readonly " : "") + "var ";
 				l_line(h + f.name + ": " + interfaceType(f.type) + (f.init != nullptr ? " = " + interfaceValue(f.init, f.type) : "") + ";", &f.namePos, h.size());
 			}
 			for (Node* n : m_program->list)

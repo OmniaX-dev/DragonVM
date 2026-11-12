@@ -1,0 +1,58 @@
+// expect-rv: 0
+// readonly: fields everyone can read, but only the struct's own subs (methods, static subs,
+// lambdas written in them) can change. Initializing (defaults, { ... }) and copying a whole
+// struct are not changes of a field.
+#include(check.ds)
+
+struct Pos { var x: i32; var y: i32; };
+
+struct Snake {
+	readonly var length: u32 = 3;
+	readonly var head: Pos;
+	readonly var cells: u8[4];
+	readonly var name: u8* = null;
+	var speed: u32 = 1;
+
+	sub grow() {
+		this->length++;
+		this->length += 1;
+		this->head.x = 7;
+		this->cells[2] = 9;
+		var p: u32* = &this->length;		// inside: allowed
+		*p = *p + 1;
+	}
+	sub copy_from(var other: Snake*) { other->length = 100; this->length = other->length; }
+	static sub make(var out: Snake*, var len: u32) {
+		out->length = len;
+	}
+	sub reset() {
+		var f: sub(Snake*) = sub(var s: Snake*) { s->length = 0; };	// a lambda written in the struct
+		f(this);
+	}
+};
+
+sub main() -> i32 {
+	var s: Snake;
+	check(1, s.length == 3 and s.head.x == 0);
+	s.grow();
+	check(2, s.length == 6 and s.head.x == 7 and s.cells[2] == 9);
+	var p: Snake* = &s;
+	check(3, p->length == 6 and p->cells[2] == 9);
+	s.speed = 4;										// not readonly
+	var o: Snake;
+	s.copy_from(&o);
+	check(4, s.length == 100 and o.length == 100);
+	var m: Snake;
+	Snake::make(&m, 42);
+	check(5, m.length == 42);
+	var c: Snake = s;									// copying a whole struct
+	c = m;
+	check(6, c.length == 42);
+	c.reset();
+	check(7, c.length == 0);
+	var t: Snake = { 9 };								// initializing
+	check(8, t.length == 9);
+	var n: u32 = s.length + p->head.x;					// reads
+	check(9, n == 107);
+	return result();
+}

@@ -105,6 +105,7 @@ enum Kind: u8 { Cmd, Data = 0x80 }      // a typed enum: 1 byte (in structs, arr
 alias Handler = sub(i32) -> void;       // a name for a type
 struct Point { var x: i32; var y: i32 = 7; }    // fields can have constant default values
 struct Box { var w: u32; sub area() -> u32 { return this->w * this->w; } }   // methods (see below)
+struct Snake { readonly var length: u32 = 3; }  // readonly: only its subs change it (see below)
 sub name(var a: i32, b: u8 = 0) -> i32 { ... }  // 'var' is optional; default values are constants
 sub name(var a: string) -> void { ... } // overloads: same name, other parameter types
 sub later(var x: i32) -> i32;           // a declaration (the definition can come later)
@@ -202,6 +203,14 @@ var f: sub(Counter*, i32) -> i32 = Counter::add; // the method as a sub: this co
   written in them) can use it, on any instance of the struct. Everything else is public. Outside
   the struct, `{ ... }` can only set the fields before the first private one (the private ones
   get their default values), and the private fields of struct constants are read only inside.
+- `readonly` before a field (`readonly var length: u32 = 3;`) lets everyone read it, but only the
+  struct's own subs (as for `priv`) change it: outside, assigning it, `++` / `--`, changing a
+  field or element in it (`s.head.x = 1`, `s.cells[0] = 1`) and taking its address (`&s.length`)
+  are errors. Initializing it (its default value, `{ ... }`) and copying a whole struct
+  (`a = b`) are allowed. It protects the field itself: a pointer field's target can still be
+  changed, a method called on a struct field can change it, and an array field still converts
+  to a pointer (`print(s.name)`). Only named structs have readonly fields; a field is either
+  `priv` or `readonly`.
 - `static sub` in a struct has no `this`: it is a sub grouped under the struct's name, called as
   `Struct.name(...)` or `Struct::name(...)` (also from the struct's other subs: a struct's subs
   are not found by their name alone). A struct can have only static subs (and no fields).

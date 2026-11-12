@@ -1,0 +1,3 @@
+// expect-error: readonly fields need a named struct
+var g: struct { readonly var x: i32; };
+sub main() -> void { }

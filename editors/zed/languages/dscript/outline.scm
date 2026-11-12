@@ -13,7 +13,7 @@
 	name: (type_identifier) @name) @item
 
 (field_declaration
-	(priv_modifier)? @context
+	[(priv_modifier) (readonly_modifier)]? @context
 	name: (field_identifier) @name) @item
 
 (enum_declaration

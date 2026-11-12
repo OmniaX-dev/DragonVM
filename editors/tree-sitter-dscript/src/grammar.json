@@ -316,8 +316,17 @@
           "type": "CHOICE",
           "members": [
             {
-              "type": "SYMBOL",
-              "name": "priv_modifier"
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "SYMBOL",
+                  "name": "priv_modifier"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "readonly_modifier"
+                }
+              ]
             },
             {
               "type": "BLANK"
@@ -943,6 +952,10 @@
     "priv_modifier": {
       "type": "STRING",
       "value": "priv"
+    },
+    "readonly_modifier": {
+      "type": "STRING",
+      "value": "readonly"
     },
     "static_declaration": {
       "type": "SEQ",

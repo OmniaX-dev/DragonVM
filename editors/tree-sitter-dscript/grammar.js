@@ -87,7 +87,7 @@ module.exports = grammar({
 			choice($.struct_declaration, $.enum_declaration),
 		),
 		field_declaration: $ => seq(
-			optional($.priv_modifier),
+			optional(choice($.priv_modifier, $.readonly_modifier)),
 			'var',
 			field('name', alias($.identifier, $.field_identifier)),
 			':',
@@ -158,6 +158,8 @@ module.exports = grammar({
 		static_modifier: _ => 'static',
 		// priv: a struct field or sub only the struct's own subs can use
 		priv_modifier: _ => 'priv',
+		// readonly: a struct field everyone can read, but only the struct's own subs can change
+		readonly_modifier: _ => 'readonly',
 		// static var x: T = value;  static const X = value;  (in a sub)
 		static_declaration: $ => seq(
 			$.static_modifier,
