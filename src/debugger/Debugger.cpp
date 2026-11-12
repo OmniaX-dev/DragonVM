@@ -377,6 +377,7 @@ namespace dragon
 		add_device("IntVector", DragonRuntime::intVec);
 		add_device("Keyboard", DragonRuntime::vKeyboard);
 		add_device("Timer", DragonRuntime::vTimer);
+		add_device("Random", DragonRuntime::vRandom);
 		add_device("DiskInterface", DragonRuntime::vDiskInterface);
 		add_device("CMOS", DragonRuntime::vCMOS);
 		m_history.addSegment("CPU", reinterpret_cast<u8*>(&m_cpuState), sizeof(m_cpuState),

@@ -1,0 +1,26 @@
+#include(int.ds)
+
+// Random numbers from the machine's random device (through the BIOS, int 0x20). The generator is
+// seeded from the host's clock at start; seed() makes the numbers that follow repeatable.
+namespace dr::random {
+	// A random number in 0..INT_MAX (2147483647).
+	sub next() -> i32 {
+		raise_interrupt(0x20, INT20_RANDOM);
+		var value: i32 = 0;
+		low { mov $value, RV }
+		return value;
+	}
+
+	// A random f32 in [0, 1).
+	sub next_float() -> f32 {
+		raise_interrupt(0x20, INT20_RANDOM_FLOAT);
+		var value: f32 = 0;
+		low { mov $value, RV }
+		return value;
+	}
+
+	// The same seed gives the same numbers after it.
+	sub seed(var seed: u32) {
+		raise_interrupt(0x20, INT20_SEED_RANDOM, seed);
+	}
+}

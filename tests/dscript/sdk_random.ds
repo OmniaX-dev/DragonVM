@@ -1,0 +1,39 @@
+// The random device through the BIOS (int 0x20): dr::random::next() in 0..INT_MAX,
+// next_float() in [0, 1), and seed(): the same seed gives the same numbers after it.
+// drun-flags: --boot
+// expect-rv: 0
+#include(check.ds)
+#import(<dragon-sdk>)
+
+sub main() -> i32 {
+	var differ: bool = false;
+	var inRange: bool = true;
+	var last: i32 = dr::random::next();
+	var i: i32 = 0;
+	while (i < 200)
+	{
+		var n: i32 = dr::random::next();
+		if (n < 0)
+			inRange = false;
+		if (n != last)
+			differ = true;
+		last = n;
+		var f: f32 = dr::random::next_float();
+		if (f < 0.0 or f >= 1.0)
+			inRange = false;
+		i++;
+	}
+	check(1, inRange);
+	check(2, differ);
+
+	dr::random::seed(1234);
+	var a1: i32 = dr::random::next();
+	var a2: i32 = dr::random::next();
+	var af: f32 = dr::random::next_float();
+	dr::random::seed(1234);
+	check(3, dr::random::next() == a1 and dr::random::next() == a2 and dr::random::next_float() == af);
+	check(4, *cast<u32*>(dr::RandomRegisters.Seed) == 1234);
+	dr::random::seed(99);
+	check(5, dr::random::next() != a1 or dr::random::next() != a2);
+	return result();
+}

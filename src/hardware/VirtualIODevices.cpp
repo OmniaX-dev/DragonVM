@@ -224,6 +224,80 @@ namespace dragon
 			return &m_data;
 		}
 
+
+
+		void VirtualRandom::init(void)
+		{
+			m_data.assign(data::MemoryMapAddresses::Random_End - data::MemoryMapAddresses::Random_Start + 1, 0x00);
+			autoSeed();
+		}
+
+		void VirtualRandom::seed(u32 seed)
+		{
+			m_rng.seed(cast<i64>(seed));
+			bytes::write32(m_data, tRegisters::Seed, cast<i32>(seed));
+		}
+
+		void VirtualRandom::autoSeed(void)
+		{
+			const u64 now = cast<u64>(std::chrono::steady_clock::now().time_since_epoch().count());
+			seed(cast<u32>(now ^ (now >> 32)));
+		}
+
+		i32 VirtualRandom::nextInt(void)
+		{
+			const i32 value = m_rng.geti32(0, INT_MAX);
+			bytes::write32(m_data, tRegisters::Int, value);
+			return value;
+		}
+
+		f32 VirtualRandom::nextFloat(void)
+		{
+			f32 value = m_rng.getf32(0.0f, 1.0f);
+			if (value >= 1.0f)		// (uniform_real_distribution can round up to the end)
+				value = std::nextafter(1.0f, 0.0f);
+			i32 bits = 0;
+			std::memcpy(&bits, &value, sizeof(bits));
+			bytes::write32(m_data, tRegisters::Float, bits);
+			return value;
+		}
+
+		i8 VirtualRandom::read8(u32 addr)
+		{
+			return stream_read8(m_data, addr, data::ErrorCodes::Random_InvalidAddress, "Random");
+		}
+
+		i32 VirtualRandom::read32(u32 addr)
+		{
+			if (addr == tRegisters::Int)
+				nextInt();
+			else if (addr == tRegisters::Float)
+				nextFloat();
+			return stream_read32(m_data, addr, data::ErrorCodes::Random_InvalidAddress, "Random");
+		}
+
+		i8 VirtualRandom::write8(u32 addr, i8 value)
+		{
+			data::ErrorHandler::pushError(data::ErrorCodes::Random_WriteAttempt, String("Attempting to write byte to the Random device (only a word to Seed). Address: ").add(String::getHexStr(addr, true, 4)));
+			return 0;
+		}
+
+		i32 VirtualRandom::write32(u32 addr, i32 value)
+		{
+			if (addr != tRegisters::Seed)
+			{
+				data::ErrorHandler::pushError(data::ErrorCodes::Random_WriteAttempt, String("Attempting to write to the Random device (only Seed is writable). Address: ").add(String::getHexStr(addr, true, 4)));
+				return 0;
+			}
+			seed(cast<u32>(value));
+			return value;
+		}
+
+		ostd::ByteStream* VirtualRandom::getByteStream(void)
+		{
+			return &m_data;
+		}
+
 		i8 VirtualKeyboard::read8(u32 addr)
 		{
 			return stream_read8(m_data, addr, data::ErrorCodes::IntVector_InvalidAddress, "KeyboardController");

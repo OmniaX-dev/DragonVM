@@ -62,6 +62,20 @@ interrupt sub __int_20_handler() {
 			signals->set(dr::SystemSignals.Reboot);
 		}
 	}
+	else if (code == INT20_RANDOM)		// RV = a random i32 in 0..INT_MAX
+	{
+		var value: u32 = *cast<u32*>(dr::RandomRegisters.Int);
+		low { mov RV, $value }
+	}
+	else if (code == INT20_SEED_RANDOM)	// seed = R9
+	{
+		*cast<u32*>(dr::RandomRegisters.Seed) = param1;
+	}
+	else if (code == INT20_RANDOM_FLOAT)	// RV = the bits of a random f32 in [0, 1)
+	{
+		var value: u32 = *cast<u32*>(dr::RandomRegisters.Float);
+		low { mov RV, $value }
+	}
 	else
 	{
 		// TODO: Eventually this should probably raise some kind of error/warning

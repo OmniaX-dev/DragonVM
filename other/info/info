@@ -85,7 +85,14 @@
         cycles / clock_rate_sec, so runs and the debugger's history are reproducible)
     0x0100069F
     -------
-    0x010006A0 (unused, was the MBR)
+    0x010006A0 RANDOM (16 Bytes) (random numbers from the host's generator, seeded from the host clock at start)
+        0x00: Int: reading a word gives a new random i32 in 0..INT_MAX (4 bytes)
+        0x04: Float: reading a word gives a new random f32 in [0, 1), its bits (4 bytes)
+        0x08: Seed: the last seed; writing a word seeds the generator (4 bytes)
+        (a byte read gives a byte of the last value, without a new one; other writes are errors)
+    0x010006AF
+    -------
+    0x010006B0 (unused, was the MBR)
     0x0100087F
     -------
     0x01000880 DISK INTERFACE (128 Bytes)
@@ -190,6 +197,9 @@
         0x12: Disk Interface - Load from DDD - BLOCKING
         0x20: Allocate heap (Uses R9 for size, R8 for the out address to store the heap block addr)
         0x21: Free heap (Uses R9 for heap block addr, stores 1 or 0 as result in RV)
+        0x22: Random integer (stores a random i32 in 0..INT_MAX in RV)
+        0x23: Seed the random generator (Uses R9 for the seed)
+        0x24: Random float (stores the bits of a random f32 in [0, 1) in RV)
     0x30: BIOS Video Interrupt (Uses R10 register for specific functionality)
         0x01: Print Char in Text Single Mode (char stored in R9 register)
         0x02: New Line in Text Single Mode

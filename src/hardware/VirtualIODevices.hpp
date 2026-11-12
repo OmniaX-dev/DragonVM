@@ -5,6 +5,7 @@
 #include "../tools/LegacyOstdSerial.hpp"
 #include <fstream>
 #include <chrono>
+#include <ostd/math/Random.hpp>
 #include <unordered_map>
 
 namespace dragon
@@ -296,6 +297,38 @@ namespace dragon
 				eTimeSource m_source { eTimeSource::WallClock };
 				u64 m_clockRate { 1 };
 				std::chrono::steady_clock::time_point m_wallStart { std::chrono::steady_clock::now() };
+		};
+
+		// Random numbers from the host's generator. Reading Int (a word) gives a new number in
+		// 0..INT_MAX, reading Float a new f32 in [0, 1) (its bits); a byte read gives a byte of the
+		// last one. Writing a word to Seed seeds the generator: the numbers that follow are then
+		// always the same. Seeded from the host clock at start.
+		class VirtualRandom : public IMemoryDevice
+		{
+			public: struct tRegisters
+			{
+				inline static constexpr u32 Int = 0x00;		// 4 bytes
+				inline static constexpr u32 Float = 0x04;	// 4 bytes
+				inline static constexpr u32 Seed = 0x08;	// 4 bytes
+			};
+
+			public:
+				void init(void);
+				void seed(u32 seed);
+				// From the host clock.
+				void autoSeed(void);
+				i32 nextInt(void);
+				f32 nextFloat(void);
+
+				i8 read8(u32 addr) override;
+				i32 read32(u32 addr) override;
+				i8 write8(u32 addr, i8 value) override;
+				i32 write32(u32 addr, i32 value) override;
+				ostd::ByteStream* getByteStream(void) override;
+
+			private:
+				ostd::ByteStream m_data;
+				ostd::RandomGenerator m_rng { false };
 		};
 
 		class VirtualMouse : public IMemoryDevice

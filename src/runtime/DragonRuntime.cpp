@@ -195,6 +195,17 @@ namespace dragon
 		memMap.mapDevice(vTimer, dragon::data::MemoryMapAddresses::Timer_Start, dragon::data::MemoryMapAddresses::Timer_End, true, "Timer");
 		if (info.verboseLoad)
 		{
+			out.fg(ostd::ConsoleColors::Magenta).p("    vRandom: ");
+			out.fg(ostd::ConsoleColors::BrightYellow);
+			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::Random_Start, true, 4).cpp_str());
+			out.p(" to ");
+			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::Random_End, true, 4).cpp_str());
+			out.p(" (remap=true)").nl();
+		}
+		vRandom.init();
+		memMap.mapDevice(vRandom, dragon::data::MemoryMapAddresses::Random_Start, dragon::data::MemoryMapAddresses::Random_End, true, "Random");
+		if (info.verboseLoad)
+		{
 			out.fg(ostd::ConsoleColors::Magenta).p("    vDiskInterface: ");
 			out.fg(ostd::ConsoleColors::BrightYellow);
 			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::DiskInterface_Start, true, 4).cpp_str());
@@ -308,6 +319,7 @@ namespace dragon
 		vGraphicsInterface.reset();
 		vKeyboard.resetState();
 		vTimer.reset();
+		vRandom.autoSeed();
 		vDiskInterface.reset();
 		vCMOS.write16(data::CMOSRegisters::SystemSignals, 0);
 		s_resetCount++;

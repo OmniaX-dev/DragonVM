@@ -69,6 +69,9 @@ namespace dragon
 				inline static constexpr u64 Timer_InvalidAddress                 =             0x9000000000000000;
 				inline static constexpr u64 Timer_WriteAttempt                   =             0x9000000000000001;
 
+				inline static constexpr u64 Random_InvalidAddress                =             0xA000000000000000;
+				inline static constexpr u64 Random_WriteAttempt                  =             0xA000000000000001;
+
 		};
 
 		class ErrorHandler
@@ -119,7 +122,11 @@ namespace dragon
 				inline static constexpr u32 Timer_Start = 0x01000680;
 				inline static constexpr u32 Timer_End   = 0x0100069F;
 
-				// 0x010006A0 - 0x0100087F: unused (the old MBR zone; the BIOS now loads the boot
+				// Random numbers from the host (see hw::VirtualRandom): reading Int / Float makes a new one.
+				inline static constexpr u32 Random_Start = 0x010006A0;
+				inline static constexpr u32 Random_End   = 0x010006AF;
+
+				// 0x010006B0 - 0x0100087F: unused (the old MBR zone; the BIOS now loads the boot
 				// area of the disk at Memory_Start, see DPTStructure::BootAreaSize).
 
 				inline static constexpr u32 DiskInterface_Start = 0x01000880;
