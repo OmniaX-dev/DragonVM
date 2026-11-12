@@ -1,26 +1,6 @@
 #include(hardware.ds)
 
 namespace dr {
-	// Milliseconds since the machine started (the timer device). Wraps after about 49.7 days:
-	// measure intervals as millis() - start, which stays right across the wrap.
-	inline sub millis() -> u32 {
-		return *cast<u32*>(TimerRegisters.Milliseconds);
-	}
-
-	// The low 32 bits of the cycles executed since the machine started (for short measurements:
-	// cycles() - start is right up to 2^32 cycles).
-	inline sub cycles() -> u32 {
-		return *cast<u32*>(TimerRegisters.CyclesLow);
-	}
-
-	// Waits ms milliseconds, by the timer: right at any clock speed (also uncapped). Interrupts
-	// keep running meanwhile (their handlers' time counts as part of the wait).
-	sub sleep(var ms: i32) {
-		if (ms <= 0)
-			return;
-		var start: u32 = millis();
-		while (millis() - start < cast<u32>(ms));
-	}
 
 	// value as text, with `decimals` digits after the point (0..9, rounded): -12.500000. From
 	// 1e9 on, in scientific notation: 1.234568e+12. Also "inf", "-inf", "nan" (and -0.000000).

@@ -1,9 +1,184 @@
 #import(<dragon-sdk>)
 
+#define(KEY_BUFF_SIZE = 128)
+
+var keyBuff: u32[KEY_BUFF_SIZE];
+var keyRingBuff: dr::RingBuffer;
+var pressedKey: u32 = 0;
+
 sub main() {
 	dr::vga_set_video_mode(dr::VGAVideoModes.Text16Color);
 	dr::vga_enable_double_buffering(false);
+	dr::set_interrupt_vector_entry(dr::HardwareInterrupts.KeyPressed, &key_pressed_handler);
 	dr::Text16.clear_screen(dr::DefaultPaletteText16.Black);
 	dr::Text16.print("Hello DragonOS :)", 0, 0, dr::DefaultPaletteText16.Blue, dr::DefaultPaletteText16.Black);
-	while(true);
+
+	keyRingBuff.init(keyBuff, sizeof(u32), KEY_BUFF_SIZE);
+	var console: dr::Text16Console();
+	var game: SnakeGame(&console);
+	game.mainLoop();
 }
+
+interrupt sub key_pressed_handler() {
+	pressedKey = *cast<u32*>(dr::KeyboardRegisters.KeyCode);
+	if (not keyRingBuff.push(&pressedKey))
+	{
+		//TODO: Handle missed key presses
+	}
+}
+
+struct SnakeGame {
+	priv enum Cell: u8 { Empty = 0, Snake, Food };
+
+	priv var m_console: dr::Text16Console* = null;
+	priv var m_board: u8* = null;
+	priv var m_body: i32* = null;
+	priv var m_board_w: u16 = 0;
+	priv var m_board_h: u16 = 0;
+	priv var m_capacity: u16 = 0;
+	priv var m_head_index: i32 = 0;
+	priv var m_tail_index: i32 = 0;
+	priv var m_growth: i32 = 0;
+	priv var m_direction_x: i32 = 1;
+	priv var m_direction_y: i32 = 0;
+	priv var m_valid: bool = false;
+	priv var m_tick_delay: u32 = 250;
+	priv var m_level: u32 = 1;
+	priv var m_level_length: u32 = 20;
+	priv var m_lastTime: u32 = 0;
+
+	sub new(var console: dr::Text16Console*) {
+		if (not console) return;
+		this->m_console = console;
+		this->m_board_w = console->get_console_width() - 1;
+		this->m_board_h = console->get_console_height() - 3;
+		this->m_capacity = this->m_board_w * this->m_board_h;
+		this->m_board = dr::malloc(this->m_capacity);
+		if (not this->m_board) return;
+		this->m_body = dr::malloc(this->m_capacity * sizeof(i32));
+		if (not this->m_body) return;
+
+		this->m_head_index = 0;
+	    this->m_tail_index = 0;
+	    this->m_body[0] = (this->m_board_h / 2) * this->m_board_w + this->m_board_w / 2;
+	    this->m_board[this->m_body[0]] = Cell.Snake;
+	    this->draw_cell(this->m_body[0], '@');
+	    this->m_growth = 3;
+	    this->place_food();
+
+		this->m_valid = true;
+	}
+	sub mainLoop() {
+        while(true) {
+        	if (dr::time::millis() - this->m_lastTime < this->m_tick_delay)
+         		continue;
+           	this->m_lastTime = dr::time::millis();
+	       	if (!this->read_input())
+	            break;
+			this->m_console->clear(dr::DefaultPaletteText16.Black)->xy(1, 3);
+	        if (!this->game_tick())
+	            break;
+			this->m_console->present();
+        }
+        while(true); //TODO: Temporary
+	}
+
+	inline priv sub next_slot(var index: i32) -> i32 {
+		index++;
+		if (index == this->m_capacity)
+			index = 0;
+		return index;
+	}
+	inline priv sub prev_slot(var index: i32) -> i32 {
+		if (index == 0)
+	        return this->m_capacity - 1;
+	    return index - 1;
+	}
+	inline priv sub snake_len() -> i32 {
+		var distance: i32 = this->m_head_index - this->m_tail_index;
+	    if (distance < 0)              // head has wrapped around past the end
+	        distance += this->m_capacity;
+	    return distance + 1;
+	}
+	priv sub draw_cell(var pos: i32, var symbol: u8) {
+		var column: i32 = pos % this->m_board_w;
+	    var row: i32    = pos / this->m_board_w;
+		this->m_console->xy(column + 1, row + 1)->print(symbol);
+	}
+	priv sub draw_border() {
+
+	}
+	priv sub place_food() {
+		var position: i32 = 0;
+	    do {
+	        position = dr::random::next() % this->m_capacity;
+	    } while (this->m_board[position] != Cell.Empty);
+
+	    this->m_board[position] = Cell.Food;
+	    this->draw_cell(position, '*');
+	}
+	priv sub game_tick() -> i32 {
+		// if (this->snake_len() % this->m_level_length == 0)
+		// 	this->m_timer.setInterval(this->m_tick_delay * this->m_level++);
+		var head_position: i32 = this->m_body[this->m_head_index];
+	    var new_column: i32 = head_position % this->m_board_w + this->m_direction_x;
+	    var new_row: i32    = head_position / this->m_board_w + this->m_direction_y;
+	    if (new_column < 0 || new_column >= this->m_board_w || new_row < 0 || new_row >= this->m_board_h)
+	        return 0;
+	    var new_head_position: i32 = new_row * this->m_board_w + new_column;
+	    if (this->m_growth == 0) {
+	        var tail_position: i32 = this->m_body[this->m_tail_index];
+	        this->m_board[tail_position] = Cell.Empty;
+	        this->draw_cell(tail_position, ' ');
+	        this->m_tail_index = this->next_slot(this->m_tail_index);
+	    }
+		else
+		{
+	        this->m_growth--;
+	    }
+	    if (this->m_board[new_head_position] == Cell.Snake)
+	        return 0;
+	    var ate_food: i32 = (this->m_board[new_head_position] == Cell.Food);
+	    this->m_head_index = this->next_slot(this->m_head_index);
+	    this->m_body[this->m_head_index] = new_head_position;
+	    this->m_board[new_head_position] = Cell.Snake;
+	    this->draw_cell(new_head_position, '@');
+	    if (this->snake_len() > 1)
+	        this->draw_cell(this->m_body[this->prev_slot(this->m_head_index)], 'o');
+	    if (ate_food)
+		{
+	        this->m_growth += 1;
+	        this->place_food();
+	    }
+	    return 1;
+	}
+	priv sub read_input() -> i32 {
+		var chosen_x: i32 = this->m_direction_x;
+	    var chosen_y: i32 = this->m_direction_y;
+
+		var key: u32 = 0;
+	    while (keyRingBuff.pop(&key)) {
+	        var key_x: i32 = 0;
+			var key_y: i32 = 0;
+			if (key == dr::KeyCodes.UpArrow)
+				key_y = -1;
+			else if (key == dr::KeyCodes.DownArrow)
+				key_y = 1;
+			else if (key == dr::KeyCodes.LeftArrow)
+				key_x = -1;
+			else if (key == dr::KeyCodes.RightArrow)
+				key_x = 1;
+			else if (key == dr::KeyCodes.LowerCase_q or key == dr::KeyCodes.UpperCase_Q)
+				return 0;
+			else continue;
+	        var is_reversal: i32 = (key_x == -this->m_direction_x && key_y == -this->m_direction_y);
+	        if (!is_reversal) {
+	            chosen_x = key_x;
+	            chosen_y = key_y;
+	        }
+	    }
+	    this->m_direction_x = chosen_x;
+	    this->m_direction_y = chosen_y;
+	    return 1;
+	}
+};

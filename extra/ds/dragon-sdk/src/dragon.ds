@@ -7,6 +7,8 @@
 #include(dpt.ds)
 
 namespace dr {
+	const INT_MAX: i32 = 2147483647;
+
 	struct BitField32 {
 		priv var m_value: u32 = 0;
 

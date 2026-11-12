@@ -19,7 +19,7 @@ sub main() {
 	__print_machine_info(stack_size + heap_size);
 	__load_mbr_data_block();
 
-	dr::sleep(2000); //This is just for show
+	dr::time::sleep(2000); //This is just for show
 
 	low {
 		%low $INST_BIOS_NODE_TOGGLE 0x00
