@@ -52,46 +52,6 @@ struct SnakeGame {
 	priv var m_offset_x: u16 = 1;
 	priv var m_offset_y: u16 = 2;
 	priv var m_horizontalLine: u8* = null;
-	priv var m_palette: Palette;
-
-	priv struct Color { var r: u8 = 0; var g: u8 = 0; var b: u8 = 0; sub new() {} sub new(var r: u8, var g: u8, var b: u8) { this->r = r; this->g = g; this->b = b; } }
-	priv struct Palette {
-		readonly var Black: Color;
-		readonly var Gray: Color;
-		readonly var White: Color;
-		readonly var Red: Color;
-		readonly var Pink: Color;
-		readonly var Brown: Color;
-		readonly var DarkOrange: Color;
-		readonly var Orange: Color;
-		readonly var Yellow: Color;
-		readonly var DarkGreen: Color;
-		readonly var Green: Color;
-		readonly var Lime: Color;
-		readonly var DarkBlue: Color;
-		readonly var Blue: Color;
-		readonly var LightBlue: Color;
-		readonly var Sky: Color;
-
-		sub new() {
-			this->Black.new(0, 0, 0);
-			this->Gray.new(157, 157, 157);
-			this->White.new(255, 255, 255);
-			this->Red.new(190, 38, 51);
-			this->Pink.new(224, 111, 139);
-			this->Brown.new(73, 60, 43);
-			this->DarkOrange.new(164, 100, 34);
-			this->Orange.new(235, 137, 49);
-			this->Yellow.new(247, 226, 107);
-			this->DarkGreen.new(47, 80, 42);
-			this->Green.new(68, 137, 26);
-			this->Lime.new(163, 206, 39);
-			this->DarkBlue.new(27, 38, 50);
-			this->Blue.new(0, 87, 132);
-			this->LightBlue.new(49, 162, 242);
-			this->Sky.new(178, 220, 239);
-		}
-	}
 
 	sub new(var console: dr::Text16Console*, var bgcol: u8) {
 		if (not console) return;
@@ -121,11 +81,6 @@ struct SnakeGame {
 		this->draw_cell(this->m_body[0], dr::ASCII.FullBlock, dr::DefaultPaletteText16.Yellow);
 		this->m_growth = 3;
 		this->place_food();
-
-		this->m_palette.new();
-		var vga_device = dr::vga_get_device();
-		vga_device->text16ColorCustomPaletteAddr = cast<u32>(&this->m_palette);
-		vga_device->signal = dr::VGAText16ColorSignals.SetCustomPalette;
 
 		this->m_valid = true;
 	}

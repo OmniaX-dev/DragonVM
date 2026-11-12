@@ -171,6 +171,7 @@ namespace dragon
 		{
 			public:
 				static void colorizeInstructionBody(ostd::OutputHandlerBase& out, const String& instBody, const DisassemblyList& labelList);
+				static const std::unordered_map<std::string, u32>& label_addresses(const DisassemblyList& labelList);
 				static void colorCodeInstructions(ostd::OutputHandlerBase& out, const String& inst, const DisassemblyList& labelList);
 				// `indent`: the columns before the address (-1: the gutter and LabelIndent).
 				// `labels`: the program's own (nullptr: every program's).

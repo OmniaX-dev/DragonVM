@@ -4,10 +4,38 @@
 #include <ostd/string/String.hpp>
 #include <ostd/string/TextStyleParser.hpp>
 #include <set>
+#include <unordered_map>
 
 namespace dragon
 {
 	//Debugger::Display
+	// The labels' names -> addresses (the first label of each name), for the last label list
+	// asked for: the disassembly view builds a whole program's lines with the same list.
+	const std::unordered_map<std::string, u32>& Debugger::Display::label_addresses(const DisassemblyList& labelList)
+	{
+		static const code::Assembler::tDisassemblyLine* s_data = nullptr;
+		static size_t s_size = 0;
+		static i64 s_firstAddr = -1, s_lastAddr = -1;
+		static std::unordered_map<std::string, u32> s_map;
+		const i64 firstAddr = labelList.empty() ? -1 : labelList.front().addr;
+		const i64 lastAddr = labelList.empty() ? -1 : labelList.back().addr;
+		if (labelList.data() == s_data && labelList.size() == s_size && firstAddr == s_firstAddr && lastAddr == s_lastAddr)
+			return s_map;
+		s_map.clear();
+		s_map.reserve(labelList.size());
+		for (const auto& label : labelList)
+		{
+			const String name = label.code.new_trim();
+			if (name != "")
+				s_map.emplace(name.cpp_str(), cast<u32>(label.addr));	// keeps the first one
+		}
+		s_data = labelList.data();
+		s_size = labelList.size();
+		s_firstAddr = firstAddr;
+		s_lastAddr = lastAddr;
+		return s_map;
+	}
+
 	void Debugger::Display::colorizeInstructionBody(ostd::OutputHandlerBase& out, const String& instBody, const DisassemblyList& labelList)
 	{
 		ostd::RegexRichString rgxrstr(instBody);
@@ -16,27 +44,36 @@ namespace dragon
 		rgxrstr.fg("(?<!\\w)(r(?:1[0-9]|20|[1-9])[lh]?|fl|pp|rv|fp|sp|ip|acc)(?!\\w)", "BrightGreen", true); //Registers
 		rgxrstr.fg("\\%low", "Magenta");
 		rgxrstr.col("\\$\\w+", "Cyan", "Black"); //Labels
-		// Each label used gets its address after it: whole names only ($__L1 is not in $__L164),
-		// and once (the list can have several programs' labels with the same name: the first one).
-		String instEdit = rgxrstr.getRawString();
-		std::set<std::string> done;
-		for (auto& label : labelList)
+		// Each label used gets its address after it: whole names only ($__L1 is not in $__L164).
+		// The instruction's names (runs of label characters) are looked up in a map of the
+		// labels, made once per label list: the list can have several programs' labels with the
+		// same name, the first one wins. (Searching the text for every label, for every line,
+		// made building the disassembly view take seconds per thousand labels.)
+		const std::unordered_map<std::string, u32>& addresses = label_addresses(labelList);
+		const std::string raw = rgxrstr.getRawString().cpp_str();
+		std::string instEdit;
+		instEdit.reserve(raw.size() + 64);
+		size_t i = 0;
+		while (i < raw.size())
 		{
-			String labelEdit = label.code;
-			labelEdit.trim();
-			if (labelEdit == "" || !done.insert(labelEdit.cpp_str()).second)
-				continue;
-			i32 index = -1;
-			while ((index = instEdit.indexOf(labelEdit, index + 1)) != -1)
+			// A name: label characters, with the '$' before them (the labels are stored with it).
+			const bool dollar = (raw[i] == '$' && i + 1 < raw.size() && Utils::isValidLabelNameChar(raw[i + 1]));
+			if (!dollar && !Utils::isValidLabelNameChar(raw[i]))
 			{
-				if (index + labelEdit.len() < instEdit.len() && Utils::isValidLabelNameChar(instEdit.at(index + labelEdit.len())))
-					continue;
-				if (index > 0 && Utils::isValidLabelNameChar(instEdit.at(index - 1)))
-					continue;
-				const std::string inserted = labelEdit.cpp_str() + "[@@ style foreground:brightgray](" + String::getHexStr(label.addr, true, 4).cpp_str() + ")[@@/]";
-				instEdit.cpp_str_ref().replace(index, labelEdit.len(), inserted);
-				index += cast<i32>(inserted.size()) - 1;
+				instEdit += raw[i++];
+				continue;
 			}
+			size_t end = i + (dollar ? 1 : 0);
+			while (end < raw.size() && Utils::isValidLabelNameChar(raw[end]))
+				end++;
+			const std::string name = raw.substr(i, end - i);
+			instEdit += name;
+			auto it = addresses.find(name);
+			if (it == addresses.end() && dollar)
+				it = addresses.find(name.substr(1));
+			if (it != addresses.end())
+				instEdit += "[@@ style foreground:brightgray](" + String::getHexStr(it->second, true, 4).cpp_str() + ")[@@/]";
+			i = end;
 		}
 		rgxrstr.setRawString(instEdit);
 		out.p("\t").pStyled(rgxrstr);
