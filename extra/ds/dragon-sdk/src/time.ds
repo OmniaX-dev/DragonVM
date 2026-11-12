@@ -1,0 +1,74 @@
+#include(dragon.ds)
+
+namespace dr::time {
+	// Milliseconds since the machine started (the timer device). Wraps after about 49.7 days:
+	// measure intervals as millis() - start, which stays right across the wrap.
+	inline sub millis() -> u32 {
+		return *cast<u32*>(TimerRegisters.Milliseconds);
+	}
+
+	// The low 32 bits of the cycles executed since the machine started (for short measurements:
+	// cycles() - start is right up to 2^32 cycles).
+	inline sub cycles() -> u32 {
+		return *cast<u32*>(TimerRegisters.CyclesLow);
+	}
+
+	// Waits ms milliseconds, by the timer: right at any clock speed (also uncapped). Interrupts
+	// keep running meanwhile (their handlers' time counts as part of the wait).
+	sub sleep(var ms: i32) {
+		if (ms <= 0)
+			return;
+		var start: u32 = millis();
+		while (millis() - start < cast<u32>(ms));
+	}
+
+	struct Timer {
+		priv var m_interval_ms: u32 = 0;
+		priv var m_callback: sub(void*) = null;
+		priv var m_context: void* = null;
+		priv var m_running: bool = false;
+		priv var m_lastTime: u32 = 0;
+
+		sub new(var interval_ms: u32, var callback: sub(void*), var context: void* = null, var start: bool = false) {
+			if (not callback) return;
+			this->m_interval_ms = interval_ms;
+			this->m_callback = callback;
+			this->m_context = context;
+			this->m_running = start;
+		}
+
+		inline sub isValid() -> bool {
+			return this->m_callback != null;
+		}
+		inline sub start() {
+			if (not this->isValid()) return;
+			this->m_lastTime = millis();
+			this->m_running = true;
+		}
+		inline sub stop() {
+			if (not this->isValid()) return;
+			this->m_running = false;
+		}
+		inline sub isRunning() -> bool {
+			if (not this->isValid()) return false;
+			return this->m_running;
+		}
+		inline sub setInterval(var interval_ms: u32) {
+			if (not this->isValid()) return;
+			this->m_interval_ms = interval_ms;
+			if (this->isRunning())
+				this->start();
+		}
+		inline sub getInterval() -> u32 {
+			return this->m_interval_ms;
+		}
+		sub update() {
+			if (not this->isRunning()) return;
+			if (millis() - this->m_lastTime >= this->m_interval_ms)
+			{
+				this->m_callback(this->m_context);
+				this->m_lastTime = millis();
+			}
+		}
+	};
+}
