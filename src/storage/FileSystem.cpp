@@ -1,4 +1,5 @@
 #include "FileSystem.hpp"
+#include "DFS.hpp"
 
 namespace dragon
 {
@@ -6,7 +7,11 @@ namespace dragon
 	{
 		stdvec<std::unique_ptr<FileSystem>>& FileSystems::fileSystems(void)
 		{
-			static stdvec<std::unique_ptr<FileSystem>> s_fileSystems;
+			static stdvec<std::unique_ptr<FileSystem>> s_fileSystems = [](void) {
+				stdvec<std::unique_ptr<FileSystem>> list;
+				list.push_back(std::make_unique<DFS>());
+				return list;
+			}();
 			return s_fileSystems;
 		}
 

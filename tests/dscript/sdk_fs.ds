@@ -1,0 +1,147 @@
+// The SDK's high level file API (dr::fs) on a RAM disk: mounting, whole files, open files
+// (modes, seek, append, read_line), directories (make_dirs, listing, remove_all), copy, rename,
+// links, errors, and closing on unmount. Needs the BIOS (the heap).
+// drun-flags: --boot
+// expect-rv: 0
+#include(check.ds)
+#import(<dragon-sdk>)
+
+const DiskSize: u32 = 192 * 1024;
+var g_disk: u8* = null;
+
+sub ram_read(var user: void*, var offset: u32, var buffer: u8*, var size: u32) -> i32 {
+	if (offset > DiskSize or size > DiskSize - offset) return dr::dfs::IOError;
+	dr::dfs::mem_copy(buffer, g_disk + offset, size);
+	return 0;
+}
+
+sub ram_write(var user: void*, var offset: u32, var buffer: u8*, var size: u32) -> i32 {
+	if (offset > DiskSize or size > DiskSize - offset) return dr::dfs::IOError;
+	dr::dfs::mem_copy(g_disk + offset, buffer, size);
+	return 0;
+}
+
+sub count_visitor(var entry: dr::fs::Entry*, var context: void*) -> bool {
+	var n: u32* = cast<u32*>(context);
+	*n = *n + entry->size;
+	return true;
+}
+
+sub main() -> i32 {
+	g_disk = cast<u8*>(dr::malloc(DiskSize));
+	check(1, g_disk != null);
+	if (g_disk == null) return result();
+	var dev: dr::dfs::Device;
+	dev.user = null;
+	dev.read = ram_read;
+	dev.write = ram_write;
+	dev.now = null;
+
+	var disk: dr::fs::FileSystem;
+	check(2, not disk.is_mounted() and not disk.make_dir("/x") and disk.last_error() == dr::fs::NotMounted);
+	check(3, disk.format_device(&dev, DiskSize, "fstest", 1024));
+	check(4, not disk.format_device(&dev, DiskSize, null, 1000) and disk.last_error() == dr::dfs::Invalid);
+	check(5, disk.mount_device(&dev) and disk.is_mounted() and not disk.is_read_only());
+	check(6, not disk.mount_device(&dev) and disk.last_error() == dr::fs::AlreadyMounted);
+	var label: u8[17];
+	check(7, disk.label(label, 17) and dr::strcmp(label, "fstest") == 0 and disk.block_size() == 1024);
+	var free0: u32 = disk.free_bytes();
+	check(8, disk.total_bytes() == DiskSize and free0 > 0 and free0 < DiskSize);
+
+	// Whole files.
+	check(10, disk.write_text("/hello.txt", "Hello\nDragon\r\nlast"));
+	check(11, disk.is_file("/hello.txt") and not disk.is_dir("/hello.txt") and disk.size_of("/hello.txt") == 18);
+	check(12, disk.type_of("/nope") == dr::fs::Type.None and disk.last_error() == dr::dfs::NotFound);
+	check(13, disk.error_text() == dr::fs::error_name(dr::dfs::NotFound));
+	var size: u32 = 0;
+	var text: u8* = disk.load("/hello.txt", &size);
+	check(14, text != null and size == 18 and text[18] == 0 and text[0] == 'H' and text[17] == 't');
+	dr::free(text);
+	check(15, disk.load("/nope") == null and disk.last_error() == dr::dfs::NotFound);
+	check(16, disk.append_text("/hello.txt", "!!") and disk.size_of("/hello.txt") == 20);
+	var buffer: u8[64];
+	check(17, disk.read_all("/hello.txt", buffer, 5) == 5 and buffer[4] == 'o');
+	check(18, disk.read_all("/nope", buffer, 5) == -1);
+
+	// Lines.
+	var file: dr::fs::File;
+	check(20, disk.open("/hello.txt", dr::fs::OpenMode.Read, &file));
+	check(21, file.read_line(buffer, 64) == 5 and dr::strcmp(buffer, "Hello") == 0);
+	check(22, file.read_line(buffer, 64) == 6 and dr::strcmp(buffer, "Dragon") == 0);
+	check(23, file.read_line(buffer, 64) == 6 and dr::strcmp(buffer, "last!!") == 0);
+	check(24, file.read_line(buffer, 64) == -1 and file.eof() and file.last_error() == 0);
+	check(25, file.write("x", 1) == -1 and file.last_error() == dr::fs::NotWritable);
+	file.close();
+	check(26, not file.is_open() and file.read(buffer, 1) == -1 and file.last_error() == dr::fs::NotOpen);
+
+	// Modes, seek, write in the middle, past the end, resize.
+	check(30, not disk.open("/new.bin", dr::fs::OpenMode.Read, &file) and disk.last_error() == dr::dfs::NotFound);
+	check(31, not disk.open("/new.bin", dr::fs::OpenMode.Create, &file) and disk.last_error() == dr::fs::BadMode);
+	check(32, disk.open("/new.bin", dr::fs::OpenMode.NewFile | dr::fs::OpenMode.Read, &file));
+	check(33, file.write_text("0123456789") == 10 and file.tell() == 10 and file.size() == 10);
+	check(34, file.seek(-4, dr::fs::SeekFrom.End) and file.write("ab", 2) == 2 and file.tell() == 8);
+	check(35, file.seek(2) and file.read(buffer, 64) == 8 and buffer[0] == '2' and buffer[4] == 'a' and buffer[7] == '9');
+	check(36, not file.seek(-1) and file.last_error() == dr::dfs::Invalid);
+	check(37, file.seek(5000) and file.write("z", 1) == 1 and file.size() == 5001);
+	check(38, file.seek(3000) and file.read(buffer, 4) == 4 and buffer[0] == 0 and buffer[3] == 0);
+	check(39, file.resize(4) and file.size() == 4 and file.tell() == 3004 and file.read(buffer, 4) == 0);
+	file.close();
+	check(40, not disk.open("/new.bin", dr::fs::OpenMode.NewFile | dr::fs::OpenMode.Exclusive, &file) and disk.last_error() == dr::dfs::Exists);
+	check(41, disk.open("/log.txt", dr::fs::OpenMode.AppendFile, &file));
+	var other: dr::fs::File;
+	check(42, disk.open("/log.txt", dr::fs::OpenMode.AppendFile, &other));
+	check(43, file.write_text("one ") == 4 and other.write_text("two ") == 4 and file.write_text("three") == 5);
+	file.close();
+	other.close();
+	check(44, disk.read_all("/log.txt", buffer, 64) == 13 and buffer[4] == 't' and buffer[8] == 't' and buffer[12] == 'e');
+	check(45, not disk.open("/", dr::fs::OpenMode.Read, &file) and disk.last_error() == dr::dfs::IsDir);
+
+	// Directories.
+	check(50, disk.make_dirs("/a/b/c/") and disk.is_dir("/a/b/c"));
+	check(51, disk.make_dirs("/a/b") and not disk.make_dir("/a") and disk.last_error() == dr::dfs::Exists);
+	check(52, not disk.make_dirs("/hello.txt/sub") and disk.last_error() == dr::dfs::NotDir);
+	check(53, disk.write_text("/a/b/c/deep.txt", "deep") and disk.copy("/new.bin", "/a/b/copy.bin"));
+	check(54, disk.size_of("/a/b/copy.bin") == 4 and disk.copy("/a/b/copy.bin", "/a/b/copy.bin"));
+	var dir: dr::fs::Dir;
+	var entry: dr::fs::Entry;
+	check(55, disk.open_dir("/a/b", &dir));
+	var seen: u32 = 0;
+	while (dir.next(&entry)) {
+		if (dr::strcmp(entry.name, "c") == 0 and entry.type == dr::fs::Type.Directory) seen = seen | 1;
+		if (dr::strcmp(entry.name, "copy.bin") == 0 and entry.type == dr::fs::Type.File and entry.size == 4) seen = seen | 2;
+		if (entry.name[0] == '.') seen = seen | 4;
+	}
+	check(56, seen == 3 and dir.last_error() == 0);
+	dir.rewind();
+	check(57, dir.next(&entry));
+	dir.close();
+	var total: u32 = 0;
+	check(58, disk.list("/", count_visitor, &total) == 4 and total == 18 + 2 + 4 + 13 + 1024);	// hello, new, log, a (1 block)
+	check(59, not disk.open_dir("/hello.txt", &dir) and disk.last_error() == dr::dfs::NotDir);
+
+	// Names: rename, link, remove, remove_all, permissions.
+	check(60, disk.rename("/log.txt", "/a/log.txt") and not disk.exists("/log.txt"));
+	check(61, disk.link("/a/log.txt", "/log2.txt"));
+	var info: dr::fs::Info;
+	check(62, disk.info("/log2.txt", &info) and info.links == 2 and info.size == 13 and info.type == dr::fs::Type.File);
+	check(63, not disk.remove("/a") and disk.last_error() == dr::dfs::NotEmpty);
+	check(64, disk.set_permissions("/log2.txt", 0x180) and disk.set_owner("/log2.txt", 5, 6));
+	check(65, disk.info("/a/log.txt", &info) and info.permissions == 0x180 and info.uid == 5 and info.gid == 6);
+	check(66, disk.remove_all("/a") and not disk.exists("/a") and disk.info("/log2.txt", &info) and info.links == 1);
+	check(67, disk.resize("/log2.txt", 3) and disk.size_of("/log2.txt") == 3);
+	check(68, disk.remove("/log2.txt") and disk.remove("/new.bin"));
+
+	// Unmounting closes the open files; the data stays.
+	check(70, disk.open("/hello.txt", dr::fs::OpenMode.Read, &file));
+	check(71, disk.unmount() and not disk.is_mounted());
+	check(72, file.read(buffer, 1) == -1 and file.last_error() == dr::fs::NotOpen);
+	check(73, disk.mount_device(&dev, true) and disk.is_read_only() and disk.size_of("/hello.txt") == 20);
+	check(74, file.read(buffer, 1) == -1);		// still the old mount's
+	check(75, not disk.write_text("/x", "x") and disk.last_error() == dr::dfs::ReadOnly);
+	check(76, not disk.open("/hello.txt", dr::fs::OpenMode.ReadWrite, &file) and disk.last_error() == dr::dfs::ReadOnly);
+	check(77, disk.unmount() and disk.mount_device(&dev));
+	check(78, disk.remove_all("/") and disk.list("/", count_visitor, &total) == 0 and disk.free_bytes() == free0);
+	check(79, disk.unmount() and disk.unmount());
+	dr::free(g_disk);
+	return result();
+}

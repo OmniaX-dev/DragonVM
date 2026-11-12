@@ -1,0 +1,145 @@
+// The SDK's DFS (dr::dfs) on a RAM disk: mkfs, files across the indirect pointers, directories,
+// links, rename, truncate, remount, read only. The C++ side reads what it writes in
+// tests/dfs/vm_test.sh (on a real disk).
+// expect-rv: 0
+#include(check.ds)
+#import(<dragon-sdk>)
+
+const DiskSize: u32 = 256 * 1024;
+var g_disk: u8* = cast<u8*>(0x01800000);				// the RAM disk (free memory: no BIOS here)
+var g_vol: dr::dfs::Volume* = cast<dr::dfs::Volume*>(0x01880000);
+var g_data: u8* = cast<u8*>(0x01890000);				// a file's content (and its copy)
+var g_back: u8* = cast<u8*>(0x018A0000);
+
+var g_reads: u32 = 0;		// device reads (the pointer cache)
+
+sub ram_read(var user: void*, var offset: u32, var buffer: u8*, var size: u32) -> i32 {
+	g_reads++;
+	if (offset > DiskSize or size > DiskSize - offset) return dr::dfs::IOError;
+	dr::dfs::mem_copy(buffer, g_disk + offset, size);
+	return 0;
+}
+
+sub ram_write(var user: void*, var offset: u32, var buffer: u8*, var size: u32) -> i32 {
+	if (offset > DiskSize or size > DiskSize - offset) return dr::dfs::IOError;
+	dr::dfs::mem_copy(g_disk + offset, buffer, size);
+	return 0;
+}
+
+sub ram_now(var user: void*) -> u32 { return 1234; }
+
+sub fill(var seed: u32, var size: u32) {
+	for (var i: u32 = 0; i < size; i++)
+		g_data[i] = cast<u8>(i * 7 + seed + (i >> 8));
+}
+
+sub count_entries(var path: string) -> i32 {
+	var dir: dr::dfs::Inode;
+	if (dr::dfs::stat(g_vol, path, &dir) < 0) return -1;
+	var cursor: u32 = 0;
+	var entry: dr::dfs::DirEntry;
+	var n: i32 = 0;
+	while (dr::dfs::dir_next(g_vol, &dir, &cursor, &entry) == 0)
+		n++;
+	return n;
+}
+
+sub main() -> i32 {
+	check(1, sizeof(dr::dfs::Superblock) == 256 and sizeof(dr::dfs::Inode) == 128);
+
+	var dev: dr::dfs::Device;
+	dev.user = null;
+	dev.read = ram_read;
+	dev.write = ram_write;
+	dev.now = ram_now;
+	for (var i: u32 = 0; i < 32; i++)
+		g_disk[i] = 0xAB;										// a boot header: never written
+
+	// mkfs: 1 KiB blocks, 256 blocks, 64 inodes (4096 bytes per inode).
+	var params: dr::dfs::MkfsParams = { DiskSize, 10, 4096, "ramdisk", null };
+	check(2, dr::dfs::mkfs(g_vol, &dev, &params) == 0);
+	check(3, g_disk[0x20] == 'D' and g_disk[0x23] == '1' and g_disk[0x1F] == 0xAB && g_disk[0] == 0xAB);
+	check(4, dr::dfs::mount(g_vol, &dev, false) == 0);
+	var l: dr::dfs::Layout* = &g_vol->layout;
+	check(5, l->total_blocks == 256 and l->inode_count == 64 and l->inode_table_block == 3 and l->first_data_block == 11);
+	var free0: u32 = g_vol->sb.free_blocks;
+	check(6, free0 == 256 - 11 - 1 and g_vol->sb.free_inodes == 64 - 8);	// the root's block
+	check(7, g_vol->sb.state == dr::dfs::StateDirty and count_entries("/") == 2);
+
+	// A file over the direct blocks into the indirect one: 13 data blocks + 1 pointer block.
+	const Size: u32 = 13 * 1024 + 100;
+	fill(3, Size);
+	var ino: u32 = 0;
+	check(10, dr::dfs::create(g_vol, "/a.txt", 0x1A4, &ino) == 0 and ino == 8);
+	check(11, dr::dfs::write_file(g_vol, "/a.txt", g_data, Size) == cast<i32>(Size));
+	check(12, g_vol->sb.free_blocks == free0 - 15);
+	dr::dfs::mem_set(g_back, 0, Size + 16);
+	check(13, dr::dfs::read_file(g_vol, "/a.txt", g_back, Size + 16) == cast<i32>(Size));
+	check(14, dr::dfs::mem_equal(g_data, g_back, Size));
+	var node: dr::dfs::Inode;
+	check(15, dr::dfs::stat(g_vol, "/a.txt", &node) == 0 and node.size == Size and node.indirect != 0 and node.links == 1 and node.mtime == 1234);
+
+	// Writing in the middle, reading a part.
+	check(16, dr::dfs::inode_write(g_vol, ino, &node, 1000, "hello", 5) == 5);
+	var part: u8[8];
+	check(17, dr::dfs::inode_read(g_vol, &node, 999, part, 7) == 7 and part[1] == 'h' and part[5] == 'o' and part[0] == g_data[999]);
+
+	// Directories, paths, names.
+	check(20, dr::dfs::mkdir(g_vol, "/d", 0x1ED) == 0);
+	check(21, dr::dfs::mkdir(g_vol, "//d///e", 0x1ED) == 0);
+	check(22, dr::dfs::mkdir(g_vol, "/d", 0x1ED) == dr::dfs::Exists);
+	check(23, dr::dfs::create(g_vol, "/nope/x", 0x1A4) == dr::dfs::NotFound);
+	check(24, dr::dfs::create(g_vol, "/a.txt/x", 0x1A4) == dr::dfs::NotDir);
+	check(25, dr::dfs::create(g_vol, "/12345678901234567890123456789012345678901234567890123456", 0x1A4) == 0);
+	check(26, dr::dfs::create(g_vol, "/123456789012345678901234567890123456789012345678901234567", 0x1A4) == dr::dfs::NameTooLong);
+	check(27, count_entries("/") == 5 and count_entries("/d") == 3);
+	check(28, dr::dfs::stat(g_vol, "/", &node) == 0 and node.links == 3);	// . .. and /d's ..
+
+	// Links, rename, unlink, rmdir.
+	check(30, dr::dfs::link(g_vol, "/a.txt", "/d/e/b.txt") == 0);
+	check(31, dr::dfs::stat(g_vol, "/a.txt", &node) == 0 and node.links == 2);
+	check(32, dr::dfs::rmdir(g_vol, "/d") == dr::dfs::NotEmpty);
+	check(33, dr::dfs::unlink(g_vol, "/d") == dr::dfs::IsDir);
+	check(34, dr::dfs::rename(g_vol, "/d", "/d/e/f") == dr::dfs::Invalid);	// into itself
+	check(35, dr::dfs::rename(g_vol, "/d/e", "/e2") == 0);
+	var dotdot: u32 = 0;
+	check(36, dr::dfs::stat(g_vol, "/e2", &node) == 0 and dr::dfs::dir_lookup(g_vol, &node, "..", 2, &dotdot) == 0 and dotdot == 1);
+	check(37, dr::dfs::stat(g_vol, "/", &node) == 0 and node.links == 4);
+	check(38, dr::dfs::read_file(g_vol, "/e2/b.txt", g_back, 16) == 16 and g_back[0] == g_data[0]);
+	check(39, dr::dfs::unlink(g_vol, "/a.txt") == 0 and dr::dfs::stat(g_vol, "/e2/b.txt", &node) == 0 and node.links == 1);
+	check(40, dr::dfs::rmdir(g_vol, "/d") == 0 and dr::dfs::stat(g_vol, "/", &node) == 0 and node.links == 3);
+
+	// Truncate to the middle, then away: the blocks come back.
+	check(41, dr::dfs::stat(g_vol, "/e2/b.txt", &node, &ino) == 0);
+	check(42, dr::dfs::truncate(g_vol, ino, &node, 2000) == 0 and node.indirect == 0 and node.direct[2] == 0);
+	check(43, dr::dfs::inode_read(g_vol, &node, 0, g_back, 4000) == 2000 and dr::dfs::mem_equal(g_back, g_data, 1000));
+	check(44, dr::dfs::unlink(g_vol, "/e2/b.txt") == 0);
+	check(45, dr::dfs::chmod(g_vol, "/e2", 0x1C0) == 0 and dr::dfs::chown(g_vol, "/e2", 7, 9) == 0);
+	check(46, dr::dfs::stat(g_vol, "/e2", &node) == 0 and node.mode == 0x41C0 and node.uid == 7 and node.gid == 9);
+	check(47, dr::dfs::rmdir(g_vol, "/e2") == 0);
+	check(48, dr::dfs::unlink(g_vol, "/12345678901234567890123456789012345678901234567890123456") == 0);
+	check(49, g_vol->sb.free_blocks == free0 and g_vol->sb.free_inodes == 64 - 8);
+
+	// Remount: the counters were written; read only refuses writes.
+	check(50, dr::dfs::write_file(g_vol, "/keep", "kept", 4) == 4);
+	// The pointer cache: reading 24 blocks in order reads the indirect block once.
+	fill(8, 24 * 1024);
+	check(70, dr::dfs::write_file(g_vol, "/big", g_data, 24 * 1024) == 24 * 1024);
+	check(71, dr::dfs::unmount(g_vol) == 0 and dr::dfs::mount(g_vol, &dev, false) == 0);	// empty caches
+	check(72, dr::dfs::stat(g_vol, "/big", &node) == 0);
+	var reads: u32 = g_reads;
+	check(73, dr::dfs::inode_read(g_vol, &node, 0, g_back, 24 * 1024) == 24 * 1024 and g_reads - reads == 24 + 1);
+	check(74, dr::dfs::mem_equal(g_data, g_back, 24 * 1024) and dr::dfs::unlink(g_vol, "/big") == 0);
+	check(51, dr::dfs::unmount(g_vol) == 0);
+	check(52, dr::dfs::mount(g_vol, &dev, true) == 0 and g_vol->sb.state == dr::dfs::StateClean);
+	check(53, g_vol->sb.free_blocks == free0 - 1 and g_vol->sb.mount_count == 3);
+	check(54, dr::dfs::create(g_vol, "/x", 0x1A4) == dr::dfs::ReadOnly);
+	check(55, dr::dfs::read_file(g_vol, "/keep", part, 8) == 4 and part[0] == 'k' and part[3] == 't');
+	check(56, dr::dfs::unmount(g_vol) == 0 and g_disk[0] == 0xAB and g_disk[31] == 0xAB);
+
+	// Not a DFS partition.
+	g_disk[0x20] = 0;
+	check(60, dr::dfs::mount(g_vol, &dev, false) == dr::dfs::Unsupported);
+	check(61, dr::dfs::str_len(dr::dfs::error_name(dr::dfs::NotEmpty)) == 19);
+	return result();
+}

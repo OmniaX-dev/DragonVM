@@ -13,6 +13,12 @@ var list_entries_count: u8 = 0;
 var reboot_entry_index: u8 = 0;
 var horizontalLine: u8* = null;
 var pressedKey: u32 = 0;
+var boot_error: string = null;			// why the last boot failed (shown under the list)
+const KERNEL0_PATH = "/boot/kernel0";	// the kernel on a DFS partition
+// load_kernel0_dfs's own errors (below dr::dfs's, which go from -1 to -14).
+const KernelNotAFile: i32 = -100;
+const KernelEmpty: i32 = -101;
+const KernelTooBig: i32 = -102;
 
 
 sub main() {
@@ -37,6 +43,9 @@ sub main() {
 		horizontalLine[i] = dr::ASCII.BoxHorizontal;
 	horizontalLine[screenWidth] = '\0';
 
+#ifdef(DRAKE_AUTOBOOT)
+	execute_selected_entry();	// boots the first entry without a key (dsc -D DRAKE_AUTOBOOT: headless tests)
+#endif
 	while(true) {
 		var key: u32 = 0;
 		if (keyRingBuff.pop(&key)) {
@@ -68,6 +77,10 @@ interrupt sub on_draw() {
 	print_box_sides();
 	print_bottom_line();
 	print_list();
+	if (boot_error) {
+		console.xy(2, 13)->fg(dr::DefaultPaletteText16.Red)->print("Boot failed: ")->print(KERNEL0_PATH)->print(": ")->print(boot_error);
+		console.fg(dr::DefaultPaletteText16.Green);
+	}
 	console.present();
 }
 
@@ -133,7 +146,8 @@ sub execute_selected_entry() {
 		dr::raise_interrupt(0x20, INT20_REBOOT);
 	else if (selected_index < boot_part_count)
 	{
-		load_kernel0_block(bootParts[selected_index]);
+		if (not load_kernel0(bootParts[selected_index]))
+			return;
 		cleanup();
 		low {
 			jmp $dr::DPTBootPartStructure.CodeLoadAddr
@@ -146,6 +160,59 @@ inline sub cleanup() {
 	dr::clear_interrupt_vector_entry(dr::HardwareInterrupts.KeyPressed);
 	dr::clear_interrupt_vector_entry(dr::HardwareInterrupts.VSync);
 	console.clear(dr::DefaultPaletteText16.Black)->xy(0, 0)->present()->destroy();
+}
+
+// Loads the partition's kernel at CodeLoadAddr: /boot/kernel0 on a DFS partition, otherwise the
+// raw block after the boot header. False (with boot_error set) when it can't.
+sub load_kernel0(var part: dr::DPTPartitionBlock*) -> bool {
+	boot_error = null;
+	var r: i32 = load_kernel0_dfs(part);
+	if (r == dr::dfs::Unsupported) {		// not DFS: the raw kernel block
+		load_kernel0_block(part);
+		return true;
+	}
+	if (r < 0) {
+		boot_error = kernel_error_name(r);
+		return false;
+	}
+	return true;
+}
+
+sub kernel_error_name(var error: i32) -> string {
+	if (error == KernelNotAFile) return "not a file";
+	if (error == KernelEmpty) return "empty file";
+	if (error == KernelTooBig) return "bigger than 1 MiB";
+	return dr::dfs::error_name(error);
+}
+
+// Unsupported when the partition isn't DFS.
+sub load_kernel0_dfs(var part: dr::DPTPartitionBlock*) -> i32 {
+	var vol: dr::dfs::Volume* = cast<dr::dfs::Volume*>(dr::malloc(sizeof(dr::dfs::Volume)));
+	if (not vol)
+		return dr::dfs::NoSpace;
+	defer dr::free(vol);
+	var disk: dr::dfs::DiskPartition;
+	var dev: dr::dfs::Device;
+	dr::dfs::dpt_partition(&disk, part);
+	dr::dfs::disk_device(&dev, &disk);
+	var r: i32 = dr::dfs::mount(vol, &dev, true);
+	if (r < 0)
+		return r;
+	defer dr::dfs::unmount(vol);
+	var node: dr::dfs::Inode;
+	r = dr::dfs::stat(vol, KERNEL0_PATH, &node);
+	if (r < 0)
+		return r;
+	if ((node.mode & dr::dfs::ModeTypeMask) != dr::dfs::ModeFile)
+		return KernelNotAFile;
+	if (node.size == 0)
+		return KernelEmpty;
+	if (node.size > dr::DPTBootPartStructure.CodeSize)
+		return KernelTooBig;
+	r = dr::dfs::inode_read(vol, &node, 0, cast<u8*>(dr::DPTBootPartStructure.CodeLoadAddr), node.size);
+	if (r < 0)
+		return r;
+	return dr::dfs::Ok;
 }
 
 sub load_kernel0_block(var part: dr::DPTPartitionBlock*) {

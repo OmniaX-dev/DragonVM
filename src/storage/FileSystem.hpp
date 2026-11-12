@@ -8,14 +8,12 @@ namespace dragon
 	namespace storage
 	{
 		// ============================================================================
-		// FileSystem — a file system format. There are none yet: a new format is a
+		// FileSystem — a file system format (DFS, see DFS.hpp). A new format is a
 		// subclass registered in FileSystems (see FileSystems::list()), and the
 		// Partition Manager shows the detected one for each partition.
 		//
 		// A file system only sees its partition (a DiskRegion: address 0 is the
 		// partition's start), so it doesn't depend on the partition table format.
-		// The operations (format, list, read and write files...) will be added here
-		// with the first implementation.
 		// ============================================================================
 		class FileSystem
 		{

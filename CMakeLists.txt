@@ -79,11 +79,15 @@ list(APPEND DEBUGGER_SOURCE_FILES
 	${CMAKE_CURRENT_LIST_DIR}/src/tools/GlobalData.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/tools/LegacyOstdSerial.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/tools/Tools.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/tools/ToolsDfs.cpp
 
 	${CMAKE_CURRENT_LIST_DIR}/src/storage/Disk.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/storage/PartitionTable.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/storage/DPT.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/storage/FileSystem.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/storage/DFS.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/storage/dfs/DfsCore.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/storage/dfs/DfsCheck.cpp
 )
 list(APPEND ASSEMBLER_SOURCE_FILES
 	${CMAKE_CURRENT_LIST_DIR}/src/assembler/assembler_main.cpp
@@ -135,6 +139,7 @@ list(APPEND TOOLS_SOURCE_FILES
 	${CMAKE_CURRENT_LIST_DIR}/src/tools/tools_main.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/tools/Utils.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/tools/Tools.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/tools/ToolsDfs.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/tools/LegacyOstdSerial.cpp
 
 	${CMAKE_CURRENT_LIST_DIR}/src/hardware/VirtualHardDrive.cpp
@@ -145,6 +150,9 @@ list(APPEND TOOLS_SOURCE_FILES
 	${CMAKE_CURRENT_LIST_DIR}/src/storage/PartitionTable.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/storage/DPT.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/storage/FileSystem.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/storage/DFS.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/storage/dfs/DfsCore.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/storage/dfs/DfsCheck.cpp
 )
 #-----------------------------------------------------------------------------------------
 
@@ -196,6 +204,16 @@ add_executable(${LSP_TARGET}
 	${CMAKE_CURRENT_LIST_DIR}/src/compiler/CodeGen.cpp
 )
 target_include_directories(${LSP_TARGET} PUBLIC ${INCLUDE_DIRS})
+
+# dfs_test: the DFS core's tests (on a disk in memory, no ostd).
+add_executable(dfs_test
+	${CMAKE_CURRENT_LIST_DIR}/tests/dfs/dfs_test.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/storage/dfs/DfsCore.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/storage/dfs/DfsCheck.cpp
+)
+
+# The DFS core is the portable subset (it's ported to DScript): no exceptions, no RTTI.
+set_source_files_properties(${CMAKE_CURRENT_LIST_DIR}/src/storage/dfs/DfsCore.cpp PROPERTIES COMPILE_OPTIONS "-fno-exceptions;-fno-rtti;-Wall;-Wextra")
 
 set(HEADLESS_TARGET drun)
 add_executable(${HEADLESS_TARGET} ${HEADLESS_SOURCE_FILES})

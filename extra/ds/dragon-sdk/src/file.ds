@@ -1,0 +1,942 @@
+// DScript SDK: files and directories (dr::fs), the easy way.
+//
+// A high level API on top of DFS (dr::dfs, dfs.ds). dr::dfs works with inodes, block buffers
+// and error codes. dr::fs works with paths, open files and true/false:
+//
+//     var disk: dr::fs::FileSystem;
+//     if (not disk.mount(2))                              // the 2nd partition of the boot disk
+//         return fail(disk.error_text());
+//     defer disk.unmount();                               // always: it writes the superblock back
+//
+//     disk.make_dirs("/home/player/saves");
+//     disk.write_text("/home/player/name.txt", "Sylar");
+//
+//     var file: dr::fs::File;
+//     if (disk.open("/home/player/saves/slot1", dr::fs::OpenMode.NewFile, &file)) {
+//         file.write(&save, sizeof(SaveData));
+//         file.close();
+//     }
+//
+//     var size: u32 = 0;
+//     var text: u8* = disk.load("/home/player/name.txt", &size);   // malloc'd, 0 terminated
+//     ...
+//     dr::free(text);
+//
+// Conventions:
+//   - Paths are absolute ("/a/b/c"); repeated '/' are fine. A name is 1 to 56 bytes, without
+//     '/'. A whole path is at most MaxPath - 1 bytes where dr::fs has to build one (make_dirs,
+//     remove_all).
+//   - Subs that can fail return a bool (or a count, -1 on errors). The reason is in
+//     last_error() (a dr::dfs error, or one of the dr::fs ones below), and error_text()
+//     describes it.
+//   - The BIOS must have run (the heap, the disk interrupt): Drake, a kernel, or drun --boot.
+//   - Nothing is cached or buffered here: every call reaches the disk when it returns.
+//   - Not thread or interrupt safe: don't use the same FileSystem from an interrupt handler.
+#include(dfs.ds)
+#include(mem.ds)
+
+namespace dr::fs {
+	const MaxPath: u32 = 256;			// the longest path dr::fs builds itself, with its 0
+	const MaxName: u32 = 56;			// the longest name in a directory
+
+	// dr::fs's own errors (dr::dfs's go from -1 to -14).
+	const NotMounted: i32 = -20;		// the FileSystem isn't mounted
+	const AlreadyMounted: i32 = -21;	// mount / format on a mounted FileSystem
+	const NoPartition: i32 = -22;		// no DPT, or no partition with that number
+	const NoMemory: i32 = -23;			// dr::malloc failed
+	const NotOpen: i32 = -24;			// a closed File / Dir (or its FileSystem was unmounted)
+	const NotReadable: i32 = -25;		// reading a File opened without OpenMode.Read
+	const NotWritable: i32 = -26;		// writing a File opened without OpenMode.Write
+	const PathTooLong: i32 = -27;		// longer than MaxPath - 1
+	const BadMode: i32 = -28;			// an OpenMode combination that makes no sense
+
+	// The description of any error dr::fs returns (its own and dr::dfs's).
+	sub error_name(var error: i32) -> string {
+		if (error == NotMounted) return "not mounted";
+		if (error == AlreadyMounted) return "already mounted";
+		if (error == NoPartition) return "no such partition";
+		if (error == NoMemory) return "out of memory";
+		if (error == NotOpen) return "not open";
+		if (error == NotReadable) return "not open for reading";
+		if (error == NotWritable) return "not open for writing";
+		if (error == PathTooLong) return "path too long";
+		if (error == BadMode) return "invalid open mode";
+		return dr::dfs::error_name(error);
+	}
+
+	enum Type: u8 {
+		None,							// doesn't exist
+		File,
+		Directory,
+		Other							// a device or another type DFS reserves
+	}
+
+	// How FileSystem.open opens a file: OR them together, or use the combinations at the end.
+	const OpenMode: struct {
+		var Read: u32 = 0x01;			// read() allowed
+		var Write: u32 = 0x02;			// write() and resize() allowed
+		var Create: u32 = 0x04;			// create the file if it doesn't exist (needs Write)
+		var Truncate: u32 = 0x08;		// empty the file when opening it (needs Write)
+		var Append: u32 = 0x10;			// every write() goes to the end (needs Write)
+		var Exclusive: u32 = 0x20;		// with Create: fail (Exists) if the file already exists
+
+		var ReadWrite: u32 = 0x03;		// an existing file, read and write
+		var NewFile: u32 = 0x0E;		// Write | Create | Truncate: a new, empty file (replaces one)
+		var AppendFile: u32 = 0x16;		// Write | Create | Append: add to the end (creates it)
+	};
+
+	// Where File.seek counts from.
+	enum SeekFrom {
+		Start,
+		Current,
+		End
+	}
+
+	// What FileSystem.info tells about a file or directory.
+	struct Info {
+		var inode: u32;					// its number in the file system (the same for hard links)
+		var type: Type;
+		var size: u32;					// bytes (a directory: its entries' blocks)
+		var links: u16;					// the names it has (a directory: 2 + its subdirectories)
+		var permissions: u16;			// Unix style, e.g. 0x1ED = 0755 (stored, not enforced)
+		var uid: u16;
+		var gid: u16;
+		var created: u32;				// seconds (0 when written by the VM: no clock yet)
+		var modified: u32;
+		var changed: u32;
+	};
+
+	// A directory entry, as Dir.next and FileSystem.list give them (never "." or "..").
+	struct Entry {
+		var name: u8[57];				// 0 terminated
+		var type: Type;
+		var inode: u32;
+		var size: u32;
+	};
+
+	sub type_from_mode(var mode: u16) -> Type {
+		var t: u16 = mode & dr::dfs::ModeTypeMask;
+		if (t == dr::dfs::ModeFile) return Type.File;
+		if (t == dr::dfs::ModeDir) return Type.Directory;
+		if (t == 0) return Type.None;
+		return Type.Other;
+	}
+
+	sub info_from_inode(var ino: u32, var node: dr::dfs::Inode*, var out: Info*) {
+		out->inode = ino;
+		out->type = type_from_mode(node->mode);
+		out->size = node->size;
+		out->links = node->links;
+		out->permissions = node->mode & dr::dfs::ModePermMask;
+		out->uid = node->uid;
+		out->gid = node->gid;
+		out->created = node->crtime;
+		out->modified = node->mtime;
+		out->changed = node->ctime;
+	}
+
+	// Copies a 0 terminated string into buffer (capacity bytes, the 0 included). False if it
+	// doesn't fit.
+	sub copy_string(var buffer: u8*, var capacity: u32, var text: string) -> bool {
+		var len: u32 = dr::dfs::str_len(text);
+		if (len + 1 > capacity)
+			return false;
+		dr::dfs::mem_copy(buffer, text, len + 1);
+		return true;
+	}
+
+	// buffer = dir + "/" + name (no double '/' after the root). False if it doesn't fit.
+	sub join_path(var buffer: u8*, var capacity: u32, var dir: string, var name: string) -> bool {
+		var dir_len: u32 = dr::dfs::str_len(dir);
+		var name_len: u32 = dr::dfs::str_len(name);
+		var slash: u32 = (dir_len > 0 and dir[dir_len - 1] == '/') ? 0 : 1;
+		if (dir_len + slash + name_len + 1 > capacity)
+			return false;
+		dr::dfs::mem_copy(buffer, dir, dir_len);
+		if (slash == 1)
+			buffer[dir_len] = '/';
+		dr::dfs::mem_copy(buffer + dir_len + slash, name, name_len + 1);
+		return true;
+	}
+
+
+	// ============================================================================
+	// FileSystem: one mounted partition
+	// ============================================================================
+	// Declare one (a global, or a local that outlives its files), mount it, use it, unmount it.
+	// It owns its dr::dfs::Volume (about 28 KiB, on the heap while mounted). Don't copy a
+	// FileSystem: it points into itself.
+	struct FileSystem {
+		priv var m_vol: dr::dfs::Volume* = null;
+		priv var m_part: dr::dfs::DiskPartition;
+		priv var m_dev: dr::dfs::Device;
+		priv var m_error: i32 = 0;
+		priv var m_generation: u32 = 0;		// counts the mounts: Files / Dirs of an older mount are closed
+
+		// ---- Mounting ----
+
+		// Mounts partition number (1 = the first, as dtools and read-dpt number them) of the
+		// boot disk. read_only: nothing can change it (and nothing is written, not even the
+		// superblock): use it when you only read.
+		sub mount(var number: u32, var read_only: bool = false) -> bool {
+			var part: dr::dfs::DiskPartition;
+			if (not this->find_partition(number, &part))
+				return false;
+			return this->mount_partition(&part, read_only);
+		}
+
+		// Mounts the partition at an explicit place (any disk).
+		sub mount_partition(var part: dr::dfs::DiskPartition*, var read_only: bool = false) -> bool {
+			if (this->m_vol != null)
+				return this->fail(AlreadyMounted);
+			this->m_part = *part;
+			dr::dfs::disk_device(&this->m_dev, &this->m_part);
+			return this->open_volume(read_only);
+		}
+
+		// Mounts DFS on any device (a RAM disk, ...). The device's user data must outlive the mount.
+		sub mount_device(var dev: dr::dfs::Device*, var read_only: bool = false) -> bool {
+			if (this->m_vol != null)
+				return this->fail(AlreadyMounted);
+			this->m_dev = *dev;
+			return this->open_volume(read_only);
+		}
+
+		// Writes the superblock back (the free space counters, the state "clean") and frees the
+		// volume. Every File and Dir of this mount is closed by it. True if it wasn't mounted.
+		sub unmount() -> bool {
+			if (this->m_vol == null)
+				return true;
+			var r: i32 = dr::dfs::unmount(this->m_vol);
+			dr::free(this->m_vol);
+			this->m_vol = null;
+			this->m_generation++;
+			return this->check(r);
+		}
+
+		// Writes the superblock now (unmount does it too). For long running programs: after
+		// sync, a crash loses nothing that was already written.
+		sub sync() -> bool {
+			if (this->m_vol == null)
+				return this->fail(NotMounted);
+			return this->check(dr::dfs::sync(this->m_vol));
+		}
+
+		// Formats partition number of the boot disk with DFS: ERASES everything on it (except
+		// the DPT boot header). The FileSystem must not be mounted; it isn't mounted afterwards.
+		// block_size: 512, 1024, 2048 or 4096 (0: 4096).
+		sub format(var number: u32, var label: string = null, var block_size: u32 = 0) -> bool {
+			var part: dr::dfs::DiskPartition;
+			if (not this->find_partition(number, &part))
+				return false;
+			var dev: dr::dfs::Device;
+			dr::dfs::disk_device(&dev, &part);
+			return this->format_device(&dev, part.size, label, block_size);
+		}
+
+		// Formats a device (size bytes) with DFS.
+		sub format_device(var dev: dr::dfs::Device*, var size: u32, var label: string = null, var block_size: u32 = 0) -> bool {
+			if (this->m_vol != null)
+				return this->fail(AlreadyMounted);
+			var log2: u32 = 0;
+			if (block_size != 0) {
+				log2 = 9;
+				while (log2 < 12 and (cast<u32>(1) << log2) != block_size)
+					log2++;
+				if ((cast<u32>(1) << log2) != block_size)
+					return this->fail(dr::dfs::Invalid);
+			}
+			var vol: dr::dfs::Volume* = cast<dr::dfs::Volume*>(dr::malloc(sizeof(dr::dfs::Volume)));
+			if (vol == null)
+				return this->fail(NoMemory);
+			var params: dr::dfs::MkfsParams = { size, log2, 0, label, null };
+			var r: i32 = dr::dfs::mkfs(vol, dev, &params);
+			dr::free(vol);
+			return this->check(r);
+		}
+
+		// ---- State ----
+
+		inline sub is_mounted() -> bool { return this->m_vol != null; }
+		sub is_read_only() -> bool { return this->m_vol != null and this->m_vol->read_only; }
+
+		// The last error (0 after a success): a dr::fs or dr::dfs error code.
+		inline sub last_error() -> i32 { return this->m_error; }
+		// Its description ("not found").
+		sub error_text() -> string { return error_name(this->m_error); }
+
+		// The partition's numbers (0 when not mounted).
+		sub block_size() -> u32 { return this->m_vol == null ? 0 : this->m_vol->layout.block_size; }
+		sub total_bytes() -> u32 { return this->m_vol == null ? 0 : this->m_vol->layout.total_blocks << this->m_vol->layout.block_size_log2; }
+		sub free_bytes() -> u32 { return this->m_vol == null ? 0 : this->m_vol->sb.free_blocks << this->m_vol->layout.block_size_log2; }
+		// How many more files and directories fit.
+		sub free_inodes() -> u32 { return this->m_vol == null ? 0 : this->m_vol->sb.free_inodes; }
+		// The label given to format (up to 16 bytes) into buffer (17 bytes are always enough).
+		sub label(var buffer: u8*, var capacity: u32) -> bool {
+			if (this->m_vol == null)
+				return this->fail(NotMounted);
+			var len: u32 = 0;
+			while (len < 16 and this->m_vol->sb.label[len] != 0)
+				len++;
+			if (len + 1 > capacity)
+				return this->fail(dr::dfs::NameTooLong);
+			dr::dfs::mem_copy(buffer, this->m_vol->sb.label, len);
+			buffer[len] = 0;
+			return this->ok();
+		}
+
+		// The DFS volume underneath, for dr::dfs calls (null when not mounted).
+		inline sub volume() -> dr::dfs::Volume* { return this->m_vol; }
+		inline sub generation() -> u32 { return this->m_generation; }
+
+		// ---- Questions about paths ----
+
+		// What the path is: Type.None if it doesn't exist (or on an error: see last_error).
+		sub type_of(var path: string) -> Type {
+			var node: dr::dfs::Inode;
+			if (not this->stat_path(path, &node, null))
+				return Type.None;
+			return type_from_mode(node.mode);
+		}
+		sub exists(var path: string) -> bool { return this->type_of(path) != Type.None; }
+		sub is_file(var path: string) -> bool { return this->type_of(path) == Type.File; }
+		sub is_dir(var path: string) -> bool { return this->type_of(path) == Type.Directory; }
+
+		// A file's size in bytes (0 if it doesn't exist: see last_error).
+		sub size_of(var path: string) -> u32 {
+			var node: dr::dfs::Inode;
+			if (not this->stat_path(path, &node, null))
+				return 0;
+			return node.size;
+		}
+
+		// Everything about a file or directory.
+		sub info(var path: string, var out: Info*) -> bool {
+			var node: dr::dfs::Inode;
+			var ino: u32 = 0;
+			if (not this->stat_path(path, &node, &ino))
+				return false;
+			info_from_inode(ino, &node, out);
+			return true;
+		}
+
+		// ---- Whole files ----
+
+		// Reads the file into buffer (at most capacity bytes): the bytes read, -1 on errors.
+		// A file bigger than capacity gives its first capacity bytes.
+		sub read_all(var path: string, var buffer: u8*, var capacity: u32) -> i32 {
+			if (this->m_vol == null)
+				return this->fail_count(NotMounted);
+			return this->count(dr::dfs::read_file(this->m_vol, path, buffer, capacity));
+		}
+
+		// Reads the whole file into new memory (dr::malloc, one byte more, set to 0: text files
+		// are ready to use as strings). Free it with dr::free. Null on errors; out_size gets the
+		// size (it may be null).
+		sub load(var path: string, var out_size: u32* = null) -> u8* {
+			var node: dr::dfs::Inode;
+			if (not this->stat_path(path, &node, null))
+				return null;
+			if (type_from_mode(node.mode) != Type.File) {
+				this->fail(dr::dfs::IsDir);
+				return null;
+			}
+			var data: u8* = cast<u8*>(dr::malloc(node.size + 1));
+			if (data == null) {
+				this->fail(NoMemory);
+				return null;
+			}
+			var r: i32 = dr::dfs::inode_read(this->m_vol, &node, 0, data, node.size);
+			if (r < 0) {
+				dr::free(data);
+				this->fail(r);
+				return null;
+			}
+			data[r] = 0;
+			if (out_size != null)
+				*out_size = cast<u32>(r);
+			this->ok();
+			return data;
+		}
+
+		// Creates the file, or replaces its content, with size bytes of data.
+		sub write_all(var path: string, var data: void*, var size: u32) -> bool {
+			if (this->m_vol == null)
+				return this->fail(NotMounted);
+			var r: i32 = dr::dfs::write_file(this->m_vol, path, cast<u8*>(data), size);
+			if (r >= 0 and cast<u32>(r) != size)
+				r = dr::dfs::NoSpace;
+			return this->check(r);
+		}
+
+		// The same with a string (without its 0).
+		sub write_text(var path: string, var text: string) -> bool {
+			return this->write_all(path, text, dr::dfs::str_len(text));
+		}
+
+		// Adds size bytes at the end of the file (created if needed).
+		sub append(var path: string, var data: void*, var size: u32) -> bool {
+			var file: File;
+			if (not this->open(path, OpenMode.AppendFile, &file))
+				return false;
+			var r: i32 = file.write(data, size);
+			var error: i32 = file.last_error();
+			file.close();
+			if (r < 0 or cast<u32>(r) != size)
+				return this->fail(error != 0 ? error : dr::dfs::NoSpace);
+			return this->ok();
+		}
+
+		sub append_text(var path: string, var text: string) -> bool {
+			return this->append(path, text, dr::dfs::str_len(text));
+		}
+
+		// ---- Directories and names ----
+
+		// Creates a directory (its parent must exist). Fails with Exists if there is already
+		// something with that name.
+		sub make_dir(var path: string) -> bool {
+			if (this->m_vol == null)
+				return this->fail(NotMounted);
+			return this->check(dr::dfs::mkdir(this->m_vol, path, 0x1ED));		// 0755
+		}
+
+		// Creates a directory and the missing ones above it ("mkdir -p"). True if it already
+		// exists as a directory.
+		sub make_dirs(var path: string) -> bool {
+			if (this->m_vol == null)
+				return this->fail(NotMounted);
+			var buffer: u8[256];
+			if (not copy_string(buffer, MaxPath, path))
+				return this->fail(PathTooLong);
+			var len: u32 = dr::dfs::str_len(buffer);
+			// Each prefix ending before a '/', then the whole path.
+			for (var i: u32 = 1; i <= len; i++) {
+				if (i < len and buffer[i] != '/')
+					continue;
+				if (buffer[i - 1] == '/')
+					continue;		// "//" or a trailing '/'
+				var saved: u8 = buffer[i];
+				buffer[i] = 0;
+				var r: i32 = dr::dfs::mkdir(this->m_vol, buffer, 0x1ED);
+				if (r == dr::dfs::Exists) {
+					if (this->type_of(buffer) != Type.Directory)
+						return this->fail(dr::dfs::NotDir);
+				}
+				else if (r < 0)
+					return this->fail(r);
+				buffer[i] = saved;
+			}
+			return this->ok();
+		}
+
+		// Removes a file, or an empty directory.
+		sub remove(var path: string) -> bool {
+			if (this->m_vol == null)
+				return this->fail(NotMounted);
+			var node: dr::dfs::Inode;
+			if (not this->stat_path(path, &node, null))
+				return false;
+			if (type_from_mode(node.mode) == Type.Directory)
+				return this->check(dr::dfs::rmdir(this->m_vol, path));
+			return this->check(dr::dfs::unlink(this->m_vol, path));
+		}
+
+		// Removes a file, or a directory with everything in it ("rm -r"). "/" itself stays (it
+		// is emptied). Careful: nothing asks for confirmation.
+		sub remove_all(var path: string) -> bool {
+			if (this->m_vol == null)
+				return this->fail(NotMounted);
+			var node: dr::dfs::Inode;
+			var ino: u32 = 0;
+			if (not this->stat_path(path, &node, &ino))
+				return false;
+			if (type_from_mode(node.mode) != Type.Directory)
+				return this->check(dr::dfs::unlink(this->m_vol, path));
+			var dir: Dir;
+			if (not this->open_dir(path, &dir))
+				return false;
+			var entry: Entry;
+			var child: u8[256];
+			while (dir.next(&entry)) {
+				if (not join_path(child, MaxPath, path, entry.name))
+					return this->fail(PathTooLong);
+				if (not this->remove_all(child))
+					return false;
+			}
+			if (dir.last_error() != 0)
+				return this->fail(dir.last_error());
+			dir.close();
+			if (ino == dr::dfs::RootInode)
+				return this->ok();
+			return this->check(dr::dfs::rmdir(this->m_vol, path));
+		}
+
+		// Renames or moves a file or directory. The destination must not exist.
+		sub rename(var from: string, var to: string) -> bool {
+			if (this->m_vol == null)
+				return this->fail(NotMounted);
+			return this->check(dr::dfs::rename(this->m_vol, from, to));
+		}
+
+		// Copies a file (the destination is created, or replaced).
+		sub copy(var from: string, var to: string) -> bool {
+			var a: Info;
+			var b: Info;
+			if (not this->info(from, &a))
+				return false;
+			if (a.type != Type.File)
+				return this->fail(dr::dfs::IsDir);
+			if (this->info(to, &b) and b.inode == a.inode)
+				return this->ok();					// the same file (or a hard link to it)
+			var src: File;
+			var dst: File;
+			if (not this->open(from, OpenMode.Read, &src))
+				return false;
+			defer src.close();
+			if (not this->open(to, OpenMode.NewFile, &dst))
+				return false;
+			defer dst.close();
+			var chunk: u8* = cast<u8*>(dr::malloc(4096));
+			if (chunk == null)
+				return this->fail(NoMemory);
+			defer dr::free(chunk);
+			while (true) {
+				var n: i32 = src.read(chunk, 4096);
+				if (n < 0)
+					return this->fail(src.last_error());
+				if (n == 0)
+					break;
+				var w: i32 = dst.write(chunk, cast<u32>(n));
+				if (w != n)
+					return this->fail(dst.last_error() != 0 ? dst.last_error() : dr::dfs::NoSpace);
+			}
+			return this->ok();
+		}
+
+		// Another name for an existing file (a hard link: both names are the same file, removing
+		// one keeps the other). Not for directories.
+		sub link(var existing: string, var new_path: string) -> bool {
+			if (this->m_vol == null)
+				return this->fail(NotMounted);
+			return this->check(dr::dfs::link(this->m_vol, existing, new_path));
+		}
+
+		// Changes a file's size: shorter cuts it, longer adds zeros (without using disk space
+		// until they are written).
+		sub resize(var path: string, var size: u32) -> bool {
+			var node: dr::dfs::Inode;
+			var ino: u32 = 0;
+			if (not this->stat_path(path, &node, &ino))
+				return false;
+			if (type_from_mode(node.mode) != Type.File)
+				return this->fail(dr::dfs::IsDir);
+			return this->check(dr::dfs::truncate(this->m_vol, ino, &node, size));
+		}
+
+		// The permissions (the low 12 bits, e.g. 0x1A4 = 0644) and the owner. DFS stores them;
+		// enforcing them is up to the OS.
+		sub set_permissions(var path: string, var permissions: u16) -> bool {
+			if (this->m_vol == null)
+				return this->fail(NotMounted);
+			return this->check(dr::dfs::chmod(this->m_vol, path, permissions));
+		}
+		sub set_owner(var path: string, var uid: u16, var gid: u16) -> bool {
+			if (this->m_vol == null)
+				return this->fail(NotMounted);
+			return this->check(dr::dfs::chown(this->m_vol, path, uid, gid));
+		}
+
+		// Calls visitor for each entry of a directory ("." and ".." skipped), in the directory's
+		// order, until it returns false. The number of entries visited, -1 on errors.
+		//     disk.list("/", sub(var e: dr::fs::Entry*, var ctx: void*) -> bool { print(e->name); return true; });
+		sub list(var path: string, var visitor: sub(Entry*, void*) -> bool, var context: void* = null) -> i32 {
+			var dir: Dir;
+			if (not this->open_dir(path, &dir))
+				return -1;
+			var entry: Entry;
+			var n: i32 = 0;
+			while (dir.next(&entry)) {
+				n++;
+				if (not visitor(&entry, context))
+					break;
+			}
+			var error: i32 = dir.last_error();
+			dir.close();
+			if (error != 0)
+				return this->fail_count(error);
+			this->ok();
+			return n;
+		}
+
+		// ---- Open files and directories ----
+
+		// Opens a file (see OpenMode) into out. Close it with out->close() (it holds no memory,
+		// but a closed File refuses further calls, which catches mistakes).
+		sub open(var path: string, var mode: u32, var out: File*) -> bool {
+			out->reset();
+			if (this->m_vol == null)
+				return this->fail(NotMounted);
+			var needs_write: u32 = OpenMode.Create | OpenMode.Truncate | OpenMode.Append;
+			if ((mode & (OpenMode.Read | OpenMode.Write)) == 0 or ((mode & needs_write) != 0 and (mode & OpenMode.Write) == 0))
+				return this->fail(BadMode);
+			if ((mode & OpenMode.Write) != 0 and this->m_vol->read_only)
+				return this->fail(dr::dfs::ReadOnly);
+			var node: dr::dfs::Inode;
+			var ino: u32 = 0;
+			var r: i32 = dr::dfs::stat(this->m_vol, path, &node, &ino);
+			if (r == dr::dfs::NotFound and (mode & OpenMode.Create) != 0) {
+				r = dr::dfs::create(this->m_vol, path, 0x1A4, &ino);		// 0644
+				if (r < 0) return this->fail(r);
+				r = dr::dfs::read_inode(this->m_vol, ino, &node);
+			}
+			else if (r == dr::dfs::Ok and (mode & OpenMode.Create) != 0 and (mode & OpenMode.Exclusive) != 0)
+				return this->fail(dr::dfs::Exists);
+			if (r < 0)
+				return this->fail(r);
+			if (type_from_mode(node.mode) == Type.Directory)
+				return this->fail(dr::dfs::IsDir);
+			if (type_from_mode(node.mode) != Type.File)
+				return this->fail(dr::dfs::Invalid);
+			if ((mode & OpenMode.Truncate) != 0 and node.size != 0) {
+				r = dr::dfs::truncate(this->m_vol, ino, &node, 0);
+				if (r < 0) return this->fail(r);
+			}
+			out->attach(this, ino, mode);
+			return this->ok();
+		}
+
+		// Opens a directory to read its entries one by one (see Dir).
+		sub open_dir(var path: string, var out: Dir*) -> bool {
+			out->reset();
+			var node: dr::dfs::Inode;
+			var ino: u32 = 0;
+			if (not this->stat_path(path, &node, &ino))
+				return false;
+			if (type_from_mode(node.mode) != Type.Directory)
+				return this->fail(dr::dfs::NotDir);
+			out->attach(this, ino);
+			return true;
+		}
+
+		// ---- Inside ----
+
+		priv sub find_partition(var number: u32, var out: dr::dfs::DiskPartition*) -> bool {
+			if (this->m_vol != null)
+				return this->fail(AlreadyMounted);
+			var dpt: dr::DPTBlock;
+			if (not dr::dpt_load_block(&dpt) or number < 1 or number > dpt.partitionCount or number > dr::DPTStructure.MaxPartitions)
+				return this->fail(NoPartition);
+			dr::dfs::dpt_partition(out, &dpt.entries[number - 1]);
+			return true;
+		}
+
+		priv sub open_volume(var read_only: bool) -> bool {
+			var vol: dr::dfs::Volume* = cast<dr::dfs::Volume*>(dr::malloc(sizeof(dr::dfs::Volume)));
+			if (vol == null)
+				return this->fail(NoMemory);
+			var r: i32 = dr::dfs::mount(vol, &this->m_dev, read_only);
+			if (r < 0) {
+				dr::free(vol);
+				return this->fail(r);
+			}
+			this->m_vol = vol;
+			this->m_generation++;
+			return this->ok();
+		}
+
+		priv sub stat_path(var path: string, var node: dr::dfs::Inode*, var ino: u32*) -> bool {
+			if (this->m_vol == null)
+				return this->fail(NotMounted);
+			return this->check(dr::dfs::stat(this->m_vol, path, node, ino));
+		}
+
+		// Remember a result: true for success, false (and last_error) for an error.
+		priv sub check(var r: i32) -> bool {
+			this->m_error = (r < 0 ? r : 0);
+			return r >= 0;
+		}
+		priv sub fail(var error: i32) -> bool {
+			this->m_error = error;
+			return false;
+		}
+		priv sub ok() -> bool {
+			this->m_error = 0;
+			return true;
+		}
+		priv sub count(var r: i32) -> i32 {
+			this->m_error = (r < 0 ? r : 0);
+			return r < 0 ? -1 : r;
+		}
+		priv sub fail_count(var error: i32) -> i32 {
+			this->m_error = error;
+			return -1;
+		}
+	};
+
+
+	// ============================================================================
+	// File: an open file, with a position
+	// ============================================================================
+	// Made by FileSystem.open. read and write start at the position and move it. Each call
+	// reads the file's inode again, so several Files on the same file (and the FileSystem's
+	// path subs) always agree. A File keeps no memory: it can be a local, copied, or dropped
+	// (but close() makes mistakes visible).
+	// If the file is removed while open, the File's calls fail (NotFound) or, if the inode was
+	// reused meanwhile, reach the new file: don't remove open files.
+	struct File {
+		priv var m_fs: FileSystem* = null;
+		priv var m_ino: u32 = 0;
+		priv var m_mode: u32 = 0;
+		priv var m_pos: u32 = 0;
+		priv var m_generation: u32 = 0;
+		priv var m_error: i32 = 0;
+
+		// Reads up to size bytes at the position into buffer: the bytes read (0 at the end of
+		// the file), -1 on errors.
+		sub read(var buffer: void*, var size: u32) -> i32 {
+			var node: dr::dfs::Inode;
+			if (not this->load(&node))
+				return -1;
+			if ((this->m_mode & OpenMode.Read) == 0)
+				return this->fail_count(NotReadable);
+			var r: i32 = dr::dfs::inode_read(this->m_fs->volume(), &node, this->m_pos, cast<u8*>(buffer), size);
+			if (r < 0)
+				return this->fail_count(r);
+			this->m_pos += cast<u32>(r);
+			this->m_error = 0;
+			return r;
+		}
+
+		// Reads one line (up to and without the '\n'; a '\r' before it is dropped too) into
+		// buffer, 0 terminated (capacity bytes, the 0 included). The line's length, -1 at the end
+		// of the file or on errors. A longer line is returned in pieces of capacity - 1 bytes.
+		sub read_line(var buffer: u8*, var capacity: u32) -> i32 {
+			if (capacity < 2)
+				return this->fail_count(dr::dfs::Invalid);
+			var start: u32 = this->m_pos;
+			var n: i32 = this->read(buffer, capacity - 1);
+			if (n <= 0)
+				return -1;
+			var len: u32 = 0;
+			while (len < cast<u32>(n) and buffer[len] != '\n')
+				len++;
+			if (len < cast<u32>(n))
+				this->m_pos = start + len + 1;		// after the '\n'
+			if (len > 0 and buffer[len - 1] == '\r' and len < cast<u32>(n))
+				len--;
+			buffer[len] = 0;
+			return cast<i32>(len);
+		}
+
+		// Writes size bytes at the position (at the end with OpenMode.Append): the bytes
+		// written (fewer when the disk is full), -1 on errors. Writing past the end grows the
+		// file (a gap reads as zeros).
+		sub write(var data: void*, var size: u32) -> i32 {
+			var node: dr::dfs::Inode;
+			if (not this->load(&node))
+				return -1;
+			if ((this->m_mode & OpenMode.Write) == 0)
+				return this->fail_count(NotWritable);
+			if ((this->m_mode & OpenMode.Append) != 0)
+				this->m_pos = node.size;
+			var r: i32 = dr::dfs::inode_write(this->m_fs->volume(), this->m_ino, &node, this->m_pos, cast<u8*>(data), size);
+			if (r < 0)
+				return this->fail_count(r);
+			this->m_pos += cast<u32>(r);
+			this->m_error = (cast<u32>(r) == size ? 0 : dr::dfs::NoSpace);
+			return r;
+		}
+
+		// A string, without its 0.
+		sub write_text(var text: string) -> i32 {
+			return this->write(text, dr::dfs::str_len(text));
+		}
+
+		// Moves the position: from the start, the current position or the end (offset can be
+		// negative). Past the end is allowed (a write there leaves a gap of zeros); before the
+		// start is an error.
+		sub seek(var offset: i32, var from: SeekFrom = SeekFrom.Start) -> bool {
+			var node: dr::dfs::Inode;
+			if (not this->load(&node))
+				return false;
+			var base: i32 = 0;
+			if (from == SeekFrom.Current)
+				base = cast<i32>(this->m_pos);
+			else if (from == SeekFrom.End)
+				base = cast<i32>(node.size);
+			if (base + offset < 0)
+				return this->fail(dr::dfs::Invalid);
+			this->m_pos = cast<u32>(base + offset);
+			this->m_error = 0;
+			return true;
+		}
+
+		// The position (the next byte read or written).
+		inline sub tell() -> u32 { return this->m_pos; }
+
+		// The file's size now (0 on errors).
+		sub size() -> u32 {
+			var node: dr::dfs::Inode;
+			if (not this->load(&node))
+				return 0;
+			return node.size;
+		}
+
+		// True at (or past) the end of the file.
+		sub eof() -> bool {
+			var node: dr::dfs::Inode;
+			if (not this->load(&node))
+				return true;
+			return this->m_pos >= node.size;
+		}
+
+		// Cuts or grows the file (the position doesn't move). Needs OpenMode.Write.
+		sub resize(var size: u32) -> bool {
+			var node: dr::dfs::Inode;
+			if (not this->load(&node))
+				return false;
+			if ((this->m_mode & OpenMode.Write) == 0)
+				return this->fail(NotWritable);
+			var r: i32 = dr::dfs::truncate(this->m_fs->volume(), this->m_ino, &node, size);
+			if (r < 0)
+				return this->fail(r);
+			this->m_error = 0;
+			return true;
+		}
+
+		// Everything about the file (see FileSystem.info).
+		sub info(var out: Info*) -> bool {
+			var node: dr::dfs::Inode;
+			if (not this->load(&node))
+				return false;
+			info_from_inode(this->m_ino, &node, out);
+			return true;
+		}
+
+		// Nothing to write back (every call already reached the disk): it marks the File closed.
+		sub close() { this->reset(); }
+
+		inline sub is_open() -> bool { return this->m_fs != null; }
+		inline sub last_error() -> i32 { return this->m_error; }
+		sub error_text() -> string { return error_name(this->m_error); }
+
+		// ---- Inside (FileSystem.open uses these) ----
+		sub reset() {
+			this->m_fs = null;
+			this->m_ino = 0;
+			this->m_mode = 0;
+			this->m_pos = 0;
+		}
+		sub attach(var fs: FileSystem*, var ino: u32, var mode: u32) {
+			this->m_fs = fs;
+			this->m_ino = ino;
+			this->m_mode = mode;
+			this->m_pos = 0;
+			this->m_generation = fs->generation();
+			this->m_error = 0;
+		}
+		// The inode as it is now; false (NotOpen, NotFound, ...) if the File can't be used.
+		priv sub load(var node: dr::dfs::Inode*) -> bool {
+			if (this->m_fs == null or not this->m_fs->is_mounted() or this->m_fs->generation() != this->m_generation)
+				return this->fail(NotOpen);
+			var r: i32 = dr::dfs::read_inode(this->m_fs->volume(), this->m_ino, node);
+			if (r < 0)
+				return this->fail(r);
+			if (type_from_mode(node->mode) != Type.File)
+				return this->fail(dr::dfs::NotFound);		// removed meanwhile
+			return true;
+		}
+		priv sub fail(var error: i32) -> bool {
+			this->m_error = error;
+			return false;
+		}
+		priv sub fail_count(var error: i32) -> i32 {
+			this->m_error = error;
+			return -1;
+		}
+	};
+
+
+	// ============================================================================
+	// Dir: reading a directory's entries
+	// ============================================================================
+	// Made by FileSystem.open_dir:
+	//     var dir: dr::fs::Dir;
+	//     var entry: dr::fs::Entry;
+	//     if (disk.open_dir("/games", &dir)) {
+	//         while (dir.next(&entry))
+	//             ... entry.name, entry.type, entry.size ...
+	//         dir.close();
+	//     }
+	// Removing entries while reading is fine (remove_all does it); entries added meanwhile may
+	// or may not be seen.
+	struct Dir {
+		priv var m_fs: FileSystem* = null;
+		priv var m_ino: u32 = 0;
+		priv var m_cursor: u32 = 0;
+		priv var m_generation: u32 = 0;
+		priv var m_error: i32 = 0;
+
+		// The next entry ("." and ".." skipped): false at the end (last_error() is 0) or on an
+		// error.
+		sub next(var out: Entry*) -> bool {
+			if (this->m_fs == null or not this->m_fs->is_mounted() or this->m_fs->generation() != this->m_generation) {
+				this->m_error = NotOpen;
+				return false;
+			}
+			var vol: dr::dfs::Volume* = this->m_fs->volume();
+			var dir: dr::dfs::Inode;
+			var r: i32 = dr::dfs::read_inode(vol, this->m_ino, &dir);
+			if (r < 0) {
+				this->m_error = r;
+				return false;
+			}
+			var entry: dr::dfs::DirEntry;
+			while (true) {
+				r = dr::dfs::dir_next(vol, &dir, &this->m_cursor, &entry);
+				if (r == dr::dfs::NotFound) {
+					this->m_error = 0;
+					return false;
+				}
+				if (r < 0) {
+					this->m_error = r;
+					return false;
+				}
+				if (not dr::dfs::is_dot_name(entry.name, entry.name_len))
+					break;
+			}
+			dr::dfs::mem_copy(out->name, entry.name, cast<u32>(entry.name_len) + 1);
+			out->inode = entry.inode;
+			out->type = type_from_mode(cast<u16>(cast<u32>(entry.type) << 12));
+			out->size = 0;
+			var node: dr::dfs::Inode;
+			if (dr::dfs::read_inode(vol, entry.inode, &node) == dr::dfs::Ok)
+				out->size = node.size;
+			this->m_error = 0;
+			return true;
+		}
+
+		// Back to the first entry.
+		sub rewind() { this->m_cursor = 0; }
+
+		sub close() { this->reset(); }
+		inline sub is_open() -> bool { return this->m_fs != null; }
+		inline sub last_error() -> i32 { return this->m_error; }
+		sub error_text() -> string { return error_name(this->m_error); }
+
+		// ---- Inside (FileSystem.open_dir uses these) ----
+		sub reset() {
+			this->m_fs = null;
+			this->m_ino = 0;
+			this->m_cursor = 0;
+		}
+		sub attach(var fs: FileSystem*, var ino: u32) {
+			this->m_fs = fs;
+			this->m_ino = ino;
+			this->m_cursor = 0;
+			this->m_generation = fs->generation();
+			this->m_error = 0;
+		}
+	};
+}

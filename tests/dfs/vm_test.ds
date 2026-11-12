@@ -1,0 +1,64 @@
+// Run by vm_test.sh on a disk image with two DPT partitions: partition 1 was formatted and filled
+// by dtools (the C++ core), partition 2 is formatted here. dtools then checks what this wrote.
+#import(<dragon-sdk>)
+
+var g_failed: i32 = 0;
+
+sub check(var id: i32, var condition: bool) {
+	if (not condition and g_failed == 0)
+		g_failed = id;
+}
+
+// The same bytes as vm_test.sh's pattern().
+sub pattern(var buffer: u8*, var size: u32, var seed: u32) {
+	for (var i: u32 = 0; i < size; i++)
+		buffer[i] = cast<u8>(i * 7 + seed + (i >> 8));
+}
+
+sub main() -> i32 {
+	var dpt: dr::DPTBlock;
+	check(1, dr::dpt_load_block(&dpt) and dpt.partitionCount >= 2);
+	var vol: dr::dfs::Volume* = cast<dr::dfs::Volume*>(dr::malloc(sizeof(dr::dfs::Volume)));
+	const BigSize: u32 = 300 * 1024;			// 1 KiB blocks: into the double indirect block
+	var a: u8* = cast<u8*>(dr::malloc(BigSize));
+	var b: u8* = cast<u8*>(dr::malloc(BigSize));
+	check(2, vol != null and a != null and b != null);
+	if (g_failed != 0) return g_failed;
+
+	// Partition 1: made by dtools.
+	var part1: dr::dfs::DiskPartition;
+	var dev1: dr::dfs::Device;
+	dr::dfs::dpt_partition(&part1, &dpt.entries[0]);
+	dr::dfs::disk_device(&dev1, &part1);
+	check(10, dr::dfs::mount(vol, &dev1, false) == 0);
+	check(11, vol->layout.block_size == 1024);
+	check(12, dr::dfs::read_file(vol, "/hello.txt", a, 64) == 13 and dr::dfs::mem_equal(a, "Hello, DFS!\n", 12));
+	pattern(b, 20000, 5);
+	check(13, dr::dfs::read_file(vol, "/docs/big.bin", a, BigSize) == 20000 and dr::dfs::mem_equal(a, b, 20000));
+	pattern(a, BigSize, 9);
+	check(14, dr::dfs::mkdir(vol, "/vm", 0x1ED) == 0);
+	check(15, dr::dfs::write_file(vol, "/vm/out.bin", a, BigSize) == cast<i32>(BigSize));
+	check(16, dr::dfs::rename(vol, "/docs/big.bin", "/vm/moved.bin") == 0);
+	check(17, dr::dfs::rmdir(vol, "/docs") == 0);
+	check(18, dr::dfs::link(vol, "/hello.txt", "/vm/hello2.txt") == 0);
+	var node: dr::dfs::Inode;
+	check(19, dr::dfs::stat(vol, "/vm/out.bin", &node) == 0 and node.dindirect != 0);
+	check(20, dr::dfs::unmount(vol) == 0);
+
+	// Partition 2: formatted here (4 KiB blocks, the defaults).
+	var part2: dr::dfs::DiskPartition;
+	var dev2: dr::dfs::Device;
+	dr::dfs::dpt_partition(&part2, &dpt.entries[1]);
+	dr::dfs::disk_device(&dev2, &part2);
+	var params: dr::dfs::MkfsParams = { part2.size, 0, 0, "fromvm", null };
+	check(30, dr::dfs::mkfs(vol, &dev2, &params) == 0);
+	check(31, dr::dfs::mount(vol, &dev2, false) == 0);
+	check(32, dr::dfs::mkdir(vol, "/etc", 0x1ED) == 0);
+	check(33, dr::dfs::write_file(vol, "/etc/motd", "Written by DScript\n", 19) == 19);
+	check(34, dr::dfs::unmount(vol) == 0);
+
+	if (g_failed != 0) {
+		debug_print("vm_test: a check failed\n");
+	}
+	return g_failed;
+}

@@ -54,6 +54,12 @@ namespace dragon
 			if (rValue != ErrorNoError)
 				return rValue;
 		}
+		else if (tool == "dfs")
+		{
+			rValue = tool_dfs(argc, argv);
+			if (rValue != ErrorNoError)
+				return rValue;
+		}
 		else if (tool == "--help")
 		{
 			print_application_help();
@@ -480,6 +486,8 @@ namespace dragon
 		out.p("    <disassembly_file>           Path to the disassembly file to parse. (Used only for -f option)").nl();
 		out.p("    -d                           Used to specify a directory path (mutually exclusive with -f).").nl();
 		out.p("    -f                           Used to specify a file path (mutually exclusive with -d).").nl().nl();
+
+		print_dfs_help();
 
 		out.fg(ostd::ConsoleColors::Magenta).p("Usage: ./dtools <tool_name> [...arguments...]").nl().nl().reset();
 	}
