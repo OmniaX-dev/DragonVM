@@ -110,6 +110,8 @@ static void processVideoSignal(void)
 				graphics.swapBuffers_16Colors();
 			break;
 			case S::Text16Color_SwapBuffers: graphics.swapBuffers_16Colors(); break;
+			case S::Text16Color_SetCustomPalette: break;		// (no screen: colors don't matter)
+			case S::Text16Color_SelectPalette: break;
 			case S::Text16Color_Scroll: graphics.scroll_16Colors(); break;
 			default: break;
 		}

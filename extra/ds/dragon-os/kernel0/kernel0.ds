@@ -42,17 +42,62 @@ struct SnakeGame {
 	priv var m_direction_x: i32 = 1;
 	priv var m_direction_y: i32 = 0;
 	priv var m_valid: bool = false;
-	priv var m_tick_delay: u32 = 250;
+	priv var m_tick_delay: u32 = 150;
 	priv var m_level: u32 = 1;
-	priv var m_level_length: u32 = 20;
+	priv var m_level_length: u32 = 8;
+	priv var m_speedup: u32 = 12;
+	priv var m_score: u32 = 0;
 	priv var m_lastTime: u32 = 0;
 	priv var m_backgroundColor: u8 = dr::DefaultPaletteText16.Black;
+	priv var m_offset_x: u16 = 1;
+	priv var m_offset_y: u16 = 2;
+	priv var m_horizontalLine: u8* = null;
+	priv var m_palette: Palette;
+
+	priv struct Color { var r: u8 = 0; var g: u8 = 0; var b: u8 = 0; sub new() {} sub new(var r: u8, var g: u8, var b: u8) { this->r = r; this->g = g; this->b = b; } }
+	priv struct Palette {
+		readonly var Black: Color;
+		readonly var Gray: Color;
+		readonly var White: Color;
+		readonly var Red: Color;
+		readonly var Pink: Color;
+		readonly var Brown: Color;
+		readonly var DarkOrange: Color;
+		readonly var Orange: Color;
+		readonly var Yellow: Color;
+		readonly var DarkGreen: Color;
+		readonly var Green: Color;
+		readonly var Lime: Color;
+		readonly var DarkBlue: Color;
+		readonly var Blue: Color;
+		readonly var LightBlue: Color;
+		readonly var Sky: Color;
+
+		sub new() {
+			this->Black.new(0, 0, 0);
+			this->Gray.new(157, 157, 157);
+			this->White.new(255, 255, 255);
+			this->Red.new(190, 38, 51);
+			this->Pink.new(224, 111, 139);
+			this->Brown.new(73, 60, 43);
+			this->DarkOrange.new(164, 100, 34);
+			this->Orange.new(235, 137, 49);
+			this->Yellow.new(247, 226, 107);
+			this->DarkGreen.new(47, 80, 42);
+			this->Green.new(68, 137, 26);
+			this->Lime.new(163, 206, 39);
+			this->DarkBlue.new(27, 38, 50);
+			this->Blue.new(0, 87, 132);
+			this->LightBlue.new(49, 162, 242);
+			this->Sky.new(178, 220, 239);
+		}
+	}
 
 	sub new(var console: dr::Text16Console*, var bgcol: u8) {
 		if (not console) return;
 		this->m_console = console;
-		this->m_board_w = console->get_console_width() - 1;
-		this->m_board_h = console->get_console_height() - 3;
+		this->m_board_w = (console->get_console_width() - this->m_offset_x - 1) / 2;
+		this->m_board_h = console->get_console_height() - this->m_offset_y - 1;
 		this->m_capacity = this->m_board_w * this->m_board_h;
 		this->m_board = dr::malloc(this->m_capacity);
 		if (not this->m_board) return;
@@ -62,13 +107,25 @@ struct SnakeGame {
 		this->m_console->clear(bgcol);
 		this->m_backgroundColor = bgcol;
 
+		this->m_horizontalLine = dr::malloc((this->m_board_w * 2) + 1);
+		if (not this->m_horizontalLine) return;
+		for (var i: u16 = 0; i < this->m_board_w * 2; i++)
+			this->m_horizontalLine[i] = dr::ASCII.BoxDoubleHorizontal;
+		this->m_horizontalLine[this->m_board_w * 2] = '\0';
+		this->draw_border();
+
 		this->m_head_index = 0;
 		this->m_tail_index = 0;
 		this->m_body[0] = (this->m_board_h / 2) * this->m_board_w + this->m_board_w / 2;
 		this->m_board[this->m_body[0]] = Cell.Snake;
-		this->draw_cell(this->m_body[0], dr::ASCII.FullBlock, dr::DefaultPaletteText16.Red);
+		this->draw_cell(this->m_body[0], dr::ASCII.FullBlock, dr::DefaultPaletteText16.Yellow);
 		this->m_growth = 3;
 		this->place_food();
+
+		this->m_palette.new();
+		var vga_device = dr::vga_get_device();
+		vga_device->text16ColorCustomPaletteAddr = cast<u32>(&this->m_palette);
+		vga_device->signal = dr::VGAText16ColorSignals.SetCustomPalette;
 
 		this->m_valid = true;
 	}
@@ -76,10 +133,10 @@ struct SnakeGame {
 		while(true) {
 			if (dr::time::millis() - this->m_lastTime < this->m_tick_delay)
 				continue;
+			this->draw_top_bar();
 			this->m_lastTime = dr::time::millis();
 			if (!this->read_input())
 				break;
-			this->m_console->xy(1, 3);
 			if (!this->game_tick())
 				break;
 			this->m_console->present();
@@ -108,11 +165,29 @@ struct SnakeGame {
 		var column: i32 = pos % this->m_board_w;
 		var row: i32    = pos / this->m_board_w;
 		this->m_console->store_colors()->bg(this->m_backgroundColor)->fg(col);
-		this->m_console->xy(column + 1, row + 1)->print(symbol);
+		this->m_console->xy(this->m_offset_x + column * 2, this->m_offset_y + row)->print(symbol)->print(symbol);
 		this->m_console->restore_colors();
 	}
+	priv sub draw_top_bar() {
+		for (var i: i32 = 0; i < this->m_console->get_console_width(); i++)
+			this->m_console->xy(i, 0)->bg(dr::DefaultPaletteText16.DarkGreen)->fg(dr::DefaultPaletteText16.Yellow)->print(' ');
+		this->m_console->xy(0, 0);
+		this->m_console->print("Score: ")->print(this->m_score)->x(20)->print("Level: ")->print(this->m_level)->x(40)->print("Length: ")->print(this->snake_len());
+	}
 	priv sub draw_border() {
-
+		var left: u16 = this->m_offset_x - 1;
+		var right: u16 = this->m_offset_x + this->m_board_w * 2;
+		var top: u16 = this->m_offset_y - 1;
+		var bottom: u16 = this->m_offset_y + this->m_board_h;
+		this->m_console->store_colors()->bg(dr::DefaultPaletteText16.DarkGreen)->fg(dr::DefaultPaletteText16.Lime);
+		this->m_console->xy(left, top)->print(dr::ASCII.BoxDoubleDownRight)->print(this->m_horizontalLine)->print(dr::ASCII.BoxDoubleDownLeft);
+		for (var y: u16 = top + 1; y < bottom; y++)
+		{
+			this->m_console->xy(left, y)->print(dr::ASCII.BoxDoubleVertical);
+			this->m_console->xy(right, y)->print(dr::ASCII.BoxDoubleVertical);
+		}
+		this->m_console->xy(left, bottom)->print(dr::ASCII.BoxDoubleUpRight)->print(this->m_horizontalLine)->print(dr::ASCII.BoxDoubleUpLeft);
+		this->m_console->restore_colors();
 	}
 	priv sub place_food() {
 		var position: i32 = 0;
@@ -121,11 +196,18 @@ struct SnakeGame {
 		} while (this->m_board[position] != Cell.Empty);
 
 		this->m_board[position] = Cell.Food;
-		this->draw_cell(position, dr::ASCII.BlackSquare, dr::DefaultPaletteText16.Lime);
+		this->draw_cell(position, dr::ASCII.FullBlock, dr::DefaultPaletteText16.Lime);
 	}
 	priv sub game_tick() -> i32 {
-		// if (this->snake_len() % this->m_level_length == 0)
-		// 	this->m_timer.setInterval(this->m_tick_delay * this->m_level++);
+		this->m_score += this->m_level * this->snake_len();
+		if (this->snake_len() / this->m_level_length == this->m_level)
+		{
+			if (this->m_tick_delay > this->m_speedup)
+			{
+				this->m_tick_delay -= this->m_speedup;
+				this->m_level++;
+			}
+		}
 		var head_position: i32 = this->m_body[this->m_head_index];
 		var new_column: i32 = head_position % this->m_board_w + this->m_direction_x;
 		var new_row: i32    = head_position / this->m_board_w + this->m_direction_y;
@@ -148,7 +230,7 @@ struct SnakeGame {
 		this->m_head_index = this->next_slot(this->m_head_index);
 		this->m_body[this->m_head_index] = new_head_position;
 		this->m_board[new_head_position] = Cell.Snake;
-		this->draw_cell(new_head_position, dr::ASCII.FullBlock, dr::DefaultPaletteText16.Red);
+		this->draw_cell(new_head_position, dr::ASCII.FullBlock, dr::DefaultPaletteText16.Yellow);
 		if (this->snake_len() > 1)
 			this->draw_cell(this->m_body[this->prev_slot(this->m_head_index)], dr::ASCII.FullBlock, dr::DefaultPaletteText16.Green);
 		if (ate_food)

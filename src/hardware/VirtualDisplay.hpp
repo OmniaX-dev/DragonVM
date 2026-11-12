@@ -38,6 +38,7 @@ namespace dragon
 				inline static constexpr u8 TextSingleInvertColors = 0x05;
 				inline static constexpr u8 TextSingleString = 0x08;        // 4 bytes (address)
 
+				inline static constexpr u8 Text16CustomPaletteAddr = 0x24;        // 4 bytes (address pointing to u8[16*(r,g,b)])
 				inline static constexpr u8 Text16ConsoleAddr = 0x28;        // 4 bytes (address of a dr::Text16Console)
 				inline static constexpr u8 Text16ClearSoftwareBufferAddr = 0x2C;        // 4 bytes (address)
 				inline static constexpr u8 Text16String = 0x30;        // 4 bytes (address)
@@ -78,6 +79,8 @@ namespace dragon
 				inline static constexpr u8 Text16Color_CopyFrame = 0x14;
 				inline static constexpr u8 Text16Color_ConsolePrintString = 0x15;    // Text16Console::print(Text16String), see Text16Console.hpp
 				inline static constexpr u8 Text16Color_CopyFrameAndSwap = 0x16;
+				inline static constexpr u8 Text16Color_SetCustomPalette = 0x17;
+				inline static constexpr u8 Text16Color_SelectPalette = 0x18;     // the palette whose ID is in the Palette register (0: the custom one)
 
 				inline static constexpr u8 RefreshScreen = 0xE0;
 				inline static constexpr u8 ClearSCreen = 0xE1;
@@ -145,6 +148,12 @@ namespace dragon
 
 				void text16_to_cells(void);
 				void text16_load_palettes(void);
+				// Makes palette m_currentText16PaletteID (clamped) the one the screen draws with,
+				// and writes its ID to the Palette register.
+				void text16_apply_palette(void);
+				// The machine's palette at start / after a reset: the config's (the custom one back
+				// to the default colors).
+				void text16_reset_palette(void);
 
 			private:
 				// Single color mode palette entries (index 0 is the console's default: background).
@@ -166,7 +175,7 @@ namespace dragon
 
 				stdvec<data::IBiosVideoPalette*> m_text16_palettes;
 				data::IBiosVideoPalette* m_text16_Currentpalette { nullptr };
-				u8 m_currentPaletteID { 0 };
+				u8 m_currentText16PaletteID { 0 };
 
 				bool m_redrawScreen { true };
 				bool m_vsyncPending { false };

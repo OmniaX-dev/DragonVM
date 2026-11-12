@@ -184,6 +184,40 @@ namespace dragon
 				std::vector<ostd::Color> m_colors;
 		};
 
+		class CustomText16Palette : public IBiosVideoPalette
+		{
+			public:
+				inline CustomText16Palette(void)
+				{
+					loadDefaults();
+				}
+
+				inline void loadDefaults(void)
+				{
+					m_colors.clear();
+					for (u8 i = 0; i < 16; i++)
+						m_colors.push_back(m_defaults.getColor(i));
+				}
+
+				inline void setColors(const stdvec<ostd::Color>& colors)
+				{
+					if (colors.size() != 16) return;
+					m_colors.clear();
+					for (auto& col: colors)
+						m_colors.push_back(col);
+				}
+
+				inline ostd::Color getColor(u8 col) override
+				{
+					if (col >= m_colors.size()) return { 0, 0, 0 };
+					return m_colors[col];
+				}
+
+			protected:
+				std::vector<ostd::Color> m_colors;
+				BiosVideoDefaultPalette m_defaults;
+		};
+
 		// A register operand is one byte: the register index (bits 0-5) and the view (bits 6-7):
 		// the whole register, or its low / high 16 bits (R1L, R1H, ...). Reading a half gives
 		// it zero-extended; writing a half changes only that half. Writes are truncated to the

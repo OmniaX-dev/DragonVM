@@ -10,7 +10,8 @@ namespace dr {
 		var textSingleColorInverted: u8;
 	    var __padding0: u8[2];
 	    var textSingleColorBufferStringAddr: u32;
-	    var __padding1: u8[28];
+	    var __padding1: u8[24];
+	    var text16ColorCustomPaletteAddr: u32;
 	    var text16ColorConsoleAddr: u32;
 	    var text16ColorClearSoftwareBufferAddr: u32;
 	    var text16ColorBufferStringAddr: u32;

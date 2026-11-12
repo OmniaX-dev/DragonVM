@@ -31,15 +31,7 @@ namespace dragon
 			m_singlePalette.setColor(SingleBackground, config.singleColor_background);
 
 			text16_load_palettes();
-			m_currentPaletteID = config.text16_palette;
-			if (m_currentPaletteID >= m_text16_palettes.size())
-				m_text16_Currentpalette = m_text16_palettes[0];
-			else
-				m_text16_Currentpalette = m_text16_palettes[m_currentPaletteID];
-			// VM color i is palette entry i. Entry 0 can't hold a color (it is the console's
-			// default), so the console's default colors are set to VM color 0 in this mode.
-			for (u32 i = 1; i < 256; i++)
-				m_text16Palette.setColor(cast<u8>(i), m_text16_Currentpalette->getColor(cast<u8>(i)));
+			text16_reset_palette();
 
 			if (!m_font.loadFromFile(fontPath, 16, 16, 0))
 				return;
@@ -66,9 +58,8 @@ namespace dragon
 			auto& config = DragonRuntime::machine_config;
 			if (videoMode == tVideoModeValues::Text16Colors)
 			{
-				const ostd::Color color0 = m_text16_Currentpalette->getColor(0);
 				setPalette(m_text16Palette);
-				setDefaultColors(color0, color0);
+				text16_apply_palette();
 			}
 			else
 			{
@@ -94,6 +85,7 @@ namespace dragon
 				// The machine was reset: nothing of the previous run stays on the screen.
 				m_resetCount = DragonRuntime::getResetCount();
 				single_text_clear_screen();
+				text16_reset_palette();
 				m_videoMode = 0xFF;
 				m_redrawScreen = true;
 			}
@@ -261,6 +253,39 @@ namespace dragon
 						l_swapBuffers();
 						break;
 					}
+					case tSignalValues::Text16Color_SetCustomPalette:
+					{
+						u32 palette_addr = cast<u32>(mem.read32(vga_addr + tRegisters::Text16CustomPaletteAddr));
+						const u8* palette_data = mem.directSpan(palette_addr, 16 * 3); // 16 colors * 3 u8 components (r, g, b)
+						if (palette_data == nullptr)
+						{
+							data::ErrorHandler::pushError(data::ErrorCodes::Graphics_MemoryReadFailed, String("SetCustomPalette: cannot read 48 bytes (16 colors, r g b) at ").add(String::getHexStr(palette_addr, true, 4)));
+							break;
+						}
+						stdvec<ostd::Color> colors;
+						colors.reserve(16);
+						for (i32 i = 0, j = 0; i < 16 * 3; i += 3, j++)
+						{
+							ostd::Color col;
+							col.r = palette_data[i + 0];
+							col.g = palette_data[i + 1];
+							col.b = palette_data[i + 2];
+							col.a = 255;
+							colors.push_back(col);
+						}
+						auto& pal = cast<data::CustomText16Palette&>(*m_text16_palettes[0]);
+						pal.setColors(colors);
+						m_currentText16PaletteID = 0; // Custom palette index
+						text16_apply_palette();
+						break;
+					}
+					case tSignalValues::Text16Color_SelectPalette:
+					{
+						// An unknown ID selects the default palette (the register then says which).
+						m_currentText16PaletteID = cast<u8>(mem.read8(vga_addr + tRegisters::Palette));
+						text16_apply_palette();
+						break;
+					}
 					case tSignalValues::ClearSCreen:
 					{
 						const u8 fg = mem.read8(vga_addr + tRegisters::MemControllerFGCol);
@@ -412,7 +437,37 @@ namespace dragon
 		void VirtualDisplay::text16_load_palettes(void)
 		{
 			if (m_text16_palettes.empty())
+			{
+				m_text16_palettes.push_back(new data::CustomText16Palette);
 				m_text16_palettes.push_back(new data::BiosVideoDefaultPalette);
+			}
+		}
+
+		void VirtualDisplay::text16_apply_palette(void)
+		{
+			if (m_currentText16PaletteID >= m_text16_palettes.size())
+				m_currentText16PaletteID = 1;
+			m_text16_Currentpalette = m_text16_palettes[m_currentText16PaletteID];
+			// VM color i is palette entry i (the screen draws with m_text16Palette: setColor makes
+			// it redraw). Entry 0 can't hold a color (it is the console's default), so the
+			// console's default colors are set to VM color 0 in this mode.
+			for (u32 i = 1; i < 256; i++)
+				m_text16Palette.setColor(cast<u8>(i), m_text16_Currentpalette->getColor(cast<u8>(i)));
+			if (m_videoMode == tVideoModeValues::Text16Colors)
+			{
+				const ostd::Color color0 = m_text16_Currentpalette->getColor(0);
+				setDefaultColors(color0, color0);
+			}
+			DragonRuntime::vGraphicsInterface.write8(tRegisters::Palette, cast<i8>(m_currentText16PaletteID));
+			m_redrawScreen = true;
+		}
+
+		void VirtualDisplay::text16_reset_palette(void)
+		{
+			if (!m_text16_palettes.empty())
+				cast<data::CustomText16Palette&>(*m_text16_palettes[0]).loadDefaults();
+			m_currentText16PaletteID = DragonRuntime::machine_config.text16_palette;
+			text16_apply_palette();
 		}
 		// ===================================================== TEXT 16 COLORS MODE =====================================================
 	}

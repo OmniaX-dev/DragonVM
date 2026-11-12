@@ -138,6 +138,16 @@ interrupt sub __int_30_handler() {
 	{
 		device->signal = dr::VGAText16ColorSignals.SwapBuffers;
 	}
+	else if (code == INT30_SET_CUSTOM_PALETTE_TEXT16)
+	{
+		device->text16ColorCustomPaletteAddr = param1;
+		device->signal = dr::VGAText16ColorSignals.SetCustomPalette;
+	}
+	else if (code == INT30_SELECT_PALETTE_TEXT16)	// R9: the palette ID (0: the custom one)
+	{
+		device->palette = cast<u8>(param1);
+		device->signal = dr::VGAText16ColorSignals.SelectPalette;
+	}
 	else if (code == INT30_SCROLL_TEXT16)
 	{
 		device->signal = dr::VGAText16ColorSignals.Scroll;

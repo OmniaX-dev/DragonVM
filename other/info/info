@@ -152,6 +152,7 @@
 
         0x08: (4 bytes) Text Single Color Buffered String Address
 
+		0x28: (4 bytes) Text 16 Colors Custom Palette Addr
 		0x28: (4 bytes) Text 16 Colors Console Address (a dr::Text16Console, for the console signals)
 		0x2C: (4 bytes) Text 16 Colors Clear Software Buffer Address
         0x30: (4 bytes) Text 16 Colors Buffered String Address
