@@ -10,8 +10,13 @@ a single-indirect and a double-indirect one; directories are files made of fixed
   core: a change to one goes into the other.
 - High level API (DScript, in the SDK): `extra/ds/dragon-sdk/src/file.ds`, `dr::fs` (paths, open files, directories)
 - fsck (host only): `src/storage/dfs/DfsCheck.hpp/.cpp`
+- Resizing (host only): `src/storage/dfs/DfsResize.hpp/.cpp`
 - `storage::DFS` (detection for the Partition Manager, a device on a `Disk`): `src/storage/DFS.hpp/.cpp`
+- `storage::DfsVolume` (host tools: a mounted volume on a partition, recursive copies in and out of the host, recursive
+  delete): `src/storage/DfsVolume.hpp/.cpp`
 - Tool: `dtools dfs <image> <partition#> <command>` (`src/tools/ToolsDfs.cpp`)
+- Debugger: the Partition Manager formats, checks, resizes and browses DFS partitions (`src/debugger/PartitionManager`,
+  `src/debugger/DfsBrowser`)
 - Tests: `bin/dfs_test` (`tests/dfs/dfs_test.cpp`, the C++ core), `tests/dscript/sdk_dfs.ds` (the DScript core on a RAM
   disk, in the DScript suite), `tests/dscript/sdk_fs.ds` (`dr::fs`), `tests/dfs/vm_test.sh` (the two on one disk image: each reads and checks what the other
   wrote, and dtools' fsck checks it all)
@@ -130,6 +135,45 @@ entry goes first (truncate writes the inode, or clears a pointer block's entries
 bit is cleared last. While renaming or linking, the link count is raised before the new entry exists. After a crash
 there can be leaked blocks or inodes, a link count that's too high, or stale free counters (fsck reports all of
 these). A block can never have two owners.
+
+## Resizing
+
+The layout only depends on the block count (and the inode count, which never changes), so a resized file system is
+exactly what mkfs would have made for the new size, plus the data. `dfs::resize()` (host only) does it in three steps:
+
+1. When the block bitmap gets shorter (shrinking past a multiple of `bits_per_block` blocks: 128 MiB with 4 KiB
+   blocks, 2 MiB with 512 B blocks), the inode table moves back first. The end of its old place becomes free data.
+2. Every block in use that is outside the new data area moves to a free block inside it, and the pointer to it
+   (in the inode, a pointer block, or a double indirect block) is updated. These are the blocks past the new end
+   when shrinking, and the blocks the longer bitmap needs when growing.
+3. When the bitmap gets longer, the inode table moves forward into the space step 2 freed. Then the new bitmap and
+   the superblock are written.
+
+The file system has to be clean (fsck) before, and it's checked again after. It can shrink down to the size its
+blocks use, plus the metadata (`ResizeInfo::min_size`), and grow up to 4 GiB. A resize isn't crash safe. When
+shrinking, resize before the partition gets smaller. When growing, resize after it got bigger: the device must reach
+the new end.
+
+```
+dtools dfs disk.drd 2 resize          # to the partition's size (after growing the partition)
+dtools dfs disk.drd 2 resize 6M       # smaller (before shrinking the partition)
+```
+
+## In the debugger
+
+Disk Manager → Partitions... opens the Partition Manager. It shows each partition's content (DFS with its usage, or
+empty / raw / unknown), and the selected partition's file system: usage, layout, state, how far it can be resized,
+and whether Drake can boot it.
+
+- **Format...** makes a DFS volume (label, block size, bytes per inode; the resulting layout is shown first).
+- **Check** runs fsck. The problems go to the console.
+- **Browse...** opens the files in a tree. You can import host files and folders (or drop them on the tree), extract
+  files and folders, create folders, rename, and delete. Each change is written to the disk at once. On one of the
+  machine's disks, every change is an edit in the history (Step back undoes it).
+- Table changes wait for **Apply**, which lists them first. With "Move and resize contents" on (the default), a
+  partition whose start changed has its data moved, and a DFS partition whose size changed has its file system
+  resized with it. A partition that's too small for its files is refused. Everything is done on a copy of the disk,
+  then written, so a failure writes nothing.
 
 ## Core API (layers)
 

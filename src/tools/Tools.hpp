@@ -35,6 +35,7 @@ namespace dragon
 			static i32 dfs_put(dfs::Volume* vol, const String& hostPath, const String& path, bool recursive);
 			static i32 dfs_put_file(dfs::Volume* vol, const String& hostPath, const String& path);
 			static i32 dfs_write_data(dfs::Volume* vol, const stdvec<u8>& data, const String& path);
+			static i32 dfs_resize(dfs::Volume* vol, const dfs::Device& dev, u64 partitionSize, const stdvec<String>& args);
 			static i32 dfs_install_kernel(dfs::Volume* vol, const String& hostPath, const String& path, bool bootFlag);
 			static i32 dfs_get(dfs::Volume* vol, const String& path, const String& hostPath);
 			static i32 dfs_stat(dfs::Volume* vol, const String& path);

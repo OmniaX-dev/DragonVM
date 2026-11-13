@@ -3,6 +3,7 @@
 
 #include "../../src/storage/dfs/DfsCore.hpp"
 #include "../../src/storage/dfs/DfsCheck.hpp"
+#include "../../src/storage/dfs/DfsResize.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -73,7 +74,9 @@ struct Fixture
 	Device dev;
 	std::unique_ptr<Volume> vol { new Volume() };
 
-	Fixture(u32 size, u32 log2, u32 bytes_per_inode = 16384) : disk(size)
+	Fixture(u32 size, u32 log2, u32 bytes_per_inode = 16384) : Fixture(size, size, log2, bytes_per_inode) {  }
+	// A file system smaller than the disk (room to grow).
+	Fixture(u32 disk_size, u32 size, u32 log2, u32 bytes_per_inode) : disk(disk_size)
 	{
 		dev = disk.device();
 		MkfsParams params { size, log2, bytes_per_inode, P("TEST"), nullptr };
@@ -598,6 +601,127 @@ static void test_fsck_detects(void)
 	CHECK_EQ(write_inode(f.vol.get(), other_ino, &other), Ok);
 }
 
+// Growing and shrinking: the bitmap keeps its length or not (the inode table moves),
+// data blocks move out of the way / below the new end, the files stay.
+static void test_resize(void)
+{
+	g_test = "resize";
+	const u32 KiB = 1024, MiB = 1024 * 1024, B = 512;
+	// 512 byte blocks: a bitmap block covers 4096 blocks (2 MiB).
+	Fixture f(4 * MiB, 3 * MiB / 2, 9, 8192);
+	Volume* vol = f.vol.get();
+	CHECK_EQ(vol->layout.block_bitmap_len, 1);
+	f.write_file("/big", 200 * KiB, 1);				// double indirect
+	CHECK_EQ(mkdir(vol, P("/d"), 0755, nullptr), Ok);
+	f.write_file("/d/a", 30 * KiB, 2);
+	char name[32];
+	for (u32 i = 0; i < 40; i++)
+	{
+		std::snprintf(name, sizeof(name), "/d/f%u", i);
+		f.write_file(name, 3 * KiB, 10 + i);
+	}
+	for (u32 i = 0; i < 40; i += 2)
+	{
+		std::snprintf(name, sizeof(name), "/d/f%u", i);
+		CHECK_EQ(unlink(vol, P(name)), Ok);
+	}
+	f.write_file("/tail", 300 * KiB, 3);
+	auto l_files_ok = [&](bool big) {
+		if (big)
+		{
+			CHECK(f.file_is("/big", 200 * KiB, 1));
+			CHECK(f.file_is("/tail", 300 * KiB, 3));
+		}
+		CHECK(f.file_is("/d/a", 30 * KiB, 2));
+		for (u32 i = 1; i < 40; i += 2)
+		{
+			std::snprintf(name, sizeof(name), "/d/f%u", i);
+			CHECK(f.file_is(name, 3 * KiB, 10 + i));
+		}
+	};
+
+	// The plan (mounted).
+	ResizeInfo plan;
+	CHECK_EQ(resize_plan(vol, 3 * MiB, plan), Ok);
+	CHECK(plan.table_moves);
+	CHECK(plan.moved_blocks >= 1);					// the root directory's block is in the way
+	CHECK_EQ(plan.old_blocks, 3072);
+	CHECK_EQ(plan.new_blocks, 6144);
+	CHECK(plan.min_size > 0 && plan.min_size < 3 * MiB / 2);
+	CHECK_EQ(resize_plan(vol, plan.min_size - B, plan), NoSpace);
+	const u32 free0 = f.free_blocks();
+
+	// Growing past the bitmap's capacity: one more bitmap block, the table moves.
+	CHECK_EQ(unmount(vol), Ok);
+	ResizeInfo info;
+	FsckResult check;
+	CHECK_EQ(resize(vol, &f.dev, 3 * MiB, &info, &check), Ok);
+	CHECK(check.clean());
+	CHECK(info.table_moves && info.moved_blocks >= 1);
+	CHECK_EQ(mount(vol, &f.dev, false), Ok);
+	CHECK_EQ(vol->layout.total_blocks, 6144);
+	CHECK_EQ(vol->layout.block_bitmap_len, 2);
+	CHECK_EQ(f.free_blocks(), free0 + 3072 - 1);
+	l_files_ok(true);
+	f.check_fsck();
+
+	// The new space is used: a file past the old end (and past 2 MiB).
+	f.write_file("/high", 1600 * KiB, 4);
+	CHECK(f.file_is("/high", 1600 * KiB, 4));
+	CHECK_EQ(unlink(vol, P("/big")), Ok);
+	CHECK_EQ(unlink(vol, P("/tail")), Ok);
+
+	// Shrinking to 2 MiB: the bitmap gets shorter (the table moves back), the blocks past
+	// the end move down.
+	CHECK_EQ(resize_plan(vol, 2 * MiB, plan), Ok);
+	CHECK(plan.table_moves);
+	CHECK(plan.moved_blocks > 0);
+	CHECK_EQ(unmount(vol), Ok);
+	CHECK_EQ(resize(vol, &f.dev, 2 * MiB, &info, &check), Ok);
+	CHECK(check.clean());
+	CHECK_EQ(info.moved_blocks, plan.moved_blocks);
+	CHECK_EQ(mount(vol, &f.dev, false), Ok);
+	CHECK_EQ(vol->layout.total_blocks, 4096);
+	CHECK_EQ(vol->layout.block_bitmap_len, 1);
+	CHECK(f.file_is("/high", 1600 * KiB, 4));
+	l_files_ok(false);
+	f.check_fsck();
+
+	// Too small: refused, nothing changes.
+	CHECK_EQ(resize_plan(vol, 2 * MiB, plan), Ok);
+	const u32 min = plan.min_size;
+	CHECK_EQ(unmount(vol), Ok);
+	CHECK_EQ(resize(vol, &f.dev, min - B, &info, &check), NoSpace);
+	CHECK_EQ(mount(vol, &f.dev, false), Ok);
+	CHECK_EQ(vol->layout.total_blocks, 4096);
+	CHECK(f.file_is("/high", 1600 * KiB, 4));
+
+	// Down to the minimum: no free block left.
+	CHECK_EQ(unmount(vol), Ok);
+	CHECK_EQ(resize(vol, &f.dev, min, &info, &check), Ok);
+	CHECK_EQ(info.new_free_blocks, 0);
+	CHECK_EQ(mount(vol, &f.dev, false), Ok);
+	CHECK_EQ(f.free_blocks(), 0);
+	CHECK(f.file_is("/high", 1600 * KiB, 4));
+	l_files_ok(false);
+
+	// Growing within the bitmap (a size that isn't a block multiple: the rest is unused).
+	CHECK_EQ(unmount(vol), Ok);
+	CHECK_EQ(resize(vol, &f.dev, min + 64 * B + 100, &info, &check), Ok);
+	CHECK(!info.table_moves);
+	CHECK_EQ(info.moved_blocks, 0);
+	CHECK_EQ(mount(vol, &f.dev, false), Ok);
+	CHECK_EQ(f.free_blocks(), 64);
+	f.write_file("/more", 63 * B, 5);			// 63 data blocks + 1 pointer block
+	CHECK_EQ(f.free_blocks(), 0);
+
+	// The device must reach the new end.
+	CHECK_EQ(unmount(vol), Ok);
+	CHECK_EQ(resize(vol, &f.dev, 8 * MiB, &info, &check), IOError);
+	CHECK_EQ(mount(vol, &f.dev, false), Ok);
+	CHECK(f.file_is("/more", 63 * B, 5));
+}
+
 int main(void)
 {
 	test_layout();
@@ -609,6 +733,7 @@ int main(void)
 	test_links();
 	test_nospace();
 	test_fsck_detects();
+	test_resize();
 	if (g_failures == 0)
 		std::printf("dfs_test: all %d checks passed\n", g_checks);
 	else

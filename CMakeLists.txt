@@ -57,6 +57,9 @@ list(APPEND DEBUGGER_SOURCE_FILES
 	${CMAKE_CURRENT_LIST_DIR}/src/debugger/DebuggerWidgets.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/debugger/DebuggerWindow.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/debugger/DiskManager.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/debugger/DiskWidgets.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/debugger/PartitionManager.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/debugger/DfsBrowser.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/debugger/CMOSManager.cpp
 
 	${CMAKE_CURRENT_LIST_DIR}/src/hardware/VirtualCPU.cpp
@@ -86,8 +89,10 @@ list(APPEND DEBUGGER_SOURCE_FILES
 	${CMAKE_CURRENT_LIST_DIR}/src/storage/DPT.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/storage/FileSystem.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/storage/DFS.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/storage/DfsVolume.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/storage/dfs/DfsCore.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/storage/dfs/DfsCheck.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/storage/dfs/DfsResize.cpp
 )
 list(APPEND ASSEMBLER_SOURCE_FILES
 	${CMAKE_CURRENT_LIST_DIR}/src/assembler/assembler_main.cpp
@@ -151,8 +156,10 @@ list(APPEND TOOLS_SOURCE_FILES
 	${CMAKE_CURRENT_LIST_DIR}/src/storage/DPT.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/storage/FileSystem.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/storage/DFS.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/storage/DfsVolume.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/storage/dfs/DfsCore.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/storage/dfs/DfsCheck.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/storage/dfs/DfsResize.cpp
 )
 #-----------------------------------------------------------------------------------------
 
@@ -210,6 +217,7 @@ add_executable(dfs_test
 	${CMAKE_CURRENT_LIST_DIR}/tests/dfs/dfs_test.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/storage/dfs/DfsCore.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/storage/dfs/DfsCheck.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/storage/dfs/DfsResize.cpp
 )
 
 # The DFS core is the portable subset (it's ported to DScript): no exceptions, no RTTI.

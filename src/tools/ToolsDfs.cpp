@@ -2,6 +2,7 @@
 
 #include "../storage/DPT.hpp"
 #include "../storage/DFS.hpp"
+#include "../storage/dfs/DfsResize.hpp"
 #include <ctime>
 #include <filesystem>
 #include <fstream>
@@ -131,6 +132,8 @@ namespace dragon
 
 		if (command == "mkfs")
 			return dfs_mkfs(s.vol.get(), s.dev, s.partitionSize, args);
+		if (command == "resize")
+			return dfs_resize(s.vol.get(), s.dev, s.partitionSize, args);
 
 		// Everything else works on the mounted volume.
 		const bool readOnly = (command == "info" || command == "ls" || command == "tree" || command == "cat" || command == "get"
@@ -302,6 +305,33 @@ namespace dragon
 		out.fg(ConsoleColors::Green).p("DFS created: ").reset();
 		out.p(storage::formatSize(cast<u64>(l.total_blocks) << l.block_size_log2)).p(", ").p(l.total_blocks).p(" blocks of ").p(l.block_size).p(" bytes, ");
 		out.p(l.inode_count).p(" inodes, data from block ").p(l.first_data_block).nl();
+		return ErrorNoError;
+	}
+
+	// The file system to a size (the partition's by default; it can't be bigger).
+	i32 Tools::dfs_resize(dfs::Volume* vol, const dfs::Device& dev, u64 partitionSize, const stdvec<String>& args)
+	{
+		u64 size = std::min<u64>(partitionSize, 0xFFFFFFFFull);
+		if (!args.empty() && (!storage::parseSize(args[0], size) || size == 0))
+			return dfs_fail(String("invalid size '").add(args[0]).add("'"));
+		if (size > partitionSize)
+			return dfs_fail(String("the partition is ").add(storage::formatSize(partitionSize)).add(": grow it first"));
+		if (size > 0xFFFFFFFFull)
+			return dfs_fail("DFS partitions are at most 4 GiB");
+		dfs::ResizeInfo info;
+		dfs::FsckResult check;
+		dfs::i32 r = dfs::resize(vol, &dev, cast<u32>(size), &info, &check);
+		for (const auto& message : check.messages)
+			out.fg(ConsoleColors::Yellow).p("  ").p(message).reset().nl();
+		if (r == dfs::NoSpace)
+			return dfs_fail(String("too small: the file system needs at least ").add(storage::formatSize(info.min_size)), r);
+		if (r == dfs::Corrupt)
+			return dfs_fail("the file system has errors (see fsck)", r);
+		if (r < 0)
+			return dfs_fail("resize failed", r);
+		out.fg(ConsoleColors::Green).p("Resized: ").reset().p(info.old_blocks).p(" -> ").p(info.new_blocks).p(" blocks (");
+		out.p(storage::formatSize(cast<u64>(info.new_blocks) * info.block_size)).p("), ").p(info.moved_blocks).p(" blocks moved");
+		out.p(info.table_moves ? ", the inode table moved" : "").nl();
 		return ErrorNoError;
 	}
 
@@ -679,6 +709,8 @@ namespace dragon
 		out.fg(ConsoleColors::Blue).p("dfs <virtual_disk_file> <partition#> <command> [...]").nl();
 		out.fg(ConsoleColors::Green).p("The <dfs> tool works on the DFS file system of a partition (1 = the first one).").nl();
 		out.p("    mkfs [--block-size 4096] [--bytes-per-inode 16384] [--label NAME]").nl();
+		out.p("    resize [size]                Grows / shrinks the file system (to the partition's size by").nl();
+		out.p("                                 default): resize the partition first to grow, after to shrink.").nl();
 		out.p("    info                         The superblock and the layout.").nl();
 		out.p("    ls [-l] [path]               A directory's entries (or a file).").nl();
 		out.p("    tree [path]").nl();
