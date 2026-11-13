@@ -6,6 +6,7 @@ var keyBuff: u32[KEY_BUFF_SIZE];
 var keyRingBuff: dr::RingBuffer;
 var console: dr::Text16Console;
 var bootParts: dr::DPTPartitionBlock*[dr::DPTStructure.MaxPartitions];
+var bootPartsLbl: u8[64][dr::DPTStructure.MaxPartitions];
 var dpt_block: dr::DPTBlock;
 var boot_part_count: u8 = 0;
 var selected_index: u8 = 0;
@@ -118,7 +119,7 @@ inline sub print_list() {
 		console.x(2)->store_colors();
 		if ((i - 1) == selected_index)
 			console.fg(dr::DefaultPaletteText16.Black)->bg(dr::DefaultPaletteText16.Green)->print(" >");
-		console.print(' ')->print(part->label)->print(' ')->nl()->restore_colors();
+		console.print(' ')->print(bootPartsLbl[i - 1])->print(' ')->nl()->restore_colors();
 		part = bootParts[i++];
 	}
 	console.x(2)->store_colors();
@@ -230,10 +231,23 @@ sub get_bootable_partitions(var dpt_block: dr::DPTBlock*, var outEntries: dr::DP
 	for (; j < dr::DPTStructure.MaxPartitions; j++)
 		outEntries[j] = null;
 	j = 0;
+	var fs: dr::fs::FileSystem;
+	var disk: dr::dfs::DiskPartition;
 	for (var i: i8 = 0; i < dpt_block->partitionCount; i++)
 	{
 		if (dr::dpt_is_partition_bootable(&dpt_block->entries[i]))
+		{
 			outEntries[j++] = &dpt_block->entries[i];
+			dr::dfs::dpt_partition(&disk, &dpt_block->entries[i]);
+			bootPartsLbl[j - 1][0] = 0;
+			if (fs.mount_partition(&disk, true))
+			{
+				fs.label(bootPartsLbl[j - 1], 64);
+				fs.unmount();
+			}
+			if (bootPartsLbl[j - 1][0] == 0)
+				dr::memcpy(bootPartsLbl[j - 1], dpt_block->entries[i].label, 64);
+		}
 	}
 	boot_part_count = j;
 	reboot_entry_index = j++;

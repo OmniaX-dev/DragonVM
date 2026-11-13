@@ -34,7 +34,7 @@ set(DS_RUN_DIR ${CMAKE_BINARY_DIR})
 file(GLOB DS_SDK_SOURCES CONFIGURE_DEPENDS ${DS_SOURCE_DIR}/dragon-sdk/src/*.ds)
 file(GLOB_RECURSE DS_BIOS_SOURCES CONFIGURE_DEPENDS ${DS_SOURCE_DIR}/bios/*.ds)
 file(GLOB_RECURSE DS_DRAKE_SOURCES CONFIGURE_DEPENDS ${DS_SOURCE_DIR}/drake/*.ds)
-file(GLOB_RECURSE DS_KERNEL0_SOURCES CONFIGURE_DEPENDS ${DS_SOURCE_DIR}/dragon-os/*.ds)
+file(GLOB_RECURSE DS_KERNEL0_SOURCES CONFIGURE_DEPENDS ${DS_SOURCE_DIR}/snake-game/*.ds)
 
 # The disassembly file names reload_env.sh's dsc calls produce.
 string(MD5 DS_DRAKE_DDS "dragon/drake.bin")
@@ -81,7 +81,7 @@ function(ds_add_env TARGET MODE ASM_FLAGS)
 
 	add_custom_command(
 		OUTPUT ${OUT}/snake_kernel0.bin ${OUT}/disassembly/${DS_KERNEL0_DDS}.dds
-		COMMAND ${DSC} ${DS_SOURCE_DIR}/dragon-os/kernel0/kernel0.ds -L ${OUT}/lib -o ${OUT}/snake_kernel0.bin --verbose --raw --header KERNEL0_BOOT
+		COMMAND ${DSC} ${DS_SOURCE_DIR}/snake-game/kernel0/kernel0.ds -L ${OUT}/lib -o ${OUT}/snake_kernel0.bin --verbose --raw --header KERNEL0_BOOT
 				--load 0x01410000 --fixed 1048576,0xFF --save-disassembly ${OUT}/disassembly/${DS_KERNEL0_DDS}.dds ${WA}
 		DEPENDS ${DS_KERNEL0_SOURCES} ${SDK} ${COMPILER_TARGET}
 		WORKING_DIRECTORY ${DS_RUN_DIR}
