@@ -294,3 +294,6 @@ target_link_libraries(${TOOLS_TARGET} ostd)
 target_link_libraries(${COMPILER_TARGET} ostd)
 target_link_libraries(${HEADLESS_TARGET} SDL3 SDL3_image ostd ogfx)
 #-----------------------------------------------------------------------------------------
+
+# The DScript projects (SDK, BIOS, Drake, kernel0): make ds_env / ds_env_debug / ds_env_debug_verbose
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/DScript.cmake)

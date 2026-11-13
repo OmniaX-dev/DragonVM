@@ -53,28 +53,28 @@ else
     if [[ "$1" == "run" ]]; then
     	printf "\n\033[0;32mRunning DragonVM runtime...\n\n\033[0m"
      	cd bin
-      	./reload_env.sh
+      	$MAKE_COMMAND --no-print-directory ds_env
         ./dvm config/testMachine.dvm
         backtrack_changes
         cd ..
     elif [[ "$1" == "dbg" ]]; then
 	    printf "\n\033[0;32mRunning DragonVM debug...\n\n\033[0m"
 	    cd bin
-		./reload_env.sh -D
+		$MAKE_COMMAND --no-print-directory ds_env_debug
 	    ./ddb config/testMachine.dvm --verbose-load
 		backtrack_changes
 	    cd ..
     elif [[ "$1" == "dbgv" ]]; then
 	    printf "\n\033[0;32mRunning DragonVM debug...\n\n\033[0m"
 	    cd bin
-		./reload_env.sh "-D --verbose-full"
+		$MAKE_COMMAND --no-print-directory ds_env_debug_verbose
 	    ./ddb config/testMachine.dvm --verbose-load
 		backtrack_changes
 	    cd ..
 	elif [[ "$1" == "gdb" ]]; then
 	    printf "\n\033[0;32mDebugging Test Application...\n\n\033[0m"
 	    cd bin
-		./reload_env.sh
+		$MAKE_COMMAND --no-print-directory ds_env
   		gdb -batch \
 		    -ex 'set pagination off' \
 		    -ex 'set print pretty on' \
