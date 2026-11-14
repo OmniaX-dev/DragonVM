@@ -264,7 +264,7 @@ namespace dragon
 		m_breakpointsPage.addWidget(m_breakpointInput);
 		place(m_breakpointInput, 0, 0, 1, 0, 0, 3, -ButtonSize - 5, ButtonSize + 3);
 		m_breakpointInput.setFontSize(15);
-		m_breakpointInput.setTooltipText("Address (0x2CF4), label ($_kernel0_main, or just kernel0_main) or source line (entry.ds:42): Enter or + adds a breakpoint");
+		m_breakpointInput.setTooltipText("Address (0x2CF4), label ($_kernel0_main, or just kernel0_main), source line (entry.ds:42, drake/entry.ds:42) or sub (dr::fs::FileSystem::info, FileSystem::info): Enter or + adds a breakpoint. Source lines and subs of DRX programs not loaded yet are pending until they are.");
 		m_breakpointInput.enableTooltip();
 		m_breakpointInput.setCallback(Widget::eCallback::ActionPerformed, [this](const Event&) { add_breakpoint_from_input(); });
 		m_breakpointsPage.addWidget(m_breakpointAddButton);
@@ -494,6 +494,7 @@ namespace dragon
 		m_display.enableBloomEffect(config.bloom_effect);
 		update_screen_effects_tooltip();
 		m_disassembly.build();
+		m_seenTablesVersion = DisassemblyLoader::getVersion();
 		m_recordCheck.setChecked(m_debugger.isHistoryEnabled());
 		m_maxSpeedCheck.setChecked(m_debugger.isMaxSpeed());
 		build_memory();
@@ -549,6 +550,15 @@ namespace dragon
 			const String command = m_pendingCommands.front();
 			m_pendingCommands.pop_front();
 			run_command(command);
+		}
+		// DRX programs loaded / unloaded (or a reset): the disassembly view gets the tables in use.
+		m_debugger.syncTables();
+		if (DisassemblyLoader::getVersion() != m_seenTablesVersion)
+		{
+			m_seenTablesVersion = DisassemblyLoader::getVersion();
+			m_disassembly.build();
+			m_disassembly.enableFollow(true);
+			m_viewsDirty = true;
 		}
 		// The console follows its output.
 		if (m_consoleView.getBuffer().getVersion() != m_seenConsoleVersion)
@@ -812,53 +822,12 @@ namespace dragon
 
 	void DebuggerWindow::add_breakpoint_from_input(void)
 	{
+		// (An address, a $label or a label's name, a source line or a sub: see Debugger::breakPointFromText.)
 		const String text = m_breakpointInput.getText().new_trim();
 		if (text == "")
 			return;
-		if (text.contains(":") && !text.startsWith("$") && text.new_substr(text.lastIndexOf(":") + 1).trim().isNumeric())
-		{
-			// A source line (file.ds:42): at each place it starts.
-			String error = "";
-			i32 line = 0;
-			const auto addresses = m_debugger.findSourceLine(text, &line, &error);
-			if (addresses.empty())
-			{
-				m_consoleOut.fg(ostd::ConsoleColors::Red).p("Invalid source line: ").p(error).reset().nl();
-				return;
-			}
-			m_consoleOut.fg(ostd::ConsoleColors::Yellow).p("Breakpoint set at ").p(text.new_substr(0, text.lastIndexOf(":")).trim()).p(":").p(line);
-			for (u32 a : addresses)
-			{
-				m_debugger.addBreakPoint(a);
-				m_consoleOut.p("  ").p(String::getHexStr(a, true, 4));
-			}
-			m_consoleOut.reset().nl();
+		if (m_debugger.breakPointFromText(text, false))
 			m_breakpointInput.setText("");
-			m_viewsDirty = true;
-			return;
-		}
-		// Labels first ($_name, written as is, or without the '$' / '$_'), then any address / symbol.
-		const auto& labels = m_debugger.data().labels;
-		u32 address = 0;
-		for (const String& symbol : { text, String("$").add(text), String("$_").add(text) })
-		{
-			if ((address = Debugger::Utils::findSymbol(labels, symbol)) != 0)
-				break;
-		}
-		if (address == 0 && !Debugger::Utils::parseAddress(m_debugger, text, address))
-		{
-			m_consoleOut.fg(ostd::ConsoleColors::Red).p("Not an address or a label: ").p(text).reset().nl();
-			return;
-		}
-		const Debugger::tBreakPoint* existing = m_debugger.getBreakPoint(address);
-		const bool already = existing != nullptr && existing->enabled;
-		m_debugger.addBreakPoint(address);
-		String label = Debugger::Utils::findSymbol(m_debugger.data().labels, address);
-		m_consoleOut.fg(ostd::ConsoleColors::Yellow).p(already ? "Breakpoint already set at " : "Breakpoint set at ").p(String::getHexStr(address, true, 4));
-		if (label != "")
-			m_consoleOut.p(" (").p(label.new_trim()).p(")");
-		m_consoleOut.reset().nl();
-		m_breakpointInput.setText("");
 		m_viewsDirty = true;
 	}
 

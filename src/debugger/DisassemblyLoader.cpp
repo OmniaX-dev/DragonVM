@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <map>
 #include <ostd/string/String.hpp>
@@ -29,7 +30,7 @@ namespace dragon
 
 	void DisassemblyTable::load_data(ostd::ByteStream& stream)
 	{
-		constexpr i32 MODE_CODE = 0, MODE_DATA = 1, MODE_LABELS = 2, MODE_LINES = 3, MODE_SOURCES = 4;
+		constexpr i32 MODE_CODE = 0, MODE_DATA = 1, MODE_LABELS = 2, MODE_LINES = 3, MODE_SOURCES = 4, MODE_SUBS = 5;
 		struct tLoc { i32 file; i32 line; i32 depth; bool statement; };
 		std::map<u32, tLoc> locations;
 		std::map<i32, tSourceFile> sources;
@@ -62,6 +63,11 @@ namespace dragon
 				m_version = cast<i32>(code_line.new_substr(12).new_trim().toInt());
 				continue;
 			}
+			if (code_line.startsWith("{ DRX } "))
+			{
+				m_drxId = std::strtoull(code_line.new_substr(8).new_trim().cpp_str().c_str(), nullptr, 16);
+				continue;
+			}
 			if (code_line == "{ DATA }")
 			{
 				mode = MODE_DATA;
@@ -75,6 +81,38 @@ namespace dragon
 			else if (code_line == "{ SOURCES }")
 			{
 				mode = MODE_SOURCES;
+				continue;
+			}
+			else if (code_line == "{ SUBS }")
+			{
+				mode = MODE_SUBS;
+				continue;
+			}
+			if (mode == MODE_SUBS)
+			{
+				// <name> \t <label> \t <parameter types> \t <inline> \t <file> \t <line> \t <last line>
+				std::vector<std::string> f;
+				const std::string text = code_line.cpp_str();
+				size_t start = 0;
+				while (true)
+				{
+					const size_t tab = text.find('\t', start);
+					f.push_back(text.substr(start, tab == std::string::npos ? std::string::npos : tab - start));
+					if (tab == std::string::npos)
+						break;
+					start = tab + 1;
+				}
+				if (f.size() < 7)
+					continue;
+				tSubInfo sub;
+				sub.name = f[0];
+				sub.label = f[1];
+				sub.params = f[2];
+				sub.isInline = (f[3] == "1");
+				sub.path = f[4];
+				sub.line = std::atoi(f[5].c_str());
+				sub.lastLine = std::atoi(f[6].c_str());
+				m_subs.push_back(sub);
 				continue;
 			}
 			if (mode == MODE_LINES)
@@ -166,42 +204,140 @@ namespace dragon
 		std::stable_sort(m_code.begin(), m_code.end());
 		std::sort(m_labels.begin(), m_labels.end());
 		std::sort(m_data.begin(), m_data.end());
+		// The subs' addresses: their labels'.
+		if (!m_subs.empty())
+		{
+			std::map<std::string, u32> labels;
+			for (const auto& l : m_labels)
+				labels[l.code.new_trim().cpp_str()] = cast<u32>(l.addr);
+			for (auto& sub : m_subs)
+			{
+				auto it = labels.find("$" + sub.label.cpp_str());
+				sub.hasAddress = (it != labels.end());
+				sub.address = sub.hasAddress ? it->second : 0;
+			}
+		}
 		m_initialized = true;
 	}
 
 
 
+	DisassemblyTable DisassemblyTable::relocatedCopy(u32 base) const
+	{
+		DisassemblyTable copy = *this;
+		auto l_move = [base](std::vector<code::Assembler::tDisassemblyLine>& lines) {
+			for (auto& line : lines)
+				line.addr = cast<i32>(cast<u32>(line.addr) + base);
+		};
+		l_move(copy.m_code);
+		l_move(copy.m_labels);
+		l_move(copy.m_data);
+		for (auto& sub : copy.m_subs)
+		{
+			if (sub.hasAddress)
+				sub.address += base;
+		}
+		copy.m_loadedCopy = true;
+		copy.m_loadBase = base;
+		return copy;
+	}
+
 	void DisassemblyLoader::loadDirectory(const String& directoryPath)
 	{
 		auto list = ostd::FileSystem::listFilesInDirectory(directoryPath);
+		// (Sorted: the same order every time.)
+		std::sort(list.begin(), list.end());
 		for (auto& path : list)
 			loadFile(path.string());
+		m_version++;
 	}
 
-	const DisassemblyTable& DisassemblyLoader::loadFile(const String& filePath)
+	void DisassemblyLoader::loadFile(const String& filePath)
 	{
-		DisassemblyTable table(filePath);
-		if (!table.isInitialized()) return DisassemblyTable::DefaultObject; //TODO: Error
-		m_tables.push_back(table);
-		return m_tables[m_tables.size() - 1];
+		auto table = std::make_unique<DisassemblyTable>(filePath);
+		if (!table->isInitialized())
+			return;
+		if (table->getDrxId() != 0)
+			m_drx[table->getDrxId()] = std::move(table);
+		else
+			m_fixed.push_back(std::move(table));
+		m_version++;
+	}
+
+	std::vector<const DisassemblyTable*> DisassemblyLoader::getTables(void)
+	{
+		std::vector<const DisassemblyTable*> tables;
+		for (const auto& t : m_fixed)
+			tables.push_back(t.get());
+		for (const auto& m : m_mappings)
+		{
+			if (m.table != nullptr)
+				tables.push_back(m.table);
+		}
+		return tables;
+	}
+
+	const DisassemblyTable* DisassemblyLoader::mapDrx(u32 base, u32 size, u64 id)
+	{
+		const u64 end = cast<u64>(base) + std::max<u32>(size, 1);
+		std::erase_if(m_mappings, [&](const tMapping& m) {
+			return base < cast<u64>(m.base) + std::max<u32>(m.size, 1) && m.base < end;
+		});
+		tMapping mapping { base, size, id, nullptr };
+		auto it = m_drx.find(id);
+		if (id != 0 && it != m_drx.end())
+		{
+			// (A copy at that address already made is used again.)
+			for (const auto& c : m_copies)
+			{
+				if (c->getDrxId() == id && c->getLoadBase() == base)
+					mapping.table = c.get();
+			}
+			if (mapping.table == nullptr)
+			{
+				m_copies.push_back(std::make_unique<DisassemblyTable>(it->second->relocatedCopy(base)));
+				mapping.table = m_copies.back().get();
+			}
+		}
+		m_mappings.push_back(mapping);
+		m_version++;
+		return mapping.table;
+	}
+
+	bool DisassemblyLoader::unmapDrx(u32 base)
+	{
+		const size_t count = m_mappings.size();
+		std::erase_if(m_mappings, [&](const tMapping& m) { return m.base == base; });
+		if (m_mappings.size() == count)
+			return false;
+		m_version++;
+		return true;
+	}
+
+	void DisassemblyLoader::clearMappings(void)
+	{
+		if (m_mappings.empty())
+			return;
+		m_mappings.clear();
+		m_version++;
 	}
 
 	std::vector<tSourceFile> DisassemblyLoader::getSources(void)
 	{
 		std::vector<tSourceFile> sources;
-		for (auto& table : m_tables)
-			sources.insert(sources.end(), table.getSources().begin(), table.getSources().end());
+		for (const DisassemblyTable* table : getTables())
+			sources.insert(sources.end(), table->getSources().begin(), table->getSources().end());
 		return sources;
 	}
 
 	i32 DisassemblyLoader::getSourceOffset(const DisassemblyTable& table)
 	{
 		i32 offset = 0;
-		for (auto& t : m_tables)
+		for (const DisassemblyTable* t : getTables())
 		{
-			if (&t == &table)
+			if (t == &table)
 				return offset;
-			offset += cast<i32>(t.getSources().size());
+			offset += cast<i32>(t->getSources().size());
 		}
 		return 0;
 	}
@@ -210,15 +346,15 @@ namespace dragon
 	{
 		std::vector<code::Assembler::tDisassemblyLine> fullTable;
 		i32 offset = 0;
-		for (auto& table : m_tables)
+		for (const DisassemblyTable* table : getTables())
 		{
-			for (auto line : table.getCodeTable())
+			for (auto line : table->getCodeTable())
 			{
 				if (line.srcFile >= 0)
 					line.srcFile += offset;
 				fullTable.push_back(line);
 			}
-			offset += cast<i32>(table.getSources().size());
+			offset += cast<i32>(table->getSources().size());
 		}
 		std::sort(fullTable.begin(), fullTable.end());
 		return fullTable;
@@ -227,8 +363,8 @@ namespace dragon
 	std::vector<code::Assembler::tDisassemblyLine> DisassemblyLoader::getDataTable(void)
 	{
 		std::vector<code::Assembler::tDisassemblyLine> fullTable;
-		for (auto& table : m_tables)
-			fullTable.insert(fullTable.end(), table.getDataTable().begin(), table.getDataTable().end());
+		for (const DisassemblyTable* table : getTables())
+			fullTable.insert(fullTable.end(), table->getDataTable().begin(), table->getDataTable().end());
 		std::sort(fullTable.begin(), fullTable.end());
 		return fullTable;
 	}
@@ -236,8 +372,8 @@ namespace dragon
 	std::vector<code::Assembler::tDisassemblyLine> DisassemblyLoader::getLabelTable(void)
 	{
 		std::vector<code::Assembler::tDisassemblyLine> fullTable;
-		for (auto& table : m_tables)
-			fullTable.insert(fullTable.end(), table.getLabelTable().begin(), table.getLabelTable().end());
+		for (const DisassemblyTable* table : getTables())
+			fullTable.insert(fullTable.end(), table->getLabelTable().begin(), table->getLabelTable().end());
 		std::sort(fullTable.begin(), fullTable.end());
 		return fullTable;
 	}

@@ -105,6 +105,20 @@ namespace dragon
 		{
 			bool enabled { true };
 			bool debugBreak { false };
+			bool fromSpec { false };	// one of a tSpecBreakPoint's addresses (it comes and goes with it)
+		};
+		// A breakpoint written as a source line or a sub name (BreakSpec): resolved again
+		// whenever the programs in memory change, so it also works for DRX programs not loaded
+		// yet (pending) and wherever they are loaded. Its addresses are in `breakpoints` too.
+		public: struct tSpecBreakPoint
+		{
+			String spec { "" };			// as written: "drake/entry.ds:37", "dr::fs::FileSystem::info"
+			bool enabled { true };
+			bool isSub { false };
+			stdvec<u32> addresses;		// in the loaded programs (none: pending)
+			String where { "" };		// what it resolved to ("drake/entry.ds:37", with the line used)
+			stdvec<String> pending;		// DRX programs not loaded that have it
+			String error { "" };		// not found anymore (the programs changed)
 		};
 		// Where an instruction comes from (programs compiled / assembled with source lines).
 		public: struct tSourceLocation
@@ -133,6 +147,7 @@ namespace dragon
 			i32 labelLineLength { 40 };
 			String disassemblyDirectory { "disassembly" };
 			std::map<u32, tBreakPoint> breakpoints;
+			stdvec<tSpecBreakPoint> specBreakpoints;
 			// Bumped whenever the tracked list changes (the views sync with it).
 			u64 trackedVersion { 0 };
 		};
@@ -207,6 +222,10 @@ namespace dragon
 			// The commands that show a view ("stack", "x 0x1234", ...).
 			inline void setViewCallback(ViewCallback callback) { m_onShowView = std::move(callback); }
 			inline void setQuitCallback(StateCallback callback) { m_onQuit = std::move(callback); }
+			// The disassembly tables in use changed (a DRX program loaded / unloaded, a reset):
+			// DisassemblyLoader::getVersion() moves on, and the views rebuild theirs. Call it from
+			// the window's loop (it notices resets).
+			void syncTables(void);
 
 			// =============================== RUN CONTROL ===============================
 			// Runs a slice of the machine if it's running (call it from the window's loop).
@@ -258,6 +277,16 @@ namespace dragon
 			void setBreakPointEnabled(u32 address, bool enabled);
 			// Removes the breakpoints and disables the debug_break ones.
 			void clearBreakPoints(void);
+			// A breakpoint from text, as the break command and the Breakpoints tab take it: an
+			// address, a $label, a source line ("drake/entry.ds:37") or a sub ("FileSystem::info";
+			// a name that is no sub: the label of that name). toggle: an existing one is removed
+			// instead (the break command). Says what it did in the console; false on errors.
+			bool breakPointFromText(const String& text, bool toggle);
+			// Source line / sub breakpoints (data().specBreakpoints): by index.
+			void removeSpecBreakPoint(size_t index);
+			void setSpecBreakPointEnabled(size_t index, bool enabled);
+			// The spec breakpoint an address belongs to; -1 if none.
+			i32 findSpecBreakPoint(u32 address) const;
 			void track(u32 address, u32 size, const String& label, bool breakOnChange = false);
 			bool untrack(u32 address);
 			void untrackAll(void);
@@ -303,6 +332,12 @@ namespace dragon
 			// while the instruction is really there: other programs can use the address).
 			bool should_break_at(u32 ip) const;
 			void register_debug_breaks(void);
+			// code, labels, data, sources and sourceLines from DisassemblyLoader's tables.
+			void refresh_tables(void);
+			// The spec breakpoints resolved again, their addresses in `breakpoints`.
+			void apply_spec_breakpoints(void);
+			void print_spec_breakpoint(const tSpecBreakPoint& bp, const String& prefix);
+			void on_drx(bool loaded, u32 base, u32 size, u64 id);
 			void tracked_changed(void);
 			void stopped(const String& reason);
 			void track_call(u32 ip);
@@ -334,6 +369,7 @@ namespace dragon
 			String m_stopReason { "" };
 			u64 m_cycle { 0 };
 			i32 m_callDepth { 0 };
+			u32 m_seenResetCount { 0 };	// DragonRuntime::getResetCount() (a reset unloads the DRX programs)
 			i32 m_targetDepth { 0 };
 			u32 m_runToAddress { 0 };
 			std::string m_debugPrintLine;

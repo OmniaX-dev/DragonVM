@@ -1394,6 +1394,23 @@ namespace dragon
 				}
 				return;
 			}
+			if (String(line).toLower().startsWith("debug_drx_load") || String(line).toLower().startsWith("debug_drx_unload"))
+			{
+				// Always assembled: they tell the debugger where a DRX program is (a no-op without one).
+				const bool load = String(line).toLower().startsWith("debug_drx_load");
+				String lineEdit(line);
+				String opEdit(lineEdit.indexOf(" ") > 0 ? lineEdit.new_substr(lineEdit.indexOf(" ") + 1) : String(""));
+				opEdit.trim();
+				i32 word = 0x00000000;
+				if (parseOperand(opEdit, word) != eOperandType::Register)
+				{
+					std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  Register required\n";
+					exit(1);
+				}
+				m_code.push_back(load ? data::OpCodes::DEBUG_DrxLoad : data::OpCodes::DEBUG_DrxUnload);
+				m_code.push_back((u8)word);
+				return;
+			}
 			if (!debugMode)
 				return;
 			if (String(line).toLower().startsWith("debug_break"))

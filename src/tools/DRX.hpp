@@ -9,8 +9,9 @@
 //   0x0C  entry offset   where to start (call) the program, from the image start
 //   0x10  reloc count    entries in the relocation table
 //   0x14  reloc offset   where the relocation table starts, in the file
-//   0x18  flags          (0)
-//   0x1C  reserved       (0)
+//   0x18  id             64 bits (high word first), 0 if none: identifies the build (a hash of
+//                        the image and the relocations), so that the debugger finds the
+//                        disassembly saved with it (its { DRX } entry) wherever it is loaded
 //   image                the program, assembled at address 0
 //   relocation table     reloc count x 4 bytes: offsets (in the image) of 32-bit addresses
 //
@@ -35,12 +36,38 @@ namespace dragon
 			std::vector<uint8_t> image;
 			uint32_t entry { 0 };
 			std::vector<uint32_t> relocations;
+			uint64_t id { 0 };
 		};
 
 		inline uint32_t readU32(const uint8_t* p) { return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) | ((uint32_t)p[2] << 8) | p[3]; }
 		inline void writeU32(uint8_t* p, uint32_t v) { p[0] = (uint8_t)(v >> 24); p[1] = (uint8_t)(v >> 16); p[2] = (uint8_t)(v >> 8); p[3] = (uint8_t)v; }
 
 		inline bool isDRX(const std::vector<uint8_t>& file) { return file.size() >= HeaderSize && readU32(file.data()) == Magic; }
+
+		// The id of a build: FNV-1a (64 bits) of the entry, the image and the relocations (never 0).
+		inline uint64_t computeId(const Program& program)
+		{
+			uint64_t h = 0xCBF29CE484222325ull;
+			auto l_byte = [&](uint8_t b) { h ^= b; h *= 0x100000001B3ull; };
+			auto l_word = [&](uint32_t w) { for (int i = 24; i >= 0; i -= 8) l_byte((uint8_t)(w >> i)); };
+			l_word(program.entry);
+			l_word((uint32_t)program.image.size());
+			for (uint8_t b : program.image)
+				l_byte(b);
+			for (uint32_t r : program.relocations)
+				l_word(r);
+			return h == 0 ? 1 : h;
+		}
+
+		// "0x0123456789ABCDEF"
+		inline std::string idString(uint64_t id)
+		{
+			static const char* digits = "0123456789ABCDEF";
+			std::string s = "0x";
+			for (int i = 60; i >= 0; i -= 4)
+				s += digits[(id >> i) & 0xF];
+			return s;
+		}
 
 		inline std::vector<uint8_t> write(const Program& program)
 		{
@@ -51,6 +78,8 @@ namespace dragon
 			writeU32(&file[0x0C], program.entry);
 			writeU32(&file[0x10], (uint32_t)program.relocations.size());
 			writeU32(&file[0x14], HeaderSize + (uint32_t)program.image.size());
+			writeU32(&file[0x18], (uint32_t)(program.id >> 32));
+			writeU32(&file[0x1C], (uint32_t)program.id);
 			for (size_t i = 0; i < program.image.size(); i++)
 				file[HeaderSize + i] = program.image[i];
 			for (size_t i = 0; i < program.relocations.size(); i++)
@@ -73,6 +102,7 @@ namespace dragon
 			}
 			out.image.assign(file.begin() + headerSize, file.begin() + headerSize + imageSize);
 			out.entry = readU32(&file[0x0C]);
+			out.id = (headerSize >= 0x20) ? ((uint64_t)readU32(&file[0x18]) << 32) | readU32(&file[0x1C]) : 0;
 			out.relocations.clear();
 			for (uint32_t i = 0; i < relocCount; i++)
 			{

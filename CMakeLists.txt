@@ -52,6 +52,7 @@ list(APPEND DEBUGGER_SOURCE_FILES
 	${CMAKE_CURRENT_LIST_DIR}/src/debugger/DisassemblyLoader.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/debugger/History.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/debugger/Debugger.cpp
+	${CMAKE_CURRENT_LIST_DIR}/src/debugger/BreakpointSpecs.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/debugger/DebuggerDisplay.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/debugger/DisassemblyView.cpp
 	${CMAKE_CURRENT_LIST_DIR}/src/debugger/DebuggerWidgets.cpp

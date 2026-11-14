@@ -394,7 +394,7 @@ namespace dragon
 		}
 		else if (arg1 == "-f")
 		{
-			const auto& table = dragon::DisassemblyLoader::loadFile(argv[3]);
+			const dragon::DisassemblyTable table(argv[3]);
 			if (!table.isInitialized())
 			{
 				out.fg(ostd::ConsoleColors::Red).p("Error: Invalid disassembly file.").reset().nl();

@@ -186,6 +186,7 @@ namespace dragon
 			bool m_started { false };
 			bool m_viewsDirty { true };
 			u64 m_seenConsoleVersion { 0 };
+			u64 m_seenTablesVersion { 0 };	// DisassemblyLoader::getVersion() the disassembly view was built for
 			// Where the machine was when a program / address was picked in the disassembly.
 			i32 m_shownAtIP { -1 };
 			u64 m_shownAtCycle { 0 };

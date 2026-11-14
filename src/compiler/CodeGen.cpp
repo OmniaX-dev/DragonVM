@@ -5238,6 +5238,23 @@ namespace dscript
 	}
 
 	// ================================== Library interfaces ==================================
+	std::vector<std::string> CodeGen::subTable(void) const
+	{
+		std::vector<std::string> out;
+		for (FuncInfo* f : m_funcList)
+		{
+			// (A library's subs are in its own disassembly; lambdas have no name to write.)
+			if (f->external || !f->defined || f->decl == nullptr || f->decl->a == nullptr || f->decl->name.rfind("__lambda_", 0) == 0)
+				continue;
+			std::string params;
+			for (Type* p : f->type->params)
+				params += (params.empty() ? "" : ", ") + p->name();
+			out.push_back(f->name + "\t" + f->label + "\t" + params + "\t" + (f->isInline ? "1" : "0") + "\t" + f->decl->pos.file + "\t"
+				+ std::to_string(f->decl->pos.line) + "\t" + std::to_string(std::max(f->decl->pos.line, f->decl->a->endPos.line)));
+		}
+		return out;
+	}
+
 	std::vector<std::string> CodeGen::exports(void) const
 	{
 		std::vector<std::string> out;

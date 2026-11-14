@@ -69,8 +69,9 @@ static void printHelp(void)
 		"    --load <address>        .load: the address the binary runs at (default 0x01010000, the RAM)\n"
 		"    --fixed <size>,<fill>   .fixed: pads the binary to exactly <size> bytes\n"
 		"    --header <name>         .header: adds a header (e.g. KERNEL0_BOOT)\n"
-		"    --save-disassembly <dir/file>  Saves the debugger disassembly, with the source lines (in a directory:\n"
-		"                            named like dasm's, for ddb)\n"
+		"  --save-disassembly <dir/file>  Saves the debugger disassembly, with the source lines (in a directory:\n"
+		"                            named like dasm's, for ddb). A DRX's is at offset 0, with the program's id:\n"
+		"                            ddb moves it to where the program is loaded (drx::load tells it)\n"
 		"  --rom                     A ROM image (e.g. the BIOS): --raw, loaded at 0x00000000 unless --load is\n"
 		"                            given, and everything that would write into the program is an error\n"
 		"                            (global variables: use const and RAM instead). Defines __ROM__\n"
@@ -154,9 +155,9 @@ static int parseArgs(int argc, char** argv, Options& o)
 		std::cerr << "dsc: a library made of several source files needs -o\n";
 		return 2;
 	}
-	if (!o.raw && (!o.load.empty() || !o.fixed.empty() || !o.header.empty() || !o.disassemblyDir.empty()))
+	if (!o.raw && (!o.load.empty() || !o.fixed.empty() || !o.header.empty()))
 	{
-		std::cerr << "dsc: --load, --fixed, --header and --save-disassembly need --raw\n";
+		std::cerr << "dsc: --load, --fixed and --header need --raw\n";
 		return 2;
 	}
 	if (!o.header.empty() && dragon::code::Assembler::headerBytes(o.header).empty())
@@ -426,7 +427,7 @@ typedef dragon::code::Assembler::tDisassemblyLine DisassemblyLine;
 // The parts of a disassembly (see Assembler::saveDisassemblyToFile).
 struct DisassemblyParts
 {
-	std::vector<DisassemblyLine> head, code, data, labels, lines, sources;
+	std::vector<DisassemblyLine> head, code, data, labels, lines, sources, subs;
 
 	void add(const std::vector<DisassemblyLine>& entries)
 	{
@@ -438,7 +439,8 @@ struct DisassemblyParts
 			else if (e.code == "{ LABELS }") part = 2;
 			else if (e.code == "{ LINES }") part = 3;
 			else if (e.code == "{ SOURCES }") part = 4;
-			else (part == 0 ? code : part == 1 ? data : part == 2 ? labels : part == 3 ? lines : sources).push_back(e);
+			else if (e.code == "{ SUBS }") part = 5;
+			else (part == 0 ? code : part == 1 ? data : part == 2 ? labels : part == 3 ? lines : part == 4 ? sources : subs).push_back(e);
 		}
 	}
 
@@ -456,6 +458,11 @@ struct DisassemblyParts
 			out.insert(out.end(), lines.begin(), lines.end());
 			out.push_back({ 0xFFFFFF03, "{ SOURCES }" });
 			out.insert(out.end(), sources.begin(), sources.end());
+		}
+		if (!subs.empty())
+		{
+			out.push_back({ 0xFFFFFF04, "{ SUBS }" });
+			out.insert(out.end(), subs.begin(), subs.end());
 		}
 		return out;
 	}
@@ -543,6 +550,7 @@ static std::vector<DisassemblyLine> linkedDisassembly(const Unit& unit, uint32_t
 		parts.labels.insert(parts.labels.end(), own.labels.begin(), own.labels.end());
 		parts.lines.insert(parts.lines.end(), own.lines.begin(), own.lines.end());
 		parts.sources.insert(parts.sources.end(), own.sources.begin(), own.sources.end());
+		parts.subs.insert(parts.subs.end(), own.subs.begin(), own.subs.end());	// (by label: moved with the labels)
 		for (uint32_t r : lib.relocations)
 		{
 			const uint32_t old = dragon::drx::readU32(&lib.image[r]);
@@ -552,6 +560,16 @@ static std::vector<DisassemblyLine> linkedDisassembly(const Unit& unit, uint32_t
 			parts.patch(at + i.offset, hexWord(dragon::drx::readU32(&lib.image[i.offset])), "$" + i.symbol, first);
 	}
 	return parts.entries();
+}
+
+// The subs (for the debugger's breakpoints by name): a { SUBS } part after the rest.
+static void addSubTable(Unit& unit, const std::vector<std::string>& subs)
+{
+	if (subs.empty() || unit.disassembly.empty())
+		return;
+	unit.disassembly.push_back({ 0xFFFFFF04, "{ SUBS }" });
+	for (const auto& s : subs)
+		unit.disassembly.push_back({ 0, String(s), 0 });
 }
 
 static void saveDisassembly(const std::string& file, const std::vector<DisassemblyLine>& entries)
@@ -571,6 +589,7 @@ int main(int argc, char** argv)
 		return r == 1 ? 0 : r;
 
 	std::vector<std::string> dasm;
+	std::vector<std::string> subTable;	// the disassembly's { SUBS } (CodeGen::subTable)
 	std::vector<Preprocessor::ImportedLibrary> libraries;
 	std::vector<std::string> dependencies, exported;
 	std::string interface;
@@ -609,6 +628,7 @@ int main(int argc, char** argv)
 		cg.libraries = o.library ? 0 : (int)pp.imports().size();
 		CodeGen codegen(cg);
 		dasm = codegen.generate(program);
+		subTable = codegen.subTable();
 		libraries = pp.imports();
 		if (o.library)
 		{
@@ -668,6 +688,7 @@ int main(int argc, char** argv)
 		Unit unit;
 		if (!assembleUnit(dasm, importable, directory, 0, true, unit, o, true))
 			return 1;
+		addSubTable(unit, subTable);
 		dragon::dlib::Library lib;
 		lib.image = unit.image;
 		lib.relocations = unit.relocations;
@@ -727,6 +748,7 @@ int main(int argc, char** argv)
 	Unit unit;
 	if (!assembleUnit(dasm, importable, directory, 0, !o.raw, unit, o, true, libraries))
 		return 1;
+	addSubTable(unit, subTable);
 	std::vector<uint8_t> image = unit.image;
 	std::vector<uint32_t> relocations = unit.relocations;
 	std::vector<uint32_t> offsets;
@@ -770,9 +792,42 @@ int main(int argc, char** argv)
 		}
 	}
 	std::sort(relocations.begin(), relocations.end());
-	// The disassembly for the debugger (-Wa,--save-disassembly; raw: --save-disassembly).
+	// A DRX: its id (in the header and in the disassembly, which is at offset 0: the debugger
+	// moves it to where the program is loaded).
+	dragon::drx::Program program;
+	if (!o.raw)
+	{
+		program.image = image;
+		program.entry = 0;
+		program.relocations = relocations;
+		program.id = dragon::drx::computeId(program);
+	}
+	auto l_disassembly = [&]() {
+		std::vector<DisassemblyLine> entries = linkedDisassembly(unit, base, libraries, offsets);
+		if (program.id != 0)
+		{
+			auto at = entries.begin();
+			while (at != entries.end() && (at->code.startsWith("{ NAME } ") || at->code.startsWith("{ VERSION } ")))
+				at++;
+			entries.insert(at, { 0, String("{ DRX } ").add(dragon::drx::idString(program.id)), 0 });
+		}
+		return entries;
+	};
+	// The disassembly for the debugger (-Wa,--save-disassembly, --save-disassembly).
 	if (dragon::code::Assembler::Application::args.save_disassembly && !o.dasmArgs.empty())
-		saveDisassembly(dragon::code::Assembler::Application::args.disassembly_file_path.cpp_str(), linkedDisassembly(unit, base, libraries, offsets));
+		saveDisassembly(dragon::code::Assembler::Application::args.disassembly_file_path.cpp_str(), l_disassembly());
+	auto l_saveDisassembly = [&]() {
+		if (o.disassemblyDir.empty())
+			return;
+		// A directory (as for ddb: one file per program, named like dasm's), or a file.
+		std::string file = o.disassemblyDir;
+		if (file.back() == '/' || std::filesystem::is_directory(file))
+		{
+			std::filesystem::create_directories(file);
+			file = (std::filesystem::path(file) / (ostd::Hash::md5(String(o.output)).cpp_str() + ".dds")).string();
+		}
+		saveDisassembly(file, l_disassembly());
+	};
 
 	if (o.raw)
 	{
@@ -798,17 +853,7 @@ int main(int argc, char** argv)
 			std::cerr << "dsc: cannot write " << o.output << "\n";
 			return 1;
 		}
-		if (!o.disassemblyDir.empty())
-		{
-			// A directory (as for ddb: one file per program, named like dasm's), or a file.
-			std::string file = o.disassemblyDir;
-			if (file.back() == '/' || std::filesystem::is_directory(file))
-			{
-				std::filesystem::create_directories(file);
-				file = (std::filesystem::path(file) / (ostd::Hash::md5(String(o.output)).cpp_str() + ".dds")).string();
-			}
-			saveDisassembly(file, linkedDisassembly(unit, base, libraries, offsets));
-		}
+		l_saveDisassembly();
 		if (o.verbose)
 			std::cout << o.output << ": " << image.size() << " bytes (raw" << (libraries.empty() ? "" : ", " + std::to_string(libraries.size()) + " libraries") << ")\n";
 		return 0;
@@ -819,17 +864,14 @@ int main(int argc, char** argv)
 		std::cerr << "dsc: the program is too big (16 MiB at most)\n";
 		return 1;
 	}
-	dragon::drx::Program program;
-	program.image = image;
-	program.entry = 0;
-	program.relocations = relocations;
 	if (!writeFile(o.output, dragon::drx::write(program)))
 	{
 		std::cerr << "dsc: cannot write " << o.output << "\n";
 		return 1;
 	}
+	l_saveDisassembly();
 	if (o.verbose)
 		std::cout << o.output << ": " << image.size() << " bytes, " << relocations.size() << " relocations"
-				  << (libraries.empty() ? "" : ", " + std::to_string(libraries.size()) + " libraries") << "\n";
+				  << (libraries.empty() ? "" : ", " + std::to_string(libraries.size()) + " libraries") << ", id " << dragon::drx::idString(program.id) << "\n";
 	return 0;
 }

@@ -271,8 +271,9 @@ namespace dragon
 
 
 	// ============================================================================
-	// BreakpointView — the breakpoints (yours and the program's debug_break
-	// instructions) and the watches. The first column enables / disables a
+	// BreakpointView — the breakpoints (source lines and subs first: those of
+	// DRX programs not loaded yet are pending; then addresses and the program's
+	// debug_break instructions) and the watches. The first column enables / disables a
 	// breakpoint (removes a watch); double-click shows it in the disassembly (in
 	// memory, for a watch); right-click for more.
 	// ============================================================================
@@ -290,12 +291,16 @@ namespace dragon
 			void onRowClicked(i32 row, i32 column, ogfx::MouseEventData::eButton button, bool doubleClick) override;
 			String getEmptyText(void) const override;
 
+		private:
+			void enable_all(bool enable);
+
 		private: struct Row
 		{
 			u32 address { 0 };
 			bool watch { false };
 			u32 size { 1 };
 			String label { "" };
+			i32 spec { -1 };	// a source line / sub breakpoint (its index in specBreakpoints)
 		};
 
 		private:

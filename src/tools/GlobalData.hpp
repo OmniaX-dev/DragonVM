@@ -450,6 +450,12 @@ namespace dragon
 				// terminal (stdout). Always assembled and run, debug mode or not.
 				inline static constexpr u8 DEBUG_PrintImm = 0x06;
 				inline static constexpr u8 DEBUG_PrintReg = 0x07;
+				// debug_drx_load reg: a DRX program was loaded; reg points to { base, image size,
+				// id high, id low } (u32s). debug_drx_unload reg: the program at base (reg) is gone.
+				// For the debugger (source-level debugging of relocated programs): always
+				// assembled and run, a no-op without a debugger.
+				inline static constexpr u8 DEBUG_DrxLoad = 0x08;
+				inline static constexpr u8 DEBUG_DrxUnload = 0x09;
 
 				inline static constexpr u8 MovImmReg = 0x10;
 				inline static constexpr u8 MovRegReg = 0x11;

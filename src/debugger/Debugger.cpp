@@ -2,6 +2,9 @@
 #include <bit>
 #include <cstdlib>
 #include "DisassemblyLoader.hpp"
+#include "BreakpointSpecs.hpp"
+#include "../tools/DRX.hpp"
+#include <filesystem>
 #include "../runtime/DragonRuntime.hpp"
 #include <ostd/io/Memory.hpp>
 #include <ostd/string/String.hpp>
@@ -290,17 +293,19 @@ namespace dragon
 			dragon::DragonRuntime::forceLoad(m_data.args.force_load_file, m_data.args.force_load_mem_offset);
 
 		dragon::DisassemblyLoader::loadDirectory(m_data.disassemblyDirectory);
-		m_data.code = dragon::DisassemblyLoader::getCodeTable();
-		m_data.labels = dragon::DisassemblyLoader::getLabelTable();
-		m_data.data = dragon::DisassemblyLoader::getDataTable();
-		m_data.sources = dragon::DisassemblyLoader::getSources();
-		m_data.sourceLines.clear();
-		for (size_t i = 0; i < m_data.code.size(); i++)
+		m_seenResetCount = DragonRuntime::getResetCount();
+		// A DRX loaded with --force-load: its disassembly where it is.
+		if (m_data.args.force_load)
 		{
-			if (m_data.code[i].srcFile >= 0)
-				m_data.sourceLines.emplace(cast<u32>(m_data.code[i].addr), i);
+			ostd::ByteStream bytes;
+			ostd::Memory::loadByteStreamFromFile(m_data.args.force_load_file, bytes);
+			std::vector<uint8_t> file(bytes.begin(), bytes.end());
+			drx::Program program;
+			std::string message;
+			if (drx::isDRX(file) && drx::read(file, program, message))
+				on_drx(true, data::MemoryMapAddresses::Memory_Start + m_data.args.force_load_mem_offset, cast<u32>(program.image.size()), program.id);
 		}
-		register_debug_breaks();
+		refresh_tables();
 
 		if (m_data.args.auto_track_all_data_symbols)
 		{
@@ -323,6 +328,7 @@ namespace dragon
 		display.enableAutoRedraw(false);
 
 		DragonRuntime::cpu.setDebugPrintHandler([this](const std::string& text) { debug_print(text); });
+		DragonRuntime::cpu.setDrxListener([this](bool loaded, u32 base, u32 size, u64 id) { on_drx(loaded, base, size, id); });
 		DragonRuntime::cpu.setInterruptListener([this](u8 intValue, bool hardware, u32 handlerAddress) {
 			if (!m_data.args.track_call_stack)
 				return;
@@ -956,15 +962,29 @@ namespace dragon
 		if (!lineText.isNumeric() || fileName == "")
 			return l_error("expected <file>:<line>");
 		const i32 wanted = cast<i32>(lineText.toInt());
+		// The files whose path ends that way (BreakSpec::pathMatches): one file (maybe written
+		// two ways, or in several programs), else an error naming them.
 		std::set<i32> files;
+		stdvec<String> distinct;
 		for (i32 i = 0; i < cast<i32>(m_data.sources.size()); i++)
 		{
 			const auto& f = m_data.sources[i];
-			if (f.name == fileName || f.path == fileName || f.path.endsWith(String("/").add(fileName)))
-				files.insert(i);
+			if (!BreakSpec::pathMatches(f.path, fileName))
+				continue;
+			files.insert(i);
+			if (std::none_of(distinct.begin(), distinct.end(), [&](const String& p) { return BreakSpec::samePath(p, f.path); }))
+				distinct.push_back(f.path);
 		}
 		if (files.empty())
 			return l_error(String("no source file named ").add(fileName).add(" in the loaded programs"));
+		if (distinct.size() > 1)
+		{
+			String message = String(fileName).add(" is more than one file: ");
+			const stdvec<String> names = BreakSpec::shortestDistinct(distinct);
+			for (size_t i = 0; i < names.size(); i++)
+				message.add(i == 0 ? "" : ", ").add(names[i]);
+			return l_error(message.add(" (write more of its path)"));
+		}
 		// The line, or the next one with code.
 		i32 line = std::numeric_limits<i32>::max();
 		for (const auto& c : m_data.code)
@@ -1070,6 +1090,14 @@ namespace dragon
 			it->second.enabled = !it->second.enabled;
 			return it->second.enabled;
 		}
+		if (it->second.fromSpec)
+		{
+			// The spec breakpoint(s) it comes from (all of its places).
+			for (i32 i; (i = findSpecBreakPoint(address)) >= 0; )
+				m_data.specBreakpoints.erase(m_data.specBreakpoints.begin() + i);
+			apply_spec_breakpoints();
+			return isBreakPoint(address);
+		}
 		m_data.breakpoints.erase(it);
 		return false;
 	}
@@ -1098,6 +1126,12 @@ namespace dragon
 			return;
 		if (it->second.debugBreak)
 			it->second.enabled = false;
+		else if (it->second.fromSpec)
+		{
+			for (i32 i; (i = findSpecBreakPoint(address)) >= 0; )
+				m_data.specBreakpoints.erase(m_data.specBreakpoints.begin() + i);
+			apply_spec_breakpoints();
+		}
 		else
 			m_data.breakpoints.erase(it);
 	}
@@ -1105,7 +1139,16 @@ namespace dragon
 	void Debugger::setBreakPointEnabled(u32 address, bool enabled)
 	{
 		auto it = m_data.breakpoints.find(address);
-		if (it != m_data.breakpoints.end())
+		if (it != m_data.breakpoints.end() && it->second.fromSpec && !it->second.debugBreak)
+		{
+			for (auto& spec : m_data.specBreakpoints)
+			{
+				if (std::find(spec.addresses.begin(), spec.addresses.end(), address) != spec.addresses.end())
+					spec.enabled = enabled;
+			}
+			apply_spec_breakpoints();
+		}
+		else if (it != m_data.breakpoints.end())
 			it->second.enabled = enabled;
 		else if (enabled)
 			addBreakPoint(address);
@@ -1113,6 +1156,7 @@ namespace dragon
 
 	void Debugger::clearBreakPoints(void)
 	{
+		m_data.specBreakpoints.clear();
 		for (auto it = m_data.breakpoints.begin(); it != m_data.breakpoints.end(); )
 		{
 			if (it->second.debugBreak)
@@ -1134,6 +1178,231 @@ namespace dragon
 			return true;
 		const u8 opCode = DragonRuntime::memMap.peek8(ip);
 		return opCode == data::OpCodes::DEBUG_Break || opCode == data::OpCodes::DEBUG_DumpRAM;
+	}
+
+	void Debugger::refresh_tables(void)
+	{
+		m_data.code = dragon::DisassemblyLoader::getCodeTable();
+		m_data.labels = dragon::DisassemblyLoader::getLabelTable();
+		m_data.data = dragon::DisassemblyLoader::getDataTable();
+		m_data.sources = dragon::DisassemblyLoader::getSources();
+		m_data.sourceLines.clear();
+		for (size_t i = 0; i < m_data.code.size(); i++)
+		{
+			if (m_data.code[i].srcFile >= 0)
+				m_data.sourceLines.emplace(cast<u32>(m_data.code[i].addr), i);
+		}
+		register_debug_breaks();
+		apply_spec_breakpoints();
+	}
+
+	void Debugger::apply_spec_breakpoints(void)
+	{
+		for (auto it = m_data.breakpoints.begin(); it != m_data.breakpoints.end(); )
+		{
+			if (it->second.fromSpec && !it->second.debugBreak)
+				it = m_data.breakpoints.erase(it);
+			else
+			{
+				it->second.fromSpec = false;
+				++it;
+			}
+		}
+		for (auto& spec : m_data.specBreakpoints)
+		{
+			const BreakSpec::tResult r = BreakSpec::resolve(spec.spec);
+			spec.addresses = r.addresses;
+			spec.pending = r.pending;
+			spec.error = r.valid ? String("") : r.error;
+			if (r.valid)
+				spec.where = r.where;
+			for (u32 a : spec.addresses)
+			{
+				auto bp = m_data.breakpoints.find(a);
+				if (bp == m_data.breakpoints.end())
+					m_data.breakpoints[a] = { spec.enabled, false, true };
+				else if (bp->second.fromSpec)
+					bp->second.enabled = bp->second.enabled || spec.enabled;
+				// (A breakpoint of its own there, or a debug_break: left as it is.)
+			}
+		}
+	}
+
+	i32 Debugger::findSpecBreakPoint(u32 address) const
+	{
+		for (size_t i = 0; i < m_data.specBreakpoints.size(); i++)
+		{
+			const auto& a = m_data.specBreakpoints[i].addresses;
+			if (std::find(a.begin(), a.end(), address) != a.end())
+				return cast<i32>(i);
+		}
+		return -1;
+	}
+
+	void Debugger::removeSpecBreakPoint(size_t index)
+	{
+		if (index >= m_data.specBreakpoints.size())
+			return;
+		m_data.specBreakpoints.erase(m_data.specBreakpoints.begin() + cast<i64>(index));
+		apply_spec_breakpoints();
+		notify_state_changed();
+	}
+
+	void Debugger::setSpecBreakPointEnabled(size_t index, bool enabled)
+	{
+		if (index >= m_data.specBreakpoints.size())
+			return;
+		m_data.specBreakpoints[index].enabled = enabled;
+		apply_spec_breakpoints();
+		notify_state_changed();
+	}
+
+	void Debugger::print_spec_breakpoint(const tSpecBreakPoint& bp, const String& prefix)
+	{
+		auto& out = console();
+		out.fg(ostd::ConsoleColors::Yellow).p(prefix).p(bp.where != "" ? bp.where : bp.spec);
+		for (u32 a : bp.addresses)
+			out.p("  ").p(String::getHexStr(a, true, 4));
+		if (!bp.pending.empty())
+		{
+			out.fg(ostd::ConsoleColors::BrightGray).p(bp.addresses.empty() ? "  pending: in " : "  (also in ");
+			for (size_t i = 0; i < bp.pending.size(); i++)
+				out.p(i == 0 ? "" : ", ").p(bp.pending[i]);
+			out.p(bp.addresses.empty() ? ", not loaded yet" : ", not loaded yet)");
+		}
+		out.reset().nl();
+	}
+
+	bool Debugger::breakPointFromText(const String& textIn, bool toggle)
+	{
+		auto& out = console();
+		const String text = textIn.new_trim();
+		if (text == "")
+			return false;
+		const BreakSpec::eKind kind = BreakSpec::kind(text);
+		if (kind != BreakSpec::eKind::None)
+		{
+			for (size_t i = 0; i < m_data.specBreakpoints.size(); i++)
+			{
+				if (m_data.specBreakpoints[i].spec != text)
+					continue;
+				if (toggle)
+				{
+					const tSpecBreakPoint removed = m_data.specBreakpoints[i];
+					removeSpecBreakPoint(i);
+					print_spec_breakpoint(removed, "Breakpoint removed at ");
+				}
+				else
+					print_spec_breakpoint(m_data.specBreakpoints[i], "Breakpoint already set at ");
+				return true;
+			}
+			const BreakSpec::tResult r = BreakSpec::resolve(text);
+			if (r.valid)
+			{
+				tSpecBreakPoint bp;
+				bp.spec = text;
+				bp.isSub = (kind == BreakSpec::eKind::Sub);
+				m_data.specBreakpoints.push_back(bp);
+				apply_spec_breakpoints();
+				print_spec_breakpoint(m_data.specBreakpoints.back(), "Breakpoint set at ");
+				notify_state_changed();
+				return true;
+			}
+			if (kind == BreakSpec::eKind::SourceLine)
+			{
+				out.fg(ostd::ConsoleColors::Red).p("Invalid source line: ").p(r.error).reset().nl();
+				return false;
+			}
+			// Not a sub: a label of that name ($name, $_name), below.
+			u32 address = 0;
+			for (const String& symbol : { String("$").add(text), String("$_").add(text) })
+			{
+				if ((address = Utils::findSymbol(m_data.labels, symbol)) != 0)
+					break;
+			}
+			if (address == 0)
+			{
+				out.fg(ostd::ConsoleColors::Red).p("No sub or label named ").p(text).p(": ").p(r.error).reset().nl();
+				return false;
+			}
+			return breakPointFromText(String::getHexStr(address, true, 4), toggle);
+		}
+		u32 address = 0;
+		i64 numeric = 0;
+		if (Utils::parseValue(text, numeric))
+			address = cast<u32>(numeric);
+		else if (text.startsWith("$"))
+		{
+			address = Utils::findSymbol(m_data.labels, text);
+			if (address == 0 && !Utils::parseAddress(*this, text, address))
+			{
+				out.fg(ostd::ConsoleColors::Red).p("Invalid symbol: ").p(text).reset().nl();
+				return false;
+			}
+		}
+		else if (!Utils::parseAddress(*this, text, address))
+		{
+			out.fg(ostd::ConsoleColors::Red).p("Not an address, a label, a source line or a sub: ").p(text).reset().nl();
+			return false;
+		}
+		const tBreakPoint* existing = getBreakPoint(address);
+		bool enabled = true;
+		if (toggle)
+			enabled = toggleBreakPoint(address);
+		else if (existing == nullptr || !existing->enabled)
+			setBreakPointEnabled(address, true);
+		const tBreakPoint* bp = getBreakPoint(address);
+		const String label = Utils::findSymbol(m_data.labels, address).new_trim();
+		const String hex = String::getHexStr(address, true, 4);
+		if (bp != nullptr && bp->debugBreak)
+			out.fg(ostd::ConsoleColors::Yellow).p(enabled ? "debug_break enabled at " : "debug_break disabled at ").p(hex);
+		else if (!toggle && existing != nullptr && existing->enabled)
+			out.fg(ostd::ConsoleColors::Yellow).p("Breakpoint already set at ").p(hex);
+		else
+			out.fg(ostd::ConsoleColors::Yellow).p(enabled ? "Breakpoint set at " : "Breakpoint removed at ").p(hex);
+		if (label != "")
+			out.p(" (").p(label).p(")");
+		out.reset().nl();
+		notify_state_changed();
+		return true;
+	}
+
+	void Debugger::on_drx(bool loaded, u32 base, u32 size, u64 id)
+	{
+		auto& out = console();
+		if (!loaded)
+		{
+			if (dragon::DisassemblyLoader::unmapDrx(base))
+			{
+				out.fg(ostd::ConsoleColors::BrightGray).p("DRX program at ").p(String::getHexStr(base, true, 4)).p(" unloaded.").reset().nl();
+				refresh_tables();
+			}
+			return;
+		}
+		const DisassemblyTable* table = dragon::DisassemblyLoader::mapDrx(base, size, id);
+		out.fg(ostd::ConsoleColors::BrightGray).p("DRX program loaded at ").p(String::getHexStr(base, true, 4)).p(" (")
+			.p(cast<i32>(size)).p(" bytes, id ").p(drx::idString(id)).p("): ");
+		if (table != nullptr)
+		{
+			const String name = table->getName() != "" ? table->getName() : String(std::filesystem::path(table->getFilePath().cpp_str()).filename().string());
+			out.fg(ostd::ConsoleColors::Green).p(name).p(table->getSources().empty() ? "" : ", with its sources").reset().nl();
+		}
+		else if (id == 0)
+			out.fg(ostd::ConsoleColors::Yellow).p("no id (built by an older dsc): no disassembly").reset().nl();
+		else
+			out.fg(ostd::ConsoleColors::Yellow).p("no disassembly with this id in '").p(m_data.disassemblyDirectory)
+				.p("/' (dsc --save-disassembly <dir>; rebuilt without it?)").reset().nl();
+		refresh_tables();
+	}
+
+	void Debugger::syncTables(void)
+	{
+		if (m_seenResetCount != DragonRuntime::getResetCount())
+		{
+			m_seenResetCount = DragonRuntime::getResetCount();
+			dragon::DisassemblyLoader::clearMappings();
+			refresh_tables();
+		}
 	}
 
 	void Debugger::register_debug_breaks(void)
@@ -1607,71 +1876,12 @@ namespace dragon
 
 	void Debugger::exec_break_command(const String& commandArgs)
 	{
-		auto& out = console();
-		u32 addr = 0;
-		bool valid = false;
-		i64 numeric = 0;
-		if (commandArgs.contains(":") && !commandArgs.startsWith("$"))
+		if (commandArgs.new_trim() == "")
 		{
-			// A source line: a breakpoint at each place it starts.
-			String error = "";
-			i32 line = 0;
-			const stdvec<u32> addresses = findSourceLine(commandArgs, &line, &error);
-			if (addresses.empty())
-			{
-				out.fg(ostd::ConsoleColors::Red).p("Invalid source line: ").p(error).reset().nl();
-				return;
-			}
-			bool all = true;
-			for (u32 a : addresses)
-			{
-				const tBreakPoint* bp = getBreakPoint(a);
-				all = all && bp != nullptr && !bp->debugBreak;
-			}
-			for (u32 a : addresses)
-			{
-				if (all)
-					removeBreakPoint(a);
-				else if (!isBreakPoint(a))
-					addBreakPoint(a);
-			}
-			const String where = commandArgs.new_substr(0, commandArgs.lastIndexOf(":")).trim().add(":").add(line);
-			out.fg(ostd::ConsoleColors::Yellow).p(all ? "Breakpoint removed at " : "Breakpoint set at ").p(where);
-			for (u32 a : addresses)
-				out.p("  ").p(String::getHexStr(a, true, 4));
-			out.reset().nl();
-			notify_state_changed();
+			console().fg(ostd::ConsoleColors::Red).p("break <address | $label | file:line | sub name>").reset().nl();
 			return;
 		}
-		if (Utils::parseValue(commandArgs, numeric))
-		{
-			addr = (u32)numeric;
-			valid = true;
-		}
-		else if (commandArgs.startsWith("$"))
-		{
-			addr = Utils::findSymbol(m_data.labels, commandArgs);
-			if (addr == 0x00000000)
-				out.fg(ostd::ConsoleColors::Red).p("Invalid symbol: ").p(commandArgs).reset().nl();
-			else
-				valid = true;
-		}
-		else
-		{
-			out.fg(ostd::ConsoleColors::Red).p("Invalid value for <break> command.").reset().nl();
-		}
-		if (valid)
-		{
-			const bool enabled = toggleBreakPoint(addr);
-			const tBreakPoint* bp = getBreakPoint(addr);
-			if (bp != nullptr && bp->debugBreak)
-				out.fg(ostd::ConsoleColors::Yellow).p(enabled ? "debug_break enabled at address: " : "debug_break disabled at address: ").p(String::getHexStr(addr, true, 4)).reset().nl();
-			else if (enabled)
-				out.fg(ostd::ConsoleColors::Yellow).p("Breakpoint set at address: ").p(String::getHexStr(addr, true, 4)).reset().nl();
-			else
-				out.fg(ostd::ConsoleColors::Yellow).p("Breakpoint removed at address: ").p(String::getHexStr(addr, true, 4)).reset().nl();
-			notify_state_changed();
-		}
+		breakPointFromText(commandArgs, true);
 	}
 
 	void Debugger::exec_list_command(const String& commandArgs)

@@ -25,6 +25,8 @@ namespace dragon
 				case data::OpCodes::DEBUG_DumpRAM: return "debug_dump_ram";
 				case data::OpCodes::DEBUG_PrintImm: return "debug_print_imm";
 				case data::OpCodes::DEBUG_PrintReg: return "debug_print_reg";
+				case data::OpCodes::DEBUG_DrxLoad: return "debug_drx_load";
+				case data::OpCodes::DEBUG_DrxUnload: return "debug_drx_unload";
 				case data::OpCodes::MovImmReg: return "MovImmReg";
 				case data::OpCodes::MovImmMem: return "MovImmMem";
 				case data::OpCodes::MovRegReg: return "MovRegReg";
@@ -155,6 +157,8 @@ namespace dragon
 				case data::OpCodes::DEBUG_DumpRAM: return 1;
 				case data::OpCodes::DEBUG_PrintImm: return 5;
 				case data::OpCodes::DEBUG_PrintReg: return 2;
+				case data::OpCodes::DEBUG_DrxLoad: return 2;
+				case data::OpCodes::DEBUG_DrxUnload: return 2;
 				case data::OpCodes::MovImmReg: return 6;
 				case data::OpCodes::MovImmMem: return 9;
 				case data::OpCodes::MovRegReg: return 3;

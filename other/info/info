@@ -15,6 +15,13 @@
     Conditional jumps (ACC compared with the operand: an immediate or a register; "jgr L, x" jumps if x > ACC):
         jeq jne, and jgr jls jge jle (signed), jgru jlsu jgeu jleu (unsigned, u32).
 
+    For the host / the debugger (always assembled and run; without a debugger only debug_print does anything):
+        debug_print <reg | imm>  the zero-terminated string at that address, to the host's terminal (ddb: its console)
+        debug_drx_load <reg>     a DRX program was loaded: reg points to { base, image size, id high, id low } (u32s);
+                                 ddb moves the disassembly saved with that id (dsc --save-disassembly) to base
+                                 (the SDK's drx::load / drx::notify_loaded run it)
+        debug_drx_unload <reg>   the DRX program at base (reg) is gone (drx::notify_unloaded, drx::free_program)
+
     Registers:
         System:  IP SP FP RV PP FL ACC
         General: R1 .. R20

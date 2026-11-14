@@ -111,6 +111,12 @@ namespace dragon
 				// Where debug_print's text goes (nullptr: stdout), e.g. the debugger's console.
 				using DebugPrintHandler = std::function<void(const std::string& text)>;
 				inline void setDebugPrintHandler(DebugPrintHandler handler) { m_debugPrintHandler = std::move(handler); }
+				// debug_drx_load / debug_drx_unload (and loaders outside the machine: notifyDrx):
+				// a DRX program loaded at base (image size, id: the DRX header's), or unloaded
+				// (loaded false: base only). For the debugger; nullptr: ignored.
+				using DrxListener = std::function<void(bool loaded, u32 base, u32 size, u64 id)>;
+				inline void setDrxListener(DrxListener listener) { m_drxListener = std::move(listener); }
+				inline void notifyDrx(bool loaded, u32 base, u32 size, u64 id) { if (m_drxListener) m_drxListener(loaded, base, size, id); }
 
 				// false (and halts, with an error) if divisor is 0.
 				bool check_divisor(i32 divisor);
@@ -137,6 +143,7 @@ namespace dragon
 				bool m_ramDumped { false };
 				bool m_debugModeEnabled { false };
 				DebugPrintHandler m_debugPrintHandler { nullptr };
+				DrxListener m_drxListener { nullptr };
 				i32 m_subroutineCounter { 0 };
 				bool m_debugProfilerStarted { false };
 

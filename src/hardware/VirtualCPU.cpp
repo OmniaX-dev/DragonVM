@@ -385,6 +385,25 @@ namespace dragon
 					debugPrint(addr);
 				}
 				break;
+				case data::OpCodes::DEBUG_DrxLoad:
+				{
+					const u32 record = cast<u32>(readRegister(fetch8()));
+					if (m_drxListener)
+					{
+						const u32 base = cast<u32>(m_memory.read32(record));
+						const u32 size = cast<u32>(m_memory.read32(record + 4));
+						const u64 id = (cast<u64>(cast<u32>(m_memory.read32(record + 8))) << 32) | cast<u32>(m_memory.read32(record + 12));
+						m_drxListener(true, base, size, id);
+					}
+				}
+				break;
+				case data::OpCodes::DEBUG_DrxUnload:
+				{
+					const u32 base = cast<u32>(readRegister(fetch8()));
+					if (m_drxListener)
+						m_drxListener(false, base, 0, 0);
+				}
+				break;
 				case data::OpCodes::DEBUG_StartProfile:
 				{
 					if (!m_debugModeEnabled) break;

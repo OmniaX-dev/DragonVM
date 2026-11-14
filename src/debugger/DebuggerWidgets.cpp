@@ -1200,8 +1200,18 @@ namespace dragon
 	void BreakpointView::refreshRows(void)
 	{
 		m_rows.clear();
+		const auto& specs = m_debugger.data().specBreakpoints;
+		for (size_t i = 0; i < specs.size(); i++)
+		{
+			Row row;
+			row.spec = cast<i32>(i);
+			row.address = specs[i].addresses.empty() ? 0 : specs[i].addresses.front();
+			m_rows.push_back(row);
+		}
 		for (const auto& [address, bp] : m_debugger.data().breakpoints)
 		{
+			if (bp.fromSpec && !bp.debugBreak)
+				continue;	// (in its spec's row)
 			Row row;
 			row.address = address;
 			row.label = Debugger::Utils::findNearestSymbol(m_debugger.data().labels, address);
@@ -1232,13 +1242,21 @@ namespace dragon
 
 	String BreakpointView::getEmptyText(void) const
 	{
-		return "No breakpoints: click the left margin of the disassembly, or use 'break <addr|$label|file:line>'.";
+		return "No breakpoints: click the left margin of the disassembly, or use 'break <addr|$label|file:line|sub>'.";
 	}
 
 	Color BreakpointView::getRowColor(i32 row) const
 	{
 		const Row& r = m_rows[row];
 		const u32 ip = cast<u32>(DragonRuntime::cpu.readRegister(data::Registers::IP));
+		if (r.spec >= 0)
+		{
+			const auto& specs = m_debugger.data().specBreakpoints;
+			if (r.spec < cast<i32>(specs.size()) && !m_debugger.isRunning()
+				&& std::find(specs[r.spec].addresses.begin(), specs[r.spec].addresses.end(), ip) != specs[r.spec].addresses.end())
+				return { 230, 200, 75, 30 };
+			return { 0, 0, 0, 0 };
+		}
 		if (!r.watch && r.address == ip && !m_debugger.isRunning())
 			return { 230, 200, 75, 30 };
 		return { 0, 0, 0, 0 };
@@ -1247,6 +1265,60 @@ namespace dragon
 	void BreakpointView::drawCell(ogfx::BasicRenderer2D& gfx, i32 row, i32 column, const Rectangle& bounds)
 	{
 		const Row& r = m_rows[row];
+		if (r.spec >= 0)
+		{
+			const auto& specs = m_debugger.data().specBreakpoints;
+			if (r.spec >= cast<i32>(specs.size()))
+				return;
+			const auto& sp = specs[r.spec];
+			const bool enabled = sp.enabled;
+			const bool pending = sp.addresses.empty();
+			const Color textColor = enabled ? TextColor : DimTextColor;
+			switch (column)
+			{
+				case 0:
+				{
+					const Rectangle box { bounds.x + 4, bounds.y + bounds.h * 0.5f - 6, 12, 12 };
+					gfx.drawRect(box, enabled ? Color(220, 220, 220) : DimTextColor, 1);
+					if (enabled)
+						gfx.fillRect({ box.x + 3, box.y + 3, 6, 6 }, pending ? Color(150, 150, 160) : Color(235, 70, 70));
+					break;
+				}
+				case 1:
+					text(gfx, sp.error != "" ? "not found" : (pending ? "pending" : (sp.isSub ? "sub" : "source line")), bounds.x, bounds.y,
+						 enabled ? (sp.error != "" ? Color(240, 110, 90) : (pending ? Color(160, 160, 175) : Color(235, 90, 90))) : DimTextColor);
+					break;
+				case 2:
+				{
+					String a = pending ? String("-") : String::getHexStr(sp.addresses.front(), true, 4);
+					if (sp.addresses.size() > 1)
+						a.add(" +").add(cast<i32>(sp.addresses.size() - 1));
+					text(gfx, a, bounds.x, bounds.y, enabled ? Color(235, 215, 90) : DimTextColor);
+					break;
+				}
+				case 3:
+				{
+					String label = sp.where != "" ? sp.where : sp.spec;
+					if (sp.error != "")
+						label.add("  (").add(sp.error).add(")");
+					else if (!sp.pending.empty())
+					{
+						label.add(pending ? "  (in " : "  (also in ");
+						for (size_t i = 0; i < sp.pending.size(); i++)
+							label.add(i == 0 ? "" : ", ").add(sp.pending[i]);
+						label.add(", not loaded yet)");
+					}
+					text(gfx, label, bounds.x, bounds.y, enabled ? Color(110, 220, 230) : DimTextColor);
+					break;
+				}
+				case 4:
+					if (!pending)
+						text(gfx, Debugger::Utils::findSymbol(m_debugger.data().code, sp.addresses.front()).new_trim(), bounds.x, bounds.y, textColor);
+					break;
+				default: break;
+			}
+			return;
+		}
 		const Debugger::tBreakPoint* bp = (r.watch ? nullptr : m_debugger.getBreakPoint(r.address));
 		if (!r.watch && bp == nullptr)
 			return;
@@ -1285,11 +1357,70 @@ namespace dragon
 		}
 	}
 
+	void BreakpointView::enable_all(bool enable)
+	{
+		for (size_t i = 0; i < m_debugger.data().specBreakpoints.size(); i++)
+			m_debugger.setSpecBreakPointEnabled(i, enable);
+		stdvec<u32> addresses;
+		for (const auto& [address, bp] : m_debugger.data().breakpoints)
+		{
+			if (!bp.fromSpec || bp.debugBreak)
+				addresses.push_back(address);
+		}
+		for (u32 address : addresses)
+			m_debugger.setBreakPointEnabled(address, enable);
+	}
+
 	void BreakpointView::onRowClicked(i32 row, i32 column, eButton button, bool doubleClick)
 	{
 		if (row >= getRowCount())
 			return;
 		const Row r = m_rows[row];
+		if (r.spec >= 0)
+		{
+			const auto& specs = m_debugger.data().specBreakpoints;
+			if (r.spec >= cast<i32>(specs.size()))
+				return;
+			const bool enabled = specs[r.spec].enabled;
+			const bool pending = specs[r.spec].addresses.empty();
+			const size_t index = cast<size_t>(r.spec);
+			if (button == eButton::Left)
+			{
+				if (column == 0)
+				{
+					m_debugger.setSpecBreakPointEnabled(index, !enabled);
+					refreshRows();
+				}
+				else if (doubleClick && !pending && m_onShowInDisassembly)
+					m_onShowInDisassembly(r.address);
+				return;
+			}
+			if (button != eButton::Right)
+				return;
+			ContextMenu::Instance menu;
+			if (!pending)
+				menu.entries.push_back({ "Show in the disassembly", 2 });
+			menu.entries.push_back({ enabled ? "Disable" : "Enable", 3 });
+			menu.entries.push_back({ "Remove", 4 });
+			menu.entries.push_back(ContextMenu::Entry::separator());
+			menu.entries.push_back({ "Enable all breakpoints", 5 });
+			menu.entries.push_back({ "Disable all breakpoints", 6 });
+			menu.entries.push_back({ "Remove all (debug_break ones disabled)", 7 });
+			menu.onActivate = [this, r, index, enabled](const ContextMenu::Entry& entry) {
+				switch (entry.id)
+				{
+					case 2: if (m_onShowInDisassembly) m_onShowInDisassembly(r.address); break;
+					case 3: m_debugger.setSpecBreakPointEnabled(index, !enabled); break;
+					case 4: m_debugger.removeSpecBreakPoint(index); break;
+					case 5: case 6: enable_all(entry.id == 5); break;
+					case 7: m_debugger.clearBreakPoints(); break;
+					default: break;
+				}
+				refreshRows();
+			};
+			dragon::show_menu(getWindow(), menu);
+			return;
+		}
 		const Debugger::tBreakPoint* bp = (r.watch ? nullptr : m_debugger.getBreakPoint(r.address));
 		if (!r.watch && bp == nullptr)
 			return;
@@ -1343,14 +1474,8 @@ namespace dragon
 				case 4: m_debugger.removeBreakPoint(r.address); break;
 				case 5:
 				case 6:
-				{
-					stdvec<u32> addresses;
-					for (const auto& [address, bp] : m_debugger.data().breakpoints)
-						addresses.push_back(address);
-					for (u32 address : addresses)
-						m_debugger.setBreakPointEnabled(address, entry.id == 5);
+					enable_all(entry.id == 5);
 					break;
-				}
 				case 7: m_debugger.clearBreakPoints(); break;
 				default: break;
 			}

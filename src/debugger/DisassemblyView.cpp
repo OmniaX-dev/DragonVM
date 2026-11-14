@@ -36,8 +36,9 @@ namespace dragon
 			asmOut.setConsoleColor(colorNames[i], dim(desaturate(asmOut.getConsoleColor(colorNames[i]))));
 		asmOut.setDefaultForeground(dim(AsmTextColor));
 		asmOut.setConsoleColor("brightgray", dim(AddressColor));	// the addresses
-		for (const auto& table : DisassemblyLoader::getTables())
+		for (const DisassemblyTable* tablePtr : DisassemblyLoader::getTables())
 		{
+			const DisassemblyTable& table = *tablePtr;
 			if (table.getCodeTable().empty())
 				continue;
 			Document& doc = m_documents.emplace_back();
@@ -46,6 +47,8 @@ namespace dragon
 			doc.name = table.getName();
 			if (doc.name == "")
 				doc.name = String(std::filesystem::path(table.getFilePath().cpp_str()).filename().string());
+			if (table.isLoadedCopy())
+				doc.name.add(" (DRX)");
 			doc.name.add("  [").add(String::getHexStr(cast<u32>(table.getCodeStart()), true, 4)).add(" - ")
 					.add(String::getHexStr(cast<u32>(table.getCodeEnd()), true, 4)).add("]");
 			out.attach(doc.buffer);

@@ -30,15 +30,42 @@ block line, `.loc -` before generated code); dasm adds them for its own sources.
 for the debugger: the binary is the same.
 ```
 dsc program.ds --raw --save-disassembly disassembly/     (a directory: named for ddb, as dasm does)
+dsc program.ds --save-disassembly disassembly/           (a DRX: at offset 0, with the program's id)
 dtools print-disassembly -f disassembly/<file>.dds        (the instructions under their lines)
 ```
+A DRX program's disassembly is at offset 0 (a `{ DRX } <id>` entry has the id of its header):
+ddb keeps it aside until a loader says where the program is, with `debug_drx_load` (the SDK's
+`drx::load` runs it once the program is relocated, whoever calls it: the BIOS loading Drake,
+Drake loading a kernel...), then shows it moved there (its sources, breakpoints on its lines,
+`where`, stepping). A new program loaded over one replaces it; `drx::notify_unloaded(base)` (and
+`drx::free_program`) remove one; a reset removes them all. `ddb --force-load program.drx
+<offset>` moves it there too. A program rebuilt without saving its disassembly has a new id:
+no disassembly rather than a wrong one (ddb's console says so when it is loaded). A loader of
+its own calls `drx::notify_loaded(base, size, id_hi, id_lo)` once the program is in place.
+`drun --drx-events` prints the loads and unloads (what ddb gets).
 In ddb, each source line (highlighted) is shown above its instructions, which are indented under
 it; inlined subs' line numbers are green, each file starts with a header, and the line of the
 current instruction is highlighted. A source line's margin and menu act on its
 first instruction (breakpoints, run to). Commands (and toolbar buttons): `sl` / `step-line` (F7: to the next line,
 into called subs), `nl` / `next-line` (F8: calls, interrupts and inlined subs run whole),
 `break <file>:<line>` (at the line, or the next one with code; every copy of an inlined line),
-`where`, `list [file:line]`. Where the program has no source lines, they step one instruction.
+`break <sub>`, `where`, `list [file:line]`. Where the program has no source lines, they step one
+instruction.
+
+Breakpoints on source lines and subs (the `break` command, the Breakpoints tab's input):
+- `<file>:<line>`: the file is the end of its path, `entry.ds`, `drake/entry.ds` (`.ds` can be left
+  out). When several different files end that way, it says which (with the shortest paths that
+  tell them apart: `bios/entry.ds, drake/entry.ds`).
+- A sub: its full name (`dr::fs::FileSystem::info`) or its last parts (`FileSystem::info`, `info`
+  when only one sub has that name; else it lists them). Overloads all get one. dsc writes the
+  subs in the disassembly (a `{ SUBS }` part: name, label, parameter types, inline, file, lines);
+  a library's are in the program's disassembly with its code, so a library sub gets a breakpoint
+  in every program linked with it (the BIOS's copy, Drake's...). An inline sub: at the first line
+  of each copy.
+- They are kept as written and resolved again whenever the programs in memory change: one in a
+  DRX program not loaded yet is pending (the tab and `bl` say in which program), and gets its
+  addresses when the program is loaded, wherever it is. Removing one of its addresses (the
+  margin) removes it.
 
 Pipeline: lexer -> preprocessor (on tokens) -> parser (AST) -> checking + code generation
 (dasm text) -> assembler -> DRX / raw binary. Sources: `src/compiler/`.
@@ -610,9 +637,12 @@ offsets of every 32-bit address in it (dsc finds them by assembling twice, at tw
 
 ```
 0x00  magic 'DRX1'   0x04  header size (32)   0x08  image size    0x0C  entry offset
-0x10  reloc count    0x14  reloc table offset 0x18  flags (0)     0x1C  reserved
+0x10  reloc count    0x14  reloc table offset 0x18  id (64 bits, high word first; 0: none)
 image (the program at address 0), then the relocation table (u32 offsets in the image)
 ```
+The id identifies the build (FNV-1a of the entry, the image and the relocations): the
+disassembly saved with it (`--save-disassembly`) has it too, so the debugger finds the right one
+for a program wherever it is loaded (see "Source-level debugging").
 To load it at `base`: copy the image, add `base` to the 32-bit word at every relocation offset,
 then call `base + entry` (see "Starting a program"). The program returns when `main` returns
 (its value in RV).

@@ -24,6 +24,8 @@ namespace dr::drx {
 		var entry: u32 = 0;
 		var relocations: u32* = null;
 		var relocations_count: u32 = 0;
+		var id_hi: u32 = 0;			// the build's id (the header's): see notify_loaded
+		var id_lo: u32 = 0;
 	};
 
 	sub __readU32(var ptr: u8*) -> u32 { return (cast<u32>(ptr[0]) << 24) | (cast<u32>(ptr[1]) << 16) | (cast<u32>(ptr[2]) << 8) | ptr[3]; }
@@ -38,7 +40,31 @@ namespace dr::drx {
 		var entry: u32 = 0;
 		var reloc_count: u32 = 0;
 		var reloc_offset: u32 = 0;
+		var id_hi: u32 = 0;			// 0x18: the build's id (0: none)
+		var id_lo: u32 = 0;
 	};
+
+	// For the debugger (source-level debugging): the program built with this id is at base
+	// (size bytes); ddb moves its disassembly (dsc --save-disassembly, which has the id) there.
+	// load() does it; a loader of its own calls it once the program is in place (relocated). A
+	// no-op without a debugger (one instruction).
+	sub notify_loaded(var base: u32, var size: u32, var id_hi: u32, var id_lo: u32) {
+		var record: u32[4] = { base, size, id_hi, id_lo };
+		low {
+			mov R1, $record
+			debug_drx_load R1
+		}
+	}
+
+	// For the debugger: the program at base is gone (its memory is used for something else).
+	// free_program() does it for read()'s programs; a program loaded with load() is unloaded
+	// with this (a new load over it unloads it too).
+	sub notify_unloaded(var base: u32) {
+		low {
+			mov R1, $base
+			debug_drx_unload R1
+		}
+	}
 
 	sub read_header(var file_bytes: u8*, var file_size: u32, var out: Header*) -> i32 {
 		if (not file_bytes or not out) return Errors.NullOutputPtr;
@@ -49,6 +75,8 @@ namespace dr::drx {
 		out->entry = __readU32(&file_bytes[0x0C]);
 		out->reloc_count = __readU32(&file_bytes[0x10]);
 		out->reloc_offset = __readU32(&file_bytes[0x14]);
+		out->id_hi = __readU32(&file_bytes[0x18]);
+		out->id_lo = __readU32(&file_bytes[0x1C]);
 		if (out->header_size < HeaderSize or out->header_size > file_size or out->image_size > file_size - out->header_size)
 			return Errors.TruncatedFile;
 		if (out->reloc_offset > file_size or out->reloc_count > (file_size - out->reloc_offset) / 4)
@@ -75,6 +103,8 @@ namespace dr::drx {
 		memcpy(outProgram->image, &file_bytes[h.header_size], h.image_size);
 		outProgram->image_size = h.image_size;
 		outProgram->entry = h.entry;
+		outProgram->id_hi = h.id_hi;
+		outProgram->id_lo = h.id_lo;
 		if (h.reloc_count == 0)
 			return Errors.NoError;
 		outProgram->relocations = malloc(h.reloc_count * 4);
@@ -94,13 +124,17 @@ namespace dr::drx {
 	// Releases what read() allocated (the Program is empty afterwards).
 	sub free_program(var prog: Program*) {
 		if (not prog) return;
-		if (prog->image) free(prog->image);
+		if (prog->image) {
+			notify_unloaded(cast<u32>(prog->image));
+			free(prog->image);
+		}
 		if (prog->relocations) free(prog->relocations);
 		var empty: Program;
 		*prog = empty;
 	}
 
-	// This right now is destructive unlike the C++ version, to avoid copying the program
+	// This right now is destructive unlike the C++ version, to avoid copying the program. Relocated
+	// to where its image is (base == prog->image: run there), the debugger is told (notify_loaded).
 	sub relocate(var prog: Program*, var base: u32) {
 		for (var i: u32 = 0; i < prog->relocations_count; i++)
 		{
@@ -108,6 +142,8 @@ namespace dr::drx {
 			var addr: u32 = __readU32(&prog->image[offset]);
 			__writeU32(&prog->image[offset], addr + base);
 		}
+		if (base == cast<u32>(prog->image))
+			notify_loaded(base, prog->image_size, prog->id_hi, prog->id_lo);
 	}
 
 	// Copies words (4 bytes each) from src to dst, forward (dst may overlap src if it is at or
@@ -209,6 +245,7 @@ namespace dr::drx {
 		for (var i: u32 = words * 4; i < h.image_size; i++)
 			base[i] = src[i];
 		__relocate(base, table, h.reloc_count);
+		notify_loaded(b, h.image_size, h.id_hi, h.id_lo);	// (h: read before the file was overwritten)
 		if (out_entry) *out_entry = b + h.entry;
 		return Errors.NoError;
 	}

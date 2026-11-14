@@ -18,9 +18,9 @@
 # reload_env.sh puts them:
 #   - the SDK: bin/ds/dragon-sdk/lib and extra/ds/dragon-sdk/lib
 #   - the BIOS: bin/dragon/bios.bin
-#   - Drake and kernel0: bin/dragon/drake.bin, bin/dragon/snake_kernel0.bin, loaded
-#     into bin/dragon/disk.drd (Drake at 0, kernel0 at 0x00700200 and as
-#     /boot/kernel0 on partition 4)
+#   - Drake and kernel0: bin/dragon/drake.bin (a DRX, as /init/boot.img on partition 1),
+#     bin/dragon/snake_kernel0.bin (at 0x00401000 and as /boot/kernel0 on partition 4),
+#     in bin/dragon/disk.drd
 #   - the disassembly: bin/disassembly, with the names reload_env.sh gives them
 #     (the md5 of the output path), so the debugger sees one copy of each program
 # ============================================================================
@@ -34,11 +34,12 @@ set(DS_RUN_DIR ${CMAKE_BINARY_DIR})
 file(GLOB DS_SDK_SOURCES CONFIGURE_DEPENDS ${DS_SOURCE_DIR}/dragon-sdk/src/*.ds)
 file(GLOB_RECURSE DS_BIOS_SOURCES CONFIGURE_DEPENDS ${DS_SOURCE_DIR}/bios/*.ds)
 file(GLOB_RECURSE DS_DRAKE_SOURCES CONFIGURE_DEPENDS ${DS_SOURCE_DIR}/drake/*.ds)
-file(GLOB_RECURSE DS_KERNEL0_SOURCES CONFIGURE_DEPENDS ${DS_SOURCE_DIR}/snake-game/*.ds)
+file(GLOB_RECURSE DS_SNAKE_KERNEL0_SOURCES CONFIGURE_DEPENDS ${DS_SOURCE_DIR}/snake-game/*.ds)
 
 # The disassembly file names reload_env.sh's dsc calls produce.
+string(MD5 DS_BIOS_DDS "dragon/bios.bin")
 string(MD5 DS_DRAKE_DDS "dragon/drake.bin")
-string(MD5 DS_KERNEL0_DDS "dragon/snake_kernel0.bin")
+string(MD5 DS_SNAKE_KERNEL0_DDS "dragon/snake_kernel0.bin")
 
 # ds_add_env(<target> <mode folder> <assembler flags (comma separated, may be empty)>)
 function(ds_add_env TARGET MODE ASM_FLAGS)
@@ -64,7 +65,9 @@ function(ds_add_env TARGET MODE ASM_FLAGS)
 
 	add_custom_command(
 		OUTPUT ${OUT}/bios.bin
-		COMMAND ${DSC} ${DS_SOURCE_DIR}/bios/entry.ds -L ${OUT}/lib -o ${OUT}/bios.bin -O --verbose --raw --load 0x0 --fixed 16777216,0xFF --rom ${WA}
+		COMMAND ${DSC} ${DS_SOURCE_DIR}/bios/entry.ds -L ${OUT}/lib -o ${OUT}/bios.bin
+	 																								-O --verbose --save-disassembly ${OUT}/disassembly/${DS_BIOS_DDS}.dds
+																									--raw --load 0x0 --fixed 16777216,0xFF --rom ${WA}
 		DEPENDS ${DS_BIOS_SOURCES} ${SDK} ${COMPILER_TARGET}
 		WORKING_DIRECTORY ${DS_RUN_DIR}
 		COMMENT "DScript (${MODE}): BIOS"
@@ -72,20 +75,22 @@ function(ds_add_env TARGET MODE ASM_FLAGS)
 
 	add_custom_command(
 		OUTPUT ${OUT}/drake.bin ${OUT}/disassembly/${DS_DRAKE_DDS}.dds
-		COMMAND ${DSC} ${DS_SOURCE_DIR}/drake/entry.ds -L ${OUT}/lib -o ${OUT}/drake.bin -O --verbose ${WA}
-		# COMMAND ${DSC} ${DS_SOURCE_DIR}/drake/entry.ds -L ${OUT}/lib -o ${OUT}/drake.bin --verbose --save-disassembly ${OUT}/disassembly/${DS_DRAKE_DDS}.dds ${WA}
+		# A DRX: its disassembly is at offset 0, with its id; ddb moves it to where the BIOS loads it.
+		COMMAND ${DSC} ${DS_SOURCE_DIR}/drake/entry.ds -L ${OUT}/lib -o ${OUT}/drake.bin
+																									 -O --verbose --save-disassembly ${OUT}/disassembly/${DS_DRAKE_DDS}.dds ${WA}
 		DEPENDS ${DS_DRAKE_SOURCES} ${SDK} ${COMPILER_TARGET}
 		WORKING_DIRECTORY ${DS_RUN_DIR}
 		COMMENT "DScript (${MODE}): Drake"
 		VERBATIM)
 
 	add_custom_command(
-		OUTPUT ${OUT}/snake_kernel0.bin ${OUT}/disassembly/${DS_KERNEL0_DDS}.dds
-		COMMAND ${DSC} ${DS_SOURCE_DIR}/snake-game/kernel0/kernel0.ds -L ${OUT}/lib -o ${OUT}/snake_kernel0.bin  -O --verbose --raw --header KERNEL0_BOOT
-				--load 0x01410000 --fixed 1048576,0xFF --save-disassembly ${OUT}/disassembly/${DS_KERNEL0_DDS}.dds ${WA}
-		DEPENDS ${DS_KERNEL0_SOURCES} ${SDK} ${COMPILER_TARGET}
+		OUTPUT ${OUT}/snake_kernel0.bin ${OUT}/disassembly/${DS_SNAKE_KERNEL0_DDS}.dds
+		COMMAND ${DSC} ${DS_SOURCE_DIR}/snake-game/kernel0/kernel0.ds -L ${OUT}/lib -o ${OUT}/snake_kernel0.bin
+																																	-O --verbose --save-disassembly ${OUT}/disassembly/${DS_SNAKE_KERNEL0_DDS}.dds
+																																	--raw --load 0x01410000 ${WA}
+		DEPENDS ${DS_SNAKE_KERNEL0_SOURCES} ${SDK} ${COMPILER_TARGET}
 		WORKING_DIRECTORY ${DS_RUN_DIR}
-		COMMENT "DScript (${MODE}): kernel0"
+		COMMENT "DScript (${MODE}): SnakeGame"
 		VERBATIM)
 
 	# Always: the results where the runtime and the debugger look for them.
@@ -96,14 +101,13 @@ function(ds_add_env TARGET MODE ASM_FLAGS)
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${OUT}/bios.bin ${DS_RUN_DIR}/dragon/bios.bin
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${OUT}/drake.bin ${DS_RUN_DIR}/dragon/drake.bin
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${OUT}/snake_kernel0.bin ${DS_RUN_DIR}/dragon/snake_kernel0.bin
-		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${OUT}/disassembly/${DS_DRAKE_DDS}.dds ${OUT}/disassembly/${DS_KERNEL0_DDS}.dds ${DS_RUN_DIR}/disassembly/
-		COMMAND ${DTOOLS} load-binary dragon/disk.drd dragon/snake_kernel0.bin 0x00401000
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${OUT}/disassembly/${DS_DRAKE_DDS}.dds ${OUT}/disassembly/${DS_SNAKE_KERNEL0_DDS}.dds ${DS_RUN_DIR}/disassembly/
 		COMMAND ${DTOOLS} dfs dragon/disk.drd 1 mkdir -p /init
 		COMMAND ${DTOOLS} dfs dragon/disk.drd 1 put dragon/drake.bin /init/boot.img
 		COMMAND ${DTOOLS} dfs dragon/disk.drd 4 install-kernel dragon/snake_kernel0.bin
 		DEPENDS ${SDK} ${OUT}/bios.bin ${OUT}/drake.bin ${OUT}/snake_kernel0.bin ${TOOLS_TARGET}
 		WORKING_DIRECTORY ${DS_RUN_DIR}
-		COMMENT "DScript (${MODE}): BIOS, Drake and kernel0 in place"
+		COMMENT "DScript (${MODE}): BIOS, Drake and SnakeGame in place"
 		VERBATIM)
 endfunction()
 

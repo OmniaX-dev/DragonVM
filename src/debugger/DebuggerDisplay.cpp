@@ -573,10 +573,33 @@ namespace dragon
 	void Debugger::Display::printBreakpoints(ostd::OutputHandlerBase& out, const Debugger& dbg)
 	{
 		out.fg(ostd::ConsoleColors::Yellow).p("Breakpoints:").reset().nl();
-		if (dbg.data().breakpoints.empty())
-			out.fg(ostd::ConsoleColors::BrightGray).p("  none (click the left margin of the disassembly, or use 'break <addr|$label>')").reset().nl();
+		if (dbg.data().breakpoints.empty() && dbg.data().specBreakpoints.empty())
+			out.fg(ostd::ConsoleColors::BrightGray).p("  none (click the left margin of the disassembly, or use 'break <addr|$label|file:line|sub>')").reset().nl();
+		for (const auto& sp : dbg.data().specBreakpoints)
+		{
+			const bool pending = sp.addresses.empty();
+			if (!sp.enabled)
+				out.fg(ostd::ConsoleColors::BrightGray).p("  o ");
+			else
+				out.fg(pending ? ostd::ConsoleColors::BrightGray : ostd::ConsoleColors::Red).p("  * ");
+			out.fg(ostd::ConsoleColors::Cyan).p(sp.where != "" ? sp.where : sp.spec);
+			for (u32 a : sp.addresses)
+				out.fg(ostd::ConsoleColors::BrightYellow).p("  ").p(String::getHexStr(a, true, 4));
+			if (sp.error != "")
+				out.fg(ostd::ConsoleColors::Red).p("  (").p(sp.error).p(")");
+			else if (!sp.pending.empty())
+			{
+				out.fg(ostd::ConsoleColors::BrightGray).p(pending ? "  pending: in " : "  (also in ");
+				for (size_t i = 0; i < sp.pending.size(); i++)
+					out.p(i == 0 ? "" : ", ").p(sp.pending[i]);
+				out.p(pending ? ", not loaded yet" : ", not loaded yet)");
+			}
+			out.reset().nl();
+		}
 		for (const auto& [addr, bp] : dbg.data().breakpoints)
 		{
+			if (bp.fromSpec && !bp.debugBreak)
+				continue;
 			if (!bp.enabled)
 				out.fg(ostd::ConsoleColors::BrightGray).p("  o ");
 			else
@@ -680,7 +703,7 @@ namespace dragon
 		l_cmd("rc / rcontinue", "Runs backwards until a breakpoint / watch. (Shift+F5)");
 		l_cmd("goto <cycle>", "Moves to a cycle of the recorded history.");
 		l_cmd("history [on/off/clear]", "Shows the history, or turns recording on / off.");
-		l_cmd("(b)reak <addr/symbol/file:line>", "Toggles a breakpoint (enables / disables a debug_break); file:line: at the line's first instruction.");
+		l_cmd("(b)reak <addr/symbol/file:line/sub>", "Toggles a breakpoint (enables / disables a debug_break). file:line (entry.ds:42, drake/entry.ds:42): at the line's first instruction; sub (dr::fs::FileSystem::info, FileSystem::info): at its start, in every program that has it. Those of DRX programs not loaded yet are pending until they are.");
 		l_cmd("bl / breakpoints", "Lists the breakpoints and watches.");
 		l_cmd("bc / clear", "Removes every breakpoint (disables the debug_break ones).");
 		l_cmd("(p)rint [word] <addr/symbol>", "Prints values from memory. Valid [size] values are: byte/word (16 bits)/dword (32 bits, the default)/qword/string.");

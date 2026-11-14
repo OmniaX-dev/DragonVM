@@ -84,6 +84,9 @@ namespace dscript
 			// of it comes from).
 			std::vector<std::string> exports(void) const;
 			std::string interface(std::vector<dragon::dlib::LineInfo>& lines);
+			// For the debugger (the disassembly's { SUBS }): a line per sub with code here (inline
+			// subs too: their copies), "<name>\t<label>\t<parameter types>\t<inline 0/1>\t<file>\t<line>\t<last line>".
+			std::vector<std::string> subTable(void) const;
 
 		private:
 			// Struct constants: type is the struct, fields holds every scalar field's value by its

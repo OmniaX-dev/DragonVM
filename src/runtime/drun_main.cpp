@@ -175,6 +175,8 @@ static void usage(void)
 				 "  --dump <address>[:n]   Prints n bytes (default 4) of memory at the end\n"
 				 "  --quiet                Only the program's output\n"
 				 "  --screen               Prints the 16 colors text mode's screen at the end (as text)\n"
+				 "  --drx-events           Prints the DRX programs loaded / unloaded (debug_drx_load / unload: what\n"
+				 "                         the debugger gets), to stderr\n"
 				 "  --vsync <cycles>       Cycles between VSync interrupts (default: clock_rate_sec /\n"
 				 "                         screen_redraw_rate_per_second from the .dvm; 0 = none)\n"
 				 "  -- <arguments>         The program's arguments (main(argc, argv); argv[0] is its path)\n"
@@ -190,7 +192,7 @@ int main(int argc, char** argv)
 	}
 	std::string config = argv[1], programPath;
 	i64 at = -1;
-	bool boot = false, quiet = false, screen = false;
+	bool boot = false, quiet = false, screen = false, drxEvents = false;
 	u64 maxCycles = 50000000;
 	i64 vsyncCycles = -1;
 	std::vector<std::pair<u32, u32>> dumps;
@@ -209,6 +211,7 @@ int main(int argc, char** argv)
 		else if (a == "--boot") boot = true;
 		else if (a == "--quiet") quiet = true;
 		else if (a == "--screen") screen = true;
+		else if (a == "--drx-events") drxEvents = true;
 		else if (a == "--vsync") vsyncCycles = (i64)std::strtoull(l_value().c_str(), nullptr, 0);
 		else if (a == "--max-cycles") maxCycles = std::strtoull(l_value().c_str(), nullptr, 0);
 		else if (a == "--dump")
@@ -242,6 +245,15 @@ int main(int argc, char** argv)
 	}
 	auto& cpu = DragonRuntime::cpu;
 	auto& mem = DragonRuntime::memMap;
+	if (drxEvents)
+	{
+		cpu.setDrxListener([](bool loaded, u32 base, u32 size, u64 id) {
+			if (loaded)
+				std::fprintf(stderr, "[drun] DRX loaded at 0x%08X, %u bytes, id %s\n", base, size, drx::idString(id).c_str());
+			else
+				std::fprintf(stderr, "[drun] DRX unloaded at 0x%08X\n", base);
+		});
+	}
 	u64 cycles = 0;
 	{
 		const auto& config = DragonRuntime::machine_config;
