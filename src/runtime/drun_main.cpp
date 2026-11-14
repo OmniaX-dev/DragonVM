@@ -179,6 +179,8 @@ static void usage(void)
 				 "                         the debugger gets), to stderr\n"
 				 "  --vsync <cycles>       Cycles between VSync interrupts (default: clock_rate_sec /\n"
 				 "                         screen_redraw_rate_per_second from the .dvm; 0 = none)\n"
+				 "  --unix-time <seconds>  The Unix time at the start (the Timer's UnixTime; default: the host's\n"
+				 "                         clock), then running on with the machine's time\n"
 				 "  -- <arguments>         The program's arguments (main(argc, argv); argv[0] is its path)\n"
 				 "Exit code: 0 if the machine halted without errors, 1 on errors, 2 when out of cycles.\n";
 }
@@ -195,6 +197,7 @@ int main(int argc, char** argv)
 	bool boot = false, quiet = false, screen = false, drxEvents = false;
 	u64 maxCycles = 50000000;
 	i64 vsyncCycles = -1;
+	i64 unixTime = -1;
 	std::vector<std::pair<u32, u32>> dumps;
 	std::vector<std::string> programArgs;
 	for (int i = 2; i < argc; i++)
@@ -212,6 +215,7 @@ int main(int argc, char** argv)
 		else if (a == "--quiet") quiet = true;
 		else if (a == "--screen") screen = true;
 		else if (a == "--drx-events") drxEvents = true;
+		else if (a == "--unix-time") unixTime = (i64)std::strtoull(l_value().c_str(), nullptr, 0);
 		else if (a == "--vsync") vsyncCycles = (i64)std::strtoull(l_value().c_str(), nullptr, 0);
 		else if (a == "--max-cycles") maxCycles = std::strtoull(l_value().c_str(), nullptr, 0);
 		else if (a == "--dump")
@@ -259,6 +263,8 @@ int main(int argc, char** argv)
 		const auto& config = DragonRuntime::machine_config;
 		// Machine time (cycles / clock rate): runs don't depend on the host's speed.
 		DragonRuntime::vTimer.setTimeSource(hw::VirtualTimer::eTimeSource::MachineTime, config.clock_rate_sec);
+		if (unixTime >= 0)
+			DragonRuntime::vTimer.setUnixTime(cast<u32>(unixTime));
 		s_vsyncCycles = (vsyncCycles >= 0 ? (u64)vsyncCycles
 			: std::max<u64>(1, cast<u64>(config.clock_rate_sec) / std::max<u64>(1, config.screen_redraw_rate_per_second)));
 	}

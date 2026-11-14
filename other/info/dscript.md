@@ -147,6 +147,31 @@ console.print(&a);                      // TextSingle / Text16 / Text16Console p
 - The cost: add / sub / compare / bits are a few instructions on each word, `mul` about 20,
   `div` / `mod` up to several hundred (a divisor under 65536 takes a faster path).
 
+### Time and dates (SDK)
+
+`time.ds` has the timer: `dr::time::millis()` (since the machine started), `cycles()`, `sleep(ms)`,
+`unix_time()` (seconds since 1970-01-01 00:00 UTC: the host's clock when the machine started,
+running on with it; `drun --unix-time <seconds>` fixes it for tests), and `dr::time::DateTime`, a
+moment in time like `ostd::Date` (1970 to 2106-02-07, the timer's `u32`):
+```
+var now: dr::time::DateTime();                      // constructors: () now, (unix_seconds),
+var d: dr::time::DateTime(1993, 12, 19, 18, 30);    //   (year, month, day, hour, minute, second) UTC
+var text: u8[32];
+d.setFormat("YYYY-MM-DD HH:Min:SS")->toString(text, 32);    // "1993-12-19 18:30:00"
+if (d.parse("01.02.2026", "DD.MM.YYYY")) ...          // strict; false: unchanged, not valid
+d.addDays(30)->addHours(-2);                        // addSeconds / Minutes / Hours / Days
+```
+- Format tokens (as in `ostd::Date`): `YYYY`, `YY` (parsed: 00..69 the 2000s), `MM`, `DD`, `HH` /
+  `hh` (24h, padded / not), `Min` / `min`, `SS` / `ss`; anything else is literal text.
+- `getYear`, `getMonth`, `getDay`, `getHour`, `getMinute`, `getSecond`, `getWeekDay` (0 Sunday),
+  `getDayOfYear`, `getFields(&y, &m, &d, &h, &mi, &s)`, `getUnixTime`, `setUnixTime`, `setNow`,
+  `set(y, m, d, h, mi, s) -> bool`, `isValid`, `compare(&other)` (-1 / 0 / 1), `equals`,
+  `daysUntil(&other)`.
+- `setTimeZone(minutes)`: a fixed UTC offset (no daylight saving) for the fields (the getters,
+  `set`, `parse`, `toString`); comparisons and arithmetic use the moment itself.
+- The calendar: `is_leap_year`, `days_in_month`, `days_from_civil(y, m, d)` (days from 1970-01-01),
+  `civil_from_days(days, &y, &m, &d)`.
+
 ### Declarations (top level)
 ```
 var name: type = value;                 // global variable (the type can be inferred: var n = 5;)

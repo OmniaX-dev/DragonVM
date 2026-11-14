@@ -272,6 +272,7 @@ namespace dragon
 				inline static constexpr u32 Milliseconds = 0x00;	// 4 bytes
 				inline static constexpr u32 CyclesHigh = 0x04;		// 4 bytes
 				inline static constexpr u32 CyclesLow = 0x08;		// 4 bytes
+				inline static constexpr u32 UnixTime = 0x0C;		// 4 bytes: seconds since 1970-01-01 00:00 UTC
 			};
 			public: enum class eTimeSource { WallClock = 0, MachineTime };
 
@@ -285,6 +286,10 @@ namespace dragon
 				void cycleStep(void);
 				u64 getCycles(void) const;
 				u32 getMilliseconds(void) const;
+				// The Unix time at the machine's start (and resets) from now on, instead of the host's
+				// clock (UnixTime then runs on from it with the machine's time): reproducible runs.
+				void setUnixTime(u32 seconds);
+				u32 getUnixTime(void) const;
 
 				i8 read8(u32 addr) override;
 				i32 read32(u32 addr) override;
@@ -297,6 +302,9 @@ namespace dragon
 				eTimeSource m_source { eTimeSource::WallClock };
 				u64 m_clockRate { 1 };
 				std::chrono::steady_clock::time_point m_wallStart { std::chrono::steady_clock::now() };
+				u32 m_unixStart { 0 };			// UnixTime at the start / reset
+				bool m_fixedUnixTime { false };
+				u32 m_fixedUnixStart { 0 };
 		};
 
 		// Random numbers from the host's generator. Reading Int (a word) gives a new number in

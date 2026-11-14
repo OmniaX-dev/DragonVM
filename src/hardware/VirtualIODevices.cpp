@@ -160,6 +160,26 @@ namespace dragon
 		{
 			std::fill(m_data.begin(), m_data.end(), 0x00);
 			m_wallStart = std::chrono::steady_clock::now();
+			if (m_fixedUnixTime)
+				m_unixStart = m_fixedUnixStart;
+			else
+				m_unixStart = cast<u32>(std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count());
+			bytes::write32(m_data, tRegisters::UnixTime, cast<i32>(m_unixStart));
+		}
+
+		void VirtualTimer::setUnixTime(u32 seconds)
+		{
+			m_fixedUnixTime = true;
+			m_fixedUnixStart = seconds;
+			m_unixStart = seconds - getMilliseconds() / 1000;
+			bytes::write32(m_data, tRegisters::UnixTime, cast<i32>(seconds));
+		}
+
+		u32 VirtualTimer::getUnixTime(void) const
+		{
+			i32 t = 0;
+			bytes::read32(m_data, tRegisters::UnixTime, t);
+			return cast<u32>(t);
 		}
 
 		void VirtualTimer::setTimeSource(eTimeSource source, u32 clockRate)
@@ -195,6 +215,7 @@ namespace dragon
 			else
 				ms = cast<u64>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - m_wallStart).count());
 			bytes::write32(m_data, tRegisters::Milliseconds, cast<i32>(cast<u32>(ms)));
+			bytes::write32(m_data, tRegisters::UnixTime, cast<i32>(m_unixStart + cast<u32>(ms / 1000)));
 		}
 
 		i8 VirtualTimer::read8(u32 addr)

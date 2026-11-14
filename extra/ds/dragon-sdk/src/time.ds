@@ -13,6 +13,12 @@ namespace dr::time {
 		return *cast<u32*>(TimerRegisters.CyclesLow);
 	}
 
+	// The time: seconds since 1970-01-01 00:00 UTC (the timer device: the host's clock when the
+	// machine started, running on with it). Unsigned: right until 2106-02-07.
+	inline sub unix_time() -> u32 {
+		return *cast<u32*>(TimerRegisters.UnixTime);
+	}
+
 	// Waits ms milliseconds, by the timer: right at any clock speed (also uncapped). Interrupts
 	// keep running meanwhile (their handlers' time counts as part of the wait).
 	sub sleep(var ms: i32) {
@@ -69,6 +75,371 @@ namespace dr::time {
 				this->m_callback(this->m_context);
 				this->m_lastTime = millis();
 			}
+		}
+	};
+
+	// The calendar (proleptic Gregorian: today's rules for every year).
+	sub is_leap_year(var year: i32) -> bool {
+		return (year % 4 == 0 and year % 100 != 0) or year % 400 == 0;
+	}
+
+	// 0 when month isn't 1..12.
+	sub days_in_month(var year: i32, var month: u32) -> u32 {
+		const days: u8[12] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+		if (month < 1 or month > 12)
+			return 0;
+		if (month == 2 and is_leap_year(year))
+			return 29;
+		return days[month - 1];
+	}
+
+	// Days from 1970-01-01 to the date (negative before it), for years from 1 on (H. Hinnant's
+	// algorithms, in 400 year eras).
+	sub days_from_civil(var year: i32, var month: u32, var day: u32) -> i32 {
+		var y: u32 = cast<u32>(year) - (month <= 2 ? 1 : 0);
+		var era: u32 = y / 400;
+		var yoe: u32 = y - era * 400;
+		var doy: u32 = (153 * (month > 2 ? month - 3 : month + 9) + 2) / 5 + day - 1;
+		var doe: u32 = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+		return cast<i32>(era * 146097 + doe) - 719468;
+	}
+
+	// The date of a day from 1970-01-01 (days_from_civil's opposite).
+	sub civil_from_days(var days: i32, var out_year: i32*, var out_month: u32*, var out_day: u32*) {
+		var z: u32 = cast<u32>(days + 719468);
+		var era: u32 = z / 146097;
+		var doe: u32 = z - era * 146097;
+		var yoe: u32 = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+		var doy: u32 = doe - (365 * yoe + yoe / 4 - yoe / 100);
+		var mp: u32 = (5 * doy + 2) / 153;
+		var month: u32 = mp < 10 ? mp + 3 : mp - 9;
+		*out_day = doy - (153 * mp + 2) / 5 + 1;
+		*out_month = month;
+		*out_year = cast<i32>(yoe + era * 400) + (month <= 2 ? 1 : 0);
+	}
+
+	// value with at least width digits (0 padded) at out[pos], keeping room for the terminator;
+	// the position after it.
+	sub __put_number(var out: u8*, var size: u32, var pos: u32, var value: u32, var width: u32) -> u32 {
+		var digits: u8[10];
+		var n: u32 = 0;
+		do {
+			digits[n++] = cast<u8>('0' + value % 10);
+			value /= 10;
+		} while (value != 0);
+		while (n < width)
+			digits[n++] = '0';
+		while (n > 0 and pos + 1 < size)
+			out[pos++] = digits[--n];
+		return pos;
+	}
+
+	// The digits at text[*pos] (min_digits..max_digits of them), *pos moved past them: false when
+	// there are fewer.
+	sub __read_number(var text: string, var pos: u32*, var min_digits: u32, var max_digits: u32, var out: u32*) -> bool {
+		var value: u32 = 0;
+		var n: u32 = 0;
+		while (n < max_digits and text[*pos] >= '0' and text[*pos] <= '9') {
+			value = value * 10 + (text[*pos] - '0');
+			*pos = *pos + 1;
+			n++;
+		}
+		if (n < min_digits)
+			return false;
+		*out = value;
+		return true;
+	}
+
+	// The format tokens (as in ostd::Date): which one starts at fmt (0: none), *length its length.
+	const __TokNone: u32 = 0;
+	const __TokYear4: u32 = 1;			// YYYY
+	const __TokYear2: u32 = 2;			// YY
+	const __TokMonth: u32 = 3;			// MM
+	const __TokDay: u32 = 4;			// DD
+	const __TokHour2: u32 = 5;			// HH
+	const __TokHour: u32 = 6;			// hh
+	const __TokMinute2: u32 = 7;		// Min
+	const __TokMinute: u32 = 8;			// min
+	const __TokSecond2: u32 = 9;		// SS
+	const __TokSecond: u32 = 10;		// ss
+	sub __format_token(var fmt: string, var length: u32*) -> u32 {
+		*length = 2;
+		if (fmt[0] == 'Y' and fmt[1] == 'Y') {
+			if (fmt[2] == 'Y' and fmt[3] == 'Y') {
+				*length = 4;
+				return __TokYear4;
+			}
+			return __TokYear2;
+		}
+		if (fmt[0] == 'M' and fmt[1] == 'i' and fmt[2] == 'n') { *length = 3; return __TokMinute2; }
+		if (fmt[0] == 'm' and fmt[1] == 'i' and fmt[2] == 'n') { *length = 3; return __TokMinute; }
+		if (fmt[0] == 'M' and fmt[1] == 'M') return __TokMonth;
+		if (fmt[0] == 'D' and fmt[1] == 'D') return __TokDay;
+		if (fmt[0] == 'H' and fmt[1] == 'H') return __TokHour2;
+		if (fmt[0] == 'h' and fmt[1] == 'h') return __TokHour;
+		if (fmt[0] == 'S' and fmt[1] == 'S') return __TokSecond2;
+		if (fmt[0] == 's' and fmt[1] == 's') return __TokSecond;
+		*length = 1;
+		return __TokNone;
+	}
+
+	// A moment in time, like ostd::Date: seconds since 1970-01-01 00:00 UTC (what comparisons and
+	// the add* subs work on), shown with a format and a fixed UTC offset (no daylight saving).
+	// From 1970-01-01 00:00:00 to 2106-02-07 06:28:15 UTC (the timer's u32 Unix time); the add*
+	// subs wrap around beyond them.
+	//
+	//     var now: dr::time::DateTime();                          // the timer's time
+	//     var d: dr::time::DateTime(1993, 12, 19, 18, 30);        // a date (UTC), time optional
+	//     var buff: u8[32];
+	//     d.setFormat("YYYY-MM-DD HH:Min:SS")->toString(buff, 32);   // "1993-12-19 18:30:00"
+	//     d.parse("01.02.2026");                                 // with a format (default DD.MM.YYYY)
+	//
+	// Formats: YYYY year, YY 2 digit year (parsed: 00..69 2000s, 70..99 1900s), MM month, DD day,
+	// HH hour (0 padded, 24h), hh hour (not padded), Min minute, min minute (not padded), SS second,
+	// ss second (not padded). Anything else is literal text (written as it is, expected as it is).
+	// The fields (the get* subs, set, the format) are in the DateTime's time zone (setTimeZone).
+	struct DateTime {
+		priv var m_seconds: u32 = 0;
+		priv var m_utcOffset: i32 = 0;				// minutes
+		priv var m_valid: bool = true;
+		priv var m_format: string = "DD.MM.YYYY";
+
+		// Now (the timer's Unix time).
+		sub new() {
+			this->m_seconds = unix_time();
+		}
+		// A Unix time.
+		sub new(var unix_seconds: u32) {
+			this->m_seconds = unix_seconds;
+		}
+		// A date and time (UTC); not valid (and 1970-01-01) when it isn't one or out of range.
+		sub new(var year: i32, var month: u32, var day: u32, var hour: u32 = 0, var minute: u32 = 0, var second: u32 = 0) {
+			if (not this->set(year, month, day, hour, minute, second))
+				this->m_seconds = 0;
+		}
+
+		inline sub isValid() -> bool { return this->m_valid; }
+
+		inline sub getUnixTime() -> u32 { return this->m_seconds; }
+		inline sub setUnixTime(var unix_seconds: u32) -> DateTime* {
+			this->m_seconds = unix_seconds;
+			this->m_valid = true;
+			return this;
+		}
+		// Now (the timer's Unix time).
+		inline sub setNow() -> DateTime* { return this->setUnixTime(unix_time()); }
+
+		// The fields, in the DateTime's time zone. False (the DateTime unchanged, not valid) when
+		// they aren't a date and time or the moment is out of range.
+		sub set(var year: i32, var month: u32, var day: u32, var hour: u32 = 0, var minute: u32 = 0, var second: u32 = 0) -> bool {
+			if (year < 1969 or year > 2106 or day < 1 or day > days_in_month(year, month) or hour > 23 or minute > 59 or second > 59) {
+				this->m_valid = false;
+				return false;
+			}
+			var days: i32 = days_from_civil(year, month, day);
+			var sod: i32 = cast<i32>(hour * 3600 + minute * 60 + second) - this->m_utcOffset * 60;
+			while (sod < 0) {
+				sod += 86400;
+				days--;
+			}
+			while (sod >= 86400) {
+				sod -= 86400;
+				days++;
+			}
+			// The last second a u32 holds: day 49710 at 23295 s.
+			if (days < 0 or days > 49710 or (days == 49710 and sod > 23295)) {
+				this->m_valid = false;
+				return false;
+			}
+			this->m_seconds = cast<u32>(days) * 86400 + cast<u32>(sod);
+			this->m_valid = true;
+			return true;
+		}
+
+		// A fixed offset from UTC, in minutes (e.g. 60 for UTC+1), for the fields only.
+		inline sub setTimeZone(var utc_offset_minutes: i32) -> DateTime* {
+			this->m_utcOffset = utc_offset_minutes;
+			return this;
+		}
+		inline sub getTimeZone() -> i32 { return this->m_utcOffset; }
+
+		// The day (from 1970-01-01, -1 for 1969-12-31 in a time zone behind UTC) and the second in
+		// it, in the time zone.
+		priv sub local(var out_days: i32*, var out_sod: u32*) {
+			var days: i32 = cast<i32>(this->m_seconds / 86400);
+			var sod: i32 = cast<i32>(this->m_seconds % 86400) + this->m_utcOffset * 60;
+			while (sod < 0) {
+				sod += 86400;
+				days--;
+			}
+			while (sod >= 86400) {
+				sod -= 86400;
+				days++;
+			}
+			*out_days = days;
+			*out_sod = cast<u32>(sod);
+		}
+
+		// All the fields at once (each pointer may be null).
+		sub getFields(var year: i32*, var month: u32*, var day: u32*, var hour: u32* = null, var minute: u32* = null, var second: u32* = null) {
+			var days: i32;
+			var sod: u32;
+			this->local(&days, &sod);
+			var y: i32;
+			var m: u32;
+			var d: u32;
+			civil_from_days(days, &y, &m, &d);
+			if (year) *year = y;
+			if (month) *month = m;
+			if (day) *day = d;
+			if (hour) *hour = sod / 3600;
+			if (minute) *minute = sod / 60 % 60;
+			if (second) *second = sod % 60;
+		}
+		sub getYear() -> i32 { var y: i32; this->getFields(&y, null, null); return y; }
+		sub getMonth() -> u32 { var m: u32; this->getFields(null, &m, null); return m; }
+		sub getDay() -> u32 { var d: u32; this->getFields(null, null, &d); return d; }
+		sub getHour() -> u32 { var days: i32; var sod: u32; this->local(&days, &sod); return sod / 3600; }
+		sub getMinute() -> u32 { var days: i32; var sod: u32; this->local(&days, &sod); return sod / 60 % 60; }
+		sub getSecond() -> u32 { var days: i32; var sod: u32; this->local(&days, &sod); return sod % 60; }
+		// 0 Sunday .. 6 Saturday (1970-01-01 was a Thursday).
+		sub getWeekDay() -> u32 {
+			var days: i32;
+			var sod: u32;
+			this->local(&days, &sod);
+			return cast<u32>(days + 4 + 7) % 7;
+		}
+		// 1..366.
+		sub getDayOfYear() -> u32 {
+			var days: i32;
+			var sod: u32;
+			this->local(&days, &sod);
+			var y: i32;
+			var m: u32;
+			var d: u32;
+			civil_from_days(days, &y, &m, &d);
+			return cast<u32>(days - days_from_civil(y, 1, 1)) + 1;
+		}
+
+		// Adding (negative: subtracting) time.
+		sub addSeconds(var seconds: i32) -> DateTime* {
+			this->m_seconds += cast<u32>(seconds);
+			return this;
+		}
+		priv sub addUnits(var count: i32, var unit: u32) -> DateTime* {
+			if (count >= 0)
+				this->m_seconds += cast<u32>(count) * unit;
+			else
+				this->m_seconds -= cast<u32>(0 - count) * unit;
+			return this;
+		}
+		inline sub addMinutes(var minutes: i32) -> DateTime* { return this->addUnits(minutes, 60); }
+		inline sub addHours(var hours: i32) -> DateTime* { return this->addUnits(hours, 3600); }
+		inline sub addDays(var days: i32) -> DateTime* { return this->addUnits(days, 86400); }
+
+		// -1, 0, 1: this is before, the same moment as, after other (whatever their time zones).
+		sub compare(var other: DateTime*) -> i32 {
+			if (this->m_seconds < other->m_seconds) return -1;
+			if (this->m_seconds > other->m_seconds) return 1;
+			return 0;
+		}
+		inline sub equals(var other: DateTime*) -> bool { return this->m_seconds == other->m_seconds; }
+		// Whole days from this to other (negative when other is before; truncated).
+		sub daysUntil(var other: DateTime*) -> i32 {
+			if (other->m_seconds >= this->m_seconds)
+				return cast<i32>((other->m_seconds - this->m_seconds) / 86400);
+			return 0 - cast<i32>((this->m_seconds - other->m_seconds) / 86400);
+		}
+
+		// The format toString and parse use (the text isn't copied: it must stay).
+		inline sub setFormat(var format: string) -> DateTime* {
+			this->m_format = format;
+			return this;
+		}
+		inline sub getFormat() -> string { return this->m_format; }
+
+		// The DateTime as text in its format, cut to fit out (size bytes, with the terminator).
+		sub toString(var out: u8*, var size: u32) -> string {
+			if (size == 0)
+				return out;
+			var year: i32;
+			var month: u32;
+			var day: u32;
+			var hour: u32;
+			var minute: u32;
+			var second: u32;
+			this->getFields(&year, &month, &day, &hour, &minute, &second);
+			var pos: u32 = 0;
+			var f: u8* = this->m_format;
+			while (*f != 0) {
+				var length: u32;
+				var token: u32 = __format_token(f, &length);
+				if (token == __TokYear4) pos = __put_number(out, size, pos, cast<u32>(year), 4);
+				else if (token == __TokYear2) pos = __put_number(out, size, pos, cast<u32>(year) % 100, 2);
+				else if (token == __TokMonth) pos = __put_number(out, size, pos, month, 2);
+				else if (token == __TokDay) pos = __put_number(out, size, pos, day, 2);
+				else if (token == __TokHour2) pos = __put_number(out, size, pos, hour, 2);
+				else if (token == __TokHour) pos = __put_number(out, size, pos, hour, 1);
+				else if (token == __TokMinute2) pos = __put_number(out, size, pos, minute, 2);
+				else if (token == __TokMinute) pos = __put_number(out, size, pos, minute, 1);
+				else if (token == __TokSecond2) pos = __put_number(out, size, pos, second, 2);
+				else if (token == __TokSecond) pos = __put_number(out, size, pos, second, 1);
+				else if (pos + 1 < size) out[pos++] = *f;
+				f += length;
+			}
+			out[pos] = 0;
+			return out;
+		}
+
+		// Text in the format (strictly: the same token widths and literal text); the fields the
+		// format hasn't are 1970, January, the 1st, 00:00:00. False (the DateTime unchanged, not
+		// valid) when it doesn't match or isn't a date and time.
+		sub parse(var text: string) -> bool {
+			var year: i32 = 1970;
+			var month: u32 = 1;
+			var day: u32 = 1;
+			var hour: u32 = 0;
+			var minute: u32 = 0;
+			var second: u32 = 0;
+			var pos: u32 = 0;
+			var ok: bool = true;
+			var f: u8* = this->m_format;
+			while (ok and *f != 0) {
+				var length: u32;
+				var token: u32 = __format_token(f, &length);
+				var v: u32 = 0;
+				if (token == __TokYear4) {
+					ok = __read_number(text, &pos, 4, 4, &v);
+					year = cast<i32>(v);
+				} else if (token == __TokYear2) {
+					ok = __read_number(text, &pos, 2, 2, &v);
+					year = cast<i32>(v < 70 ? 2000 + v : 1900 + v);
+				} else if (token == __TokMonth) {
+					ok = __read_number(text, &pos, 2, 2, &month);
+				} else if (token == __TokDay) {
+					ok = __read_number(text, &pos, 2, 2, &day);
+				} else if (token == __TokHour2 or token == __TokMinute2 or token == __TokSecond2 or token == __TokHour or token == __TokMinute or token == __TokSecond) {
+					var padded: bool = token == __TokHour2 or token == __TokMinute2 or token == __TokSecond2;
+					ok = __read_number(text, &pos, padded ? 2 : 1, 2, &v);
+					if (token == __TokHour2 or token == __TokHour) hour = v;
+					else if (token == __TokMinute2 or token == __TokMinute) minute = v;
+					else second = v;
+				} else {
+					ok = text[pos] == *f;
+					pos++;
+				}
+				f += length;
+			}
+			if (not ok or text[pos] != 0) {
+				this->m_valid = false;
+				return false;
+			}
+			return this->set(year, month, day, hour, minute, second);
+		}
+		// With a format (also kept for toString).
+		inline sub parse(var text: string, var format: string) -> bool {
+			this->m_format = format;
+			return this->parse(text);
 		}
 	};
 }

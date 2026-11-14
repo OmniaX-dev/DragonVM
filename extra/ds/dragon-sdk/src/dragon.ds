@@ -153,6 +153,7 @@ namespace dr {
 		var Milliseconds: u32					= MemoryLayout.Timer + 0x0000;	// since the machine started (wraps after ~49.7 days)
 		var CyclesHigh: u32						= MemoryLayout.Timer + 0x0004;	// cycles executed since the machine started: high word
 		var CyclesLow: u32						= MemoryLayout.Timer + 0x0008;	// low word
+		var UnixTime: u32						= MemoryLayout.Timer + 0x000C;	// seconds since 1970-01-01 00:00 UTC
 	};
 	// Reading Int / Float (a word) gives a new random number; writing Seed seeds the generator
 	// (programs use int 0x20: see dr::random).

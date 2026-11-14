@@ -191,6 +191,10 @@ sub kernel_error_name(var error: i32) -> string {
 	return dr::dfs::error_name(error);
 }
 
+// Loads the partition's kernel, the first that works of: /boot/kernel0 as a DRX (at a random
+// address after Drake), /boot/kernel0 as a raw kernel (at CodeLoadAddr), and on a partition that
+// isn't DFS the raw block after the boot header (at CodeLoadAddr). *out_load_addr: the DRX's entry,
+// 0 for a raw kernel. False (with boot_error set) when it can't.
 sub load_kernel0(var part: dr::DPTPartitionBlock*, var out_load_addr: u32*) -> bool {
 	boot_error = null;
 	*out_load_addr = 0;
@@ -199,6 +203,12 @@ sub load_kernel0(var part: dr::DPTPartitionBlock*, var out_load_addr: u32*) -> b
 	dr::dfs::dpt_partition(&disk, part);
 	if (not fs.mount_partition(&disk, true))
 	{
+		if (fs.last_error() == dr::dfs::Unsupported)
+		{
+			// Not DFS: the raw kernel block after the boot header, at its fixed address.
+			load_kernel0_legacy(part);
+			return true;
+		}
 		boot_error = fs.error_text();
 		return false;
 	}
@@ -293,7 +303,7 @@ sub load_kernel0_dfs_fixed(var part: dr::DPTPartitionBlock*) -> i32 {
 	return dr::dfs::Ok;
 }
 
-// Unused for now
+// The kernel of a partition that isn't DFS: the raw block after its boot header.
 sub load_kernel0_legacy(var part: dr::DPTPartitionBlock*) {
 	var ddd: dr::DiskDriverData;
 	ddd.mode = dr::DiskMode.Read;
