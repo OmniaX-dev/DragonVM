@@ -61,6 +61,16 @@ namespace dragon
 						inline static constexpr u8 hdreg_in_dreg_immoffw	=	0x1F;
 						inline static constexpr u8 hdreg_in_dreg_regoff	=	0x20;
 						inline static constexpr u8 hdreg_in_dreg_immoffb	=	0x21;
+						// A register's value (reg) at *dreg + offset (32 / 16 / 8 bits).
+						inline static constexpr u8 wreg_in_dreg_immoffw	=	0x22;
+						inline static constexpr u8 wreg_in_dreg_regoff	=	0x23;
+						inline static constexpr u8 wreg_in_dreg_immoffb	=	0x24;
+						inline static constexpr u8 hreg_in_dreg_immoffw	=	0x25;
+						inline static constexpr u8 hreg_in_dreg_regoff	=	0x26;
+						inline static constexpr u8 hreg_in_dreg_immoffb	=	0x27;
+						inline static constexpr u8 breg_in_dreg_immoffw	=	0x28;
+						inline static constexpr u8 breg_in_dreg_regoff	=	0x29;
+						inline static constexpr u8 breg_in_dreg_immoffb	=	0x2A;
 						inline static constexpr u8 himm_in_mem_immoffw	=	0x36;
 						inline static constexpr u8 himm_in_mem_regoff	=	0x37;
 						inline static constexpr u8 himm_in_mem_immoffb	=	0x38;

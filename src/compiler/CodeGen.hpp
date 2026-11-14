@@ -24,6 +24,9 @@ namespace dscript
 		bool isStatic { false };	// a static variable / constant array of a sub (<sub>::<name>)
 		bool external { false };	// in a library (#import): only declared here
 		const Node* decl { nullptr };	// globals: the declaration
+		// -O: a local / parameter kept in a register (its memory slot is not used), or "".
+		std::string reg;
+		int optId { -1 };			// -O: its index in the sub's variables (the same in both passes)
 	};
 
 	struct FuncInfo
@@ -48,6 +51,9 @@ namespace dscript
 		bool rom { false };			// the program runs from ROM: everything stored in it is read-only
 		bool noInline { false };	// inline subs are compiled as normal subs (for debugging)
 		bool noAsserts { false };	// NDEBUG: assert(...) is only checked, no code
+		// -O: scalar locals and parameters whose address is never taken are kept in the registers
+		// a sub's expressions leave free, and a peephole pass removes the copies that leaves.
+		bool optimize { false };
 		std::vector<std::string> directives;	// .load / .fixed / .header lines for raw mode
 		// For the language server: errors are collected (errors()) instead of stopping at the
 		// first one (each declaration and sub is checked on its own), no code is returned, and
@@ -182,16 +188,43 @@ namespace dscript
 			Reg gen(Node* e);
 			Reg genAddr(Node* e);
 			Reg genBinary(Node* e);
-			Reg genAssign(Node* e);
-			Reg genIncDec(Node* e);
+			// discard: the value isn't used (an expression statement, a for loop's step).
+			Reg genAssign(Node* e, bool discard = false);
+			Reg genIncDec(Node* e, bool discard = false);
+			// An expression whose value isn't used.
+			void genDiscard(Node* e);
+			// Where a scalar lvalue is: *base, or *base + offset (an immediate, "dword 0x...", or a
+			// register). base is FP / PP for locals and parameters (not allocated).
+			struct Place
+			{
+				Reg base;
+				bool ownBase { true };
+				std::string offset;		// "" (none), "dword <imm>" or a register
+				Reg offsetReg;			// the offset's register, if it is one (allocated after base)
+				bool isReg { false };	// a register variable (base is its register)
+			};
+			Place genPlace(Node* e);
+			void loadPlace(const Reg& dst, const Place& p, Type* t);
+			// value: a register or an immediate.
+			void storePlace(const Place& p, const std::string& value, Type* t);
+			void releasePlace(const Place& p);
+			// The value of an assignment (in v, the newest register) as the expression's result:
+			// v itself, or moved into the place's base register.
+			Reg placeResult(const Place& p, const Reg& v);
+			// A constant value as the immediate a store of type t writes ("" if it can't be one).
+			std::string constImmediate(Node* value, Type* t);
+			// An argument as an immediate / label (constants, string literals, subs), or "".
+			std::string argImmediate(Node* arg, Type* param);
 			Reg genCall(Node* e);
 			Reg genInlineCall(Node* e, FuncInfo* f);
 			Reg genLogicalValue(Node* e);
 			void genLow(Node* low, bool topLevel);
 			void load(const Reg& dst, const Reg& addr, Type* t);
 			void store(const Reg& addr, const Reg& value, Type* t);
-			void loadVar(const Reg& dst, VarInfo* v);
-			void varAddress(const Reg& dst, VarInfo* v);
+			// fromMemory: a register variable's memory slot (its parameter value, at the start).
+			void loadVar(const Reg& dst, VarInfo* v, bool fromMemory = false);
+			// taken: -O pass 1, the variable can't be in a register.
+			void varAddress(const Reg& dst, VarInfo* v, bool taken = true);
 			void convert(const Reg& r, Type* from, Type* to);
 			void normalize(const Reg& r, Type* t);
 			void copyMemory(const Reg& dst, const Reg& src, uint32_t size);
@@ -249,6 +282,27 @@ namespace dscript
 			std::map<FuncInfo*, std::vector<std::pair<FuncInfo*, SourcePos>>> m_inlineCalls;
 			void checkInlineRecursion(void);
 			int m_regDepth { 0 };
+			int m_regLimit { 16 };		// temporaries alloc() may use (fewer when -O keeps variables in registers)
+			// ===== -O (register variables) =====
+			// Each sub is generated twice: pass 1 records its variables (whether their address is
+			// taken, how often they are used, in which loop depth, and when they are live) and the
+			// temporaries it needs; pass 2 generates it with the chosen variables in registers.
+			struct OptVar { bool eligible { true }; bool param { false }; double weight { 0 }; int start { 0 }; int end { 0x7FFFFFFF }; };
+			struct OptRetry {};			// pass 2 needed more temporaries than pass 1: no register variables
+			int m_optPass { 0 };		// 0: off, 1: recording, 2: register variables
+			std::vector<OptVar> m_optVars;
+			std::vector<std::string> m_optRegs;	// pass 2: optId -> its register ("" if in memory)
+			int m_optTick { 0 };
+			int m_optMaxDepth { 0 };
+			int m_loopDepth { 0 };
+			std::set<int> m_lowRegs;	// registers the sub's low blocks name (never variables)
+			bool m_lowOpaque { false };	// a low block names registers in a way not tracked (reg(...))
+			void optRegister(VarInfo* v, bool functionParam);
+			void optUse(VarInfo* v);
+			void optEndScope(const std::map<std::string, VarInfo*>& scope);
+			void optAssign(void);
+			// Peephole pass over a sub's code (-O): copies into and out of temporaries.
+			void peephole(std::vector<std::string>& code);
 			int m_stmtDepth { 0 };		// m_regDepth at the start of a statement (> 0 in inline subs)
 			std::vector<std::string>* m_out { nullptr };
 			Loc m_loc;

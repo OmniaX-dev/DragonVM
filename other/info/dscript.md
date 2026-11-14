@@ -8,6 +8,7 @@ binary (`--raw`).
 dsc program.ds -L extra/ds/dragon-sdk/lib         -> program.drx (relocatable)
 dsc kernel.ds --raw --load 0x01012000 --fixed 1024,0xFF --header KERNEL0_BOOT
 dsc program.ds --emit-dasm program.dasm           (also writes the generated dasm)
+dsc program.ds -O                                 (optimized: locals in registers)
 dsc bios.ds --rom --fixed 16777216,0xFF -Wa,-D    (dasm options: here its debug mode)
 drun config/testMachine.dvm program.drx --boot    (runs it without a window)
 ```
@@ -527,7 +528,9 @@ Raw dasm, copied line by line, except the `$name`s of DScript things:
 
 At most two DScript variables per line. Arrays and structs give their address. The low code can
 use every register (but S1 / S2 hold the `$var`s, and `arg` changes PP, which the parameters
-need); `ret` (or `rti`) returns from the sub, with the value in RV.
+need); `ret` (or `rti`) returns from the sub, with the value in RV. With `-O`, the registers the
+low code names (`R1`..`R20`) are never DScript variables in that sub; name every register it
+changes (a register changed by code it jumps to, without `call`, must be named too).
 ```
 sub print(var text: string) -> void {
     low {
@@ -580,6 +583,19 @@ var m: i32 = MAX(x, y + 1);
 - **Locals** are at `FP + offset` (offset <= 0): the sub moves SP below them first.
 - **Registers**: R1..R16 hold the temporaries of an expression (as a stack; an expression can
   need 16 at most), R17..R20 are scratch, S1 / S2 hold the `$var`s of low blocks.
+- **`-O`** (off by default, `-O0`): each sub is generated twice. The first pass finds the scalar
+  locals and parameters (integers, `bool`, `f32`, pointers, enums) whose address is never taken
+  (`&v`, also `&$v` in a low block), how often each is used (a use in a loop counts 8 times
+  more, per loop depth) and where each is live (its block); the second keeps the most used in
+  the registers above the temporaries the sub needs (up to R16), variables whose blocks don't
+  overlap sharing one. Parameters are loaded into theirs at the start (only those used more
+  than once). Registers a low block in the sub names (`R5`, also through an inline sub) are
+  never used for variables, and a low block using `reg(...)` keeps them all in memory. Then a
+  peephole pass removes copies through registers: a value computed straight into the variable
+  that receives it, a register read instead of its copy, copies nothing reads (it follows the
+  sub's jumps; low code is never changed). `call` keeps R1..R20, so the variables survive
+  calls; hardware interrupts keep them too. In the debugger, a register variable is in its
+  register (its memory slot isn't used).
 - Needs the `extmov` and `extalu` CPU extensions, and `extfpu` for programs using `f32`
   (`cpuext = extmov, extalu, extfpu` in the machine config).
 - Layout: `jmp __ds_start`, the data (globals, string literals), `__ds_start` (calls `__ds_init`,
@@ -678,7 +694,9 @@ jump: its `main(argc, argv)` always gets `0, null`. `main`'s value is returned i
 runs first) or the compilation error (`// expect-error:`). `// expect-rom-rv:` compiles the
 test with `--rom` as the machine's BIOS, boots it and checks `main`'s return value;
 `// dsc-flags:` adds dsc options. `DSCRIPT_TEST_CONFIG=<file.dvm>` runs the tests on another
-machine config (e.g. one with a known-good BIOS).
+machine config (e.g. one with a known-good BIOS); `DSCRIPT_TEST_DSC_FLAGS=<options>` adds dsc
+options to every compilation, the SDK's too (`DSCRIPT_TEST_DSC_FLAGS=-O`: the whole suite
+optimized).
 
 
 ## Limitations (for now)

@@ -57,6 +57,15 @@ namespace dragon
 					case OpCodes::hdreg_in_dreg_immoffw:	return m_name + "_hdreg_in_dreg_immoffw";
 					case OpCodes::hdreg_in_dreg_regoff:	return m_name + "_hdreg_in_dreg_regoff";
 					case OpCodes::hdreg_in_dreg_immoffb:	return m_name + "_hdreg_in_dreg_immoffb";
+					case OpCodes::wreg_in_dreg_immoffw:	return m_name + "_wreg_in_dreg_immoffw";
+					case OpCodes::wreg_in_dreg_regoff:	return m_name + "_wreg_in_dreg_regoff";
+					case OpCodes::wreg_in_dreg_immoffb:	return m_name + "_wreg_in_dreg_immoffb";
+					case OpCodes::hreg_in_dreg_immoffw:	return m_name + "_hreg_in_dreg_immoffw";
+					case OpCodes::hreg_in_dreg_regoff:	return m_name + "_hreg_in_dreg_regoff";
+					case OpCodes::hreg_in_dreg_immoffb:	return m_name + "_hreg_in_dreg_immoffb";
+					case OpCodes::breg_in_dreg_immoffw:	return m_name + "_breg_in_dreg_immoffw";
+					case OpCodes::breg_in_dreg_regoff:	return m_name + "_breg_in_dreg_regoff";
+					case OpCodes::breg_in_dreg_immoffb:	return m_name + "_breg_in_dreg_immoffb";
 					case OpCodes::himm_in_mem_immoffw:	return m_name + "_himm_in_mem_immoffw";
 					case OpCodes::himm_in_mem_regoff:	return m_name + "_himm_in_mem_regoff";
 					case OpCodes::himm_in_mem_immoffb:	return m_name + "_himm_in_mem_immoffb";
@@ -119,6 +128,15 @@ namespace dragon
 					case OpCodes::hdreg_in_dreg_immoffw:	return 7;
 					case OpCodes::hdreg_in_dreg_regoff:	return 4;
 					case OpCodes::hdreg_in_dreg_immoffb:	return 4;
+					case OpCodes::wreg_in_dreg_immoffw:	return 7;
+					case OpCodes::wreg_in_dreg_regoff:	return 4;
+					case OpCodes::wreg_in_dreg_immoffb:	return 4;
+					case OpCodes::hreg_in_dreg_immoffw:	return 7;
+					case OpCodes::hreg_in_dreg_regoff:	return 4;
+					case OpCodes::hreg_in_dreg_immoffb:	return 4;
+					case OpCodes::breg_in_dreg_immoffw:	return 7;
+					case OpCodes::breg_in_dreg_regoff:	return 4;
+					case OpCodes::breg_in_dreg_immoffb:	return 4;
 					case OpCodes::himm_in_mem_immoffw:	return 11;
 					case OpCodes::himm_in_mem_regoff:	return 8;
 					case OpCodes::himm_in_mem_immoffb:	return 8;
@@ -141,6 +159,78 @@ namespace dragon
 				u8 inst = vcpu.fetch8();
 				switch (inst)
 				{
+					case OpCodes::wreg_in_dreg_immoffw:
+					{
+						u8 dest_dreg = vcpu.fetch8();
+						u32 value = vcpu.readRegister(vcpu.fetch8());
+						u32 offset = vcpu.fetch32();
+						mem.write32(vcpu.readRegister(dest_dreg) + offset, value);
+					}
+					break;
+					case OpCodes::wreg_in_dreg_regoff:
+					{
+						u8 dest_dreg = vcpu.fetch8();
+						u32 value = vcpu.readRegister(vcpu.fetch8());
+						u32 offset = vcpu.readRegister(vcpu.fetch8());
+						mem.write32(vcpu.readRegister(dest_dreg) + offset, value);
+					}
+					break;
+					case OpCodes::wreg_in_dreg_immoffb:
+					{
+						u8 dest_dreg = vcpu.fetch8();
+						u32 value = vcpu.readRegister(vcpu.fetch8());
+						u32 offset = vcpu.fetch8();
+						mem.write32(vcpu.readRegister(dest_dreg) + offset, value);
+					}
+					break;
+					case OpCodes::hreg_in_dreg_immoffw:
+					{
+						u8 dest_dreg = vcpu.fetch8();
+						u32 value = vcpu.readRegister(vcpu.fetch8());
+						u32 offset = vcpu.fetch32();
+						mem.write16(vcpu.readRegister(dest_dreg) + offset, (u16)value);
+					}
+					break;
+					case OpCodes::hreg_in_dreg_regoff:
+					{
+						u8 dest_dreg = vcpu.fetch8();
+						u32 value = vcpu.readRegister(vcpu.fetch8());
+						u32 offset = vcpu.readRegister(vcpu.fetch8());
+						mem.write16(vcpu.readRegister(dest_dreg) + offset, (u16)value);
+					}
+					break;
+					case OpCodes::hreg_in_dreg_immoffb:
+					{
+						u8 dest_dreg = vcpu.fetch8();
+						u32 value = vcpu.readRegister(vcpu.fetch8());
+						u32 offset = vcpu.fetch8();
+						mem.write16(vcpu.readRegister(dest_dreg) + offset, (u16)value);
+					}
+					break;
+					case OpCodes::breg_in_dreg_immoffw:
+					{
+						u8 dest_dreg = vcpu.fetch8();
+						u32 value = vcpu.readRegister(vcpu.fetch8());
+						u32 offset = vcpu.fetch32();
+						mem.write8(vcpu.readRegister(dest_dreg) + offset, (u8)value);
+					}
+					break;
+					case OpCodes::breg_in_dreg_regoff:
+					{
+						u8 dest_dreg = vcpu.fetch8();
+						u32 value = vcpu.readRegister(vcpu.fetch8());
+						u32 offset = vcpu.readRegister(vcpu.fetch8());
+						mem.write8(vcpu.readRegister(dest_dreg) + offset, (u8)value);
+					}
+					break;
+					case OpCodes::breg_in_dreg_immoffb:
+					{
+						u8 dest_dreg = vcpu.fetch8();
+						u32 value = vcpu.readRegister(vcpu.fetch8());
+						u32 offset = vcpu.fetch8();
+						mem.write8(vcpu.readRegister(dest_dreg) + offset, (u8)value);
+					}
+					break;
 					case OpCodes::wimm_in_dreg_immoffw:
 					{
 						u8 dest_dreg = vcpu.fetch8();

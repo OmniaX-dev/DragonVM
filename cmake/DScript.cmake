@@ -56,7 +56,7 @@ function(ds_add_env TARGET MODE ASM_FLAGS)
 	add_custom_command(
 		OUTPUT ${SDK}
 		COMMAND ${CMAKE_COMMAND} -E make_directory ${OUT}/lib ${OUT}/disassembly
-		COMMAND ${DSC} --lib ${DS_SDK_SOURCES} -o ${SDK} ${WA}
+		COMMAND ${DSC} --lib ${DS_SDK_SOURCES} -o ${SDK} -O ${WA}
 		DEPENDS ${DS_SDK_SOURCES} ${COMPILER_TARGET}
 		WORKING_DIRECTORY ${DS_RUN_DIR}
 		COMMENT "DScript (${MODE}): dragon-sdk"
@@ -64,7 +64,7 @@ function(ds_add_env TARGET MODE ASM_FLAGS)
 
 	add_custom_command(
 		OUTPUT ${OUT}/bios.bin
-		COMMAND ${DSC} ${DS_SOURCE_DIR}/bios/entry.ds -L ${OUT}/lib -o ${OUT}/bios.bin --verbose --raw --load 0x0 --fixed 16777216,0xFF --rom ${WA}
+		COMMAND ${DSC} ${DS_SOURCE_DIR}/bios/entry.ds -L ${OUT}/lib -o ${OUT}/bios.bin -O --verbose --raw --load 0x0 --fixed 16777216,0xFF --rom ${WA}
 		DEPENDS ${DS_BIOS_SOURCES} ${SDK} ${COMPILER_TARGET}
 		WORKING_DIRECTORY ${DS_RUN_DIR}
 		COMMENT "DScript (${MODE}): BIOS"
@@ -72,7 +72,7 @@ function(ds_add_env TARGET MODE ASM_FLAGS)
 
 	add_custom_command(
 		OUTPUT ${OUT}/drake.bin ${OUT}/disassembly/${DS_DRAKE_DDS}.dds
-		COMMAND ${DSC} ${DS_SOURCE_DIR}/drake/entry.ds -L ${OUT}/lib -o ${OUT}/drake.bin --verbose ${WA}
+		COMMAND ${DSC} ${DS_SOURCE_DIR}/drake/entry.ds -L ${OUT}/lib -o ${OUT}/drake.bin -O --verbose ${WA}
 		# COMMAND ${DSC} ${DS_SOURCE_DIR}/drake/entry.ds -L ${OUT}/lib -o ${OUT}/drake.bin --verbose --save-disassembly ${OUT}/disassembly/${DS_DRAKE_DDS}.dds ${WA}
 		DEPENDS ${DS_DRAKE_SOURCES} ${SDK} ${COMPILER_TARGET}
 		WORKING_DIRECTORY ${DS_RUN_DIR}
@@ -81,7 +81,7 @@ function(ds_add_env TARGET MODE ASM_FLAGS)
 
 	add_custom_command(
 		OUTPUT ${OUT}/snake_kernel0.bin ${OUT}/disassembly/${DS_KERNEL0_DDS}.dds
-		COMMAND ${DSC} ${DS_SOURCE_DIR}/snake-game/kernel0/kernel0.ds -L ${OUT}/lib -o ${OUT}/snake_kernel0.bin --verbose --raw --header KERNEL0_BOOT
+		COMMAND ${DSC} ${DS_SOURCE_DIR}/snake-game/kernel0/kernel0.ds -L ${OUT}/lib -o ${OUT}/snake_kernel0.bin  -O --verbose --raw --header KERNEL0_BOOT
 				--load 0x01410000 --fixed 1048576,0xFF --save-disassembly ${OUT}/disassembly/${DS_KERNEL0_DDS}.dds ${WA}
 		DEPENDS ${DS_KERNEL0_SOURCES} ${SDK} ${COMPILER_TARGET}
 		WORKING_DIRECTORY ${DS_RUN_DIR}

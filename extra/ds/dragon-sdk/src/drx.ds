@@ -130,8 +130,8 @@ namespace dr::drx {
 		}
 	}
 
-	// Every offset in the table is at most last (unsigned: both biased by 0x80000000). The CPU's
-	// conditional jumps compare the operand with ACC: jls jumps if last < the offset.
+	// Every offset in the table is at most last (unsigned). The CPU's conditional jumps compare
+	// the operand with ACC: jlsu jumps if last < the offset (as u32s).
 	sub __check_relocations(var table: u32*, var count: u32, var last: u32) -> bool {
 		if (count == 0)
 			return true;
@@ -140,12 +140,9 @@ namespace dr::drx {
 			mov R1, $table
 			mov R3, $count
 			mov R5, $last
-			xorip R5, 0x80000000
 		__drx_check_loop:
-			mov R4, *R1
-			xorip R4, 0x80000000
-			mov ACC, R4
-			jls $__drx_check_bad, R5
+			mov ACC, *R1
+			jlsu $__drx_check_bad, R5
 			addip R1, 0x00000004
 			dec R3
 			mov ACC, R3

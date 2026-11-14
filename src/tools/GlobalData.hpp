@@ -534,6 +534,15 @@ namespace dragon
 				inline static constexpr u8 JmpLeImm = 0x7A;
 				inline static constexpr u8 JmpLeReg = 0x7B;
 				inline static constexpr u8 Jmp = 0x7C;
+				// Unsigned conditional jumps (the operand compared with ACC, as u32s).
+				inline static constexpr u8 JmpGrUImm = 0x90;
+				inline static constexpr u8 JmpGrUReg = 0x91;
+				inline static constexpr u8 JmpLessUImm = 0x92;
+				inline static constexpr u8 JmpLessUReg = 0x93;
+				inline static constexpr u8 JmpGeUImm = 0x94;
+				inline static constexpr u8 JmpGeUReg = 0x95;
+				inline static constexpr u8 JmpLeUImm = 0x96;
+				inline static constexpr u8 JmpLeUReg = 0x97;
 
 				inline static constexpr u8 Ext01 = 0xE0;
 				inline static constexpr u8 Ext02 = 0xE1;

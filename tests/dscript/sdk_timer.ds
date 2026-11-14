@@ -14,8 +14,10 @@ sub main() -> u32 {
 	var cyc: u32 = dr::time::cycles() - c0;
 	if (ms < 250 or ms > 252)
 		return 2;
+	// sleep() waits for the millisecond counter to go up by 250: it started somewhere in a
+	// millisecond, so up to one millisecond's cycles less than 250 full ones.
 	var expected: u32 = 250 * (clock / 1000);
-	if (cyc < expected or cyc > expected + (clock / 1000) * 2 + 200)
+	if (cyc + clock / 1000 < expected or cyc > expected + (clock / 1000) * 2 + 200)
 		return 3;
 	var t1: u32 = dr::time::millis();
 	dr::time::sleep(0);

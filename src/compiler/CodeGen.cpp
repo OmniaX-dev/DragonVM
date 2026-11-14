@@ -2,6 +2,7 @@
 #include <cmath>
 #include <bit>
 #include <cstdio>
+#include <cstring>
 #include <algorithm>
 #include <filesystem>
 
@@ -20,6 +21,7 @@ namespace dscript
 	static const char* ScratchSrc = "R19";
 	static const char* ScratchAddr = "R20";
 	static const char* LowScratch[2] = { "reg(0x07)", "reg(0x08)" };
+	static const char LowMark = '\x01';	// -O: a low block's line (in the sub's code until the peephole pass)
 
 	static uint32_t alignUp(uint32_t value, uint32_t align) { return (value + align - 1) / align * align; }
 
@@ -2024,9 +2026,14 @@ namespace dscript
 
 	CodeGen::Reg CodeGen::alloc(const SourcePos& pos)
 	{
-		if (m_regDepth >= TempRegisters)
+		if (m_regDepth >= m_regLimit)
+		{
+			if (m_optPass == 2)
+				throw OptRetry {};
 			error(pos, "expression too complex (more than 16 temporary values): split it");
+		}
 		m_regDepth++;
+		m_optMaxDepth = std::max(m_optMaxDepth, m_regDepth);
 		return "R" + std::to_string(m_regDepth);
 	}
 
@@ -2156,8 +2163,12 @@ namespace dscript
 		}
 	}
 
-	void CodeGen::varAddress(const Reg& dst, VarInfo* v)
+	void CodeGen::varAddress(const Reg& dst, VarInfo* v, bool taken)
 	{
+		if (!v->reg.empty())
+			error({ "<compiler>", 0, 0 }, "internal error: the address of register variable '" + v->name + "'");
+		if (v->optId >= 0 && m_optPass == 1 && taken)
+			m_optVars[v->optId].eligible = false;
 		switch (v->storage)
 		{
 			case VarInfo::Storage::Global:
@@ -2175,9 +2186,15 @@ namespace dscript
 		}
 	}
 
-	void CodeGen::loadVar(const Reg& dst, VarInfo* v)
+	void CodeGen::loadVar(const Reg& dst, VarInfo* v, bool fromMemory)
 	{
 		Type* t = v->type;
+		optUse(v);
+		if (!v->reg.empty() && !fromMemory)
+		{
+			emit("mov " + dst + ", " + v->reg);
+			return;
+		}
 		if (!t->isScalar())
 		{
 			varAddress(dst, v);
@@ -2218,12 +2235,18 @@ namespace dscript
 		}
 		else
 		{
+			// omov *d, *s, offset: the word at *s to d + offset (d stays, s moves on).
 			for (uint32_t i = 0; i < words; i++)
 			{
-				emit("mov *" + d + ", *" + s);
-				emit("addip " + d + ", 4");
+				emit("omov *" + d + ", *" + s + ", dword " + imm(i * 4));
 				emit("addip " + s + ", 4");
 			}
+			for (uint32_t i = 0; i < size % 4; i++)
+			{
+				emit("omovb *" + d + ", *" + s + ", dword " + imm(words * 4 + i));
+				emit("addip " + s + ", 1");
+			}
+			return;
 		}
 		for (uint32_t i = 0; i < size % 4; i++)
 		{
@@ -2237,9 +2260,18 @@ namespace dscript
 	{
 		if (size == 0)
 			return;
+		const uint32_t words = size / 4;
+		if (words <= 8)
+		{
+			// One omov per word / byte, at dst + offset.
+			for (uint32_t i = 0; i < words; i++)
+				emit("omov *" + dst + ", 0x00000000, dword " + imm(i * 4));
+			for (uint32_t i = 0; i < size % 4; i++)
+				emit("omovb *" + dst + ", 0x00000000, dword " + imm(words * 4 + i));
+			return;
+		}
 		const std::string d = ScratchDst;
 		emit("mov " + d + ", " + dst);
-		const uint32_t words = size / 4;
 		if (words > 8)
 		{
 			std::string loop = newLabel();
@@ -2351,6 +2383,14 @@ namespace dscript
 			case NodeKind::Index:
 			case NodeKind::Member:
 			{
+				if (e->type->isScalar())
+				{
+					// movo base, *base, offset: the element / field without adding the offset first.
+					Place p = genPlace(e);
+					loadPlace(p.base, p, e->type);
+					release(p.offsetReg);
+					return p.base;
+				}
 				Reg r = genAddr(e);
 				load(r, r, e->type);
 				return r;
@@ -2412,6 +2452,160 @@ namespace dscript
 			default: break;
 		}
 		error(e->pos, "this has no address");
+	}
+
+	CodeGen::Place CodeGen::genPlace(Node* e)
+	{
+		Place p;
+		switch (e->kind)
+		{
+			case NodeKind::Ident:
+				if (e->var != nullptr && e->var->type->isScalar() && (e->var->storage == VarInfo::Storage::Local || e->var->storage == VarInfo::Storage::Param))
+				{
+					VarInfo* v = e->var;
+					optUse(v);
+					p.ownBase = false;
+					if (!v->reg.empty())
+					{
+						p.base = v->reg;
+						p.isReg = true;
+						return p;
+					}
+					const bool local = (v->storage == VarInfo::Storage::Local);
+					p.base = local ? "FP" : "PP";
+					const int64_t offset = local ? v->offset : -4 * v->offset + (4 - (int64_t)v->type->size());
+					if (offset != 0)
+						p.offset = "dword " + imm(offset);
+					return p;
+				}
+			break;
+			case NodeKind::Index:
+			{
+				p.base = (e->a->type->kind == Type::Kind::Array) ? genAddr(e->a) : gen(e->a);
+				const uint32_t size = e->type->size();
+				if (e->b->isConst)
+				{
+					if ((uint32_t)(e->b->constValue * size) != 0)
+						p.offset = "dword " + imm(e->b->constValue * size);
+				}
+				else
+				{
+					p.offsetReg = gen(e->b);
+					scale(p.offsetReg, size);
+					p.offset = p.offsetReg;
+				}
+				return p;
+			}
+			case NodeKind::Member:
+			{
+				Type* st = (e->value == 1) ? decay(e->a->type)->base : e->a->type;
+				p.base = (e->value == 1) ? gen(e->a) : genAddr(e->a);
+				const uint32_t offset = st->structInfo->field(e->name)->offset;
+				if (offset != 0)
+					p.offset = "dword " + imm(offset);
+				return p;
+			}
+			default: break;
+		}
+		p.base = genAddr(e);
+		return p;
+	}
+
+	static const char* sizeSuffix(const Type* t)
+	{
+		return t->size() == 1 ? "b" : (t->size() == 2 ? "w" : "");
+	}
+
+	void CodeGen::loadPlace(const Reg& dst, const Place& p, Type* t)
+	{
+		if (p.isReg)
+		{
+			emit("mov " + dst + ", " + p.base);	// (kept normalized: every store converts)
+			return;
+		}
+		if (p.offset.empty())
+			emit(std::string("mov") + sizeSuffix(t) + " " + dst + ", *" + p.base);
+		else
+			emit(std::string("mov") + sizeSuffix(t) + "o " + dst + ", *" + p.base + ", " + p.offset);
+		if (t->kind == Type::Kind::I8 || t->kind == Type::Kind::I16)
+			normalize(dst, t);
+	}
+
+	void CodeGen::storePlace(const Place& p, const std::string& value, Type* t)
+	{
+		if (p.isReg)
+		{
+			emit("mov " + p.base + ", " + value);
+			return;
+		}
+		const bool isRegister = value.size() >= 2 && value[0] == 'R' && std::isdigit((unsigned char)value[1]);
+		if (!isRegister)
+		{
+			// An immediate (or a label): omov takes one, at base + offset (0 if none).
+			emit(std::string("omov") + sizeSuffix(t) + " *" + p.base + ", " + value + ", " + (p.offset.empty() ? std::string("dword 0x00000000") : p.offset));
+			return;
+		}
+		if (p.offset.empty())
+		{
+			emit(std::string("mov") + sizeSuffix(t) + " *" + p.base + ", " + value);
+			return;
+		}
+		// omov *base, reg, offset (extmov): the register at base + offset.
+		emit(std::string("omov") + sizeSuffix(t) + " *" + p.base + ", " + value + ", " + p.offset);
+	}
+
+	void CodeGen::releasePlace(const Place& p)
+	{
+		release(p.offsetReg);
+		if (p.ownBase)
+			release(p.base);
+	}
+
+	CodeGen::Reg CodeGen::placeResult(const Place& p, const Reg& v)
+	{
+		if (!p.ownBase && p.offsetReg.empty())
+			return v;
+		emit("mov " + p.base + ", " + v);
+		release(v);
+		release(p.offsetReg);
+		return p.base;
+	}
+
+	std::string CodeGen::constImmediate(Node* value, Type* t)
+	{
+		if (value == nullptr || !value->isConst || value->type == nullptr)
+			return "";
+		const Type* from = decay(value->type);
+		const bool number = from->isInteger() || from->isFloat();
+		if (t->kind == Type::Kind::Bool)
+			return number ? imm(constTruth(value->constValue, from) ? 1 : 0) : "";
+		if ((t->isInteger() || t->isFloat()) && number)
+			return imm(constConvert(value->constValue, from, t));
+		if (t->kind == Type::Kind::Pointer && from->kind == Type::Kind::Null)
+			return imm(0);
+		return "";
+	}
+
+	std::string CodeGen::argImmediate(Node* arg, Type* param)
+	{
+		if (!param->isScalar())
+			return "";
+		foldStringConst(arg);
+		if (arg->kind == NodeKind::StrLit && param->kind == Type::Kind::Pointer)
+			return "$" + stringLiteral(arg->text);
+		if (arg->kind == NodeKind::Ident && arg->var == nullptr && arg->func != nullptr && param->kind == Type::Kind::Function)
+			return "$" + arg->func->label;
+		return constImmediate(arg, param);
+	}
+
+	void CodeGen::genDiscard(Node* e)
+	{
+		if (e->kind == NodeKind::Assign)
+			release(genAssign(e, true));
+		else if (e->kind == NodeKind::PreInc || e->kind == NodeKind::PreDec || e->kind == NodeKind::PostInc || e->kind == NodeKind::PostDec)
+			release(genIncDec(e, true));
+		else
+			release(gen(e));
 	}
 
 	// For "a OP b": the jump taken when the comparison is true / false. The CPU compares the
@@ -2484,24 +2678,22 @@ namespace dscript
 		{
 			Type* ta = decay(e->a->type);
 			Type* tb = decay(e->b->type);
-			const bool isUnsigned = (ta->isInteger() && tb->isInteger()) ? arithmeticType(ta, tb)->kind == Type::Kind::U32 : true;
+			// Unsigned order (== and != are the same either way).
+			const bool isUnsigned = ((ta->isInteger() && tb->isInteger()) ? arithmeticType(ta, tb)->kind == Type::Kind::U32 : true)
+									&& e->name != "==" && e->name != "!=";
 			Reg a = gen(e->a);
 			std::string operand;
 			Reg b;
 			if (e->b->isConst)
-				operand = imm(isUnsigned ? (e->b->constValue ^ 0x80000000) : e->b->constValue);
+				operand = imm(e->b->constValue);
 			else
 			{
 				b = gen(e->b);
-				if (isUnsigned)
-					emit("xorip " + b + ", 0x80000000");
 				operand = b;
 			}
-			// Unsigned: flipping the sign bits makes the signed comparison of the CPU work.
-			if (isUnsigned)
-				emit("xorip " + a + ", 0x80000000");
+			// Unsigned order: the u jumps (jgru, jlsu, jgeu, jleu) compare as u32s.
 			emit("mov ACC, " + a);
-			emit(std::string(jumpFor(e->name, jumpIfTrue)) + " $" + target + ", " + operand);
+			emit(std::string(jumpFor(e->name, jumpIfTrue)) + (isUnsigned ? "u" : "") + " $" + target + ", " + operand);
 			release(b);
 			release(a);
 			return;
@@ -2655,7 +2847,7 @@ namespace dscript
 		return a;
 	}
 
-	CodeGen::Reg CodeGen::genAssign(Node* e)
+	CodeGen::Reg CodeGen::genAssign(Node* e, bool discard)
 	{
 		Type* t = e->a->type;
 		if (t->kind == Type::Kind::Struct)
@@ -2667,21 +2859,35 @@ namespace dscript
 			release(d);
 			return "";
 		}
-		Reg d = genAddr(e->a);
+		Place d = genPlace(e->a);
 		if (e->name == "=")
 		{
+			if (discard)
+			{
+				const std::string c = constImmediate(e->b, t);
+				if (!c.empty())
+				{
+					storePlace(d, c, t);
+					releasePlace(d);
+					return "";
+				}
+			}
 			Reg v = gen(e->b);
 			convert(v, decay(e->b->type), t);
-			store(d, v, t);
-			emit("mov " + d + ", " + v);
-			release(v);
-			return d;
+			storePlace(d, v, t);
+			if (discard)
+			{
+				release(v);
+				releasePlace(d);
+				return "";
+			}
+			return placeResult(d, v);
 		}
 		const std::string op = e->name.substr(0, e->name.size() - 1);
 		if (t->isFloat())
 		{
 			Reg v = alloc(e->pos);
-			load(v, d, t);
+			loadPlace(v, d, t);
 			Reg x;
 			std::string operand;
 			if (e->b->isConst)
@@ -2695,13 +2901,17 @@ namespace dscript
 			const char* inst = (op == "+") ? "fadd " : (op == "-") ? "fsub " : (op == "*") ? "fmul " : "fdiv ";
 			emit(inst + v + ", " + operand);
 			release(x);
-			store(d, v, t);
-			emit("mov " + d + ", " + v);
-			release(v);
-			return d;
+			storePlace(d, v, t);
+			if (discard)
+			{
+				release(v);
+				releasePlace(d);
+				return "";
+			}
+			return placeResult(d, v);
 		}
 		Reg v = alloc(e->pos);
-		load(v, d, t);
+		loadPlace(v, d, t);
 		Reg x;
 		std::string operand;
 		if (e->b->isConst)
@@ -2763,34 +2973,52 @@ namespace dscript
 			normalize(v, t);
 		}
 		release(x);
-		store(d, v, t);
-		emit("mov " + d + ", " + v);
-		release(v);
-		return d;
+		storePlace(d, v, t);
+		if (discard)
+		{
+			release(v);
+			releasePlace(d);
+			return "";
+		}
+		return placeResult(d, v);
 	}
 
-	CodeGen::Reg CodeGen::genIncDec(Node* e)
+	CodeGen::Reg CodeGen::genIncDec(Node* e, bool discard)
 	{
 		Type* t = e->type;
 		const bool inc = (e->kind == NodeKind::PreInc || e->kind == NodeKind::PostInc);
 		const bool post = (e->kind == NodeKind::PostInc || e->kind == NodeKind::PostDec);
 		const int64_t step = (t->kind == Type::Kind::Pointer) ? std::max<uint32_t>(1, t->base->size()) : 1;
-		Reg d = genAddr(e->a);
+		auto l_step = [&](const Reg& r) {
+			if (t->isFloat())
+				emit("fadd " + r + ", " + imm(bitsOf(inc ? 1.0f : -1.0f)));
+			else
+				addImmediate(r, inc ? step : -step);
+			if (t->isInteger())
+				normalize(r, t);
+		};
+		Place d = genPlace(e->a);
 		Reg v = alloc(e->pos);
-		load(v, d, t);
-		Reg n = alloc(e->pos);
-		emit("mov " + n + ", " + v);
-		if (t->isFloat())
-			emit("fadd " + n + ", " + imm(bitsOf(inc ? 1.0f : -1.0f)));
-		else
-			addImmediate(n, inc ? step : -step);
-		if (t->isInteger())
-			normalize(n, t);
-		store(d, n, t);
-		emit("mov " + d + ", " + (post ? v : n));
-		release(n);
-		release(v);
-		return d;
+		loadPlace(v, d, t);
+		if (post && !discard)
+		{
+			// The old value is the result: the new one in another register.
+			Reg n = alloc(e->pos);
+			emit("mov " + n + ", " + v);
+			l_step(n);
+			storePlace(d, n, t);
+			release(n);
+			return placeResult(d, v);
+		}
+		l_step(v);
+		storePlace(d, v, t);
+		if (discard)
+		{
+			release(v);
+			releasePlace(d);
+			return "";
+		}
+		return placeResult(d, v);
 	}
 
 	// Inline sub call: the arguments go into new locals of the caller, the body is generated
@@ -2849,29 +3077,49 @@ namespace dscript
 			v->param = true;
 			if (m_options.index != nullptr && !m_discarding)
 				indexName(v->defPos, v->name, v->defPos, hoverVar(v));
-			m_localCursor -= 4;
-			v->offset = m_localCursor;
-			m_localMin = std::min(m_localMin, m_localCursor);
-			Reg r;
-			if (i < e->list.size())
+			optRegister(v, false);
+			Place slot;
+			slot.ownBase = false;
+			if (v->reg.empty())
 			{
-				r = gen(e->list[i]);
-				convert(r, decay(e->list[i]->type), params[i]);
+				m_localCursor -= 4;
+				v->offset = m_localCursor;
+				m_localMin = std::min(m_localMin, m_localCursor);
+				slot.base = "FP";
+				slot.offset = "dword " + imm(v->offset);
 			}
 			else
 			{
-				Node* def = f->defaults[i];
-				r = alloc(e->pos);
-				if (def->kind == NodeKind::StrLit)
-					emit("mov " + r + ", $" + stringLiteral(def->text));
-				else
-					emit("mov " + r + ", " + imm(constConvert(def->constValue, decay(def->type), params[i])));
+				slot.base = v->reg;
+				slot.isReg = true;
 			}
-			Reg a = alloc(e->pos);
-			varAddress(a, v);
-			store(a, r, params[i]);
-			release(a);
-			release(r);
+			std::string value;
+			if (i >= e->list.size())
+			{
+				Node* def = f->defaults[i];
+				value = (def->kind == NodeKind::StrLit) ? "$" + stringLiteral(def->text) : imm(constConvert(def->constValue, decay(def->type), params[i]));
+			}
+			else
+				value = argImmediate(e->list[i], params[i]);
+			if (!value.empty() && params[i]->isScalar())
+				storePlace(slot, value, params[i]);
+			else if (params[i]->isScalar())
+			{
+				Reg r = gen(e->list[i]);
+				convert(r, decay(e->list[i]->type), params[i]);
+				storePlace(slot, r, params[i]);
+				release(r);
+			}
+			else
+			{
+				Reg r = gen(e->list[i]);
+				convert(r, decay(e->list[i]->type), params[i]);
+				Reg a = alloc(e->pos);
+				varAddress(a, v);
+				store(a, r, params[i]);
+				release(a);
+				release(r);
+			}
 			paramScope[v->name] = v;
 		}
 		// The body sees its parameters (and the globals), not the caller's variables or loops.
@@ -2908,6 +3156,7 @@ namespace dscript
 		else
 			noLoc();
 		m_stmtDepth = stmtDepth;
+		optEndScope(m_scopes.front());		// the parameters
 		m_scopes = std::move(scopes);
 		m_loops = std::move(loops);
 		m_defers = std::move(defers);
@@ -2943,6 +3192,12 @@ namespace dscript
 		const auto& params = fnType->params;
 		for (size_t i = 0; i < e->list.size(); i++)
 		{
+			const std::string value = argImmediate(e->list[i], params[i]);
+			if (!value.empty())
+			{
+				emit("push " + value);
+				continue;
+			}
 			Reg r = gen(e->list[i]);
 			convert(r, decay(e->list[i]->type), params[i]);
 			emit("push " + r);
@@ -3032,13 +3287,20 @@ namespace dscript
 		}
 		if (type->kind == Type::Kind::Array)
 			error(init->pos, "arrays are initialized with { ... } or a string");
+		Place p;
+		p.base = addr;
+		p.ownBase = false;
+		if (offset != 0)
+			p.offset = "dword " + imm(offset);
+		const std::string c = constImmediate(init, type);
+		if (!c.empty())
+		{
+			storePlace(p, c, type);
+			return;
+		}
 		Reg v = gen(init);
 		convert(v, decay(init->type), type);
-		Reg d = alloc(init->pos);
-		emit("mov " + d + ", " + addr);
-		addImmediate(d, offset);
-		store(d, v, type);
-		release(d);
+		storePlace(p, v, type);
 		release(v);
 	}
 
@@ -3094,9 +3356,13 @@ namespace dscript
 			indexName(v->defPos, v->name, v->defPos, hoverVar(v));
 			completeLocal(v);
 		}
-		m_localCursor -= (int32_t)alignUp(std::max<uint32_t>(t->size(), 1), 4);
-		v->offset = m_localCursor;
-		m_localMin = std::min(m_localMin, m_localCursor);
+		optRegister(v, false);
+		if (v->reg.empty())
+		{
+			m_localCursor -= (int32_t)alignUp(std::max<uint32_t>(t->size(), 1), 4);
+			v->offset = m_localCursor;
+			m_localMin = std::min(m_localMin, m_localCursor);
+		}
 
 		const bool aggregate = (t->kind == Type::Kind::Struct || t->kind == Type::Kind::Array);
 		std::vector<std::pair<int32_t, const StructField*>> defaults;
@@ -3110,32 +3376,48 @@ namespace dscript
 				zeroMemory(a, t->size());
 				for (const auto& d : defaults)
 				{
-					Reg val = alloc(s->pos);
+					std::string val;
 					if (d.second->init->kind == NodeKind::StrLit)
-						emit("mov " + val + ", $" + stringLiteral(d.second->init->text));
+						val = "$" + stringLiteral(d.second->init->text);
 					else if (d.second->init->kind == NodeKind::Ident && d.second->init->func != nullptr)
-						emit("mov " + val + ", $" + d.second->init->func->label);
+						val = "$" + d.second->init->func->label;
 					else
-						emit("mov " + val + ", " + imm(constConvert(d.second->init->constValue, decay(d.second->init->type), d.second->type)));
-					Reg p = alloc(s->pos);
-					emit("mov " + p + ", " + a);
-					addImmediate(p, d.first);
-					store(p, val, d.second->type);
-					release(p);
-					release(val);
+						val = imm(constConvert(d.second->init->constValue, decay(d.second->init->type), d.second->type));
+					Place p;
+					p.base = a;
+					p.ownBase = false;
+					if (d.first != 0)
+						p.offset = "dword " + imm(d.first);
+					storePlace(p, val, d.second->type);
 				}
 				if (s->a)
 					genInit(a, t, s->a, 0);
 				release(a);
 			}
 		}
-		else if (s->a)
+		else if (s->a && !v->reg.empty())
 		{
-			Reg a = alloc(s->pos);
-			varAddress(a, v);
-			genInit(a, t, s->a, 0);
-			release(a);
+			// A register variable (a scalar): the value into its register.
+			foldStringConst(s->a);
+			check(s->a, t);
+			requireConvertible(s->a, t, "in the initialization");
+			Place p;
+			p.base = v->reg;
+			p.ownBase = false;
+			p.isReg = true;
+			const std::string c = constImmediate(s->a, t);
+			if (!c.empty())
+				storePlace(p, c, t);
+			else
+			{
+				Reg r = gen(s->a);
+				convert(r, decay(s->a->type), t);
+				storePlace(p, r, t);
+				release(r);
+			}
 		}
+		else if (s->a)
+			genInit("FP", t, s->a, v->offset);	// the variable at FP + offset
 		if (s->c)
 			genConstructor(v, s);
 		m_scopes.back()[s->name] = v;
@@ -3225,6 +3507,7 @@ namespace dscript
 					genDefers(m_defers.size() - 1);
 				}
 				m_defers.pop_back();
+				optEndScope(m_scopes.back());
 				m_scopes.pop_back();
 				m_scopeEnds.pop_back();
 			}
@@ -3242,8 +3525,7 @@ namespace dscript
 				check(s->a);
 				if (s->a->kind == NodeKind::Ident && s->a->func == nullptr && s->a->var == nullptr && m_funcs.count(s->a->name))
 					error(s->pos, "'" + s->a->name + "' is a sub: call it with " + s->a->name + "()");
-				Reg r = gen(s->a);
-				release(r);
+				genDiscard(s->a);
 			}
 			break;
 			case NodeKind::Assert:
@@ -3317,6 +3599,7 @@ namespace dscript
 			{
 				check(s->a);
 				std::string lStart = newLabel(), lEnd = newLabel();
+				m_loopDepth++;
 				label(lStart);
 				genBranch(s->a, lEnd, false);
 				m_loops.push_back({ lEnd, lStart, m_defers.size() });
@@ -3324,11 +3607,13 @@ namespace dscript
 				m_loops.pop_back();
 				emit("jmp $" + lStart);	// (the body's last line: then the condition, on the while's line)
 				label(lEnd);
+				m_loopDepth--;
 			}
 			break;
 			case NodeKind::DoWhile:
 			{
 				std::string lStart = newLabel(), lCont = newLabel(), lEnd = newLabel();
+				m_loopDepth++;
 				label(lStart);
 				m_loops.push_back({ lEnd, lCont, m_defers.size() });
 				genStatement(s->b);
@@ -3338,6 +3623,7 @@ namespace dscript
 				loc(s->a->pos);
 				genBranch(s->a, lStart, true);
 				label(lEnd);
+				m_loopDepth--;
 			}
 			break;
 			case NodeKind::For:
@@ -3348,6 +3634,7 @@ namespace dscript
 				if (s->a)
 					genStatement(s->a);
 				std::string lStart = newLabel(), lCont = newLabel(), lEnd = newLabel();
+				m_loopDepth++;
 				label(lStart);
 				if (s->b)
 				{
@@ -3362,10 +3649,12 @@ namespace dscript
 				if (s->c)
 				{
 					check(s->c);
-					release(gen(s->c));
+					genDiscard(s->c);
 				}
 				emit("jmp $" + lStart);
 				label(lEnd);
+				m_loopDepth--;
+				optEndScope(m_scopes.back());
 				m_scopes.pop_back();
 				m_scopeEnds.pop_back();
 			}
@@ -3389,7 +3678,8 @@ namespace dscript
 				else if (ret->kind != Type::Kind::Void)
 					error(s->pos, fn->name + " must return a value (" + ret->name() + ")");
 				// The value first, then every defer of the sub (it stays in its register: calls keep them).
-				if (hasDefers(0))
+				const bool deferred = hasDefers(0);
+				if (deferred)
 				{
 					const int stmtDepth = m_stmtDepth;
 					m_stmtDepth = m_regDepth;
@@ -3399,7 +3689,28 @@ namespace dscript
 				}
 				if (!r.empty())
 				{
-					emit("mov RV, " + r);
+					// The value's last instruction writes r (a load / move): it can write RV itself.
+					// (Not after defers: their code comes last.)
+					std::string& last = m_out->back();
+					bool retargeted = false;
+					for (const char* inst : { "mov ", "movo ", "movbo ", "movwo " })
+					{
+						if (deferred)
+							break;
+						const std::string head = std::string("\t") + inst + r + ", ";
+						if (last.rfind(head, 0) == 0 && last.find(", " + r, head.size() - 2) == std::string::npos)
+						{
+							const std::string source = last.substr(head.size());
+							if (source == "RV")
+								m_out->pop_back();			// mov r, RV (a call's value): already there
+							else
+								last = std::string("\t") + inst + "RV, " + source;
+							retargeted = true;
+							break;
+						}
+					}
+					if (!retargeted)
+						emit("mov RV, " + r);
 					release(r);
 				}
 				if (!m_inline.empty())
@@ -3468,6 +3779,27 @@ namespace dscript
 				switchedSection = true;
 			else if (line[0] != '@' && line.rfind("##", 0) != 0)
 				loc(pos);
+			if (m_optPass == 1)
+			{
+				// The registers it names are not used for variables.
+				for (size_t k = 0; k < line.size(); k++)
+				{
+					const char c = line[k];
+					if ((c == 'R' || c == 'r') && (k == 0 || !(std::isalnum((unsigned char)line[k - 1]) || line[k - 1] == '_' || line[k - 1] == '$'))
+						&& k + 1 < line.size() && std::isdigit((unsigned char)line[k + 1]))
+					{
+						size_t e = k + 1;
+						while (e < line.size() && std::isdigit((unsigned char)line[e]))
+							e++;
+						if (e >= line.size() || !(std::isalnum((unsigned char)line[e]) || line[e] == '_'))
+							m_lowRegs.insert(std::atoi(line.c_str() + k + 1));
+					}
+				}
+				std::string lower = line;
+				std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+				if (lower.find("reg(") != std::string::npos)
+					m_lowOpaque = true;
+			}
 
 			struct Sub { VarInfo* var; int form; std::string reg; };	// form: 0 value, 1 address
 			std::vector<Sub> subs;
@@ -3618,7 +3950,11 @@ namespace dscript
 				else
 					loadVar(s.reg, s.var);
 			}
-			emit(out);
+			// (Marked for the peephole pass, which doesn't look into low code.)
+			if (m_optPass != 0)
+				m_out->push_back(std::string("\t") + LowMark + out);
+			else
+				emit(out);
 			for (VarInfo* v : storeBack)
 			{
 				std::string reg;
@@ -3627,7 +3963,20 @@ namespace dscript
 					if (s.var == v && s.form == 0)
 						reg = s.reg;
 				}
-				if (v->storage == VarInfo::Storage::Global)
+				if (!v->reg.empty())
+				{
+					// Truncated as a store to its memory would.
+					emit("mov " + v->reg + ", " + reg);
+					switch (v->type->kind)
+					{
+						case Type::Kind::I8: emit("lsh " + v->reg + ", 24"); emit("rsh " + v->reg + ", 24"); break;
+						case Type::Kind::I16: emit("lsh " + v->reg + ", 16"); emit("rsh " + v->reg + ", 16"); break;
+						case Type::Kind::U8: case Type::Kind::Bool: emit("andip " + v->reg + ", 0x000000FF"); break;
+						case Type::Kind::U16: emit("andip " + v->reg + ", 0x0000FFFF"); break;
+						default: break;
+					}
+				}
+				else if (v->storage == VarInfo::Storage::Global)
 				{
 					const char* suffix = (v->type->size() == 1 ? "b" : (v->type->size() == 2 ? "w" : ""));
 					emit(std::string("mov") + suffix + " [$" + v->symbol + "], " + reg);
@@ -3635,7 +3984,7 @@ namespace dscript
 				else
 				{
 					emit(std::string("push ") + ScratchAddr);
-					varAddress(ScratchAddr, v);
+					varAddress(ScratchAddr, v, false);	// (a register variable has no store-back to its memory)
 					store(ScratchAddr, reg, v->type);
 					emit(std::string("pop ") + ScratchAddr);
 				}
@@ -3648,51 +3997,110 @@ namespace dscript
 	// ======================================== Program ========================================
 	void CodeGen::genFunction(FuncInfo* f)
 	{
-		std::vector<std::string> body;
-		m_out = &body;
-		m_func = f;
-		m_scopes.clear();
-		m_scopes.push_back({});
-		for (size_t i = 0; i < f->paramNames.size(); i++)
-		{
-			VarInfo* v = new VarInfo();
-			v->name = f->paramNames[i];
-			v->type = f->type->params[i];
-			v->storage = VarInfo::Storage::Param;
-			v->offset = (int32_t)i;
-			v->pos = f->decl->list[i]->pos;
-			v->defPos = f->decl->list[i]->namePos;
-			v->param = true;
-			if (m_options.index != nullptr)
-				indexName(v->defPos, v->name, v->defPos, hoverVar(v));
-			m_scopes.back()[v->name] = v;
-		}
-		m_scopeEnds.clear();
-		if (f->decl->a != nullptr)
-		{
-			m_scopeEnds.push_back(f->decl->a->endPos);
+		// The body (into body): pass 1 / 2 of -O run it once each.
+		auto l_body = [&](std::vector<std::string>& body) {
+			m_out = &body;
+			m_func = f;
+			m_scopes.clear();
+			m_scopes.push_back({});
+			m_optTick = 0;
+			m_optMaxDepth = 0;
+			m_loopDepth = 0;
+			if (m_optPass != 0)
+				m_optVars.clear();
+			if (m_optPass == 1)
+			{
+				m_lowRegs.clear();
+				m_lowOpaque = false;
+			}
+			std::vector<VarInfo*> regParams;
 			for (size_t i = 0; i < f->paramNames.size(); i++)
-				completeLocal(m_scopes.back()[f->paramNames[i]]);
-		}
-		m_localCursor = 4;
-		m_localMin = 4;
-		m_loops.clear();
-		m_defers.clear();
-		m_defers.emplace_back();
-		m_inDefer = 0;
-		m_atomic = 0;
-		m_regDepth = 0;
-		Node* bodyNode = f->decl->a;
-		for (Node* s : bodyNode->list)
-			genStatement(s);
-		const bool endsWithReturn = !bodyNode->list.empty() && bodyNode->list.back()->kind == NodeKind::Return;
-		if (!endsWithReturn)
+			{
+				VarInfo* v = new VarInfo();
+				v->name = f->paramNames[i];
+				v->type = f->type->params[i];
+				v->storage = VarInfo::Storage::Param;
+				v->offset = (int32_t)i;
+				v->pos = f->decl->list[i]->pos;
+				v->defPos = f->decl->list[i]->namePos;
+				v->param = true;
+				if (m_options.index != nullptr)
+					indexName(v->defPos, v->name, v->defPos, hoverVar(v));
+				m_scopes.back()[v->name] = v;
+				optRegister(v, true);
+				if (!v->reg.empty())
+					regParams.push_back(v);
+			}
+			m_scopeEnds.clear();
+			if (f->decl->a != nullptr)
+			{
+				m_scopeEnds.push_back(f->decl->a->endPos);
+				for (size_t i = 0; i < f->paramNames.size(); i++)
+					completeLocal(m_scopes.back()[f->paramNames[i]]);
+			}
+			m_localCursor = 4;
+			m_localMin = 4;
+			m_loops.clear();
+			m_defers.clear();
+			m_defers.emplace_back();
+			m_inDefer = 0;
+			m_atomic = 0;
+			m_regDepth = 0;
+			// Register parameters: their values into their registers.
+			for (VarInfo* v : regParams)
+				loadVar(v->reg, v, true);
+			Node* bodyNode = f->decl->a;
+			for (Node* s : bodyNode->list)
+				genStatement(s);
+			const bool endsWithReturn = !bodyNode->list.empty() && bodyNode->list.back()->kind == NodeKind::Return;
+			if (!endsWithReturn)
+			{
+				loc(bodyNode->endPos);
+				genDefers(0);
+				if (f->type->base->kind != Type::Kind::Void)
+					emit("mov RV, 0");
+				emit(f->interrupt ? "rti" : "ret");
+			}
+		};
+		std::vector<std::string> body;
+		const bool optimize = m_options.optimize && !m_options.analysis && m_options.index == nullptr && !m_discarding;
+		if (!optimize)
+			l_body(body);
+		else
 		{
-			loc(bodyNode->endPos);
-			genDefers(0);
-			if (f->type->base->kind != Type::Kind::Void)
-				emit("mov RV, 0");
-			emit(f->interrupt ? "rti" : "ret");
+			struct Reset { CodeGen* cg; ~Reset() { cg->m_optPass = 0; cg->m_regLimit = TempRegisters; cg->m_optRegs.clear(); } } reset { this };
+			m_optPass = 1;
+			l_body(body);
+			optAssign();
+			bool any = false;
+			for (const auto& r : m_optRegs)
+				any = any || !r.empty();
+			if (any)
+			{
+				const int passOneDepth = m_optMaxDepth;
+				const size_t passOneVars = m_optVars.size();
+				std::vector<std::string> optimized;
+				m_optPass = 2;
+				m_regLimit = passOneDepth;
+				try
+				{
+					l_body(optimized);
+					// (Both passes must see the same variables, in the same order: otherwise
+					// pass 1's code is kept.)
+					if (m_optVars.size() == passOneVars)
+						body = std::move(optimized);
+				}
+				catch (const OptRetry&)
+				{
+					// (Keeps pass 1's code: the variables in memory.)
+					m_inline.clear();
+					m_stmtDepth = 0;
+					m_regLimit = TempRegisters;
+				}
+			}
+			m_optPass = 0;
+			m_regLimit = TempRegisters;
+			peephole(body);
 		}
 		m_out = &m_code;
 		m_code.push_back("");
@@ -3705,10 +4113,524 @@ namespace dscript
 			emit(std::string("subip ") + ScratchCounter + ", " + imm(4 - m_localMin));
 			emit(std::string("mov SP, ") + ScratchCounter);
 		}
+		for (std::string& line : body)
+		{
+			if (line.size() > 1 && line[1] == LowMark)
+				line.erase(1, 1);
+		}
 		m_code.insert(m_code.end(), body.begin(), body.end());
 		m_scopes.clear();
 		m_defers.clear();
 		m_func = nullptr;
+	}
+
+	// ==================================== -O: register variables ====================================
+	void CodeGen::optRegister(VarInfo* v, bool functionParam)
+	{
+		if (m_optPass == 0)
+			return;
+		v->optId = (int)m_optVars.size();
+		OptVar o;
+		o.start = m_optTick++;
+		o.param = functionParam;
+		o.eligible = v->type != nullptr && v->type->isScalar() && v->type->size() <= 4;
+		m_optVars.push_back(o);
+		if (m_optPass == 2 && (size_t)v->optId < m_optRegs.size())
+			v->reg = m_optRegs[v->optId];
+	}
+
+	void CodeGen::optUse(VarInfo* v)
+	{
+		if (m_optPass != 1 || v->optId < 0)
+			return;
+		double w = 1;
+		for (int i = 0; i < std::min(m_loopDepth, 5); i++)
+			w *= 8;
+		m_optVars[v->optId].weight += w;
+	}
+
+	void CodeGen::optEndScope(const std::map<std::string, VarInfo*>& scope)
+	{
+		if (m_optPass != 1)
+		{
+			m_optTick += (m_optPass != 0) ? 1 : 0;
+			return;
+		}
+		const int tick = m_optTick++;
+		for (const auto& entry : scope)
+		{
+			VarInfo* v = entry.second;
+			if (v->optId >= 0 && !m_optVars[v->optId].param && m_optVars[v->optId].end == 0x7FFFFFFF)
+				m_optVars[v->optId].end = tick;
+		}
+	}
+
+	void CodeGen::optAssign(void)
+	{
+		m_optRegs.assign(m_optVars.size(), "");
+		if (m_lowOpaque)
+			return;
+		// The registers above the temporaries pass 1 needed (R17..R20 are the code generator's scratch).
+		std::vector<int> pool;
+		for (int r = TempRegisters; r > m_optMaxDepth; r--)
+		{
+			if (m_lowRegs.count(r) == 0)
+				pool.push_back(r);
+		}
+		std::vector<int> order;
+		for (size_t i = 0; i < m_optVars.size(); i++)
+		{
+			const OptVar& o = m_optVars[i];
+			// A parameter used once costs as much in a register (its load at the start).
+			if (o.eligible && o.weight > (o.param ? 1.5 : 0))
+				order.push_back((int)i);
+		}
+		std::stable_sort(order.begin(), order.end(), [&](int a, int b) { return m_optVars[a].weight > m_optVars[b].weight; });
+		std::map<int, std::vector<int>> taken;		// register -> the variables in it
+		for (int id : order)
+		{
+			const OptVar& o = m_optVars[id];
+			for (int r : pool)
+			{
+				bool free = true;
+				for (int other : taken[r])
+				{
+					const OptVar& p = m_optVars[other];
+					if (o.start <= p.end && p.start <= o.end)
+					{
+						free = false;
+						break;
+					}
+				}
+				if (free)
+				{
+					taken[r].push_back(id);
+					m_optRegs[id] = "R" + std::to_string(r);
+					break;
+				}
+			}
+		}
+	}
+
+	// ==================================== -O: peephole pass ====================================
+	// Works on one sub's code: its temporaries (R1..R16) are only live inside a statement, so
+	// copies through them can be removed when nothing reads them afterwards (followed along
+	// the jumps of the sub). Low code is opaque (it can do anything with any register).
+	namespace
+	{
+		enum class InsKind { None, Def, RW, Read, Jump, CondJump, End, Barrier, LowOp };
+		struct PLine
+		{
+			std::string text;
+			InsKind kind { InsKind::None };	// None: a label, a directive, an empty line
+			std::string mn;
+			std::vector<std::string> ops;
+			std::string label;				// a label line: its name
+			bool low { false };				// a low block's line: looked at, never changed
+		};
+
+		bool isGeneralReg(const std::string& s, int* number = nullptr)
+		{
+			if (s.size() < 2 || s.size() > 3 || s[0] != 'R')
+				return false;
+			for (size_t i = 1; i < s.size(); i++)
+			{
+				if (!std::isdigit((unsigned char)s[i]))
+					return false;
+			}
+			const int n = std::atoi(s.c_str() + 1);
+			if (number)
+				*number = n;
+			return n >= 1 && n <= 20;
+		}
+
+		bool tokenChar(char c) { return std::isalnum((unsigned char)c) || c == '_'; }
+
+		// A register operand (not memory: *R, [..]; not an immediate or a label).
+		bool isGeneralRegOrSpecial(const std::string& s)
+		{
+			if (s.empty() || s[0] == '*' || s[0] == '[' || s[0] == '$' || std::isdigit((unsigned char)s[0]) || s[0] == '-')
+				return false;
+			for (char c : s)
+			{
+				if (!tokenChar(c) && c != '(' && c != ')')
+					return false;
+			}
+			return true;
+		}
+
+		bool isTemp(const std::string& s)
+		{
+			int n = 0;
+			return isGeneralReg(s, &n) && n <= TempRegisters;
+		}
+
+		bool mentions(const std::string& op, const std::string& r)
+		{
+			for (size_t at = op.find(r); at != std::string::npos; at = op.find(r, at + 1))
+			{
+				const bool before = (at > 0) && (tokenChar(op[at - 1]) || op[at - 1] == '$');
+				const bool after = (at + r.size() < op.size()) && tokenChar(op[at + r.size()]);
+				if (!before && !after)
+					return true;
+			}
+			return false;
+		}
+
+		std::string replaceToken(const std::string& op, const std::string& from, const std::string& to)
+		{
+			std::string out;
+			size_t i = 0;
+			while (i < op.size())
+			{
+				if (op.compare(i, from.size(), from) == 0)
+				{
+					const bool before = (i > 0) && (tokenChar(op[i - 1]) || op[i - 1] == '$');
+					const bool after = (i + from.size() < op.size()) && tokenChar(op[i + from.size()]);
+					if (!before && !after)
+					{
+						out += to;
+						i += from.size();
+						continue;
+					}
+				}
+				out += op[i++];
+			}
+			return out;
+		}
+
+		void parseLine(PLine& l)
+		{
+			l.kind = InsKind::None;
+			l.low = false;
+			l.mn.clear();
+			l.ops.clear();
+			l.label.clear();
+			const std::string& t = l.text;
+			if (t.empty())
+				return;
+			if (t[0] != '\t')
+			{
+				if (t[0] != '.' && t.back() == ':')
+					l.label = t.substr(0, t.size() - 1);
+				return;
+			}
+			if (t.size() > 1 && t[1] == LowMark)
+			{
+				// A low line: an instruction that only names registers (R1..R20) reads and writes
+				// those (LowOp); control flow, labels, directives, calls, interrupts, reg(..) and
+				// anything unclear are barriers.
+				l.kind = InsKind::Barrier;
+				std::string body = t.substr(2);
+				for (const char* scratch : LowScratch)	// (S1 / S2: not R registers)
+				{
+					for (size_t at = body.find(scratch); at != std::string::npos; at = body.find(scratch))
+						body.replace(at, std::strlen(scratch), "S");
+				}
+				if (body.empty() || body[0] == '.' || body[0] == '@' || body[0] == '#' || body.find(':') != std::string::npos
+					|| body.find("reg(") != std::string::npos || body.find("REG(") != std::string::npos)
+					return;
+				std::string mn = body.substr(0, body.find_first_of(" \t"));
+				std::transform(mn.begin(), mn.end(), mn.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+				if (mn.empty() || mn[0] == 'j' || mn == "call" || mn == "ret" || mn == "rti" || mn == "hlt" || mn == "int"
+					|| mn == "push" || mn == "pop" || mn.find("debug") == 0 || !std::isalpha((unsigned char)mn[0]))
+					return;
+				for (int k = 1; k <= 20; k++)
+				{
+					if (mentions(body, "r" + std::to_string(k)))
+						return;		// (lower case: not followed)
+				}
+				PLine plain;
+				plain.text = "\t" + body;
+				parseLine(plain);
+				l.low = true;
+				if (plain.kind == InsKind::Def || plain.kind == InsKind::RW || plain.kind == InsKind::Read)
+				{
+					l.kind = plain.kind;
+					l.mn = plain.mn;
+					l.ops = plain.ops;
+					return;
+				}
+				l.kind = InsKind::LowOp;
+				l.mn = mn;
+				l.ops = { body.substr(mn.size()) };
+				return;
+			}
+			const size_t sp = t.find(' ', 1);
+			l.mn = t.substr(1, sp == std::string::npos ? std::string::npos : sp - 1);
+			if (sp != std::string::npos)
+			{
+				std::string rest = t.substr(sp + 1);
+				size_t start = 0;
+				while (true)
+				{
+					const size_t comma = rest.find(',', start);
+					std::string op = rest.substr(start, comma == std::string::npos ? std::string::npos : comma - start);
+					const size_t f = op.find_first_not_of(" \t"), e = op.find_last_not_of(" \t");
+					l.ops.push_back(f == std::string::npos ? std::string() : op.substr(f, e - f + 1));
+					if (comma == std::string::npos)
+						break;
+					start = comma + 1;
+				}
+			}
+			static const std::set<std::string> defs { "mov", "movb", "movw", "movo", "movbo", "movwo", "pop" };
+			static const std::set<std::string> rws { "addip", "subip", "mulip", "divip", "divipu", "andip", "orip", "xorip", "lsh", "rsh",
+				"notip", "neg", "fneg", "fadd", "fsub", "fmul", "fdiv", "itof", "utof", "ftoi", "ftou" };
+			static const std::set<std::string> reads { "push", "omov", "omovw", "omovb", "feq", "flt", "fle", "debug_print", "call" };
+			static const std::set<std::string> condJumps { "jeq", "jne", "jgr", "jls", "jge", "jle", "jgru", "jlsu", "jgeu", "jleu" };
+			if (defs.count(l.mn) && !l.ops.empty())
+				l.kind = InsKind::Def;
+			else if (rws.count(l.mn) && !l.ops.empty())
+				l.kind = InsKind::RW;
+			else if (reads.count(l.mn))
+				l.kind = InsKind::Read;
+			else if (l.mn == "jmp" && l.ops.size() == 1)
+				l.kind = InsKind::Jump;
+			else if (condJumps.count(l.mn) && l.ops.size() == 2)
+				l.kind = InsKind::CondJump;
+			else if (l.mn == "ret" || l.mn == "rti" || l.mn == "hlt")
+				l.kind = InsKind::End;
+			else
+				l.kind = InsKind::Barrier;
+		}
+
+		void rebuild(PLine& l)
+		{
+			std::string t = "\t" + l.mn;
+			for (size_t i = 0; i < l.ops.size(); i++)
+				t += (i == 0 ? " " : ", ") + l.ops[i];
+			l.text = t;
+		}
+
+		// The first operand is only written (a register destination of a mov / pop).
+		bool writeOnlyFirst(const PLine& l)
+		{
+			return l.kind == InsKind::Def && isGeneralRegOrSpecial(l.ops[0]);
+		}
+	}
+
+	void CodeGen::peephole(std::vector<std::string>& code)
+	{
+		std::vector<PLine> lines(code.size());
+		for (size_t i = 0; i < code.size(); i++)
+		{
+			lines[i].text = code[i];
+			parseLine(lines[i]);
+		}
+		std::map<std::string, size_t> labels;
+		for (size_t i = 0; i < lines.size(); i++)
+		{
+			if (!lines[i].label.empty())
+				labels[lines[i].label] = i;
+		}
+		auto l_remove = [&](size_t i) { lines[i].text.clear(); parseLine(lines[i]); };
+		auto l_reads = [&](const PLine& l, const std::string& r) {
+			if (l.kind == InsKind::Barrier)
+				return true;
+			for (size_t k = writeOnlyFirst(l) ? 1 : 0; k < l.ops.size(); k++)
+			{
+				if (mentions(l.ops[k], r))
+					return true;
+			}
+			return false;
+		};
+		auto l_writes = [&](const PLine& l, const std::string& r) {
+			if (l.kind == InsKind::Barrier)
+				return true;
+			if (l.kind == InsKind::LowOp)
+				return mentions(l.ops[0], r);
+			return (l.kind == InsKind::Def || l.kind == InsKind::RW) && l.ops[0] == r;
+		};
+		auto l_mentions = [&](const PLine& l, const std::string& r) {
+			if (l.kind == InsKind::Barrier)
+				return true;
+			for (const auto& op : l.ops)
+			{
+				if (mentions(op, r))
+					return true;
+			}
+			return false;
+		};
+		auto l_target = [&](const PLine& l) -> long {
+			const std::string& op = l.ops[0];
+			if (op.size() < 2 || op[0] != '$')
+				return -1;
+			auto it = labels.find(op.substr(1));
+			return it == labels.end() ? -1 : (long)it->second;
+		};
+		// Can r (a temporary) be read from line `from` on (on any path, before it is set again)?
+		std::vector<int> seen(lines.size() + 1, 0);
+		int generation = 0;
+		auto l_liveFrom = [&](size_t from, const std::string& r) -> bool {
+			generation++;
+			std::vector<size_t> work { from };
+			int budget = 4000;
+			while (!work.empty())
+			{
+				size_t i = work.back();
+				work.pop_back();
+				for (; ; i++)
+				{
+					if (--budget < 0 || i >= lines.size())
+						return true;
+					const PLine& l = lines[i];
+					if (l.kind == InsKind::None)
+					{
+						if (!l.label.empty())
+						{
+							if (seen[i] == generation)
+								break;
+							seen[i] = generation;
+						}
+						continue;
+					}
+					if (l_reads(l, r))
+						return true;
+					if (l_writes(l, r))
+						break;
+					if (l.kind == InsKind::End)
+						break;
+					if (l.kind == InsKind::Jump || l.kind == InsKind::CondJump)
+					{
+						const long t = l_target(l);
+						if (t < 0)
+							return true;
+						work.push_back((size_t)t);
+						if (l.kind == InsKind::Jump)
+							break;
+					}
+				}
+			}
+			return false;
+		};
+		auto l_liveAfter = [&](size_t i, const std::string& r) { return l_liveFrom(i + 1, r); };
+		for (int round = 0; round < 8; round++)
+		{
+			bool changed = false;
+			for (size_t i = 0; i < lines.size(); i++)
+			{
+				PLine& l = lines[i];
+				if (l.low || l.kind != InsKind::Def || l.mn != "mov" || l.ops.size() != 2 || !isGeneralRegOrSpecial(l.ops[0]))
+					continue;
+				const std::string dst = l.ops[0], src = l.ops[1];
+				// mov X, X
+				if (dst == src)
+				{
+					l_remove(i);
+					changed = true;
+					continue;
+				}
+				// mov Rt, <register / immediate / label> that nothing reads.
+				if (isTemp(dst) && src[0] != '*' && src[0] != '[' && !l_liveAfter(i, dst))
+				{
+					l_remove(i);
+					changed = true;
+					continue;
+				}
+				// mov X, Rt: Rt's value computed in X itself (from where Rt is set).
+				if (isTemp(src) && isGeneralReg(dst))
+				{
+					long s = -1;
+					int steps = 0;
+					for (long j = (long)i - 1; j >= 0 && steps < 64; j--)
+					{
+						const PLine& p = lines[j];
+						if (p.kind == InsKind::None)
+						{
+							if (!p.label.empty())
+								break;
+							continue;
+						}
+						steps++;
+						if (p.low || p.kind == InsKind::Barrier || p.kind == InsKind::LowOp || p.kind == InsKind::Jump || p.kind == InsKind::CondJump || p.kind == InsKind::End)
+							break;
+						if (writeOnlyFirst(p) && p.ops[0] == src && !l_reads(p, src))
+						{
+							// (X can be read here: before it is written.)
+							if (p.ops[0] != dst)
+								s = j;
+							break;
+						}
+						if (l_mentions(p, dst))
+							break;
+					}
+					if (s >= 0 && !l_liveAfter(i, src))
+					{
+						for (size_t k = (size_t)s; k < i; k++)
+						{
+							PLine& q = lines[k];
+							if (q.kind == InsKind::None)
+								continue;
+							for (auto& op : q.ops)
+								op = replaceToken(op, src, dst);
+							rebuild(q);
+						}
+						l_remove(i);
+						changed = true;
+						continue;
+					}
+				}
+				// mov Rt, Y: the next reads of Rt read Y.
+				if (isTemp(dst) && isGeneralReg(src))
+				{
+					bool allReplaced = true;
+					size_t resume = lines.size();	// where the rest is looked at (that line included)
+					bool dead = false;
+					for (size_t j = i + 1; j < lines.size(); j++)
+					{
+						PLine& q = lines[j];
+						resume = j;
+						if (q.kind == InsKind::None)
+						{
+							if (!q.label.empty())
+								break;
+							continue;
+						}
+						if (q.low || q.kind == InsKind::Barrier || q.kind == InsKind::LowOp || q.kind == InsKind::End)
+							break;
+						if (q.kind == InsKind::RW && q.ops[0] == dst)
+						{
+							allReplaced = false;	// changed in place: it needs its own copy
+							break;
+						}
+						bool replaced = false;
+						for (size_t k = writeOnlyFirst(q) ? 1 : 0; k < q.ops.size(); k++)
+						{
+							if (mentions(q.ops[k], dst))
+							{
+								q.ops[k] = replaceToken(q.ops[k], dst, src);
+								replaced = true;
+							}
+						}
+						if (replaced)
+						{
+							rebuild(q);
+							changed = true;
+						}
+						if (l_writes(q, dst))
+						{
+							dead = true;
+							break;
+						}
+						if (l_writes(q, src) || q.kind == InsKind::Jump || q.kind == InsKind::CondJump)
+							break;
+					}
+					if (allReplaced && (dead || !l_liveFrom(resume, dst)))
+					{
+						l_remove(i);
+						changed = true;
+					}
+				}
+			}
+			if (!changed)
+				break;
+		}
+		code.clear();
+		for (const PLine& l : lines)
+		{
+			if (!l.text.empty() || l.kind != InsKind::None)
+				code.push_back(l.text);
+		}
 	}
 
 	// The constant bytes of a global (big endian); false if a part needs code at run time.

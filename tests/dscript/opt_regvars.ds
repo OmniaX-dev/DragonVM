@@ -1,0 +1,214 @@
+// -O: locals and parameters in registers (and the peephole pass), where it could go wrong.
+// expect-rv: 0
+// dsc-flags: -O
+#import(<dragon-sdk>)
+
+var g_failures: i32 = 0;
+var g_calls: i32 = 0;
+
+sub expect(var id: i32, var ok: bool) {
+	if (ok)
+		return;
+	var buff: u8[12];
+	debug_print("opt_regvars: check ");
+	debug_print(dr::itoa(id, buff));
+	debug_print(" failed\n");
+	g_failures++;
+}
+
+// Narrow types wrap as they do in memory.
+sub narrow() {
+	var a: u8 = 250;
+	for (var i: i32 = 0; i < 10; i++)
+		a++;
+	expect(1, a == 4);
+	var b: i8 = 120;
+	b += 10;
+	expect(2, b == -126);
+	var c: u16 = 0xFFF0;
+	c = c + 0x20;
+	expect(3, c == 0x10);
+	var d: i16 = -32768;
+	d--;
+	expect(4, d == 32767);
+	var e: bool = true;
+	var n: i32 = 0;
+	for (var i: i32 = 0; i < 5; i++) {
+		if (e)
+			n++;
+		e = !e;
+	}
+	expect(5, n == 3);
+	var big: u32 = 0x12345;
+	var t: u8 = cast<u8>(big);
+	expect(6, t == 0x45);
+}
+
+// $variables in low blocks: read and written (a narrow one truncated like a store).
+sub lowvars() -> i32 {
+	var x: u32 = 5;
+	var y: u32 = 0;
+	var z: u8 = 0;
+	for (var i: u32 = 0; i < 3; i++) {
+		low {
+			mov R1, $x
+			addip R1, 10
+			mov $y, R1
+			mov $z, 0x00000123
+		}
+		x = y;
+	}
+	expect(10, x == 35 and y == 35);
+	expect(11, z == 0x23);
+	return cast<i32>(x);
+}
+
+// Variables in sibling scopes (sharing registers) and one live across a later loop.
+sub scopes(var n: i32) -> i32 {
+	var outer: i32 = 7;
+	var total: i32 = 0;
+	for (var i: i32 = 0; i < n; i++) {
+		{
+			var a: i32 = i * 2;
+			total += a;
+		}
+		{
+			var b: i32 = i * 3;
+			total += b;
+		}
+		var c: i32;
+		c = outer;
+		total += c;
+	}
+	var after: i32 = 100;
+	return total + after + outer;
+}
+
+inline sub add3(var a: i32, var b: i32, var c: i32) -> i32 {
+	var s: i32 = a + b;
+	return s + c;
+}
+
+inline sub twice(var v: i32) -> i32 {
+	return add3(v, v, 0);
+}
+
+sub count() -> i32 {
+	g_calls++;
+	return g_calls;
+}
+
+// Inline parameters, nested inline calls in arguments, calls between (registers survive calls).
+sub inlines(var k: i32) -> i32 {
+	var r: i32 = add3(twice(k), add3(1, 2, 3), count());
+	var q: i32 = add3(r, r, r);
+	return q;
+}
+
+// defer reads variables in registers at every exit.
+var g_seen: i32 = 0;
+sub defers(var n: i32) -> i32 {
+	var acc: i32 = 1;
+	defer g_seen = acc;
+	for (var i: i32 = 0; i < n; i++) {
+		acc *= 2;
+		if (acc > 100)
+			return acc;
+	}
+	return acc;
+}
+
+sub fib(var n: u32) -> u32 {
+	if (n < 2)
+		return n;
+	var a: u32 = fib(n - 1);
+	var b: u32 = fib(n - 2);
+	return a + b;
+}
+
+// A variable whose address is taken stays in memory; the others still work around it.
+sub settle(var p: i32*) {
+	*p = *p + 1;
+}
+sub addressed() -> i32 {
+	var m: i32 = 41;
+	var k: i32 = 3;
+	settle(&m);
+	k += m;
+	return k;
+}
+
+sub floats(var n: i32) -> f32 {
+	var s: f32 = 0.0;
+	var step: f32 = 0.5;
+	for (var i: i32 = 0; i < n; i++)
+		s += step;
+	return s;
+}
+
+// Many live values: more variables than free registers.
+sub many(var a: i32, var b: i32, var c: i32, var d: i32) -> i32 {
+	var v1: i32 = a + 1; var v2: i32 = b + 2; var v3: i32 = c + 3; var v4: i32 = d + 4;
+	var v5: i32 = v1 * v2; var v6: i32 = v3 * v4; var v7: i32 = v5 - v6; var v8: i32 = v7 + a;
+	var v9: i32 = v8 ^ b; var v10: i32 = v9 | c; var v11: i32 = v10 & 0xFFFF; var v12: i32 = v11 + d;
+	var v13: i32 = v12 + v1; var v14: i32 = v13 + v2; var v15: i32 = v14 + v3; var v16: i32 = v15 + v4;
+	var v17: i32 = v16 + v5 + v6 + v7 + v8 + v9 + v10 + v11 + v12 + v13 + v14 + v15;
+	for (var i: i32 = 0; i < 3; i++) {
+		v1++; v2++; v3++; v4++; v5++; v6++; v7++; v8++; v9++; v10++; v11++; v12++; v13++; v14++; v15++; v16++;
+	}
+	return v17 + v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9 + v10 + v11 + v12 + v13 + v14 + v15 + v16;
+}
+// The same, every variable in memory (an address taken).
+sub many_ref(var a: i32, var b: i32, var c: i32, var d: i32) -> i32 {
+	var v1: i32 = a + 1; var v2: i32 = b + 2; var v3: i32 = c + 3; var v4: i32 = d + 4;
+	var v5: i32 = v1 * v2; var v6: i32 = v3 * v4; var v7: i32 = v5 - v6; var v8: i32 = v7 + a;
+	var v9: i32 = v8 ^ b; var v10: i32 = v9 | c; var v11: i32 = v10 & 0xFFFF; var v12: i32 = v11 + d;
+	var v13: i32 = v12 + v1; var v14: i32 = v13 + v2; var v15: i32 = v14 + v3; var v16: i32 = v15 + v4;
+	var v17: i32 = v16 + v5 + v6 + v7 + v8 + v9 + v10 + v11 + v12 + v13 + v14 + v15;
+	for (var i: i32 = 0; i < 3; i++) {
+		v1++; v2++; v3++; v4++; v5++; v6++; v7++; v8++; v9++; v10++; v11++; v12++; v13++; v14++; v15++; v16++;
+	}
+	var p: i32* = &v1; p = &v2; p = &v3; p = &v4; p = &v5; p = &v6; p = &v7; p = &v8;
+	p = &v9; p = &v10; p = &v11; p = &v12; p = &v13; p = &v14; p = &v15; p = &v16; p = &v17;
+	return v17 + v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9 + v10 + v11 + v12 + v13 + v14 + v15 + v16;
+}
+
+// Assignments as values, post-increments as values, ternaries.
+sub values(var n: i32) -> i32 {
+	var a: i32 = 0;
+	var b: i32 = 0;
+	var c: i32 = (a = n) + (b = 2);
+	var d: i32 = a++;
+	var e: i32 = ++b;
+	var f: i32 = (c > 5) ? d : e;
+	return a * 1000 + b * 100 + c * 10 + d + f;
+}
+
+// Pointers walked in registers.
+sub strlen2(var s: u8*) -> u32 {
+	var n: u32 = 0;
+	while (*s != 0) {
+		s++;
+		n++;
+	}
+	return n;
+}
+
+sub main() -> i32 {
+	narrow();
+	expect(12, lowvars() == 35);
+	expect(20, scopes(4) == (0 + 2 + 4 + 6) + (0 + 3 + 6 + 9) + 28 + 107);
+	expect(30, inlines(5) == 3 * (10 + 6 + 1));
+	expect(31, inlines(1) == 3 * (2 + 6 + 2));
+	expect(40, defers(3) == 8 and g_seen == 8);
+	expect(41, defers(10) == 128 and g_seen == 128);
+	expect(50, fib(15) == 610);
+	expect(60, addressed() == 45);
+	expect(70, floats(7) == 3.5);
+	expect(80, many(3, 5, 7, 11) == many_ref(3, 5, 7, 11));
+	expect(81, many(-9, 1000, 3, 0) == many_ref(-9, 1000, 3, 0));
+	expect(90, values(7) == 8 * 1000 + 3 * 100 + 9 * 10 + 7 + 7);
+	expect(91, values(1) == 2 * 1000 + 3 * 100 + 3 * 10 + 1 + 3);
+	expect(100, strlen2("dragon") == 6 and strlen2("") == 0);
+	return g_failures;
+}

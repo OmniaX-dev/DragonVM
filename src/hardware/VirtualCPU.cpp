@@ -990,6 +990,82 @@ namespace dragon
 						writeRegister32(data::Registers::IP, addr);
 				}
 				break;
+				case data::OpCodes::JmpGrUImm:
+				{
+					u32 addr = fetch32();
+					u32 value = fetch32();
+					u32 accValue = readRegister(data::Registers::ACC);
+					if (value > accValue)
+						writeRegister32(data::Registers::IP, addr);
+				}
+				break;
+				case data::OpCodes::JmpGrUReg:
+				{
+					u32 addr = fetch32();
+					u8 regAddr = fetch8();
+					u32 value = readRegister(regAddr);
+					u32 accValue = readRegister(data::Registers::ACC);
+					if (value > accValue)
+						writeRegister32(data::Registers::IP, addr);
+				}
+				break;
+				case data::OpCodes::JmpLessUImm:
+				{
+					u32 addr = fetch32();
+					u32 value = fetch32();
+					u32 accValue = readRegister(data::Registers::ACC);
+					if (value < accValue)
+						writeRegister32(data::Registers::IP, addr);
+				}
+				break;
+				case data::OpCodes::JmpLessUReg:
+				{
+					u32 addr = fetch32();
+					u8 regAddr = fetch8();
+					u32 value = readRegister(regAddr);
+					u32 accValue = readRegister(data::Registers::ACC);
+					if (value < accValue)
+						writeRegister32(data::Registers::IP, addr);
+				}
+				break;
+				case data::OpCodes::JmpGeUImm:
+				{
+					u32 addr = fetch32();
+					u32 value = fetch32();
+					u32 accValue = readRegister(data::Registers::ACC);
+					if (value >= accValue)
+						writeRegister32(data::Registers::IP, addr);
+				}
+				break;
+				case data::OpCodes::JmpGeUReg:
+				{
+					u32 addr = fetch32();
+					u8 regAddr = fetch8();
+					u32 value = readRegister(regAddr);
+					u32 accValue = readRegister(data::Registers::ACC);
+					if (value >= accValue)
+						writeRegister32(data::Registers::IP, addr);
+				}
+				break;
+				case data::OpCodes::JmpLeUImm:
+				{
+					u32 addr = fetch32();
+					u32 value = fetch32();
+					u32 accValue = readRegister(data::Registers::ACC);
+					if (value <= accValue)
+						writeRegister32(data::Registers::IP, addr);
+				}
+				break;
+				case data::OpCodes::JmpLeUReg:
+				{
+					u32 addr = fetch32();
+					u8 regAddr = fetch8();
+					u32 value = readRegister(regAddr);
+					u32 accValue = readRegister(data::Registers::ACC);
+					if (value <= accValue)
+						writeRegister32(data::Registers::IP, addr);
+				}
+				break;
 				case data::OpCodes::Jmp:
 				{
 					u32 addr = fetch32();

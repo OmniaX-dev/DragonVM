@@ -9,6 +9,11 @@
             movb / omovb / movbo   8 bits (byte)
         Moving 16 or 8 bits into a whole register zero-extends the value.
         omov* / mov*o offsets: <imm> (8-bit), dword <imm> (32-bit, "word <imm>" also accepted), <register>
+        omov* *dreg, <value>, <offset> stores at dreg + offset: value is an immediate, a register, or *reg
+            (the memory at reg); mov*o <reg>, *dreg, <offset> loads from dreg + offset.
+
+    Conditional jumps (ACC compared with the operand: an immediate or a register; "jgr L, x" jumps if x > ACC):
+        jeq jne, and jgr jls jge jle (signed), jgru jlsu jgeu jleu (unsigned, u32).
 
     Registers:
         System:  IP SP FP RV PP FL ACC

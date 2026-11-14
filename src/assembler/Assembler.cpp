@@ -2160,7 +2160,8 @@ namespace dragon
 				}
 				return;
 			}
-			else if (instEdit == "jne" || instEdit == "jeq" || instEdit == "jgr" || instEdit == "jls" || instEdit == "jge" || instEdit == "jle")
+			else if (instEdit == "jne" || instEdit == "jeq" || instEdit == "jgr" || instEdit == "jls" || instEdit == "jge" || instEdit == "jle"
+					|| instEdit == "jgru" || instEdit == "jlsu" || instEdit == "jgeu" || instEdit == "jleu")
 			{
 				m_code.push_back(0x00);
 				eOperandType opType = parseOperand(st.next(), word);
@@ -2182,6 +2183,10 @@ namespace dragon
 					else if (instEdit == "jls") m_code[m_code.size() - (1 + data::WordSize)] = data::OpCodes::JmpLessImm;
 					else if (instEdit == "jge") m_code[m_code.size() - (1 + data::WordSize)] = data::OpCodes::JmpGeImm;
 					else if (instEdit == "jle") m_code[m_code.size() - (1 + data::WordSize)] = data::OpCodes::JmpLeImm;
+					else if (instEdit == "jgru") m_code[m_code.size() - (1 + data::WordSize)] = data::OpCodes::JmpGrUImm;
+					else if (instEdit == "jlsu") m_code[m_code.size() - (1 + data::WordSize)] = data::OpCodes::JmpLessUImm;
+					else if (instEdit == "jgeu") m_code[m_code.size() - (1 + data::WordSize)] = data::OpCodes::JmpGeUImm;
+					else if (instEdit == "jleu") m_code[m_code.size() - (1 + data::WordSize)] = data::OpCodes::JmpLeUImm;
 					pushWord(word);
 				}
 				else if (opType == eOperandType::Register)
@@ -2192,6 +2197,10 @@ namespace dragon
 					else if (instEdit == "jls") m_code[m_code.size() - (1 + data::WordSize)] = data::OpCodes::JmpLessReg;
 					else if (instEdit == "jge") m_code[m_code.size() - (1 + data::WordSize)] = data::OpCodes::JmpGeReg;
 					else if (instEdit == "jle") m_code[m_code.size() - (1 + data::WordSize)] = data::OpCodes::JmpLeReg;
+					else if (instEdit == "jgru") m_code[m_code.size() - (1 + data::WordSize)] = data::OpCodes::JmpGrUReg;
+					else if (instEdit == "jlsu") m_code[m_code.size() - (1 + data::WordSize)] = data::OpCodes::JmpLessUReg;
+					else if (instEdit == "jgeu") m_code[m_code.size() - (1 + data::WordSize)] = data::OpCodes::JmpGeUReg;
+					else if (instEdit == "jleu") m_code[m_code.size() - (1 + data::WordSize)] = data::OpCodes::JmpLeUReg;
 					m_code.push_back((u8)word);
 				}
 				else
@@ -2216,6 +2225,53 @@ namespace dragon
 			instEdit.trim().toLower();
 			String opEdit(lineEdit.new_substr(lineEdit.indexOf(" ") + 1));
 			opEdit.trim();
+			if (STDVEC_CONTAINS(cpuExtensions, "extmov") && (instEdit == "omov" || instEdit == "omovw" || instEdit == "omovb"))
+			{
+				// omov* *dreg, reg, offset: a register's value at dreg + offset.
+				auto pt = opEdit.tokenize(",");
+				if (pt.count() == 3)
+				{
+					i32 w1 = 0, w2 = 0, w3 = 0;
+					String s1 = pt.next(), s2 = pt.next(), s3 = pt.next();
+					s1.trim(); s2.trim(); s3.trim();
+					if (parseOperand(s1, w1) == eOperandType::DerefRegister && parseOperand(s2, w2) == eOperandType::Register)
+					{
+						bool word_offset = false;
+						if (s3.startsWith("dword") || s3.startsWith("word"))
+						{
+							s3.substr(s3.startsWith("dword") ? 5 : 4).trim();
+							word_offset = true;
+						}
+						using Ops = hw::cpuext::ExtMov::OpCodes;
+						const u8 first = (instEdit == "omov") ? Ops::wreg_in_dreg_immoffw : (instEdit == "omovw" ? Ops::hreg_in_dreg_immoffw : Ops::breg_in_dreg_immoffw);
+						const eOperandType t3 = parseOperand(s3, w3);
+						m_code.push_back(data::OpCodes::Ext01);
+						if (t3 == eOperandType::Immediate)
+						{
+							m_code.push_back(word_offset ? first : cast<u8>(first + 2));
+							m_code.push_back((u8)w1);
+							m_code.push_back((u8)w2);
+							if (word_offset)
+								pushWord(w3);
+							else
+								m_code.push_back((u8)w3);
+						}
+						else if (t3 == eOperandType::Register)
+						{
+							m_code.push_back(cast<u8>(first + 1));
+							m_code.push_back((u8)w1);
+							m_code.push_back((u8)w2);
+							m_code.push_back((u8)w3);
+						}
+						else
+						{
+							std::cout << "Invalid operand type; " << line << " (" << opEdit << ")  ->  the offset must be an immediate or a register\n";
+							exit(1);
+						}
+						return;
+					}
+				}
+			}
 			if (STDVEC_CONTAINS(cpuExtensions, "extmov"))
 			{
 				u16 code_offset = 1;

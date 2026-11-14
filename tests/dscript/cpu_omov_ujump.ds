@@ -1,0 +1,132 @@
+// The extmov register stores (omov / omovw / omovb *dreg, reg, offset: 32-bit, 8-bit and register
+// offsets) and the unsigned conditional jumps (jgru / jlsu / jgeu / jleu, immediate and register
+// operands), in low blocks: the CPU and the assembler, not dsc.
+// expect-rv: 0
+#import(<dragon-sdk>)
+
+var g_failures: i32 = 0;
+
+sub expect(var id: i32, var ok: bool) {
+	if (ok)
+		return;
+	var buff: u8[12];
+	debug_print("cpu_omov_ujump: check ");
+	debug_print(dr::itoa(id, buff));
+	debug_print(" failed\n");
+	g_failures++;
+}
+
+// Bits: 1 jgru (b > a), 2 jlsu (b < a), 4 jgeu (b >= a), 8 jleu (b <= a); ACC = a, operand b.
+sub ujumps_reg(var a: u32, var b: u32) -> u32 {
+	var r: u32 = 0;
+	low {
+		mov R1, $b
+		mov R5, 0
+		mov ACC, $a
+		jgru $__t_r_gr, R1
+		jmp $__t_r_gr_done
+	__t_r_gr:
+		orip R5, 1
+	__t_r_gr_done:
+		jlsu $__t_r_ls, R1
+		jmp $__t_r_ls_done
+	__t_r_ls:
+		orip R5, 2
+	__t_r_ls_done:
+		jgeu $__t_r_ge, R1
+		jmp $__t_r_ge_done
+	__t_r_ge:
+		orip R5, 4
+	__t_r_ge_done:
+		jleu $__t_r_le, R1
+		jmp $__t_r_le_done
+	__t_r_le:
+		orip R5, 8
+	__t_r_le_done:
+		mov $r, R5
+	}
+	return r;
+}
+
+// The same with the operand as an immediate (b = 0x80000000).
+sub ujumps_imm(var a: u32) -> u32 {
+	var r: u32 = 0;
+	low {
+		mov R5, 0
+		mov ACC, $a
+		jgru $__t_i_gr, 0x80000000
+		jmp $__t_i_gr_done
+	__t_i_gr:
+		orip R5, 1
+	__t_i_gr_done:
+		jlsu $__t_i_ls, 0x80000000
+		jmp $__t_i_ls_done
+	__t_i_ls:
+		orip R5, 2
+	__t_i_ls_done:
+		jgeu $__t_i_ge, 0x80000000
+		jmp $__t_i_ge_done
+	__t_i_ge:
+		orip R5, 4
+	__t_i_ge_done:
+		jleu $__t_i_le, 0x80000000
+		jmp $__t_i_le_done
+	__t_i_le:
+		orip R5, 8
+	__t_i_le_done:
+		mov $r, R5
+	}
+	return r;
+}
+
+// Independent of the u jumps (dsc uses them for u32 comparisons): the sign bits flipped, compared
+// as i32s (the signed jumps).
+sub expected(var a: u32, var b: u32) -> u32 {
+	var sa: i32 = cast<i32>(a ^ 0x80000000);
+	var sb: i32 = cast<i32>(b ^ 0x80000000);
+	var r: u32 = 0;
+	if (sb > sa) r |= 1;
+	if (sb < sa) r |= 2;
+	if (sb >= sa) r |= 4;
+	if (sb <= sa) r |= 8;
+	return r;
+}
+
+sub main() -> i32 {
+	// Register stores.
+	var buf: u8[16];
+	dr::memset(buf, 0, 16);
+	var p: u8* = buf;
+	low {
+		mov R1, $p
+		mov R2, 0x11223344
+		omov *R1, R2, dword 0x00000004
+		omovw *R1, R2, 0x0A
+		mov R3, 0x0000000C
+		omovb *R1, R2, R3
+		mov R4, 0xAABBCCDD
+		omov *R1, R4, 0x00
+	}
+	var want: u8[16] = { 0xAA, 0xBB, 0xCC, 0xDD, 0x11, 0x22, 0x33, 0x44, 0, 0, 0x33, 0x44, 0x44, 0, 0, 0 };
+	for (var i: u32 = 0; i < 16; i++)
+		expect(cast<i32>(1 + i), buf[i] == want[i]);
+	low {
+		mov R1, $p
+		mov R2, 0x00000002
+		mov R6, 0x5A5A5A5A
+		omov *R1, R6, R2
+		omovw *R1, R6, dword 0x0000000E
+		omovb *R1, R6, dword 0x00000008
+	}
+	expect(20, buf[0] == 0xAA and buf[1] == 0xBB and buf[2] == 0x5A and buf[5] == 0x5A and buf[6] == 0x33);
+	expect(21, buf[8] == 0x5A and buf[9] == 0 and buf[14] == 0x5A and buf[15] == 0x5A and buf[13] == 0);
+
+	// Unsigned jumps, where signed and unsigned disagree.
+	var as: u32[8] = { 0, 0xFFFFFFFF, 0x80000000, 0x7FFFFFFF, 5, 1, 0xFFFFFFFE, 0x80000001 };
+	var bs: u32[8] = { 0xFFFFFFFF, 0, 0x7FFFFFFF, 0x80000000, 5, 2, 0xFFFFFFFF, 0x80000000 };
+	for (var i: u32 = 0; i < 8; i++) {
+		expect(cast<i32>(100 + i), ujumps_reg(as[i], bs[i]) == expected(as[i], bs[i]));
+		expect(cast<i32>(200 + i), ujumps_imm(as[i]) == expected(as[i], 0x80000000));
+	}
+	return g_failures;
+}
