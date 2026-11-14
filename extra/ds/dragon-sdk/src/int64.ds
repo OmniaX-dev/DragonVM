@@ -1,0 +1,543 @@
+// 64-bit integers as structs: dr::U64 (unsigned) and dr::I64 (signed, two's complement).
+//
+// The CPU is 32-bit, so every operation is a few (add, compare, bits) to hundreds (div / mod)
+// of instructions: use them where 32 bits aren't enough.
+//
+//   var a: dr::U64(5);                     // constructors: (), (u32), (i32), (hi, lo), (U64*), (I64*)
+//   var b: dr::U64(0x1, 0x00000000);       // hi, lo: 0x1_00000000
+//   a.mul(3)->add(&b)->shl(4);             // the operations change the struct and return it
+//   if (a.gt(1000)) ...                    // comparisons return bool (cmp: -1 / 0 / 1)
+//   var text: u8[24]; a.str(text);          // to text (str(buffer, base)), parse(text, base)
+//   console.print(&a);                     // the print classes take U64* / I64*
+//
+// Every operation takes a u32, an i32 or a U64* (I64* for I64): the smaller integer types use
+// the u32 / i32 one (a u8 / u16 is zero extended, an i8 / i16 / i32 sign extended), so does an
+// integer literal (i32). The words are fields, hi then lo: the same bytes as a big endian 64-bit
+// value in memory (a pointer to one, e.g. in a disk structure, can be cast to U64* / I64*).
+//
+// Names: subt (sub is a keyword), band / bor / bxor / bnot (and / or / not are keywords).
+// Division by zero is the CPU's (as for u32 / i32).
+
+namespace dr {
+	// The operations both types share, on the words (I64 casts itself to U64*).
+	namespace int64 {
+		sub add(var a: U64*, var h: u32, var l: u32) {
+			var r: u32 = a->lo + l;
+			a->hi = a->hi + h + (r < l ? 1 : 0);
+			a->lo = r;
+		}
+
+		sub subt(var a: U64*, var h: u32, var l: u32) {
+			var borrow: u32 = (a->lo < l ? 1 : 0);
+			a->lo = a->lo - l;
+			a->hi = a->hi - h - borrow;
+		}
+
+		// a * b, the full 64 bits (the CPU's multiply keeps 32): with 16-bit halves.
+		sub mul32(var a: u32, var b: u32, var out: U64*) {
+			var a0: u32 = a & 0xFFFF;
+			var a1: u32 = a >> 16;
+			var b0: u32 = b & 0xFFFF;
+			var b1: u32 = b >> 16;
+			var p00: u32 = a0 * b0;
+			var p01: u32 = a0 * b1;
+			var p10: u32 = a1 * b0;
+			var p11: u32 = a1 * b1;
+			var mid: u32 = p01 + p10;
+			var midCarry: u32 = (mid < p01 ? 0x10000 : 0);
+			var lo: u32 = p00 + (mid << 16);
+			var loCarry: u32 = (lo < p00 ? 1 : 0);
+			out->hi = p11 + (mid >> 16) + midCarry + loCarry;
+			out->lo = lo;
+		}
+
+		// The low 64 bits of the product (the same for signed and unsigned).
+		sub mul(var a: U64*, var h: u32, var l: u32) {
+			var r: U64;
+			mul32(a->lo, l, &r);
+			r.hi = r.hi + a->hi * l + a->lo * h;
+			a->hi = r.hi;
+			a->lo = r.lo;
+		}
+
+		sub shl(var a: U64*, var n: u32) {
+			n = n & 63;
+			if (n == 0)
+				return;
+			if (n >= 32) {
+				a->hi = a->lo << (n - 32);
+				a->lo = 0;
+				return;
+			}
+			a->hi = (a->hi << n) | (a->lo >> (32 - n));
+			a->lo = a->lo << n;
+		}
+
+		// fill: the bits that come in at the top (0, or 0xFFFFFFFF: arithmetic shift).
+		sub shr(var a: U64*, var n: u32, var fill: u32) {
+			n = n & 63;
+			if (n == 0)
+				return;
+			if (n >= 32) {
+				a->lo = (n == 32 ? a->hi : ((a->hi >> (n - 32)) | (fill << (64 - n))));
+				a->hi = fill;
+				return;
+			}
+			a->lo = (a->lo >> n) | (a->hi << (32 - n));
+			a->hi = (a->hi >> n) | (fill << (32 - n));
+		}
+
+		sub rol(var a: U64*, var n: u32) {
+			n = n & 63;
+			if (n == 0)
+				return;
+			var right: U64;
+			right.hi = a->hi;
+			right.lo = a->lo;
+			shr(&right, 64 - n, 0);
+			shl(a, n);
+			a->hi = a->hi | right.hi;
+			a->lo = a->lo | right.lo;
+		}
+
+		sub clz32(var x: u32) -> u32 {
+			if (x == 0)
+				return 32;
+			var n: u32 = 0;
+			if ((x & 0xFFFF0000) == 0) { n += 16; x = x << 16; }
+			if ((x & 0xFF000000) == 0) { n += 8; x = x << 8; }
+			if ((x & 0xF0000000) == 0) { n += 4; x = x << 4; }
+			if ((x & 0xC0000000) == 0) { n += 2; x = x << 2; }
+			if ((x & 0x80000000) == 0) { n += 1; }
+			return n;
+		}
+
+		sub ctz32(var x: u32) -> u32 {
+			if (x == 0)
+				return 32;
+			var n: u32 = 0;
+			if ((x & 0x0000FFFF) == 0) { n += 16; x = x >> 16; }
+			if ((x & 0x000000FF) == 0) { n += 8; x = x >> 8; }
+			if ((x & 0x0000000F) == 0) { n += 4; x = x >> 4; }
+			if ((x & 0x00000003) == 0) { n += 2; x = x >> 2; }
+			if ((x & 0x00000001) == 0) { n += 1; }
+			return n;
+		}
+
+		sub popc32(var x: u32) -> u32 {
+			x = x - ((x >> 1) & 0x55555555);
+			x = (x & 0x33333333) + ((x >> 2) & 0x33333333);
+			x = (x + (x >> 4)) & 0x0F0F0F0F;
+			return (x * 0x01010101) >> 24;
+		}
+
+		sub ucmp(var ah: u32, var al: u32, var bh: u32, var bl: u32) -> i32 {
+			if (ah != bh)
+				return (ah < bh ? -1 : 1);
+			if (al != bl)
+				return (al < bl ? -1 : 1);
+			return 0;
+		}
+
+		sub scmp(var ah: u32, var al: u32, var bh: u32, var bl: u32) -> i32 {
+			if (ah != bh)
+				return (cast<i32>(ah) < cast<i32>(bh) ? -1 : 1);
+			if (al != bl)
+				return (al < bl ? -1 : 1);
+			return 0;
+		}
+
+		// n / d and n % d, unsigned (q and r may be null; d == 0: the CPU's division by zero).
+		sub udivmod(var nh: u32, var nl: u32, var dh: u32, var dl: u32, var q: U64*, var r: U64*) {
+			var qh: u32 = 0;
+			var ql: u32 = 0;
+			var rh: u32 = 0;
+			var rl: u32 = 0;
+			if (dh == 0 and dl == 0) {
+				ql = nl / dl;		// the CPU's division by zero
+			}
+			else if (nh == 0 and dh == 0) {
+				ql = nl / dl;
+				rl = nl % dl;
+			}
+			else if (dh == 0 and dl <= 0xFFFF) {
+				// A small divisor: four 16-bit digits (the remainder stays < 2^16).
+				var cur: u32 = nh >> 16;
+				var qd: u32 = cur / dl;
+				cur = ((cur % dl) << 16) | (nh & 0xFFFF);
+				qh = (qd << 16) | (cur / dl);
+				cur = ((cur % dl) << 16) | (nl >> 16);
+				qd = cur / dl;
+				cur = ((cur % dl) << 16) | (nl & 0xFFFF);
+				ql = (qd << 16) | (cur / dl);
+				rl = cur % dl;
+			}
+			else if (ucmp(nh, nl, dh, dl) < 0) {
+				rh = nh;
+				rl = nl;
+			}
+			else {
+				// Shift and subtract, from the divisor's top bit aligned with the dividend's.
+				var nlz: u32 = (nh != 0 ? clz32(nh) : 32 + clz32(nl));
+				var dlz: u32 = (dh != 0 ? clz32(dh) : 32 + clz32(dl));
+				var shift: u32 = dlz - nlz;
+				var rem: U64;
+				rem.hi = nh;
+				rem.lo = nl;
+				var div: U64;
+				div.hi = dh;
+				div.lo = dl;
+				shl(&div, shift);
+				var quo: U64;
+				for (var i: u32 = 0; i <= shift; i++) {
+					shl(&quo, 1);
+					if (ucmp(rem.hi, rem.lo, div.hi, div.lo) >= 0) {
+						subt(&rem, div.hi, div.lo);
+						quo.lo = quo.lo | 1;
+					}
+					shr(&div, 1, 0);
+				}
+				qh = quo.hi;
+				ql = quo.lo;
+				rh = rem.hi;
+				rl = rem.lo;
+			}
+			if (q) { q->hi = qh; q->lo = ql; }
+			if (r) { r->hi = rh; r->lo = rl; }
+		}
+
+		// n / d and n % d, signed: the quotient truncated toward zero, the remainder with the
+		// dividend's sign (as for i32).
+		sub sdivmod(var nh: u32, var nl: u32, var dh: u32, var dl: u32, var q: U64*, var r: U64*) {
+			var nneg: bool = (nh & 0x80000000) != 0;
+			var dneg: bool = (dh & 0x80000000) != 0;
+			var n: U64;
+			n.hi = nh;
+			n.lo = nl;
+			if (nneg) { n.hi = ~n.hi; n.lo = ~n.lo; add(&n, 0, 1); }
+			var d: U64;
+			d.hi = dh;
+			d.lo = dl;
+			if (dneg) { d.hi = ~d.hi; d.lo = ~d.lo; add(&d, 0, 1); }
+			var qq: U64;
+			var rr: U64;
+			udivmod(n.hi, n.lo, d.hi, d.lo, &qq, &rr);
+			if (nneg != dneg) { qq.hi = ~qq.hi; qq.lo = ~qq.lo; add(&qq, 0, 1); }
+			if (nneg) { rr.hi = ~rr.hi; rr.lo = ~rr.lo; add(&rr, 0, 1); }
+			if (q) { q->hi = qq.hi; q->lo = qq.lo; }
+			if (r) { r->hi = rr.hi; r->lo = rr.lo; }
+		}
+
+		// The magnitude in text (base 2 - 36), after an optional '-': buffer gets at most 66 bytes.
+		sub to_text(var h: u32, var l: u32, var negative: bool, var buffer: u8*, var base: u32) -> string {
+			if (base < 2 or base > 36) {
+				*buffer = 0;
+				return buffer;
+			}
+			var digits: u8[65];
+			var count: u32 = 0;
+			var v: U64;
+			v.hi = h;
+			v.lo = l;
+			var rem: U64;
+			do {
+				udivmod(v.hi, v.lo, 0, base, &v, &rem);
+				digits[count++] = (rem.lo < 10 ? cast<u8>('0' + rem.lo) : cast<u8>('a' + rem.lo - 10));
+			} while (v.hi != 0 or v.lo != 0);
+			var p: u8* = buffer;
+			if (negative)
+				*p++ = '-';
+			while (count > 0)
+				*p++ = digits[--count];
+			*p = 0;
+			return buffer;
+		}
+
+		// Digits (base 2 - 36; base 16 also takes a 0x) into out, unsigned: false on an empty or
+		// invalid text, or a value over max (hi, lo).
+		sub from_text(var text: string, var base: u32, var maxh: u32, var maxl: u32, var out: U64*) -> bool {
+			if (not text or base < 2 or base > 36)
+				return false;
+			var p: u8* = text;
+			if (base == 16 and p[0] == '0' and (p[1] == 'x' or p[1] == 'X'))
+				p = p + 2;
+			if (*p == 0)
+				return false;
+			var v: U64;
+			var step: U64;
+			while (*p != 0) {
+				var c: u32 = *p;
+				var digit: u32 = 99;
+				if (c >= '0' and c <= '9') digit = c - '0';
+				else if (c >= 'a' and c <= 'z') digit = c - 'a' + 10;
+				else if (c >= 'A' and c <= 'Z') digit = c - 'A' + 10;
+				if (digit >= base)
+					return false;
+				// v * base + digit, without going over 64 bits.
+				mul32(v.lo, base, &step);
+				var top: U64;
+				mul32(v.hi, base, &top);
+				if (top.hi != 0)
+					return false;
+				step.hi = step.hi + top.lo;
+				if (step.hi < top.lo)
+					return false;
+				add(&step, 0, digit);
+				if (step.hi == 0 and step.lo < digit and (v.hi != 0 or v.lo != 0))
+					return false;
+				if (ucmp(step.hi, step.lo, maxh, maxl) > 0)
+					return false;
+				v.hi = step.hi;
+				v.lo = step.lo;
+				p++;
+			}
+			out->hi = v.hi;
+			out->lo = v.lo;
+			return true;
+		}
+	}
+
+	// ============================================================================
+	// U64: an unsigned 64-bit integer.
+	// ============================================================================
+	struct U64 {
+		var hi: u32 = 0;
+		var lo: u32 = 0;
+
+		sub new(var v: u32) { this->hi = 0; this->lo = v; }
+		sub new(var v: i32) { this->hi = (v < 0 ? 0xFFFFFFFF : 0); this->lo = cast<u32>(v); }
+		sub new(var hi: u32, var lo: u32) { this->hi = hi; this->lo = lo; }
+		sub new(var o: U64*) { this->hi = o->hi; this->lo = o->lo; }
+		sub new(var o: I64*) { this->hi = o->hi; this->lo = o->lo; }
+
+		// ---- Setting ----
+		inline sub set(var v: u32) -> U64* { this->hi = 0; this->lo = v; return this; }
+		inline sub set(var v: i32) -> U64* { this->hi = (v < 0 ? 0xFFFFFFFF : 0); this->lo = cast<u32>(v); return this; }
+		inline sub set(var hi: u32, var lo: u32) -> U64* { this->hi = hi; this->lo = lo; return this; }
+		inline sub set(var o: U64*) -> U64* { this->hi = o->hi; this->lo = o->lo; return this; }
+		inline sub set(var o: I64*) -> U64* { this->hi = o->hi; this->lo = o->lo; return this; }
+
+		// ---- Arithmetic ----
+		inline sub add(var v: u32) -> U64* { dr::int64::add(this, 0, v); return this; }
+		inline sub add(var v: i32) -> U64* { dr::int64::add(this, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v)); return this; }
+		inline sub add(var o: U64*) -> U64* { dr::int64::add(this, o->hi, o->lo); return this; }
+		inline sub subt(var v: u32) -> U64* { dr::int64::subt(this, 0, v); return this; }
+		inline sub subt(var v: i32) -> U64* { dr::int64::subt(this, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v)); return this; }
+		inline sub subt(var o: U64*) -> U64* { dr::int64::subt(this, o->hi, o->lo); return this; }
+		inline sub mul(var v: u32) -> U64* { dr::int64::mul(this, 0, v); return this; }
+		inline sub mul(var v: i32) -> U64* { dr::int64::mul(this, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v)); return this; }
+		inline sub mul(var o: U64*) -> U64* { dr::int64::mul(this, o->hi, o->lo); return this; }
+		inline sub div(var v: u32) -> U64* { dr::int64::udivmod(this->hi, this->lo, 0, v, this, null); return this; }
+		inline sub div(var v: i32) -> U64* { dr::int64::udivmod(this->hi, this->lo, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v), this, null); return this; }
+		inline sub div(var o: U64*) -> U64* { dr::int64::udivmod(this->hi, this->lo, o->hi, o->lo, this, null); return this; }
+		inline sub mod(var v: u32) -> U64* { dr::int64::udivmod(this->hi, this->lo, 0, v, null, this); return this; }
+		inline sub mod(var v: i32) -> U64* { dr::int64::udivmod(this->hi, this->lo, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v), null, this); return this; }
+		inline sub mod(var o: U64*) -> U64* { dr::int64::udivmod(this->hi, this->lo, o->hi, o->lo, null, this); return this; }
+		// this / d, and the remainder in rem (rem may be this' own: then it gets the remainder).
+		inline sub divmod(var d: u32, var rem: u32*) -> U64* { var r: U64; dr::int64::udivmod(this->hi, this->lo, 0, d, this, &r); if (rem) *rem = r.lo; return this; }
+		inline sub divmod(var d: U64*, var rem: U64*) -> U64* { var r: U64; dr::int64::udivmod(this->hi, this->lo, d->hi, d->lo, this, &r); if (rem) { rem->hi = r.hi; rem->lo = r.lo; } return this; }
+		inline sub neg() -> U64* { this->hi = ~this->hi; this->lo = ~this->lo; dr::int64::add(this, 0, 1); return this; }
+		inline sub inc() -> U64* { dr::int64::add(this, 0, 1); return this; }
+		inline sub dec() -> U64* { dr::int64::subt(this, 0, 1); return this; }
+		inline sub min(var v: u32) -> U64* { if (this->gt(v)) this->set(v); return this; }
+		inline sub min(var v: i32) -> U64* { if (this->gt(v)) this->set(v); return this; }
+		inline sub min(var o: U64*) -> U64* { if (this->gt(o)) this->set(o); return this; }
+		inline sub max(var v: u32) -> U64* { if (this->lt(v)) this->set(v); return this; }
+		inline sub max(var v: i32) -> U64* { if (this->lt(v)) this->set(v); return this; }
+		inline sub max(var o: U64*) -> U64* { if (this->lt(o)) this->set(o); return this; }
+
+		// ---- Bits ----
+		inline sub band(var v: u32) -> U64* { this->hi = 0; this->lo = this->lo & v; return this; }
+		inline sub band(var v: i32) -> U64* { this->hi = this->hi & (v < 0 ? 0xFFFFFFFF : 0); this->lo = this->lo & cast<u32>(v); return this; }
+		inline sub band(var o: U64*) -> U64* { this->hi = this->hi & o->hi; this->lo = this->lo & o->lo; return this; }
+		inline sub bor(var v: u32) -> U64* { this->lo = this->lo | v; return this; }
+		inline sub bor(var v: i32) -> U64* { this->hi = this->hi | (v < 0 ? 0xFFFFFFFF : 0); this->lo = this->lo | cast<u32>(v); return this; }
+		inline sub bor(var o: U64*) -> U64* { this->hi = this->hi | o->hi; this->lo = this->lo | o->lo; return this; }
+		inline sub bxor(var v: u32) -> U64* { this->lo = this->lo ^ v; return this; }
+		inline sub bxor(var v: i32) -> U64* { this->hi = this->hi ^ (v < 0 ? 0xFFFFFFFF : 0); this->lo = this->lo ^ cast<u32>(v); return this; }
+		inline sub bxor(var o: U64*) -> U64* { this->hi = this->hi ^ o->hi; this->lo = this->lo ^ o->lo; return this; }
+		inline sub bnot() -> U64* { this->hi = ~this->hi; this->lo = ~this->lo; return this; }
+		inline sub shl(var n: u32) -> U64* { dr::int64::shl(this, n); return this; }
+		inline sub shr(var n: u32) -> U64* { dr::int64::shr(this, n, 0); return this; }
+		inline sub rol(var n: u32) -> U64* { dr::int64::rol(this, n); return this; }
+		inline sub ror(var n: u32) -> U64* { dr::int64::rol(this, 64 - (n & 63)); return this; }
+		// Bit n (0 = the lowest).
+		inline sub bit(var n: u32) -> bool { n = n & 63; return ((n >= 32 ? this->hi >> (n - 32) : this->lo >> n) & 1) != 0; }
+		inline sub setb(var n: u32) -> U64* { n = n & 63; if (n >= 32) this->hi = this->hi | (1 << (n - 32)); else this->lo = this->lo | (1 << n); return this; }
+		inline sub clrb(var n: u32) -> U64* { n = n & 63; if (n >= 32) this->hi = this->hi & ~(1 << (n - 32)); else this->lo = this->lo & ~(1 << n); return this; }
+		// Leading / trailing zero bits (64 for 0), set bits.
+		inline sub clz() -> u32 { return (this->hi != 0 ? dr::int64::clz32(this->hi) : 32 + dr::int64::clz32(this->lo)); }
+		inline sub ctz() -> u32 { return (this->lo != 0 ? dr::int64::ctz32(this->lo) : 32 + dr::int64::ctz32(this->hi)); }
+		inline sub popc() -> u32 { return dr::int64::popc32(this->hi) + dr::int64::popc32(this->lo); }
+
+		// ---- Comparisons ----
+		inline sub cmp(var v: u32) -> i32 { return dr::int64::ucmp(this->hi, this->lo, 0, v); }
+		inline sub cmp(var v: i32) -> i32 { return dr::int64::ucmp(this->hi, this->lo, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v)); }
+		inline sub cmp(var o: U64*) -> i32 { return dr::int64::ucmp(this->hi, this->lo, o->hi, o->lo); }
+		inline sub eq(var v: u32) -> bool { return this->hi == 0 and this->lo == v; }
+		inline sub eq(var v: i32) -> bool { return this->hi == (v < 0 ? 0xFFFFFFFF : 0) and this->lo == cast<u32>(v); }
+		inline sub eq(var o: U64*) -> bool { return this->hi == o->hi and this->lo == o->lo; }
+		inline sub ne(var v: u32) -> bool { return not this->eq(v); }
+		inline sub ne(var v: i32) -> bool { return not this->eq(v); }
+		inline sub ne(var o: U64*) -> bool { return not this->eq(o); }
+		inline sub lt(var v: u32) -> bool { return this->cmp(v) < 0; }
+		inline sub lt(var v: i32) -> bool { return this->cmp(v) < 0; }
+		inline sub lt(var o: U64*) -> bool { return this->cmp(o) < 0; }
+		inline sub le(var v: u32) -> bool { return this->cmp(v) <= 0; }
+		inline sub le(var v: i32) -> bool { return this->cmp(v) <= 0; }
+		inline sub le(var o: U64*) -> bool { return this->cmp(o) <= 0; }
+		inline sub gt(var v: u32) -> bool { return this->cmp(v) > 0; }
+		inline sub gt(var v: i32) -> bool { return this->cmp(v) > 0; }
+		inline sub gt(var o: U64*) -> bool { return this->cmp(o) > 0; }
+		inline sub ge(var v: u32) -> bool { return this->cmp(v) >= 0; }
+		inline sub ge(var v: i32) -> bool { return this->cmp(v) >= 0; }
+		inline sub ge(var o: U64*) -> bool { return this->cmp(o) >= 0; }
+		inline sub is_zero() -> bool { return this->hi == 0 and this->lo == 0; }
+		// The value fits in a u32 (to_u32 returns the low word either way).
+		inline sub fits32() -> bool { return this->hi == 0; }
+		inline sub to_u32() -> u32 { return this->lo; }
+
+		// ---- Text ----
+		// The value in text (base 2 - 36, lowercase digits): buffer needs 21 bytes in base 10,
+		// 65 in base 2. Returns buffer.
+		inline sub str(var buffer: u8*, var base: u32 = 10) -> string { return dr::int64::to_text(this->hi, this->lo, false, buffer, base); }
+		// The value of a text of digits (base 16 also takes 0x): false (and no change) on an empty
+		// or invalid text, or over 2^64 - 1.
+		inline sub parse(var text: string, var base: u32 = 10) -> bool { return dr::int64::from_text(text, base, 0xFFFFFFFF, 0xFFFFFFFF, this); }
+	};
+
+	// ============================================================================
+	// I64: a signed 64-bit integer (two's complement).
+	// ============================================================================
+	struct I64 {
+		var hi: u32 = 0;
+		var lo: u32 = 0;
+
+		sub new(var v: u32) { this->hi = 0; this->lo = v; }
+		sub new(var v: i32) { this->hi = (v < 0 ? 0xFFFFFFFF : 0); this->lo = cast<u32>(v); }
+		sub new(var hi: u32, var lo: u32) { this->hi = hi; this->lo = lo; }
+		sub new(var o: I64*) { this->hi = o->hi; this->lo = o->lo; }
+		sub new(var o: U64*) { this->hi = o->hi; this->lo = o->lo; }
+
+		inline sub u() -> U64* { return cast<U64*>(this); }
+
+		// ---- Setting ----
+		inline sub set(var v: u32) -> I64* { this->hi = 0; this->lo = v; return this; }
+		inline sub set(var v: i32) -> I64* { this->hi = (v < 0 ? 0xFFFFFFFF : 0); this->lo = cast<u32>(v); return this; }
+		inline sub set(var hi: u32, var lo: u32) -> I64* { this->hi = hi; this->lo = lo; return this; }
+		inline sub set(var o: I64*) -> I64* { this->hi = o->hi; this->lo = o->lo; return this; }
+		inline sub set(var o: U64*) -> I64* { this->hi = o->hi; this->lo = o->lo; return this; }
+
+		// ---- Arithmetic ----
+		inline sub add(var v: u32) -> I64* { dr::int64::add(this->u(), 0, v); return this; }
+		inline sub add(var v: i32) -> I64* { dr::int64::add(this->u(), (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v)); return this; }
+		inline sub add(var o: I64*) -> I64* { dr::int64::add(this->u(), o->hi, o->lo); return this; }
+		inline sub subt(var v: u32) -> I64* { dr::int64::subt(this->u(), 0, v); return this; }
+		inline sub subt(var v: i32) -> I64* { dr::int64::subt(this->u(), (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v)); return this; }
+		inline sub subt(var o: I64*) -> I64* { dr::int64::subt(this->u(), o->hi, o->lo); return this; }
+		inline sub mul(var v: u32) -> I64* { dr::int64::mul(this->u(), 0, v); return this; }
+		inline sub mul(var v: i32) -> I64* { dr::int64::mul(this->u(), (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v)); return this; }
+		inline sub mul(var o: I64*) -> I64* { dr::int64::mul(this->u(), o->hi, o->lo); return this; }
+		inline sub div(var v: u32) -> I64* { dr::int64::sdivmod(this->hi, this->lo, 0, v, this->u(), null); return this; }
+		inline sub div(var v: i32) -> I64* { dr::int64::sdivmod(this->hi, this->lo, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v), this->u(), null); return this; }
+		inline sub div(var o: I64*) -> I64* { dr::int64::sdivmod(this->hi, this->lo, o->hi, o->lo, this->u(), null); return this; }
+		inline sub mod(var v: u32) -> I64* { dr::int64::sdivmod(this->hi, this->lo, 0, v, null, this->u()); return this; }
+		inline sub mod(var v: i32) -> I64* { dr::int64::sdivmod(this->hi, this->lo, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v), null, this->u()); return this; }
+		inline sub mod(var o: I64*) -> I64* { dr::int64::sdivmod(this->hi, this->lo, o->hi, o->lo, null, this->u()); return this; }
+		// this / d (toward zero), and the remainder (the dividend's sign) in rem.
+		inline sub divmod(var d: i32, var rem: i32*) -> I64* { var r: U64; dr::int64::sdivmod(this->hi, this->lo, (d < 0 ? 0xFFFFFFFF : 0), cast<u32>(d), this->u(), &r); if (rem) *rem = cast<i32>(r.lo); return this; }
+		inline sub divmod(var d: I64*, var rem: I64*) -> I64* { var r: U64; dr::int64::sdivmod(this->hi, this->lo, d->hi, d->lo, this->u(), &r); if (rem) { rem->hi = r.hi; rem->lo = r.lo; } return this; }
+		inline sub neg() -> I64* { this->hi = ~this->hi; this->lo = ~this->lo; dr::int64::add(this->u(), 0, 1); return this; }
+		inline sub abs() -> I64* { if (this->is_neg()) this->neg(); return this; }
+		inline sub inc() -> I64* { dr::int64::add(this->u(), 0, 1); return this; }
+		inline sub dec() -> I64* { dr::int64::subt(this->u(), 0, 1); return this; }
+		inline sub min(var v: u32) -> I64* { if (this->gt(v)) this->set(v); return this; }
+		inline sub min(var v: i32) -> I64* { if (this->gt(v)) this->set(v); return this; }
+		inline sub min(var o: I64*) -> I64* { if (this->gt(o)) this->set(o); return this; }
+		inline sub max(var v: u32) -> I64* { if (this->lt(v)) this->set(v); return this; }
+		inline sub max(var v: i32) -> I64* { if (this->lt(v)) this->set(v); return this; }
+		inline sub max(var o: I64*) -> I64* { if (this->lt(o)) this->set(o); return this; }
+
+		// ---- Bits ----
+		inline sub band(var v: u32) -> I64* { this->hi = 0; this->lo = this->lo & v; return this; }
+		inline sub band(var v: i32) -> I64* { this->hi = this->hi & (v < 0 ? 0xFFFFFFFF : 0); this->lo = this->lo & cast<u32>(v); return this; }
+		inline sub band(var o: I64*) -> I64* { this->hi = this->hi & o->hi; this->lo = this->lo & o->lo; return this; }
+		inline sub bor(var v: u32) -> I64* { this->lo = this->lo | v; return this; }
+		inline sub bor(var v: i32) -> I64* { this->hi = this->hi | (v < 0 ? 0xFFFFFFFF : 0); this->lo = this->lo | cast<u32>(v); return this; }
+		inline sub bor(var o: I64*) -> I64* { this->hi = this->hi | o->hi; this->lo = this->lo | o->lo; return this; }
+		inline sub bxor(var v: u32) -> I64* { this->lo = this->lo ^ v; return this; }
+		inline sub bxor(var v: i32) -> I64* { this->hi = this->hi ^ (v < 0 ? 0xFFFFFFFF : 0); this->lo = this->lo ^ cast<u32>(v); return this; }
+		inline sub bxor(var o: I64*) -> I64* { this->hi = this->hi ^ o->hi; this->lo = this->lo ^ o->lo; return this; }
+		inline sub bnot() -> I64* { this->hi = ~this->hi; this->lo = ~this->lo; return this; }
+		inline sub shl(var n: u32) -> I64* { dr::int64::shl(this->u(), n); return this; }
+		// Arithmetic: the sign bit comes in at the top.
+		inline sub shr(var n: u32) -> I64* { dr::int64::shr(this->u(), n, ((this->hi & 0x80000000) != 0 ? 0xFFFFFFFF : 0)); return this; }
+		inline sub rol(var n: u32) -> I64* { dr::int64::rol(this->u(), n); return this; }
+		inline sub ror(var n: u32) -> I64* { dr::int64::rol(this->u(), 64 - (n & 63)); return this; }
+		inline sub bit(var n: u32) -> bool { return this->u()->bit(n); }
+		inline sub setb(var n: u32) -> I64* { this->u()->setb(n); return this; }
+		inline sub clrb(var n: u32) -> I64* { this->u()->clrb(n); return this; }
+		inline sub clz() -> u32 { return this->u()->clz(); }
+		inline sub ctz() -> u32 { return this->u()->ctz(); }
+		inline sub popc() -> u32 { return this->u()->popc(); }
+
+		// ---- Comparisons ----
+		inline sub cmp(var v: u32) -> i32 { return dr::int64::scmp(this->hi, this->lo, 0, v); }
+		inline sub cmp(var v: i32) -> i32 { return dr::int64::scmp(this->hi, this->lo, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v)); }
+		inline sub cmp(var o: I64*) -> i32 { return dr::int64::scmp(this->hi, this->lo, o->hi, o->lo); }
+		inline sub eq(var v: u32) -> bool { return this->hi == 0 and this->lo == v; }
+		inline sub eq(var v: i32) -> bool { return this->hi == (v < 0 ? 0xFFFFFFFF : 0) and this->lo == cast<u32>(v); }
+		inline sub eq(var o: I64*) -> bool { return this->hi == o->hi and this->lo == o->lo; }
+		inline sub ne(var v: u32) -> bool { return not this->eq(v); }
+		inline sub ne(var v: i32) -> bool { return not this->eq(v); }
+		inline sub ne(var o: I64*) -> bool { return not this->eq(o); }
+		inline sub lt(var v: u32) -> bool { return this->cmp(v) < 0; }
+		inline sub lt(var v: i32) -> bool { return this->cmp(v) < 0; }
+		inline sub lt(var o: I64*) -> bool { return this->cmp(o) < 0; }
+		inline sub le(var v: u32) -> bool { return this->cmp(v) <= 0; }
+		inline sub le(var v: i32) -> bool { return this->cmp(v) <= 0; }
+		inline sub le(var o: I64*) -> bool { return this->cmp(o) <= 0; }
+		inline sub gt(var v: u32) -> bool { return this->cmp(v) > 0; }
+		inline sub gt(var v: i32) -> bool { return this->cmp(v) > 0; }
+		inline sub gt(var o: I64*) -> bool { return this->cmp(o) > 0; }
+		inline sub ge(var v: u32) -> bool { return this->cmp(v) >= 0; }
+		inline sub ge(var v: i32) -> bool { return this->cmp(v) >= 0; }
+		inline sub ge(var o: I64*) -> bool { return this->cmp(o) >= 0; }
+		inline sub is_zero() -> bool { return this->hi == 0 and this->lo == 0; }
+		inline sub is_neg() -> bool { return (this->hi & 0x80000000) != 0; }
+		// -1, 0 or 1.
+		inline sub sign() -> i32 { return (this->is_neg() ? -1 : (this->is_zero() ? 0 : 1)); }
+		// The value fits in an i32 (to_i32 returns the low word either way).
+		inline sub fits32() -> bool { return this->hi == ((this->lo & 0x80000000) != 0 ? 0xFFFFFFFF : 0); }
+		inline sub to_i32() -> i32 { return cast<i32>(this->lo); }
+
+		// ---- Text ----
+		// The value in text (base 2 - 36, with a '-'): buffer needs 21 bytes in base 10, 66 in base 2.
+		sub str(var buffer: u8*, var base: u32 = 10) -> string {
+			var m: U64(this);
+			if (this->is_neg())
+				m.neg();
+			return dr::int64::to_text(m.hi, m.lo, this->is_neg(), buffer, base);
+		}
+		// The value of a text of digits, with an optional '-' / '+' (base 16 also takes 0x): false
+		// (and no change) on an empty or invalid text, or outside -2^63 .. 2^63 - 1.
+		sub parse(var text: string, var base: u32 = 10) -> bool {
+			if (not text)
+				return false;
+			var negative: bool = (text[0] == '-');
+			var p: u8* = text;
+			if (text[0] == '-' or text[0] == '+')
+				p = p + 1;
+			var m: U64;
+			if (not dr::int64::from_text(p, base, 0x80000000, (negative ? 0 : 0xFFFFFFFF), &m))
+				return false;
+			if (not negative and m.hi == 0x80000000)
+				return false;
+			if (negative)
+				m.neg();
+			this->hi = m.hi;
+			this->lo = m.lo;
+			return true;
+		}
+	};
+}

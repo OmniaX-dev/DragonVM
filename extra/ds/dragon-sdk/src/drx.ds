@@ -69,15 +69,15 @@ namespace dr::drx {
 		var h: Header;
 		var r: i32 = read_header(file_bytes, file_size, &h);
 		if (r != Errors.NoError) return r;
-		outProgram->image = dr::malloc(h.image_size == 0 ? 1 : h.image_size);
+		outProgram->image = malloc(h.image_size == 0 ? 1 : h.image_size);
 		if (not outProgram->image)
 			return Errors.InvalidAllocation;
-		dr::memcpy(outProgram->image, &file_bytes[h.header_size], h.image_size);
+		memcpy(outProgram->image, &file_bytes[h.header_size], h.image_size);
 		outProgram->image_size = h.image_size;
 		outProgram->entry = h.entry;
 		if (h.reloc_count == 0)
 			return Errors.NoError;
-		outProgram->relocations = dr::malloc(h.reloc_count * 4);
+		outProgram->relocations = malloc(h.reloc_count * 4);
 		if (not outProgram->relocations)
 			return Errors.InvalidAllocation;
 		for (var i: u32 = 0; i < h.reloc_count; i++)
@@ -94,8 +94,8 @@ namespace dr::drx {
 	// Releases what read() allocated (the Program is empty afterwards).
 	sub free_program(var prog: Program*) {
 		if (not prog) return;
-		if (prog->image) dr::free(prog->image);
-		if (prog->relocations) dr::free(prog->relocations);
+		if (prog->image) free(prog->image);
+		if (prog->relocations) free(prog->relocations);
 		var empty: Program;
 		*prog = empty;
 	}
@@ -129,7 +129,7 @@ namespace dr::drx {
 			if (__readU32(&table[i * 4]) > h.image_size - 4)
 				return Errors.RelocationOutOfRange;
 		}
-		dr::memcpy(base, &file_bytes[h.header_size], h.image_size);
+		memcpy(base, &file_bytes[h.header_size], h.image_size);
 		for (var i: u32 = 0; i < h.reloc_count; i++)
 		{
 			var at: u8* = &base[__readU32(&table[i * 4])];

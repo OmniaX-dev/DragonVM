@@ -2,6 +2,7 @@
 #include(int.ds)
 #include(mem.ds)
 #include(assert.ds)
+#include(int64.ds)
 
 namespace dr {
 	struct TextSingle {
@@ -29,6 +30,14 @@ namespace dr {
 				return;
 			}
 			TextSingle::print(cast<u32>(n));
+		}
+		inline static sub print(var n: U64*) {
+			var buff: u8[24];
+			TextSingle::print(n->str(buff));
+		}
+		inline static sub print(var n: I64*) {
+			var buff: u8[24];
+			TextSingle::print(n->str(buff));
 		}
 		static sub print(var f: f32, var decimals: u32 = 6) {
 			if (!vga_is_textSingle())
@@ -110,6 +119,14 @@ namespace dr {
 			var buff: u8[12];
 			itoa(n, buff);
 			Text16::print(buff, x, y, fg, bg);
+		}
+		inline static sub print(var n: U64*, var x: u8, var y: u8, var fg: u8, var bg: u8) {
+			var buff: u8[24];
+			Text16::print(n->str(buff), x, y, fg, bg);
+		}
+		inline static sub print(var n: I64*, var x: u8, var y: u8, var fg: u8, var bg: u8) {
+			var buff: u8[24];
+			Text16::print(n->str(buff), x, y, fg, bg);
 		}
 		static sub print(var f: f32, var x: u8, var y: u8, var fg: u8, var bg: u8, var decimals: u32 = 6) {
 			if (!vga_is_text16())
@@ -245,6 +262,14 @@ namespace dr {
 			var buff: u8[12];
 			itoa(n, buff);
 			return this->print(buff);
+		}
+		inline sub print(var n: U64*) -> Text16Console* {
+			var buff: u8[24];
+			return this->print(n->str(buff));
+		}
+		inline sub print(var n: I64*) -> Text16Console* {
+			var buff: u8[24];
+			return this->print(n->str(buff));
 		}
 		sub print(var f: f32, var decimals: u32 = 6) -> Text16Console* {
 			if (not this->is_valid() or this->has_error())

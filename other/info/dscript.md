@@ -91,6 +91,31 @@ a `u32` (its 32 bits), so it is passed, returned, stored and copied like one.
   `NAN`, ... `dr::ftoa(f, buffer, decimals)` writes one as text; `print(f32)` prints one
   (`TextSingle`, `Text16`, `Text16Console`; 6 decimals by default).
 
+### 64-bit integers (SDK)
+
+There is no 64-bit type in the language: the SDK's `int64.ds` has two structs, `dr::U64` and
+`dr::I64` (two's complement), with the words as fields (`hi`, then `lo`: the bytes of a big endian
+64-bit value, so a pointer to one in memory can be cast to `U64*` / `I64*`). The operations
+change the struct and return it, so they chain:
+```
+var a: dr::U64(5);                      // constructors: (), (u32), (i32), (hi, lo), (U64*), (I64*)
+a.mul(3)->add(&b)->shl(4);              // a = ((a * 3) + b) << 4
+if (a.gt(1000)) ...                     // eq ne lt le gt ge (bool), cmp (-1 / 0 / 1)
+var text: u8[24]; a.str(text);           // str(buffer, base = 10), parse(text, base = 10) -> bool
+console.print(&a);                      // TextSingle / Text16 / Text16Console print them
+```
+- Every operation takes a `u32`, an `i32` or a `U64*` (`I64*` for `I64`); the smaller types use
+  the `u32` / `i32` one (zero / sign extended), and so does an integer literal (`i32`).
+- Arithmetic: `add`, `subt` (`sub` is a keyword), `mul`, `div`, `mod`, `divmod(d, &rem)`, `neg`,
+  `inc`, `dec`, `min`, `max`; `I64` also `abs`. Signed division truncates toward zero, the
+  remainder has the dividend's sign (as for `i32`); division by zero is the CPU's.
+- Bits: `band`, `bor`, `bxor`, `bnot` (`and` / `or` / `not` are keywords), `shl`, `shr` (`I64`:
+  arithmetic), `rol`, `ror`, `bit(n)`, `setb(n)`, `clrb(n)`, `clz`, `ctz`, `popc`.
+- Other: `set(...)` (the constructors' forms), `is_zero`, `fits32`, `to_u32` / `to_i32` (the low
+  word), `I64`: `is_neg`, `sign`, `u()` (itself as `U64*`).
+- The cost: add / sub / compare / bits are a few instructions on each word, `mul` about 20,
+  `div` / `mod` up to several hundred (a divisor under 65536 takes a faster path).
+
 ### Declarations (top level)
 ```
 var name: type = value;                 // global variable (the type can be inferred: var n = 5;)
