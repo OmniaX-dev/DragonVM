@@ -5,6 +5,7 @@
 #include(data.ds)
 
 const BOOTLOADER_PATH: string = "/init/boot.img";
+const MAX_BOOTLOADER_SIZE: u32 = 1024*1024*10; // 10 MiB
 
 sub main() {
 	*cast<u8*>(dr::VGARegisters.VideoMode) = dr::VGAVideoModes.TextSingleColor;
@@ -27,10 +28,16 @@ sub main() {
 
 	__print_machine_info(stack_size + heap_size);
 
-	dr::time::sleep(2000); //This is just for show
+	// dr::time::sleep(2000); //This is just for show
 
-	if (__boot_init_part(init_part) != 0)
-	{ debug_print("Failed to boot init partition"); low { hlt } } //TODO: Error
+	var r: i32 = __boot_init_part(init_part);
+	if (r != 0)
+	{
+		debug_print("Failed to boot init partition: ");
+		var buff: u8[10];
+		debug_print(dr::itoa(r, buff));
+		low { hlt }
+	} //TODO: Error
 }
 
 sub __get_init_part(var dpt_block: dr::DPTBlock*, var outPart: dr::DPTPartitionBlock**) -> bool {
@@ -57,16 +64,27 @@ sub __get_init_part(var dpt_block: dr::DPTBlock*, var outPart: dr::DPTPartitionB
 
 sub __boot_init_part(var init_part: dr::DPTPartitionBlock*) -> i32 {
 	var fs: dr::fs::FileSystem;
-	var vol = fs.volume();
-	assert(false, "Bootloader size constraint missing in __boot_init_part");
-	// if (node.size > 0x01410000 - dr::MemoryLayout.RAM or dr::MemoryLayout.RAM + node.size > heap_addr) return -1;
-	var r: i32 = fs.read_all(BOOTLOADER_PATH, cast<u8*>(dr::MemoryLayout.RAM), 0);
+	var disk: dr::dfs::DiskPartition;
+	dr::dfs::dpt_partition(&disk, init_part);
+	if (not fs.mount_partition(&disk, true))
+		return -1;
+	defer fs.unmount();
+	var info: dr::fs::Info;
+	if (not fs.info(BOOTLOADER_PATH, &info))
+		return -2;
+	if (info.size > MAX_BOOTLOADER_SIZE)
+		return -3;
+	var load_addr: u8* = cast<u8*>(dr::MemoryLayout.RAM);
+	var r: i32 = fs.read_all(BOOTLOADER_PATH, load_addr, info.size);
 	if (r < 0) return r - 1000;
-	low {
-		%low $INST_BIOS_NODE_TOGGLE 0x00
-		jmp $dr::MemoryLayout.RAM
-		hlt
-	}
+	var entry_addr: u32 = 0;
+	r = dr::drx::load(load_addr, info.size, load_addr, MAX_BOOTLOADER_SIZE, &entry_addr);
+	if (r != dr::drx::Errors.NoError)
+		return r - 2000;
+	fs.unmount();
+	low { %low $INST_BIOS_NODE_TOGGLE 0x00 }
+	dr::drx::run(entry_addr); // Bootloader should never return from main
+	low { hlt };
 	return 0; // Unreacheable
 }
 

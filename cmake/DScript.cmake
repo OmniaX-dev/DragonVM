@@ -72,8 +72,8 @@ function(ds_add_env TARGET MODE ASM_FLAGS)
 
 	add_custom_command(
 		OUTPUT ${OUT}/drake.bin ${OUT}/disassembly/${DS_DRAKE_DDS}.dds
-		COMMAND ${DSC} ${DS_SOURCE_DIR}/drake/entry.ds -L ${OUT}/lib -o ${OUT}/drake.bin --verbose --raw --load 0x01010000
-				--save-disassembly ${OUT}/disassembly/${DS_DRAKE_DDS}.dds ${WA}
+		COMMAND ${DSC} ${DS_SOURCE_DIR}/drake/entry.ds -L ${OUT}/lib -o ${OUT}/drake.bin --verbose ${WA}
+		# COMMAND ${DSC} ${DS_SOURCE_DIR}/drake/entry.ds -L ${OUT}/lib -o ${OUT}/drake.bin --verbose --save-disassembly ${OUT}/disassembly/${DS_DRAKE_DDS}.dds ${WA}
 		DEPENDS ${DS_DRAKE_SOURCES} ${SDK} ${COMPILER_TARGET}
 		WORKING_DIRECTORY ${DS_RUN_DIR}
 		COMMENT "DScript (${MODE}): Drake"

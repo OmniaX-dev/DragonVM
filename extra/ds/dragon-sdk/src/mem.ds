@@ -2,26 +2,70 @@
 #include(int.ds)
 
 namespace dr {
+	// Copies size bytes from src to dst, forward (as a byte loop would: dst may overlap src at or
+	// below it, and dst 1 - 3 bytes above src repeats the first bytes, as before). A word at a time
+	// (a dasm loop, ~7 instructions per 4 bytes; the machine takes unaligned words), the last 0 - 3
+	// bytes one by one.
 	sub memcpy(var dst: void*, var src: void*, var size: u32) -> void* {
-	    var d: u8* = cast<u8*>(dst);
-	    var s: u8* = cast<u8*>(src);
-	    while (size > 0) {
-	        *d = *s;
-	        d++;
-	        s++;
-	        size--;
-	    }
-	    return dst;
+		var d: u8* = cast<u8*>(dst);
+		var s: u8* = cast<u8*>(src);
+		var gap: u32 = cast<u32>(d) - cast<u32>(s);
+		var words: u32 = size / 4;
+		if (gap >= 1 and gap <= 3)
+			words = 0;		// a word would read bytes this copy has to write first
+		if (words > 0) {
+			low {
+				mov R1, $s
+				mov R2, $d
+				mov R3, $words
+			__mem_memcpy_loop:
+				mov R4, *R1
+				mov *R2, R4
+				addip R1, 0x00000004
+				addip R2, 0x00000004
+				dec R3
+				mov ACC, R3
+				jne $__mem_memcpy_loop, 0x00000000
+			}
+			d = d + words * 4;
+			s = s + words * 4;
+			size = size - words * 4;
+		}
+		while (size > 0) {
+			*d = *s;
+			d++;
+			s++;
+			size--;
+		}
+		return dst;
 	}
 
+	// Sets size bytes at dst to value: a word at a time (a dasm loop), the last 0 - 3 bytes one by one.
 	sub memset(var dst: void*, var value: u8, var size: u32) -> void* {
-	    var d: u8* = cast<u8*>(dst);
-	    while (size > 0) {
-	        *d = value;
-	        d++;
-	        size--;
-	    }
-	    return dst;
+		var d: u8* = cast<u8*>(dst);
+		var words: u32 = size / 4;
+		if (words > 0) {
+			var fill: u32 = cast<u32>(value) * 0x01010101;
+			low {
+				mov R1, $d
+				mov R2, $fill
+				mov R3, $words
+			__mem_memset_loop:
+				mov *R1, R2
+				addip R1, 0x00000004
+				dec R3
+				mov ACC, R3
+				jne $__mem_memset_loop, 0x00000000
+			}
+			d = d + words * 4;
+			size = size - words * 4;
+		}
+		while (size > 0) {
+			*d = value;
+			d++;
+			size--;
+		}
+		return dst;
 	}
 
 	sub memcmp(var a: void*, var b: void*, var size: u32) -> i32 {

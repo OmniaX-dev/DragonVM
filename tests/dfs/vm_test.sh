@@ -17,7 +17,9 @@ pattern() { python3 -c "import sys; n, s = int(sys.argv[1]), int(sys.argv[2]); s
 DISK="$OUT/disk.drd"
 DT="$BIN/dtools"
 "$DT" new-vdisk "$DISK" 8388608 > /dev/null || fail "new-vdisk"
-"$DT" new-dpt "$DISK" -p 1048576 -l one -p 1048576 -l two > /dev/null || fail "new-dpt"
+# Partition 3: the init partition the BIOS boots from (any DRX as /init/boot.img: drun takes over
+# when the BIOS jumps to it).
+"$DT" new-dpt "$DISK" -p 1048576 -l one -p 1048576 -l two -p 524288 -l init -f boot -f init > /dev/null || fail "new-dpt"
 "$DT" dfs "$DISK" 1 mkfs --block-size 1024 > /dev/null || fail "mkfs"
 printf 'Hello, DFS!\n\n' > "$OUT/hello.txt"
 pattern 20000 5 > "$OUT/big.bin"
@@ -28,6 +30,9 @@ pattern 20000 5 > "$OUT/big.bin"
 mkdir -p "$OUT/sdk"
 "$BIN/dsc" --lib "$ROOT"/extra/ds/dragon-sdk/src/*.ds -o "$OUT/sdk/dragon-sdk.dlib" || fail "the SDK doesn't build"
 "$BIN/dsc" vm_test.ds -L "$OUT/sdk" -o "$OUT/vm_test.drx" || fail "vm_test.ds doesn't build"
+"$DT" dfs "$DISK" 3 mkfs > /dev/null || fail "mkfs (init)"
+"$DT" dfs "$DISK" 3 mkdir -p /init > /dev/null || fail "mkdir /init"
+"$DT" dfs "$DISK" 3 put "$OUT/vm_test.drx" /init/boot.img > /dev/null || fail "put /init/boot.img"
 sed -e "s|^Disks = .*|Disks = $DISK|" "$BIN/config/testMachine.dvm" > "$OUT/machine.dvm"
 (cd "$BIN" && ./drun "$OUT/machine.dvm" "$OUT/vm_test.drx" --boot --max-cycles 400000000 > "$OUT/run.out" 2> "$OUT/run.err")
 rv="$(grep -o 'RV = 0x[0-9A-F]* (-\?[0-9]*)' "$OUT/run.err" | sed 's/.*(\(.*\))/\1/')"

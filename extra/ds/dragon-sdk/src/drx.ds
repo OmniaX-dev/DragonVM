@@ -110,10 +110,83 @@ namespace dr::drx {
 		}
 	}
 
+	// Copies words (4 bytes each) from src to dst, forward (dst may overlap src if it is at or
+	// below it). A dasm loop: about 7 instructions a word, against ~30 for the DScript loop.
+	sub __copy_words(var dst: u8*, var src: u8*, var words: u32) {
+		if (words == 0)
+			return;
+		low {
+			mov R1, $src
+			mov R2, $dst
+			mov R3, $words
+		__drx_copy_words_loop:
+			mov R4, *R1
+			mov *R2, R4
+			addip R1, 0x00000004
+			addip R2, 0x00000004
+			dec R3
+			mov ACC, R3
+			jne $__drx_copy_words_loop, 0x00000000
+		}
+	}
+
+	// Every offset in the table is at most last (unsigned: both biased by 0x80000000). The CPU's
+	// conditional jumps compare the operand with ACC: jls jumps if last < the offset.
+	sub __check_relocations(var table: u32*, var count: u32, var last: u32) -> bool {
+		if (count == 0)
+			return true;
+		var bad: u32 = 0;
+		low {
+			mov R1, $table
+			mov R3, $count
+			mov R5, $last
+			xorip R5, 0x80000000
+		__drx_check_loop:
+			mov R4, *R1
+			xorip R4, 0x80000000
+			mov ACC, R4
+			jls $__drx_check_bad, R5
+			addip R1, 0x00000004
+			dec R3
+			mov ACC, R3
+			jne $__drx_check_loop, 0x00000000
+			jmp $__drx_check_done
+		__drx_check_bad:
+			mov $bad, 0x00000001
+		__drx_check_done:
+		}
+		return bad == 0;
+	}
+
+	// Adds base to the word at base + offset, for every offset in the table.
+	sub __relocate(var base: u8*, var table: u32*, var count: u32) {
+		if (count == 0)
+			return;
+		low {
+			mov R1, $table
+			mov R2, $base
+			mov R3, $count
+		__drx_relocate_loop:
+			mov R4, *R1
+			addip R4, R2
+			mov R5, *R4
+			addip R5, R2
+			mov *R4, R5
+			addip R1, 0x00000004
+			dec R3
+			mov ACC, R3
+			jne $__drx_relocate_loop, 0x00000000
+		}
+	}
+
 	// Loads the DRX in file_bytes to base (at most capacity bytes): copies the image there and adds
 	// base to every address in it. Nothing is allocated, and base is untouched on errors (the
-	// header and the relocations are checked first). The file and base must not overlap.
-	// out_entry gets the address to start the program at (base + entry: see run()).
+	// header and the relocations are checked first). out_entry gets the address to start the
+	// program at (base + entry: see run()).
+	// In place: base can overlap the file if it is at or below the image in the file (e.g. base ==
+	// file_bytes: the file read where the program goes) and the image doesn't reach the
+	// relocation table (it is after the image in dsc's files): the image is copied forward, so
+	// every byte is read before it is overwritten. Other overlaps: Errors.Overlap.
 	sub load(var file_bytes: u8*, var file_size: u32, var base: u8*, var capacity: u32, var out_entry: u32* = null) -> i32 {
 		var h: Header;
 		var r: i32 = read_header(file_bytes, file_size, &h);
@@ -122,19 +195,23 @@ namespace dr::drx {
 		if (h.image_size > capacity) return Errors.ImageTooBig;
 		var b: u32 = cast<u32>(base);
 		var f: u32 = cast<u32>(file_bytes);
-		if (b < f + file_size and f < b + h.image_size) return Errors.Overlap;
-		var table: u8* = &file_bytes[h.reloc_offset];
-		for (var i: u32 = 0; i < h.reloc_count; i++)
-		{
-			if (__readU32(&table[i * 4]) > h.image_size - 4)
-				return Errors.RelocationOutOfRange;
+		if (b < f + file_size and f < b + h.image_size) {
+			var t: u32 = f + h.reloc_offset;
+			if (b > f + h.header_size or (b < t + h.reloc_count * 4 and t < b + h.image_size))
+				return Errors.Overlap;
 		}
-		memcpy(base, &file_bytes[h.header_size], h.image_size);
-		for (var i: u32 = 0; i < h.reloc_count; i++)
-		{
-			var at: u8* = &base[__readU32(&table[i * 4])];
-			__writeU32(at, __readU32(at) + b);
-		}
+		// The machine is big endian like the file, and takes unaligned words: the offsets and the
+		// addresses are read and written as u32s.
+		var table: u32* = cast<u32*>(&file_bytes[h.reloc_offset]);
+		if (not __check_relocations(table, h.reloc_count, h.image_size - 4))
+			return Errors.RelocationOutOfRange;
+		// Forward (in place: the destination is never ahead of the source), a word at a time.
+		var src: u8* = &file_bytes[h.header_size];
+		var words: u32 = h.image_size / 4;
+		__copy_words(base, src, words);
+		for (var i: u32 = words * 4; i < h.image_size; i++)
+			base[i] = src[i];
+		__relocate(base, table, h.reloc_count);
 		if (out_entry) *out_entry = b + h.entry;
 		return Errors.NoError;
 	}
