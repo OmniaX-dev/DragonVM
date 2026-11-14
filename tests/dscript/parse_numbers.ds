@@ -1,0 +1,119 @@
+// dr::atou, dr::atoi and dr::atof (the opposites of utoa, itoa and ftoa).
+// expect-rv: 0
+#import(<dragon-sdk>)
+
+var g_failures: i32 = 0;
+
+sub expect(var id: i32, var ok: bool) {
+	if (ok)
+		return;
+	var buff: u8[12];
+	debug_print("parse_numbers: check ");
+	debug_print(dr::itoa(id, buff));
+	debug_print(" failed\n");
+	g_failures++;
+}
+
+sub u(var text: string, var expected: u32, var base: i32 = 10) -> bool {
+	var v: u32 = 12345;
+	return dr::atou(text, &v, base) and v == expected;
+}
+sub ubad(var text: string, var base: i32 = 10) -> bool {
+	var v: u32 = 12345;
+	return not dr::atou(text, &v, base) and v == 12345;
+}
+sub i(var text: string, var expected: i32, var base: i32 = 10) -> bool {
+	var v: i32 = 12345;
+	return dr::atoi(text, &v, base) and v == expected;
+}
+sub ibad(var text: string, var base: i32 = 10) -> bool {
+	var v: i32 = 12345;
+	return not dr::atoi(text, &v, base) and v == 12345;
+}
+// Within a relative error (f32: about 7 digits).
+sub f(var text: string, var expected: f32) -> bool {
+	var v: f32 = 0.0;
+	if (not dr::atof(text, &v))
+		return false;
+	var diff: f32 = v - expected;
+	if (diff < 0.0) diff = -diff;
+	var mag: f32 = expected < 0.0 ? -expected : expected;
+	return diff <= mag * 0.000001;
+}
+sub fbad(var text: string) -> bool {
+	var v: f32 = 7.0;
+	return not dr::atof(text, &v) and v == 7.0;
+}
+
+sub main() -> i32 {
+	expect(1, u("0", 0));
+	expect(2, u("4096", 4096));
+	expect(3, u("4294967295", 0xFFFFFFFF));
+	expect(4, ubad("4294967296"));
+	expect(5, ubad("99999999999"));
+	expect(6, u("  42 ", 42));
+	expect(7, u("ff", 255, 16));
+	expect(8, u("0xFF", 255, 16));
+	expect(9, u("0x1000", 0x1000, 0));
+	expect(10, u("0b101", 5, 0));
+	expect(11, u("0o17", 15, 0));
+	expect(12, u("017", 17, 0));
+	expect(13, u("zz", 35 * 36 + 35, 36));
+	expect(14, ubad(""));
+	expect(15, ubad("   "));
+	expect(16, ubad("12a"));
+	expect(17, ubad("1 2"));
+	expect(18, ubad("-1"));
+	expect(19, ubad("0x", 0));
+	expect(20, ubad("12", 1));
+	expect(21, ubad("12", 37));
+	expect(22, ubad("2", 2));
+
+	expect(30, i("-12", -12));
+	expect(31, i("+7", 7));
+	expect(32, i("2147483647", 2147483647));
+	expect(33, ibad("2147483648"));
+	expect(34, i("-2147483648", -2147483647 - 1));
+	expect(35, ibad("-2147483649"));
+	expect(36, i("-0x10", -16, 0));
+	expect(37, ibad("-"));
+	expect(38, ibad("--1"));
+	expect(39, i(" -0 ", 0));
+
+	var buff: u8[33];
+	var v: i32 = 0;
+	expect(40, dr::atoi(dr::itoa(-123456, buff), &v) and v == -123456);
+	var w: u32 = 0;
+	expect(41, dr::atou(dr::utoa(0xCAFEBABE, buff, 16), &w, 16) and w == 0xCAFEBABE);
+	expect(42, dr::atou(dr::utoa(0x80000001, buff, 2), &w, 2) and w == 0x80000001);
+
+	expect(50, f("0", 0.0));
+	expect(51, f("3.5", 3.5));
+	expect(52, f("-0.25", -0.25));
+	expect(53, f(".5", 0.5));
+	expect(54, f("2.", 2.0));
+	expect(55, f("1e9", 1e9));
+	expect(56, f("1.5E-3", 0.0015));
+	expect(57, f("123456.789", 123456.789));
+	expect(58, f("  -12.5 ", -12.5));
+	expect(59, f("0.000000000000000000001", 1e-21));
+	expect(60, f("1234567890123456789012345", 1.2345679e24));
+	expect(61, f("0.1", 0.1));
+	expect(62, f("3.4e38", 3.4e38));
+	var x: f32 = 0.0;
+	expect(63, dr::atof("inf", &x) and x == 1.0 / 0.0);
+	expect(64, dr::atof("-inf", &x) and x == -1.0 / 0.0);
+	expect(65, dr::atof("nan", &x) and x != x);
+	expect(66, dr::atof("1e50", &x) and x == 1.0 / 0.0);
+	expect(67, dr::atof("1e-60", &x) and x == 0.0);
+	expect(68, fbad(""));
+	expect(69, fbad("."));
+	expect(70, fbad("1e"));
+	expect(71, fbad("1.2.3"));
+	expect(72, fbad("abc"));
+	expect(73, fbad("-"));
+	expect(74, dr::atof(dr::ftoa(-12.5, buff), &x) and x == -12.5);
+	expect(75, dr::atof(dr::ftoa(1234567.0, buff, 2), &x) and x == 1234567.0);
+	expect(76, f(dr::ftoa(2.5e12, buff), 2.5e12));
+	return g_failures;
+}

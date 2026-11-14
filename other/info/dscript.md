@@ -117,7 +117,10 @@ a `u32` (its 32 bits), so it is passed, returned, stored and copied like one.
   `clamp`, `lerp`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `exp`, `log`, `log2`,
   `log10`, `pow`, `fmod`, `is_nan`, `is_inf`, `is_finite`, and `PI`, `TAU`, `E`, `INFINITY`,
   `NAN`, ... `dr::ftoa(f, buffer, decimals)` writes one as text; `print(f32)` prints one
-  (`TextSingle`, `Text16`, `Text16Console`; 6 decimals by default).
+  (`TextSingle`, `Text16`, `Text16Console`; 6 decimals by default). `dr::atof(text, &f)` reads
+  one back (also `inf`, `nan`, `1.5e-3`); `dr::atou` / `dr::atoi(text, &n, base)` do the same for
+  integers (base 0: from a `0x` / `0b` / `0o` prefix). They return false when the text isn't a
+  number (or it doesn't fit).
 
 ### 64-bit integers (SDK)
 

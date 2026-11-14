@@ -11,7 +11,6 @@ sub main() {
 	dr::vga_enable_double_buffering(false);
 	dr::set_interrupt_vector_entry(dr::HardwareInterrupts.KeyPressed, &key_pressed_handler);
 	dr::Text16.clear_screen(dr::DefaultPaletteText16.Black);
-	dr::Text16.print("Hello DragonOS :)", 0, 0, dr::DefaultPaletteText16.Blue, dr::DefaultPaletteText16.Black);
 
 	keyRingBuff.init(keyBuff, sizeof(u32), KEY_BUFF_SIZE);
 	var console: dr::Text16Console();

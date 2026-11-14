@@ -14,17 +14,30 @@ var list_entries_count: u8 = 0;
 var reboot_entry_index: u8 = 0;
 var horizontalLine: u8* = null;
 var pressedKey: u32 = 0;
-var boot_error: string = null;			// why the last boot failed (shown under the list)
-const KERNEL0_PATH = "/boot/kernel0";	// the kernel on a DFS partition
-// load_kernel0_dfs's own errors (below dr::dfs's, which go from -1 to -14).
+var boot_error: string = null;
+var drake_load_addr: u32 = 0;
+var drake_size: u32 = 0;
+
+// load_kernel0's own errors (below dr::dfs's, which go from -1 to -14).
 const KernelNotAFile: i32 = -100;
 const KernelEmpty: i32 = -101;
 const KernelTooBig: i32 = -102;
+const UnableToMount: i32 = -103;
+const KernelNoRoom: i32 = -104;
+const KernelInvalidDrx: i32 = -105;
+
+const KERNEL0_PATH = "/boot/kernel0";	// the kernel on a DFS partition
+const MAX_KERNEL0_SIZE: u32 = 1024*1024*10; // 10 MiB
 
 
-sub main() {
+// argv[0] = Load address for Drake
+// argv[1] = Drake size
+sub main(var argc: i32, var argv: u8**) {
 	dr::TextSingle::clear_screen();
 	dr::vga_set_video_mode(dr::VGAVideoModes.Text16Color);
+
+	halt_on_condition(argc != 2 or not dr::atou(argv[0], &drake_load_addr) or not dr::atou(argv[1], &drake_size),
+		"Invalid arguments from the BIOS (Drake's load address and size).");
 
 	halt_on_condition(not dr::dpt_load_block(&dpt_block), "No valid DPT block found.");
 	get_bootable_partitions(&dpt_block, bootParts);
@@ -38,15 +51,15 @@ sub main() {
 	dr::set_interrupt_vector_entry(dr::HardwareInterrupts.VSync, &on_draw);
 
 	var screenWidth: u16 = console.get_console_width();
-	horizontalLine = dr::malloc(screenWidth + 1);
+	horizontalLine = dr::malloc(screenWidth - 1);		// between the two corners
 	halt_on_condition(not horizontalLine, "Allocation for <horizontalLine> failed.");
 	for (var i: u16 = 0; i < screenWidth - 2; i++)
 		horizontalLine[i] = dr::ASCII.BoxHorizontal;
-	horizontalLine[screenWidth] = '\0';
+	horizontalLine[screenWidth - 2] = '\0';
 
-#ifdef(DRAKE_AUTOBOOT)
-	execute_selected_entry();	// boots the first entry without a key (dsc -D DRAKE_AUTOBOOT: headless tests)
-#endif
+	#ifdef(DRAKE_AUTOBOOT)
+		execute_selected_entry();	// boots the first entry without a key (dsc -D DRAKE_AUTOBOOT: headless tests)
+	#endif
 	while(true) {
 		var key: u32 = 0;
 		if (keyRingBuff.pop(&key)) {
@@ -113,17 +126,16 @@ inline sub print_box_sides() {
 inline sub print_list() {
 	console.y(2);
 	var i: u8 = 0;
-	var part = bootParts[i++];
-	while (part and i < dr::DPTStructure.MaxPartitions)
+	while (i < dr::DPTStructure.MaxPartitions and bootParts[i])
 	{
 		console.x(2)->store_colors();
-		if ((i - 1) == selected_index)
+		if (i == selected_index)
 			console.fg(dr::DefaultPaletteText16.Black)->bg(dr::DefaultPaletteText16.Green)->print(" >");
-		console.print(' ')->print(bootPartsLbl[i - 1])->print(' ')->nl()->restore_colors();
-		part = bootParts[i++];
+		console.print(' ')->print(bootPartsLbl[i])->print(' ')->nl()->restore_colors();
+		i++;
 	}
 	console.x(2)->store_colors();
-	if ((i - 1) == selected_index)
+	if (i == selected_index)
 		console.fg(dr::DefaultPaletteText16.Black)->bg(dr::DefaultPaletteText16.Green)->print(" >");
 	console.print(" Reboot ")->nl()->restore_colors();
 }
@@ -147,13 +159,19 @@ sub execute_selected_entry() {
 		dr::raise_interrupt(0x20, INT20_REBOOT);
 	else if (selected_index < boot_part_count)
 	{
-		if (not load_kernel0(bootParts[selected_index]))
+		var load_addr: u32 = 0;
+		if (not load_kernel0(bootParts[selected_index], &load_addr))
 			return;
 		cleanup();
-		low {
-			jmp $dr::DPTBootPartStructure.CodeLoadAddr
-			hlt
+		if (load_addr == 0)
+		{
+			low {
+				jmp $dr::DPTBootPartStructure.CodeLoadAddr
+				hlt
+			}
 		}
+		dr::drx::run(load_addr);
+		low { hlt }
 	}
 }
 
@@ -163,31 +181,90 @@ inline sub cleanup() {
 	console.clear(dr::DefaultPaletteText16.Black)->xy(0, 0)->present()->destroy();
 }
 
-// Loads the partition's kernel at CodeLoadAddr: /boot/kernel0 on a DFS partition, otherwise the
-// raw block after the boot header. False (with boot_error set) when it can't.
-sub load_kernel0(var part: dr::DPTPartitionBlock*) -> bool {
-	boot_error = null;
-	var r: i32 = load_kernel0_dfs(part);
-	if (r == dr::dfs::Unsupported) {		// not DFS: the raw kernel block
-		load_kernel0_block(part);
-		return true;
-	}
-	if (r < 0) {
-		boot_error = kernel_error_name(r);
-		return false;
-	}
-	return true;
-}
-
 sub kernel_error_name(var error: i32) -> string {
 	if (error == KernelNotAFile) return "not a file";
 	if (error == KernelEmpty) return "empty file";
-	if (error == KernelTooBig) return "bigger than 1 MiB";
+	if (error == KernelTooBig) return "too big";
+	if (error == UnableToMount) return "unable to mount dfs volume";
+	if (error == KernelNoRoom) return "not enough memory between Drake and the heap";
+	if (error == KernelInvalidDrx) return "invalid DRX file";
 	return dr::dfs::error_name(error);
 }
 
-// Unsupported when the partition isn't DFS.
-sub load_kernel0_dfs(var part: dr::DPTPartitionBlock*) -> i32 {
+sub load_kernel0(var part: dr::DPTPartitionBlock*, var out_load_addr: u32*) -> bool {
+	boot_error = null;
+	*out_load_addr = 0;
+	var fs: dr::fs::FileSystem;
+	var disk: dr::dfs::DiskPartition;
+	dr::dfs::dpt_partition(&disk, part);
+	if (not fs.mount_partition(&disk, true))
+	{
+		boot_error = fs.error_text();
+		return false;
+	}
+	defer fs.unmount();
+	var info: dr::fs::Info;
+	if (not fs.info(KERNEL0_PATH, &info))
+	{
+		boot_error = fs.error_text();
+		return false;
+	}
+	if (info.type != dr::fs::Type.File)
+	{
+		boot_error = kernel_error_name(KernelNotAFile);
+		return false;
+	}
+	if (info.size == 0)
+	{
+		boot_error = kernel_error_name(KernelEmpty);
+		return false;
+	}
+	if (info.size > MAX_KERNEL0_SIZE)
+	{
+		boot_error = kernel_error_name(KernelTooBig);
+		return false;
+	}
+	const KASLR_ALIGN: u32 = 0x10000; // 64 KiB slots (a power of 2)
+	var first: u32 = (drake_load_addr + drake_size + KASLR_ALIGN - 1) & ~(KASLR_ALIGN - 1); // round up
+	var heap_start: u32 = dr::read_cmos(dr::CMOSRegisters.HeapStart);
+	if (heap_start < first or heap_start - first < info.size) {
+		boot_error = kernel_error_name(KernelNoRoom);
+		return false;
+	}
+	var last: u32 = (heap_start - info.size) & ~(KASLR_ALIGN - 1);  // round down
+	var slots: u32 = (last - first) / KASLR_ALIGN + 1;
+	var slot: u32 = cast<u32>(dr::random::next()) % slots;
+	var load_addr: u8* = cast<u8*>(first + slot * KASLR_ALIGN);
+	var r: i32 = fs.read_all(KERNEL0_PATH, load_addr, info.size);
+	if (r < 0)
+	{
+		boot_error = fs.error_text();
+		return false;
+	}
+	var entry_addr: u32 = 0;
+	r = dr::drx::load(load_addr, info.size, load_addr, heap_start - cast<u32>(load_addr), &entry_addr);
+	if (r == dr::drx::Errors.InvalidMagic or r == dr::drx::Errors.FileTooSmall)
+	{
+		// Not a DRX: a raw kernel, at its fixed address.
+		r = load_kernel0_dfs_fixed(part);
+		if (r < 0)
+		{
+			boot_error = kernel_error_name(r);
+			return false;
+		}
+		*out_load_addr = 0;
+		return true;
+	}
+	if (r != dr::drx::Errors.NoError)
+	{
+		boot_error = kernel_error_name(KernelInvalidDrx);
+		return false;
+	}
+	*out_load_addr = entry_addr;
+	return true;
+}
+
+sub load_kernel0_dfs_fixed(var part: dr::DPTPartitionBlock*) -> i32 {
 	var vol: dr::dfs::Volume* = cast<dr::dfs::Volume*>(dr::malloc(sizeof(dr::dfs::Volume)));
 	if (not vol)
 		return dr::dfs::NoSpace;
@@ -216,7 +293,8 @@ sub load_kernel0_dfs(var part: dr::DPTPartitionBlock*) -> i32 {
 	return dr::dfs::Ok;
 }
 
-sub load_kernel0_block(var part: dr::DPTPartitionBlock*) {
+// Unused for now
+sub load_kernel0_legacy(var part: dr::DPTPartitionBlock*) {
 	var ddd: dr::DiskDriverData;
 	ddd.mode = dr::DiskMode.Read;
 	ddd.disk = dr::get_boot_disk();

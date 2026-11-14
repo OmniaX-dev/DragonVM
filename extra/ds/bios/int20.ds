@@ -62,7 +62,7 @@ interrupt sub __int_20_handler() {
 			signals->set(dr::SystemSignals.Reboot);
 		}
 	}
-	else if (code == INT20_RANDOM)		// RV = a random i32 in 0..INT_MAX
+	else if (code == INT20_RANDOM)		// RV = a random i32 in 0..INT32_MAX
 	{
 		var value: u32 = *cast<u32*>(dr::RandomRegisters.Int);
 		low { mov RV, $value }

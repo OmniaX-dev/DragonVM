@@ -86,8 +86,7 @@ function(ds_add_env TARGET MODE ASM_FLAGS)
 	add_custom_command(
 		OUTPUT ${OUT}/snake_kernel0.bin ${OUT}/disassembly/${DS_SNAKE_KERNEL0_DDS}.dds
 		COMMAND ${DSC} ${DS_SOURCE_DIR}/snake-game/kernel0/kernel0.ds -L ${OUT}/lib -o ${OUT}/snake_kernel0.bin
-																																	-O --verbose --save-disassembly ${OUT}/disassembly/${DS_SNAKE_KERNEL0_DDS}.dds
-																																	--raw --load 0x01410000 ${WA}
+																																	-O --verbose --save-disassembly ${OUT}/disassembly/${DS_SNAKE_KERNEL0_DDS}.dds ${WA}
 		DEPENDS ${DS_SNAKE_KERNEL0_SOURCES} ${SDK} ${COMPILER_TARGET}
 		WORKING_DIRECTORY ${DS_RUN_DIR}
 		COMMENT "DScript (${MODE}): SnakeGame"

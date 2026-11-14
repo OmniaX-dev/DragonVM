@@ -7,7 +7,8 @@
 #include(dpt.ds)
 
 namespace dr {
-	const INT_MAX: i32 = 2147483647;
+	const INT32_MAX: i32 = 2147483647;
+	const UINT32_MAX: u32 = 4294967295;
 
 	struct BitField32 {
 		priv var m_value: u32 = 0;
@@ -156,7 +157,7 @@ namespace dr {
 	// Reading Int / Float (a word) gives a new random number; writing Seed seeds the generator
 	// (programs use int 0x20: see dr::random).
 	const RandomRegisters: struct {
-		var Int: u32							= MemoryLayout.Random + 0x0000;	// a new i32 in 0..INT_MAX
+		var Int: u32							= MemoryLayout.Random + 0x0000;	// a new i32 in 0..INT32_MAX
 		var Float: u32							= MemoryLayout.Random + 0x0004;	// a new f32 in [0, 1)
 		var Seed: u32							= MemoryLayout.Random + 0x0008;	// the last seed
 	};

@@ -3,7 +3,7 @@
 // Random numbers from the machine's random device (through the BIOS, int 0x20). The generator is
 // seeded from the host's clock at start; seed() makes the numbers that follow repeatable.
 namespace dr::random {
-	// A random number in 0..INT_MAX (2147483647).
+	// A random number in 0..INT32_MAX (2147483647).
 	sub next() -> i32 {
 		raise_interrupt(0x20, INT20_RANDOM);
 		var value: i32 = 0;

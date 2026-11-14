@@ -83,7 +83,13 @@ sub __boot_init_part(var init_part: dr::DPTPartitionBlock*) -> i32 {
 		return r - 2000;
 	fs.unmount();
 	low { %low $INST_BIOS_NODE_TOGGLE 0x00 }
-	dr::drx::run(entry_addr); // Bootloader should never return from main
+	const argc: u32 = 2;
+	var argv: u8*[argc];
+	argv[0] = dr::malloc(11);	// a u32 in decimal: up to 10 digits and the terminator
+	argv[1] = dr::malloc(11);
+	dr::utoa(cast<u32>(load_addr), argv[0]);
+	dr::utoa(info.size, argv[1]);
+	dr::drx::run(entry_addr, argc, argv); // Bootloader should never return from main
 	low { hlt };
 	return 0; // Unreacheable
 }

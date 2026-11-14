@@ -128,6 +128,195 @@ namespace dr {
 		return result;
 	}
 
+	// The opposites of utoa, itoa and ftoa: text to a number. True when the whole text is the
+	// number (spaces before and after are allowed), *out then has it; false when it isn't a number
+	// or (atou, atoi) it doesn't fit, *out unchanged. base: 2..36, or 0: from the prefix ("0x"
+	// hex, "0b" binary, "0o" octal, otherwise decimal). Base 16 also takes a "0x" prefix.
+
+	inline sub __isspace(var c: u8) -> bool {
+		return c == ' ' or c == '\t' or c == '\n' or c == '\r';
+	}
+
+	// The value of digit c, 99 when it isn't one.
+	inline sub __digit_value(var c: u8) -> u32 {
+		if (c >= '0' and c <= '9') return c - '0';
+		if (c >= 'a' and c <= 'z') return c - 'a' + 10;
+		if (c >= 'A' and c <= 'Z') return c - 'A' + 10;
+		return 99;
+	}
+
+	// The base (0 when it isn't valid), *pp moved past its prefix.
+	sub __number_base(var pp: u8**, var base: i32) -> u32 {
+		var p: u8* = *pp;
+		if (base == 0 or base == 16) {
+			if (p[0] == '0' and (p[1] == 'x' or p[1] == 'X')) {
+				*pp = p + 2;
+				return 16;
+			}
+		}
+		if (base == 0) {
+			if (p[0] == '0' and (p[1] == 'b' or p[1] == 'B')) {
+				*pp = p + 2;
+				return 2;
+			}
+			if (p[0] == '0' and (p[1] == 'o' or p[1] == 'O')) {
+				*pp = p + 2;
+				return 8;
+			}
+			return 10;
+		}
+		if (base < 2 or base > 36)
+			return 0;
+		return cast<u32>(base);
+	}
+
+	// The digits at *pp (then moved past them), up to the end of the text and its spaces: false
+	// when there are none, something else follows or the number is bigger than limit.
+	sub __parse_digits(var pp: u8**, var base: u32, var limit: u32, var out: u32*) -> bool {
+		var p: u8* = *pp;
+		var value: u32 = 0;
+		var any: bool = false;
+		while (true) {
+			var d: u32 = __digit_value(*p);
+			if (d >= base)
+				break;
+			if (value > (limit - d) / base)
+				return false;
+			value = value * base + d;
+			any = true;
+			p++;
+		}
+		while (__isspace(*p))
+			p++;
+		if (not any or *p != 0)
+			return false;
+		*pp = p;
+		*out = value;
+		return true;
+	}
+
+	// "4096", "0x1000", "  12 " (no sign).
+	sub atou(var text: string, var out: u32*, var base: i32 = 10) -> bool {
+		var p: u8* = text;
+		while (__isspace(*p))
+			p++;
+		var b: u32 = __number_base(&p, base);
+		if (b == 0)
+			return false;
+		return __parse_digits(&p, b, 0xFFFFFFFF, out);
+	}
+
+	// "-12", "+7", "-0x80000000" (-2147483648..2147483647).
+	sub atoi(var text: string, var out: i32*, var base: i32 = 10) -> bool {
+		var p: u8* = text;
+		while (__isspace(*p))
+			p++;
+		var negative: bool = *p == '-';
+		if (*p == '-' or *p == '+')
+			p++;
+		var b: u32 = __number_base(&p, base);
+		if (b == 0)
+			return false;
+		var magnitude: u32 = 0;
+		if (not __parse_digits(&p, b, negative ? 0x80000000 : 0x7FFFFFFF, &magnitude))
+			return false;
+		*out = negative ? cast<i32>(0 - magnitude) : cast<i32>(magnitude);
+		return true;
+	}
+
+	// "3.5", "-0.25", ".5", "2.", "1e9", "1.5E-3", "inf", "-inf", "nan" (what ftoa writes). Computed
+	// in f32 (about 7 significant digits); too big gives inf, too small 0.
+	sub atof(var text: string, var out: f32*) -> bool {
+		var p: u8* = text;
+		while (__isspace(*p))
+			p++;
+		var negative: bool = *p == '-';
+		if (*p == '-' or *p == '+')
+			p++;
+		var value: f32 = 0.0;
+		if (p[0] == 'i' and p[1] == 'n' and p[2] == 'f') {
+			value = 1.0 / 0.0;
+			p += 3;
+		} else if (p[0] == 'n' and p[1] == 'a' and p[2] == 'n') {
+			value = 0.0 / 0.0;
+			p += 3;
+		} else {
+			// The first 9 significant digits in an integer (exact), the others only move the point.
+			var mantissa: u32 = 0;
+			var digits: u32 = 0;
+			var exponent: i32 = 0;
+			var any: bool = false;
+			while (*p >= '0' and *p <= '9') {
+				if (digits < 9) {
+					mantissa = mantissa * 10 + (*p - '0');
+					if (mantissa != 0)
+						digits++;
+				} else {
+					exponent++;
+				}
+				any = true;
+				p++;
+			}
+			if (*p == '.') {
+				p++;
+				while (*p >= '0' and *p <= '9') {
+					if (digits < 9) {
+						mantissa = mantissa * 10 + (*p - '0');
+						if (mantissa != 0)
+							digits++;
+						exponent--;
+					}
+					any = true;
+					p++;
+				}
+			}
+			if (not any)
+				return false;
+			if (*p == 'e' or *p == 'E') {
+				p++;
+				var e: i32 = 0;
+				var q: u8* = p;
+				var eNegative: bool = *q == '-';
+				if (*q == '-' or *q == '+')
+					q++;
+				if (*q < '0' or *q > '9')
+					return false;
+				while (*q >= '0' and *q <= '9') {
+					if (e < 1000)
+						e = e * 10 + (*q - '0');
+					q++;
+				}
+				exponent += eNegative ? -e : e;
+				p = q;
+			}
+			// 10^|exponent| by squaring (fewer roundings than one multiplication per digit).
+			value = cast<f32>(mantissa);
+			if (mantissa != 0 and exponent != 0) {
+				var n: u32 = cast<u32>(exponent < 0 ? -exponent : exponent);
+				if (n > 100)
+					n = 100;						// enough for inf or 0 (f32: 1e-45..3.4e38)
+				var scale: f32 = 1.0;
+				var power: f32 = 10.0;
+				while (n != 0) {
+					if ((n & 1) != 0)
+						scale *= power;
+					power *= power;
+					n >>= 1;
+				}
+				if (exponent < 0)
+					value /= scale;
+				else
+					value *= scale;
+			}
+		}
+		while (__isspace(*p))
+			p++;
+		if (*p != 0)
+			return false;
+		*out = negative ? -value : value;
+		return true;
+	}
+
 	inline sub isprint(var c: u32) -> bool {
 		return c >= 0x20 && c <= 0x7E;
 	}
