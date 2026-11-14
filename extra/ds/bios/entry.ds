@@ -4,6 +4,8 @@
 #include(int30.ds)
 #include(data.ds)
 
+const BOOTLOADER_PATH: string = "/init/boot.img";
+
 sub main() {
 	*cast<u8*>(dr::VGARegisters.VideoMode) = dr::VGAVideoModes.TextSingleColor;
 	dr::enable_interrupts();
@@ -16,26 +18,56 @@ sub main() {
 	var heap_addr: u32 = dr::read_cmos(dr::CMOSRegisters.MemoryStart) + dr::read_cmos(dr::CMOSRegisters.MemorySize) - stack_size - heap_size;
 	Allocator::init(cast<u8*>(heap_addr), heap_size);
 
+	var dpt_block: dr::DPTBlock;
+	if (not dr::dpt_load_block(&dpt_block))
+	{ debug_print("Not a DPT block"); low { hlt } } //TODO: Error
+	var init_part: dr::DPTPartitionBlock*;
+	if (not __get_init_part(&dpt_block, &init_part))
+	{ debug_print("No INIT partition found"); low { hlt } } //TODO: Error
+
 	__print_machine_info(stack_size + heap_size);
-	__load_mbr_data_block();
 
 	dr::time::sleep(2000); //This is just for show
 
+	if (__boot_init_part(init_part) != 0)
+	{ debug_print("Failed to boot init partition"); low { hlt } } //TODO: Error
+}
+
+sub __get_init_part(var dpt_block: dr::DPTBlock*, var outPart: dr::DPTPartitionBlock**) -> bool {
+	var fs: dr::fs::FileSystem;
+	var disk: dr::dfs::DiskPartition;
+	for (var i: i8 = 0; i < dpt_block->partitionCount; i++)
+	{
+		var part = &dpt_block->entries[i];
+		if (dr::dpt_is_partition_init(part))
+		{
+			dr::dfs::dpt_partition(&disk, part);
+			if (fs.mount_partition(&disk, true))
+			{
+				if (not fs.is_file(BOOTLOADER_PATH)) continue;
+				fs.unmount();
+				*outPart = part;
+				return true;
+			}
+		}
+	}
+	*outPart = null;
+	return false;
+}
+
+sub __boot_init_part(var init_part: dr::DPTPartitionBlock*) -> i32 {
+	var fs: dr::fs::FileSystem;
+	var vol = fs.volume();
+	assert(false, "Bootloader size constraint missing in __boot_init_part");
+	// if (node.size > 0x01410000 - dr::MemoryLayout.RAM or dr::MemoryLayout.RAM + node.size > heap_addr) return -1;
+	var r: i32 = fs.read_all(BOOTLOADER_PATH, cast<u8*>(dr::MemoryLayout.RAM), 0);
+	if (r < 0) return r - 1000;
 	low {
 		%low $INST_BIOS_NODE_TOGGLE 0x00
 		jmp $dr::MemoryLayout.RAM
+		hlt
 	}
-}
-
-sub __load_mbr_data_block() {
-	var disk: u8 = dr::get_boot_disk();
-	var ddd: dr::DiskDriverData;
-	ddd.mode = dr::DiskMode.Read;
-	ddd.disk = disk;
-	ddd.address = 0x00000000;
-	ddd.dataSize = 4194304;
-	ddd.memoryAddress = dr::MemoryLayout.RAM;
-	dr::raise_interrupt(0x20, INT20_LOAD_FROM_DDD_BLOCKING, cast<u32>(&ddd));
+	return 0; // Unreacheable
 }
 
 sub __print_machine_info(var reserved_ram: u32) {

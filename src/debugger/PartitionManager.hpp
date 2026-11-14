@@ -82,6 +82,8 @@ namespace dragon
 		bool bootHeader { false };	// the partition starts with the DPT boot header (F1 C4)
 		bool hasKernel { false };	// DFS: /boot/kernel0 is a file
 		u32 kernelSize { 0 };
+		bool hasInitImage { false };	// DFS: /init/boot.img is a file
+		u32 initImageSize { 0 };
 
 		inline f32 usedFraction(void) const { return fsSize == 0 ? -1.0f : cast<f32>(cast<f64>(usedBytes) / cast<f64>(fsSize)); }
 	};

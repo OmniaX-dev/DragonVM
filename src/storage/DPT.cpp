@@ -7,6 +7,7 @@ namespace dragon
 	namespace storage
 	{
 		using DPT = data::DPTStructure;
+		static_assert(DPT::DPTBlockSizeBytes == 4096 && DPT::EntriesStart == DPT::HeaderSizeBytes);
 
 		bool DPTScheme::detect(Disk& disk) const
 		{
@@ -131,15 +132,15 @@ namespace dragon
 
 		stdvec<tReservedArea> DPTScheme::getReservedAreas(u64 diskSize) const
 		{
-			return {
-				{ 0, DPT::BootAreaSize, "boot code" },
-				{ DPT::DiskAddress, DPT::DPTBlockSizeBytes, "DPT" }
-			};
+			return { { DPT::DiskAddress, DPT::DPTBlockSizeBytes, "DPT" } };
 		}
 
 		stdvec<tPartitionFlag> DPTScheme::getFlags(void) const
 		{
-			return { { DPT::tFlags::Boot, "boot", "Bootable partition" } };
+			return {
+				{ DPT::tFlags::Boot, "boot", "Bootable partition" },
+				{ DPT::tFlags::Init, "init", "Init partition (with the boot flag): the BIOS loads the boot loader from it (DFS, /init/boot.img)" }
+			};
 		}
 	}
 }

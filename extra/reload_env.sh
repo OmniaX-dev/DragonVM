@@ -14,12 +14,10 @@ printf "${green}Flashing BIOS...\n${clear}"
 
 printf "\n${green}Compiling Drake...\n${clear}"
 ./dsc ./ds/drake/entry.ds -L ds/dragon-sdk/lib --verbose -o dragon/drake.bin --raw --load 0x01010000 --fixed 4194304,0x00 --save-disassembly disassembly/ -Wa,$1
-./dtools load-binary dragon/disk.drd dragon/drake.bin 0x00000000
 
 printf "\n${green}Compiling DragonOS...\n${clear}"
 printf "\n${green}1) kernel0.dss\n${clear}"
+# (Drake and kernel0 aren't installed on the disk: the DPT is at disk 0 now)
 ./dsc ./ds/snake-game/kernel0/kernel0.ds -L ds/dragon-sdk/lib --verbose -o dragon/snake_kernel0.bin --raw --header KERNEL0_BOOT --load 0x01410000 --fixed 1048576,0xFF --save-disassembly disassembly/ -Wa,$1
-./dtools load-binary dragon/disk.drd dragon/snake_kernel0.bin 0x00700200
-./dtools dfs dragon/disk.drd 4 install-kernel dragon/snake_kernel0.bin
 
 printf "\n"

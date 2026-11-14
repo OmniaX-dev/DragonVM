@@ -195,6 +195,29 @@ namespace dragon
 				return ErrorDfsTooFewArgs;
 			return dfs_get(vol, args[0], args[1]);
 		}
+		if (command == "mkdir" && !args.empty() && args[0] == "-p")
+		{
+			// The directory and its parents; the ones that exist are fine.
+			if (!need(2, "mkdir -p <path>"))
+				return ErrorDfsTooFewArgs;
+			String current = "";
+			for (const auto& name : String(args[1]).tokenize("/").getRawData())
+			{
+				if (name == "")
+					continue;
+				current = current + "/" + name;
+				r = dfs::mkdir(vol, cpath(current), 0755, nullptr);
+				if (r < 0 && r != dfs::Exists)
+					return dfs_fail("mkdir -p " + current, r);
+			}
+			dfs::Inode node;
+			r = dfs::stat(vol, cpath(current == "" ? String("/") : current), &node, nullptr);
+			if (r < 0)
+				return dfs_fail("mkdir -p " + args[1], r);
+			if ((node.mode & dfs::ModeTypeMask) != dfs::ModeDir)
+				return dfs_fail("mkdir -p " + current, dfs::NotDir);
+			return ErrorNoError;
+		}
 		if (command == "mkdir" || command == "rm" || command == "rmdir")
 		{
 			if (!need(1, (command + " <path>").c_str()))
@@ -720,7 +743,8 @@ namespace dragon
 		out.p("    install-kernel <kernel.bin> [/boot/kernel0]").nl();
 		out.p("                                 The kernel as a file (without a KERNEL0_BOOT header), and the").nl();
 		out.p("                                 partition's boot header (Drake boots it).").nl();
-		out.p("    mkdir | rm | rmdir <path>").nl();
+		out.p("    mkdir [-p] <path>            A directory (-p: and its parents; no error if it exists).").nl();
+		out.p("    rm | rmdir <path>").nl();
 		out.p("    mv <from> <to>               Renames / moves (the destination must not exist).").nl();
 		out.p("    ln <existing> <new>          A hard link (not for directories).").nl();
 		out.p("    stat <path>").nl();

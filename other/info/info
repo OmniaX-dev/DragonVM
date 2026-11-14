@@ -180,7 +180,7 @@
     0x01000A40 (unmapped)
     0x0100FFFF
     -------
-    0x01010000 RAM (machine config: ram_size_kb, default 8192 KiB, at least 4160 KiB: the boot area + a 64 KiB stack)
+    0x01010000 RAM (machine config: ram_size_kb, default 8192 KiB, at least 4160 KiB: the boot loader's 4 MiB + a 64 KiB stack)
     0x01010000 + RAM size - 1 (at most 0x0FFFFFFF)
 
 
@@ -242,20 +242,23 @@
 # DPT - Partition Table
 #==========================================================================================================================================
 
-    Disk Address: 0x400000 - 0x4001FF (512 bytes), right after the 4 MiB boot area (0x000000 - 0x3FFFFF)
-    Partitions start at 0x400200.
-    Header: (+0x000 - +0x00B) (12 bytes)
-        0x000: (2 bytes) - 0xF1CA - This number identifies this block as a DPT partition table
-        0x002: (2 bytes) - DPT version
-        0x004: (1 byte)  - Partition count (max 5)
-        0x005: (7 bytes) - Reserved
-    Partition Table: (+0x00C - +0x1FF) (500 bytes)
-        Entry: (100 bytes) (x5)
+    Disk Address: 0x000000 - 0x000FFF (4096 bytes), at the start of the disk
+    Partitions start at 0x001000.
+    Header: (+0x000 - +0x05F) (96 bytes)
+        0x000: (2 bytes)  - 0xF1CA - This number identifies this block as a DPT partition table
+        0x002: (2 bytes)  - DPT version (0.3)
+        0x004: (1 byte)   - Partition count (max 40)
+        0x005: (91 bytes) - Reserved
+    Partition Table: (+0x060 - +0xFFF) (4000 bytes)
+        Entry: (100 bytes) (x40)
             0x00: (4 bytes) - Start Address
             0x04: (4 bytes) - Size
-            0x08: (2 bytes) - Flags
-            0x08: (26 bytes) - Reserved
+            0x08: (2 bytes) - Flags (bit 0: boot, bit 1: init)
+            0x0A: (26 bytes) - Reserved
             0x24: (64 bytes) - Partition label
+
+    The init partition (flags boot and init): a DFS partition; the BIOS loads the boot loader from
+    its /init/boot.img.
 
 
 

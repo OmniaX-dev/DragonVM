@@ -256,7 +256,7 @@ sub get_bootable_partitions(var dpt_block: dr::DPTBlock*, var outEntries: dr::DP
 
 sub print_system_info(var dpt_ver_maj: u8, var dpt_ver_min: u8) {
 	console.bg(dr::DefaultPaletteText16.Green)->fg(dr::DefaultPaletteText16.Black);
-	console.print(" Drake 0.2 -- DPT Version ")->print(cast<u32>(dpt_ver_maj))->print('.')->print(cast<u32>(dpt_ver_min))->print(' ');
+	console.print(" Drake 0.3 -- DPT Version ")->print(cast<u32>(dpt_ver_maj))->print('.')->print(cast<u32>(dpt_ver_min))->print(' ');
 	console.bg(dr::DefaultPaletteText16.Black)->fg(dr::DefaultPaletteText16.Green)->nl();
 }
 

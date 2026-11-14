@@ -22,12 +22,11 @@ detect_package_manager() {
   fi
 }
 
-install_manual_dependencies_linux() {
-    # Build OmniaFramework
+install_manual_dependencies() {
 	git clone https://github.com/OmniaX-dev/OmniaFramework.git
     cd OmniaFramework
-    ./build release
-    ./build install
+    ./build dependencies -v SKIP_SHADER_TOOLS=true
+    ./build -i release
     cd ../..
 }
 
@@ -49,12 +48,7 @@ if [ "$(expr substr $(uname -s) 1 10)" == "MINGW64_NT" ]; then
                       			   mingw-w64-ucrt-x86_64-SDL2_mixer mingw-w64-ucrt-x86_64-SDL2_image \
                             	   mingw-w64-ucrt-x86_64-SDL2_ttf mingw-w64-ucrt-x86_64-SDL2_gfx
 
-
-    git clone https://github.com/OmniaX-dev/OmniaFramework.git
-    cd OmniaFramework
-    ./build release
-    ./build install
-    cd ../..
+    install_manual_dependencies
 elif [ "$(expr substr $(uname -s) 1 5)" == "Linux" ]; then
 	pkgmgr=$(detect_package_manager)
 	case "$pkgmgr" in
@@ -76,5 +70,5 @@ elif [ "$(expr substr $(uname -s) 1 5)" == "Linux" ]; then
 	    exit 1
 	    ;;
 	esac
-	install_manual_dependencies_linux
+	install_manual_dependencies
 fi

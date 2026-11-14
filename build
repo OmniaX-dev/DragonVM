@@ -26,20 +26,6 @@ if [[ "$1" == "debug" || "$1" == "release" ]]; then
     ((build_number++))
     truncate -s 0 other/build.nr
     echo $build_number >> other/build.nr
-elif [[ "$1" == "windows_release" ]]; then
-    cd other
-    chmod +x build_windows_release.sh
-    ./build_windows_release.sh
-    cd ../bin/DragonVM_w64
-   	./reload_env.sh
-    cd ../..
-elif [[ "$1" == "linux_release" ]]; then
-    cd other
-    chmod +x build_linux_release.sh
-    ./build_linux_release.sh
-    cd ../bin/DragonVM_linux64
-   	./reload_env.sh
-    cd ../..
 elif [[ "$1" == "dependencies" ]]; then
     cd other
     chmod +x build_dependencies.sh

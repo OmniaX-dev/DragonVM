@@ -72,7 +72,7 @@ function(ds_add_env TARGET MODE ASM_FLAGS)
 
 	add_custom_command(
 		OUTPUT ${OUT}/drake.bin ${OUT}/disassembly/${DS_DRAKE_DDS}.dds
-		COMMAND ${DSC} ${DS_SOURCE_DIR}/drake/entry.ds -L ${OUT}/lib -o ${OUT}/drake.bin --verbose --raw --load 0x01010000 --fixed 4194304,0x00
+		COMMAND ${DSC} ${DS_SOURCE_DIR}/drake/entry.ds -L ${OUT}/lib -o ${OUT}/drake.bin --verbose --raw --load 0x01010000
 				--save-disassembly ${OUT}/disassembly/${DS_DRAKE_DDS}.dds ${WA}
 		DEPENDS ${DS_DRAKE_SOURCES} ${SDK} ${COMPILER_TARGET}
 		WORKING_DIRECTORY ${DS_RUN_DIR}
@@ -97,8 +97,9 @@ function(ds_add_env TARGET MODE ASM_FLAGS)
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${OUT}/drake.bin ${DS_RUN_DIR}/dragon/drake.bin
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${OUT}/snake_kernel0.bin ${DS_RUN_DIR}/dragon/snake_kernel0.bin
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${OUT}/disassembly/${DS_DRAKE_DDS}.dds ${OUT}/disassembly/${DS_KERNEL0_DDS}.dds ${DS_RUN_DIR}/disassembly/
-		COMMAND ${DTOOLS} load-binary dragon/disk.drd dragon/drake.bin 0x00000000
-		COMMAND ${DTOOLS} load-binary dragon/disk.drd dragon/snake_kernel0.bin 0x00700200
+		COMMAND ${DTOOLS} load-binary dragon/disk.drd dragon/snake_kernel0.bin 0x00401000
+		COMMAND ${DTOOLS} dfs dragon/disk.drd 1 mkdir -p /init
+		COMMAND ${DTOOLS} dfs dragon/disk.drd 1 put dragon/drake.bin /init/boot.img
 		COMMAND ${DTOOLS} dfs dragon/disk.drd 4 install-kernel dragon/snake_kernel0.bin
 		DEPENDS ${SDK} ${OUT}/bios.bin ${OUT}/drake.bin ${OUT}/snake_kernel0.bin ${TOOLS_TARGET}
 		WORKING_DIRECTORY ${DS_RUN_DIR}

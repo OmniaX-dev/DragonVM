@@ -261,6 +261,13 @@ int main(int argc, char** argv)
 				if (!step(cycles))
 					return 1;
 			}
+			// The BIOS has to reach the RAM start (where it jumps to the boot code): if it stopped
+			// before (an error, e.g. no boot partition), the program can't run.
+			if (cast<u32>(cpu.readRegister(data::Registers::IP)) != data::MemoryMapAddresses::Memory_Start)
+			{
+				std::cerr << "drun: the BIOS " << (cpu.isHalted() ? "halted" : "ran out of cycles") << " before jumping to the boot code (after " << cycles << " cycles)\n";
+				return (cpu.isHalted() ? 1 : 2);
+			}
 		}
 		std::vector<uint8_t> file;
 		if (!readFile(programPath, file))

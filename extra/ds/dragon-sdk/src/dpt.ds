@@ -1,5 +1,6 @@
 #include(dragon.ds)
 #include(mem.ds)
+#include(math.ds)
 
 namespace dr {
 	struct DPTBlock {
@@ -7,8 +8,8 @@ namespace dr {
 		var versionMaj: u8;
 		var versionMin: u8;
 		var partitionCount: u8;
-		var reserved: u8[7];
-		var entries: DPTPartitionBlock[5];
+		var reserved: u8[91];
+		var entries: DPTPartitionBlock[40];
 	};
 
 	struct DPTPartitionBlock {
@@ -20,8 +21,9 @@ namespace dr {
 	};
 
 	const DPTStructure: struct {
-		var DiskAddress: u32 					= 0x400000;	// after the 4 MiB boot area
-		var EntriesStart: u32			 		= 0x000C;
+		var DiskAddress: u32 					= 0x000000;	// the start of the disk
+		var BlockSize: u32						= 4096;		// 96 (header) + 40 * 100 (entries)
+		var EntriesStart: u32			 		= 0x0060;
 
 		var EntryStart: u32  					= 0x0000;
 		var EntryPartitionSize: u32 			= 0x0004;
@@ -30,7 +32,7 @@ namespace dr {
 
 		var ID: u16								= 0xF1CA;
 		var EntrySize: u32						= 100;
-		var MaxPartitions: u8					= 5;
+		var MaxPartitions: u8					= 40;
 	};
 
 	const DPTBootPartStructure: struct {
@@ -46,6 +48,7 @@ namespace dr {
 
 	const DPTPartFlags: struct {
 		var Boot: u16 = 0b00000000_00000001;
+		var Init: u16 = 0b00000000_00000010;
 	};
 
 	sub dpt_load_block(var outBlock: DPTBlock*) -> bool {
@@ -57,7 +60,7 @@ namespace dr {
 		ddd.dataSize = sizeof(DPTBlock);
 		ddd.memoryAddress = cast<u32>(outBlock);
 		raise_interrupt(0x20, INT20_LOAD_FROM_DDD_BLOCKING, cast<u32>(&ddd));
-		if (outBlock->ID != DPTStructure.ID)
+		if (outBlock->ID != DPTStructure.ID or outBlock->partitionCount > dr::DPTStructure.MaxPartitions)
 		{
 			memset(outBlock, 0, sizeof(DPTBlock));
 			return false;
@@ -65,19 +68,28 @@ namespace dr {
 		return true;
 	}
 
-	sub dpt_is_partition_bootable(var part: DPTPartitionBlock*) -> bool {
-		if (!part) return false;
-		if (!(part->flags & DPTPartFlags.Boot)) return false;
-		var header: u8[32];
+	sub dpt_read_partition_header(var part: DPTPartitionBlock*, var outHeader: u8*) {
 		var ddd: DiskDriverData;
 		ddd.mode = DiskMode.Read;
 		ddd.disk = get_boot_disk();
 		ddd.address = part->startAddress;
 		ddd.dataSize = DPTBootPartStructure.HeaderSize;
-		ddd.memoryAddress = cast<u32>(header);
+		ddd.memoryAddress = cast<u32>(outHeader);
 		raise_interrupt(0x20, INT20_LOAD_FROM_DDD_BLOCKING, cast<u32>(&ddd));
+	}
+
+	sub dpt_is_partition_bootable(var part: DPTPartitionBlock*) -> bool {
+		if (!part) return false;
+		if (!(part->flags & DPTPartFlags.Boot)) return false;
+		var header: u8[32];
+		dpt_read_partition_header(part, header);
 		if (*cast<u16*>(header) != DPTBootPartStructure.ID)
 			return false;
 		return true;
+	}
+
+	inline sub dpt_is_partition_init(var part: DPTPartitionBlock*) -> bool {
+		var mask: u16 = DPTPartFlags.Boot | DPTPartFlags.Init;
+		return part and (part->flags & mask) == mask;
 	}
 }

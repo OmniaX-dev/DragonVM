@@ -1,0 +1,149 @@
+#include(mem.ds)
+
+namespace dr::drx {
+	const Magic: u32 = 0x44525831;	// "DRX1"
+	const HeaderSize: u32 = 32;
+
+	enum Errors: i32 {
+		NoError = 0,
+		FileTooSmall = -1,
+		InvalidMagic = -2,
+		TruncatedFile = -3,
+		NullOutputPtr = -4,
+		RelocationOutOfRange = -5,
+		InvalidAllocation = -6,
+		ImageTooBig = -7,			// load: the image doesn't fit in capacity
+		Overlap = -8,				// load: the destination overlaps the file
+		EntryOutOfRange = -9,		// the entry isn't in the image
+	};
+
+	struct Program
+	{
+		var image: u8* = null;
+		var image_size: u32 = 0;
+		var entry: u32 = 0;
+		var relocations: u32* = null;
+		var relocations_count: u32 = 0;
+	};
+
+	sub __readU32(var ptr: u8*) -> u32 { return (cast<u32>(ptr[0]) << 24) | (cast<u32>(ptr[1]) << 16) | (cast<u32>(ptr[2]) << 8) | ptr[3]; }
+	sub __writeU32(var ptr: u8*, var v: u32) { ptr[0] = cast<u8>(v >> 24); ptr[1] = cast<u8>(v >> 16); ptr[2] = cast<u8>(v >> 8); ptr[3] = cast<u8>(v); }
+
+
+	// The header's fields, checked against the file: Errors.NoError or an error.
+	struct Header
+	{
+		var header_size: u32 = 0;
+		var image_size: u32 = 0;
+		var entry: u32 = 0;
+		var reloc_count: u32 = 0;
+		var reloc_offset: u32 = 0;
+	};
+
+	sub read_header(var file_bytes: u8*, var file_size: u32, var out: Header*) -> i32 {
+		if (not file_bytes or not out) return Errors.NullOutputPtr;
+		if (file_size < HeaderSize) return Errors.FileTooSmall;
+		if (__readU32(file_bytes) != Magic) return Errors.InvalidMagic;
+		out->header_size = __readU32(&file_bytes[0x04]);
+		out->image_size = __readU32(&file_bytes[0x08]);
+		out->entry = __readU32(&file_bytes[0x0C]);
+		out->reloc_count = __readU32(&file_bytes[0x10]);
+		out->reloc_offset = __readU32(&file_bytes[0x14]);
+		if (out->header_size < HeaderSize or out->header_size > file_size or out->image_size > file_size - out->header_size)
+			return Errors.TruncatedFile;
+		if (out->reloc_offset > file_size or out->reloc_count > (file_size - out->reloc_offset) / 4)
+			return Errors.TruncatedFile;
+		if (out->reloc_count > 0 and out->image_size < 4)
+			return Errors.RelocationOutOfRange;
+		if (out->entry >= out->image_size)
+			return Errors.EntryOutOfRange;
+		return Errors.NoError;
+	}
+
+	// Copies the program out of the file (image and relocations in new memory: release them with
+	// free_program, also after an error).
+	sub read(var file_bytes: u8*, var file_size: u32, var outProgram: Program*) -> i32 {
+		if (not outProgram) return Errors.NullOutputPtr;
+		var empty: Program;
+		*outProgram = empty;
+		var h: Header;
+		var r: i32 = read_header(file_bytes, file_size, &h);
+		if (r != Errors.NoError) return r;
+		outProgram->image = dr::malloc(h.image_size == 0 ? 1 : h.image_size);
+		if (not outProgram->image)
+			return Errors.InvalidAllocation;
+		dr::memcpy(outProgram->image, &file_bytes[h.header_size], h.image_size);
+		outProgram->image_size = h.image_size;
+		outProgram->entry = h.entry;
+		if (h.reloc_count == 0)
+			return Errors.NoError;
+		outProgram->relocations = dr::malloc(h.reloc_count * 4);
+		if (not outProgram->relocations)
+			return Errors.InvalidAllocation;
+		for (var i: u32 = 0; i < h.reloc_count; i++)
+		{
+			var offset: u32 = __readU32(&file_bytes[h.reloc_offset + i * 4]);
+			if (offset > h.image_size - 4)
+				return Errors.RelocationOutOfRange;
+			outProgram->relocations[i] = offset;
+			outProgram->relocations_count++;
+		}
+		return Errors.NoError;
+	}
+
+	// Releases what read() allocated (the Program is empty afterwards).
+	sub free_program(var prog: Program*) {
+		if (not prog) return;
+		if (prog->image) dr::free(prog->image);
+		if (prog->relocations) dr::free(prog->relocations);
+		var empty: Program;
+		*prog = empty;
+	}
+
+	// This right now is destructive unlike the C++ version, to avoid copying the program
+	sub relocate(var prog: Program*, var base: u32) {
+		for (var i: u32 = 0; i < prog->relocations_count; i++)
+		{
+			var offset: u32 = prog->relocations[i];
+			var addr: u32 = __readU32(&prog->image[offset]);
+			__writeU32(&prog->image[offset], addr + base);
+		}
+	}
+
+	// Loads the DRX in file_bytes to base (at most capacity bytes): copies the image there and adds
+	// base to every address in it. Nothing is allocated, and base is untouched on errors (the
+	// header and the relocations are checked first). The file and base must not overlap.
+	// out_entry gets the address to start the program at (base + entry: see run()).
+	sub load(var file_bytes: u8*, var file_size: u32, var base: u8*, var capacity: u32, var out_entry: u32* = null) -> i32 {
+		var h: Header;
+		var r: i32 = read_header(file_bytes, file_size, &h);
+		if (r != Errors.NoError) return r;
+		if (not base) return Errors.NullOutputPtr;
+		if (h.image_size > capacity) return Errors.ImageTooBig;
+		var b: u32 = cast<u32>(base);
+		var f: u32 = cast<u32>(file_bytes);
+		if (b < f + file_size and f < b + h.image_size) return Errors.Overlap;
+		var table: u8* = &file_bytes[h.reloc_offset];
+		for (var i: u32 = 0; i < h.reloc_count; i++)
+		{
+			if (__readU32(&table[i * 4]) > h.image_size - 4)
+				return Errors.RelocationOutOfRange;
+		}
+		dr::memcpy(base, &file_bytes[h.header_size], h.image_size);
+		for (var i: u32 = 0; i < h.reloc_count; i++)
+		{
+			var at: u8* = &base[__readU32(&table[i * 4])];
+			__writeU32(at, __readU32(at) + b);
+		}
+		if (out_entry) *out_entry = b + h.entry;
+		return Errors.NoError;
+	}
+
+	// Starts a loaded program (load()'s out_entry) the way loaders do: with argc / argv, or with
+	// none (argc 0). It returns when the program's main returns, with main's value.
+	inline sub run(var entry: u32, var argc: i32 = 0, var argv: string* = null) -> i32 {
+		if (argc == 0)
+			return cast<sub() -> i32>(entry)();
+		return cast<sub(i32, string*) -> i32>(entry)(argc, argv);
+	}
+}

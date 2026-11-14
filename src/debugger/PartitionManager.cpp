@@ -1,6 +1,7 @@
 #include "PartitionManager.hpp"
 #include "DiskManager.hpp"
 #include "../storage/FileSystem.hpp"
+#include "../tools/GlobalData.hpp"
 #include <algorithm>
 
 namespace dragon
@@ -206,7 +207,7 @@ namespace dragon
 	{
 		setTypeName("dragon::PartitionListView");
 		setFontSize(16);
-		setColumns({ { "#", 5 }, { "Label", 20 }, { "File system", 13 }, { "Start", 12 }, { "End", 12 }, { "Size", 11 }, { "Used", 29 }, { "Flags", 8 } });
+		setColumns({ { "#", 5 }, { "Label", 20 }, { "File system", 13 }, { "Start", 12 }, { "End", 12 }, { "Size", 11 }, { "Used", 25 }, { "Flags", 12 } });
 	}
 
 	i32 PartitionListView::getRowCount(void) const
@@ -477,7 +478,7 @@ namespace dragon
 			input.setCommitCallback([this](FieldInput& field) { commit_field(field); });
 		};
 		l_field(m_labelTitle, "Label", m_labelInput, top + 38, -18, 0.5f, "The partition's label (Return applies it)");
-		l_field(m_startTitle, "Start", m_startInput, top + 74, 260, 0, "Start address: 0x400200, 4M, 4096K... (Return applies it)");
+		l_field(m_startTitle, "Start", m_startInput, top + 74, 260, 0, "Start address: 0x1000, 4M, 4096K... (Return applies it)");
 		l_field(m_sizeTitle, "Size", m_sizeInput, top + 110, 260, 0, "Size: 0x1400, 5120, 5K, 1.5M... (Return applies it)");
 		addWidget(m_growButton);
 		place(m_growButton, 0, 1, 0, 1, 266, top + 110, 330, top + 138);
@@ -649,7 +650,7 @@ namespace dragon
 			}
 			storage::DiskRegion region(m_document->getBufferDisk(), part.start, part.size);
 			u8 head[2] = { 0, 0 };
-			c.bootHeader = (part.size >= 2 && region.read(0, std::span<u8>(head, 2)) && head[0] == 0xF1 && head[1] == 0xC4);
+			c.bootHeader = (part.size >= 2 && region.read(0, std::span<u8>(head, 2)) && ((head[0] << 8) | head[1]) == data::DPTStructure::BootPart_ID_CODE);
 			const storage::FileSystem* fileSystem = storage::FileSystems::detect(region);
 			if (fileSystem != nullptr && fileSystem->getName() == "DFS")
 			{
@@ -678,6 +679,12 @@ namespace dragon
 					{
 						c.hasKernel = true;
 						c.kernelSize = kernel.size;
+					}
+					dfs::Inode image;
+					if (vol.stat(data::DPTStructure::InitImagePath, image) == dfs::Ok && (image.mode & dfs::ModeTypeMask) == dfs::ModeFile)
+					{
+						c.hasInitImage = true;
+						c.initImageSize = image.size;
 					}
 				}
 			}
@@ -759,6 +766,10 @@ namespace dragon
 			const PartitionContent& c = m_contents[origin];
 			if (part.label != old.label || part.flags != old.flags)
 				ops.push_back({ String("Change ").add(name).add("'s ").add(part.label != old.label ? "label" : "flags").add(part.label != old.label && part.flags != old.flags ? " and flags" : ""), DebugListView::TextColor, false });
+			if (part.hasFlag(data::DPTStructure::tFlags::Init) && !old.hasFlag(data::DPTStructure::tFlags::Init) && !(c.dfs && c.readable && c.hasInitImage))
+				ops.push_back({ String("  ").add(name).add(c.dfs ? String(" has no ").add(data::DPTStructure::InitImagePath) : String(" isn't DFS")).add(": the BIOS can't load a boot loader from it"), WarningColor, false });
+			if (part.hasFlag(data::DPTStructure::tFlags::Init) && !part.hasFlag(data::DPTStructure::tFlags::Boot) && part.flags != old.flags)
+				ops.push_back({ String("  ").add(name).add(" has the init flag without the boot flag: the BIOS needs both"), WarningColor, false });
 			const bool moved = part.start != old.start;
 			const bool resized = part.size != old.size;
 			if (!moved && !resized)
@@ -802,6 +813,12 @@ namespace dragon
 				ops.push_back({ String("Grow ").add(name).add("'s DFS from ").add(storage::formatSize(c.fsSize)).add(" to ").add(storage::formatSize(target)), DebugListView::TextColor, false });
 			if (c.dfs && !c.readable)
 				ops.push_back({ String("  ").add(name).add("'s DFS can't be read (").add(c.error).add("): it isn't resized"), WarningColor, false });
+		}
+		if (!ops.empty())
+		{
+			const auto inits = std::count_if(m_table.partitions.begin(), m_table.partitions.end(), [](const storage::tPartition& part) { return part.hasFlag(data::DPTStructure::tFlags::Init); });
+			if (inits > 1)
+				ops.push_back({ String("").add(cast<u64>(inits)).add(" partitions have the init flag (one is expected)"), WarningColor, false });
 		}
 		return ops;
 	}
@@ -954,6 +971,8 @@ namespace dragon
 			m_fsInfo.setEmptyText("");
 			if (c->bootHeader)
 				m_fsInfo.addRow("Boot header", "F1 C4: a raw kernel partition (Drake loads its first 1 MiB)", WarningColor);
+			if (part.hasFlag(data::DPTStructure::tFlags::Init))
+				m_fsInfo.addRow("Init", "The init flag needs a DFS partition (with /init/boot.img)", WarningColor);
 			m_fsInfo.addRow("Format", onDisk ? String("Format... makes it a DFS volume") : String("Apply the table first, then Format..."), DimColor);
 			return;
 		}
@@ -994,8 +1013,25 @@ namespace dragon
 		if (c->hasKernel)
 			m_fsInfo.addRow("Boot", String("/boot/kernel0 (").add(storage::formatSize(c->kernelSize)).add(")").add(part.hasFlag(0) && c->bootHeader ? ": Drake can boot it" : (c->bootHeader ? ": set the boot flag" : ": no boot header (dtools install-kernel)")),
 							part.hasFlag(0) && c->bootHeader ? SuccessColor : WarningColor);
-		else
+		else if (part.hasFlag(data::DPTStructure::tFlags::Boot))
 			m_fsInfo.addRow("Boot", "No /boot/kernel0", DimColor);
+		// The init partition: the boot and init flags, /init/boot.img.
+		const bool init = part.hasFlag(data::DPTStructure::tFlags::Init);
+		const bool boot = part.hasFlag(data::DPTStructure::tFlags::Boot);
+		const String image = data::DPTStructure::InitImagePath;
+		if (init)
+		{
+			String text = (c->hasInitImage ? String(image).add(" (").add(storage::formatSize(c->initImageSize)).add(")") : String("No ").add(image));
+			if (c->hasInitImage && boot)
+				text.add(": the BIOS can load it");
+			else if (!c->hasInitImage)
+				text.add(boot ? String(": put the boot loader there") : String(", and set the boot flag too"));
+			else
+				text.add(": set the boot flag too");
+			m_fsInfo.addRow("Init", text, c->hasInitImage && boot ? SuccessColor : WarningColor);
+		}
+		else if (c->hasInitImage)
+			m_fsInfo.addRow("Init", String(image).add(" (").add(storage::formatSize(c->initImageSize)).add("): set the init flag"), DimColor);
 		m_fsInfo.addRow("UUID", c->uuid, DimColor);
 	}
 

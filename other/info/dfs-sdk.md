@@ -240,7 +240,7 @@ screen and doesn't boot.
 ```
 sub load_kernel0_dfs(var part: dr::DPTPartitionBlock*) -> i32 {
 ```
-`part` is the partition's entry in the DPT, the table at disk byte 0x400000 that Drake read at startup. Among other
+`part` is the partition's entry in the DPT, the table at the start of the disk that Drake read at startup. Among other
 things it holds `startAddress` (where the partition begins on the disk) and `size`.
 
 ---

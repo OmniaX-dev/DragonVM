@@ -126,8 +126,8 @@ namespace dragon
 				inline static constexpr u32 Random_Start = 0x010006A0;
 				inline static constexpr u32 Random_End   = 0x010006AF;
 
-				// 0x010006B0 - 0x0100087F: unused (the old MBR zone; the BIOS now loads the boot
-				// area of the disk at Memory_Start, see DPTStructure::BootAreaSize).
+				// 0x010006B0 - 0x0100087F: unused (the old MBR zone; the BIOS loads the boot
+				// loader at Memory_Start).
 
 				inline static constexpr u32 DiskInterface_Start = 0x01000880;
 				inline static constexpr u32 DiskInterface_End   = 0x010008FF;
@@ -378,6 +378,7 @@ namespace dragon
 		{
 			public: struct tFlags {
 				inline static constexpr u8 Boot             = 0;
+				inline static constexpr u8 Init             = 1;
 			};
 			public:
 
@@ -386,7 +387,7 @@ namespace dragon
 				inline static constexpr u16 DPTVersionMin                        = 0x003;
 				inline static constexpr u16 PartitionCount                        = 0x004;
 
-				inline static constexpr u16 EntriesStart                        = 0x00C;
+				inline static constexpr u16 EntriesStart                        = 0x060;
 
 				inline static constexpr u16 EntryStartAddress                    = 0x000;
 				inline static constexpr u16 EntryPartitionSize                    = 0x004;
@@ -395,21 +396,20 @@ namespace dragon
 
 
 
-				inline static constexpr u16 HeaderReservedSizeBytes            = 7;
-				// Disk layout: the boot area (loaded at the RAM start by the BIOS), the DPT
-				// block, then the partitions.
-				inline static constexpr u32 BootAreaSize                        = 0x400000;    // 4 MiB
-				inline static constexpr u32 DiskAddress                        = BootAreaSize;
+				// Disk layout: the DPT block at the start of the disk (4096 bytes: a
+				// 96-byte header, 40 entries of 100 bytes), then the partitions.
+				inline static constexpr u32 DiskAddress                        = 0x000000;
 				inline static constexpr u16 DPT_ID_CODE                        = 0xF1CA;
+				inline static constexpr u16 HeaderSizeBytes                    = 96;
+				inline static constexpr u16 HeaderReservedSizeBytes            = HeaderSizeBytes - PartitionCount - 1;    // 91
 				inline static constexpr u16 EntrySizeBytes                        = 100;
 				inline static constexpr u16 EntryLabelSizeBytes                = 64;
 				inline static constexpr u16 EntryReservedSizeBytes                = 26;
-				inline static constexpr u16 HeaderSizeBytes                    = 12;
-				inline static constexpr u16 DPTBlockSizeBytes                    = 512;
+				inline static constexpr u8 MaxPartCount                        = 40;
+				inline static constexpr u16 DPTBlockSizeBytes                    = HeaderSizeBytes + EntrySizeBytes * MaxPartCount;    // 4096
 				inline static constexpr u8 CurrentDPTVersionMaj                 = 0x00;
-				inline static constexpr u8 CurrentDPTVersionMin                 = 0x02;
+				inline static constexpr u8 CurrentDPTVersionMin                 = 0x03;
 				inline static constexpr u32 DiskStartAddr                         = DiskAddress + DPTBlockSizeBytes;
-				inline static constexpr u8 MaxPartCount                        = 5;
 
 
 
@@ -418,6 +418,9 @@ namespace dragon
 				inline static constexpr u16 BootPart_ID_CODE                    = 0xF1C4;
 				inline static constexpr u32 BootPart_CodeSizeBytes                = 1048576;
 				inline static constexpr u8 BootPart_HeaderSizeBytes            = 32;
+				// The init partition (flags Boot and Init): a DFS partition, the boot loader in
+				// InitImagePath.
+				inline static constexpr const char* InitImagePath            = "/init/boot.img";
 		};
 
 		class CPUExtension
@@ -569,10 +572,11 @@ namespace dragon
 		class DefaultValues
 		{
 			public:
-				// RAM size (machine config: ram_size_kb), in KiB. At least the disk's boot area
-				// (the BIOS loads it at the RAM start) and a 64 KiB stack (at the end of the RAM).
+				// RAM size (machine config: ram_size_kb), in KiB. At least the boot loader's
+				// 4 MiB (the BIOS loads it at the RAM start) and a 64 KiB stack (at the end of the RAM).
 				inline static constexpr u32 DefaultRAMSizeKB = 16384;
-				inline static constexpr u32 MinRAMSizeKB = DPTStructure::BootAreaSize / 1024 + 64;
+				inline static constexpr u32 BootLoaderSizeKB = 4096;
+				inline static constexpr u32 MinRAMSizeKB = BootLoaderSizeKB + 16384;
 				inline static constexpr u32 MaxRAMSizeKB = (MemoryMapAddresses::Memory_Max - MemoryMapAddresses::Memory_Start + 1) / 1024;
 				inline static constexpr u32 DefaultStackSize = 0x200000;
 				// Bytes the disk interface copies per cycle (machine config: disk_block_size).

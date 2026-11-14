@@ -478,7 +478,8 @@ namespace dragon
 		out.p("    -p                           Used to start creating a partition.").nl();
 		out.p("    -s                           Used to specify the partition's size.").nl();
 		out.p("    -l (optional)                Used to specify the partition's label.").nl();
-		out.p("    -f (optional)                Used to specify one single flag for the partition. Use multiple -f parameters for multiple flags.").nl().nl();
+		out.p("    -f (optional)                Used to specify one single flag for the partition. Use multiple -f parameters for multiple flags.").nl();
+		out.p("                                 Flags: boot, init. The table is at the start of the disk (4096 bytes), at most 40 partitions.").nl().nl();
 
 		out.fg(ostd::ConsoleColors::Blue).p("print-disassembly [-d <disassembly_directory>] | [-f <disassembly_file>]").nl();
 		out.fg(ostd::ConsoleColors::Green).p("The <print-disassembly> tool is used to parse and print disassembly tables.").nl();
