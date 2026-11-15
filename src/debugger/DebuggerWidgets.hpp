@@ -111,7 +111,7 @@ namespace dragon
 	// RegisterView — the CPU state: the registers in cards (value in hex, signed /
 	// unsigned decimal, the value before the last step when it changed), the flags
 	// as toggles, and the machine info (executed / next instruction, cycle, stack
-	// frame, interrupt handlers, BIOS mode, subroutine depth, halt).
+	// frame, interrupt handlers, supervisor mode, subroutine depth, halt).
 	//
 	// Double-click a register to edit it (hex, decimal, binary or 'c'), click a
 	// flag to toggle it; right-click a register for more (show its value in

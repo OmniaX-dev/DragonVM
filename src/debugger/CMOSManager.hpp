@@ -35,7 +35,7 @@ namespace dragon
 	//   file  the cmos.dr file of the machine config: edited as a copy, Save
 	//         writes the changed bytes (the machine reads the file when it starts)
 	//   live  the chip of the running machine: every write goes through the memory
-	//         map, with the CPU put in BIOS mode for it (the chip is write protected
+	//         map, with the CPU put in supervisor mode for it (the chip is write protected
 	//         outside of it) and back; each one is an edit in the history
 	// ============================================================================
 	class CMOSManagerWindow : public ogfx::gui::SubWindow

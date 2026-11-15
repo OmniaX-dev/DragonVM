@@ -38,13 +38,36 @@
 
 
 
+    Modes: supervisor and user (CPU control Mode shows it).
+        Supervisor: the BIOS, the boot loader and the kernel (the CPU starts in it). User: programs, where these
+        are privileged (a CPU_PrivilegedInstruction error, a fault when handled):
+            hlt, rti, umode, changing the interrupt flag (sflg / zflg / tflg 0x00, a write to FL), int to a fault
+            vector (0x00 - 0x0F); and writes to the protected registers (CMOS, keyboard controller, CPU control,
+            the Timer's InterruptInterval) are access violations.
+        umode                    supervisor -> user mode, here (same stack)
+        Traps: int, hardware interrupts and faults run their handler in supervisor mode. From user mode the CPU
+            first switches to the kernel stack (CPU control KernelStackTop, unless 0). It pushes, on that stack:
+            the previous SP, the previous mode (1 supervisor, 0 user), [hardware interrupts and faults: RV, S1, S2,
+            OFFSET, FL], a marker (0x48574952 with the saved registers, 0 without), 0 (the argument count), then
+            the stack frame. rti undoes it, the mode and SP last: it is how a kernel enters user mode (a frame
+            built by hand, see dr::cpu::enter_user_mode).
+        int in user mode is a system call: it also works while interrupts are disabled.
+        Faults: an instruction that fails in user mode (its error) raises a fault if the fault's vector is
+            enabled; the error is dropped, CPU control FaultVector / FaultIP / FaultAddress tell what happened,
+            and the handler returns to the faulting instruction (unless it changes the frame's saved IP). Not
+            enabled, or in supervisor mode: the machine stops with the error, as before.
+        The stack check allows SP in the machine's stack (CMOS StackSize below the stack top), the kernel stack
+            and the user stack (CPU control).
+
+
+
 #==========================================================================================================================================
 # Memory Map
 #==========================================================================================================================================
     0x00000000 BIOS (16 MiB: 16777216 Bytes) (write to this section is disabled)
     0x00FFFFFF
     -------
-    0x01000000 CMOS (128 Bytes) (write to this section is only allowed in BIOS Mode)
+    0x01000000 CMOS (128 Bytes) (write to this section is only allowed in supervisor mode)
         MemStart: (4 bytes) 0x00
         MemSize: (4 bytes) 0x04             (last address of the RAM)
         ClockSpeed: (4 bytes) 0x08
@@ -70,7 +93,7 @@
         ...Repeat...
     0x0100057F
     -------
-    0x01000580 KEYBOARD MAPPING (224 Bytes) (write to this section is only allowed in BIOS Mode)
+    0x01000580 KEYBOARD MAPPING (224 Bytes) (write to this section is only allowed in supervisor mode)
         0x00: Modifiers (4 bytes)
             0b00000000.00000001: Left Shift
             0b00000000.00000010: Left Ctrl
@@ -89,13 +112,16 @@
     0x01000660 MOUSE MAPPING (32 Bytes)
     0x0100067F
     -------
-    0x01000680 TIMER (32 Bytes) (read-only: writes are errors, also in BIOS Mode)
+    0x01000680 TIMER (32 Bytes) (read-only: writes are errors, except InterruptInterval in supervisor mode)
         0x00: Milliseconds since the machine started or was reset (4 bytes, wraps after ~49.7 days)
         0x04: Cycles executed since the machine started or was reset, high word (4 bytes)
         0x08: Cycles, low word (4 bytes)
         0x0C: Unix time: seconds since 1970-01-01 00:00 UTC (4 bytes, unsigned: until 2106), the
               host's clock at the start or reset, running on with the machine's time (drun
               --unix-time <seconds> fixes the start)
+        0x10: InterruptInterval: the Timer interrupt (0xC0) every n milliseconds, 0: off (4 bytes,
+              writable in supervisor mode: the only writable register)
+        0x14: NextInterrupt: the time (milliseconds) of the next one (4 bytes)
         (dvm: real time, right at any clock speed, also uncapped; ddb and drun: machine time,
         cycles / clock_rate_sec, so runs and the debugger's history are reproducible)
     0x0100069F
@@ -106,6 +132,18 @@
         0x08: Seed: the last seed; writing a word seeds the generator (4 bytes)
         (a byte read gives a byte of the last value, without a new one; other writes are errors)
     0x010006AF
+    -------
+    0x010006B0 CPU CONTROL (64 Bytes) (readable by everyone, writable in supervisor mode only)
+        0x00: KernelStackTop (4 bytes): traps from user mode switch to this stack (0: they don't switch)
+        0x04: KernelStackSize (4 bytes)
+        0x08: UserStackTop (4 bytes): a user program's stack, for the stack check (0: none)
+        0x0C: UserStackSize (4 bytes)
+        0x10: FaultVector (4 bytes): the last fault
+        0x14: FaultIP (4 bytes): its instruction
+        0x18: FaultAddress (4 bytes): the address it accessed (memory faults; the instruction's otherwise)
+        0x1C: Mode (4 bytes, read-only): 1 supervisor, 0 user
+        0x20 - 0x3F: reserved (the memory permission map)
+    0x010006EF
     -------
     0x010006B0 (unused, was the MBR)
     0x0100087F
@@ -239,16 +277,27 @@
         0xE1: Clear Screen
 
 
+    Machine Specific - Faults (CPU exceptions, see "Modes"):
+    =======================================
+    0x00: Division by zero
+    0x01: Invalid instruction (unknown, or an extension the machine hasn't)
+    0x02: Privileged instruction (in user mode)
+    0x03: Access violation (a protected, read-only or missing address: FaultAddress)
+    0x04: Stack overflow
+    0x05: General (any other error)
+    0x06 - 0x0F: reserved
+
     Machine Specific - Hardware Interrupts:
     =======================================
     (They come between any two instructions: besides the stack frame (R1-R20, PP, ACC, IP, FP), the CPU keeps
-    RV, S1, S2, OFFSET, FL and the BIOS mode for the interrupted code; rti puts them back. A software interrupt
+    RV, S1, S2, OFFSET, FL, the mode and SP for the interrupted code; rti puts them back. A software interrupt
     (int) is a call: RV, S1, S2, OFFSET, FL can come back changed, e.g. 0x20/0x21 returns its result in RV.)
     MAX INTERRUPT 0xFF
     0x80: Disk Interface Finished
     0xA0: Keyboard Interface - Key Pressed
     0xA1: Keyboard Interface - Key Released
     0xA2: Keyboard Interface - Text Entered
+    0xC0: Timer - every InterruptInterval milliseconds (skipped while its previous handler runs)
     0xE0: Virtual Display - Text16_Mode Screen Refreshed
 
 

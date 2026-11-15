@@ -15,6 +15,7 @@ namespace dragon
 		i8 MemoryMapper::read8(u32 addr)
 		{
 			addr &= data::AddressMask;
+			data::ErrorHandler::currentAddress = addr;
 			auto region = findRegion(addr);
 			if (region == nullptr) return 0x00;
 			const u32 finalAddr = (region->remap ? addr - region->startAddress : addr);
@@ -24,6 +25,7 @@ namespace dragon
 		i16 MemoryMapper::read16(u32 addr)
 		{
 			addr &= data::AddressMask;
+			data::ErrorHandler::currentAddress = addr;
 			auto region = findRegion(addr);
 			if (region == nullptr) return 0x0000;
 			if (cast<u64>(addr) + 1 > region->endAddress)
@@ -35,6 +37,7 @@ namespace dragon
 		i16 MemoryMapper::write16(u32 addr, i16 value)
 		{
 			addr &= data::AddressMask;
+			data::ErrorHandler::currentAddress = addr;
 			auto region = findRegion(addr);
 			if (region == nullptr) return 0x0000;
 			if (cast<u64>(addr) + 1 > region->endAddress)
@@ -46,6 +49,7 @@ namespace dragon
 		i32 MemoryMapper::read32(u32 addr)
 		{
 			addr &= data::AddressMask;
+			data::ErrorHandler::currentAddress = addr;
 			auto region = findRegion(addr);
 			if (region == nullptr) return 0x00000000;
 			if (cast<u64>(addr) + 3 > region->endAddress)
@@ -60,6 +64,7 @@ namespace dragon
 		i8 MemoryMapper::write8(u32 addr, i8 value)
 		{
 			addr &= data::AddressMask;
+			data::ErrorHandler::currentAddress = addr;
 			auto region = findRegion(addr);
 			if (region == nullptr) return 0x00;
 			const u32 finalAddr = (region->remap ? addr - region->startAddress : addr);
@@ -69,6 +74,7 @@ namespace dragon
 		i32 MemoryMapper::write32(u32 addr, i32 value)
 		{
 			addr &= data::AddressMask;
+			data::ErrorHandler::currentAddress = addr;
 			auto region = findRegion(addr);
 			if (region == nullptr) return 0x00000000;
 			if (cast<u64>(addr) + 3 > region->endAddress)

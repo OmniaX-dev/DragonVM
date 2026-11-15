@@ -55,9 +55,8 @@ interrupt sub __int_20_handler() {
 	else if (code == INT20_REBOOT)
 	{
 		atomic {
-			low { %low $INST_BIOS_NODE_TOGGLE 0x01 }
-			// (the CMOS is writable in BIOS mode only; the machine resets before the next
-			// instruction, so this handler doesn't return)
+			// (the CMOS is writable in supervisor mode only, which interrupt handlers run in; the
+			// machine resets before the next instruction, so this handler doesn't return)
 			var signals: dr::BitField16* = cast<dr::BitField16*>(dr::CMOSRegisters.SystemSignals);
 			signals->set(dr::SystemSignals.Reboot);
 		}

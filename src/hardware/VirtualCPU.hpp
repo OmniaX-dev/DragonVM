@@ -32,7 +32,7 @@ namespace dragon
 				u8 currentExtInst;
 				i8 currentExtension;    // index in the extension table, -1 = none
 				bool halt;
-				bool biosMode;
+				bool supervisor;
 				bool isDebugBreakPoint;
 				bool ramDumped;
 				bool isOffsetAddressingEnabled;
@@ -45,8 +45,8 @@ namespace dragon
 				VirtualCPU(IMemoryDevice& memory);
 				// Sets SP and FP to the top of the stack (the last word of the RAM).
 				void setStackTop(u32 stackTop);
-				// Power-on state: every register and flag 0, IP 0, SP / FP at the stack top, BIOS
-				// mode, not halted, no interrupt / subroutine pending, no offset addressing. The
+				// Power-on state: every register and flag 0, IP 0, SP / FP at the stack top,
+				// supervisor mode, not halted, no interrupt / subroutine pending, no offset addressing. The
 				// extensions, the debug mode and the handlers stay.
 				void reset(void);
 				inline u32 getStackTop(void) const { return m_stackTop; }
@@ -75,20 +75,34 @@ namespace dragon
 				bool readFlag(u8 flg);
 				void setFlag(u8 flg, bool val = true);
 
+				// An interrupt: raised by a device (hardware) or by int. Ignored while interrupts
+				// are disabled, except int in user mode (a system call). See trap().
 				bool handleInterrupt(u8 intValue, bool hardware);
+				// Enters the handler of vector (it must be enabled), in supervisor mode. From user
+				// mode it first switches to the kernel stack (CPU control KernelStackTop, unless 0).
+				// On the (new) stack, under the handler's stack frame: the previous SP, the previous
+				// mode (1 supervisor), then with saveContext (hardware interrupts and faults, which
+				// come between any two instructions) RV, S1, S2, OFFSET, FL, then the marker
+				// (HardwareInterruptMarker with saveContext, otherwise 0) and an argument count of 0.
+				// rti undoes it all (the mode and SP last).
+				void trap(u8 vector, bool saveContext);
 				// Pushed under an interrupt's stack frame: hardware (the saved registers follow) or 0.
 				inline static constexpr u32 HardwareInterruptMarker = 0x48574952;
 
 				bool loadExtension(void);
+				// Runs one instruction. In user mode, an error it causes becomes a fault when the
+				// fault's vector is enabled (the error is then dropped and the handler runs).
 				bool execute(void);
 
 				inline bool isHalted(void) const { return m_halt; }
 				inline u8 getCurrentInstruction(void) const { return m_currentInst; }
 				inline bool isInDebugBreakPoint(void) const { return m_isDebugBreakPoint; }
 				inline bool isRamDumped(void) const { return m_ramDumped; }
-				inline bool isInBIOSMOde(void) const { return m_biosMode; }
-				// The debugger's writes to protected devices (the CMOS chip) need BIOS mode.
-				inline void setBIOSMode(bool biosMode) { m_biosMode = biosMode; }
+				// Supervisor mode (the BIOS, the boot loader, a kernel) or user mode (programs: no
+				// privileged instructions, no writes to protected device registers).
+				inline bool isSupervisor(void) const { return m_supervisor; }
+				// Also for the debugger's writes to protected devices (the CMOS chip).
+				inline void setSupervisor(bool supervisor) { m_supervisor = supervisor; }
 				inline bool isInSubRoutine(void) const { return m_subroutineCounter > 0; }
 				inline i32 getSubRoutineCounter(void) const { return m_subroutineCounter; }
 				inline data::CPUExtension* getCurrentCPUExtension(void) const { return m_currentExtension; }
@@ -123,6 +137,14 @@ namespace dragon
 
 			private:
 				void write_register(u8 reg, u32 value);
+				bool execute_instruction(void);
+				// False (with a CPU_PrivilegedInstruction error) in user mode.
+				bool privileged(const char* what);
+				// The error an instruction caused in user mode (errors from firstError on) as a
+				// fault, if its vector is enabled: false otherwise (the errors stay).
+				bool raise_fault(u32 instructionAddress, size_t firstError);
+				// SP is in a stack the CPU knows (the machine's, the kernel's, the user's).
+				bool stack_allowed(u32 sp);
 
 			private:
 				i32 m_registers[data::Registers::Last];
@@ -133,7 +155,7 @@ namespace dragon
 				bool m_halt { false };
 				u8 m_currentInst { 0x00 };
 				u32 m_currentAddr { 0x0000 };
-				bool m_biosMode { true };
+				bool m_supervisor { true };
 				i32 m_interruptHandlerCount { 0 };
 				// For each interrupt in service, the handler depth (m_interruptHandlerCount) of its
 				// outermost running handler; 0 = not in service. rti clears the entries deeper than

@@ -101,7 +101,7 @@ namespace dragon
 		addWidget(m_liveCheck);
 		place(m_liveCheck, 0, 0, 0, 0, 8, 6, 130, 34);
 		m_liveCheck.setText("Live chip");
-		m_liveCheck.setTooltipText("Off: edit the cmos.dr file. On: edit the running machine's chip (through the memory map, in BIOS mode)");
+		m_liveCheck.setTooltipText("Off: edit the cmos.dr file. On: edit the running machine's chip (through the memory map, in supervisor mode)");
 		m_liveCheck.enableTooltip();
 		m_liveCheck.setStateChangedCallback([this](CheckBox&, bool checked) { set_live(checked); });
 		addWidget(m_infoLine);
@@ -252,7 +252,7 @@ namespace dragon
 		m_reloadButton.enable(!m_live && m_file != nullptr);
 		if (m_live)
 		{
-			m_infoLine.setMessage(String("Live chip at ").add(String::getHexStr(data::MemoryMapAddresses::CMOS_Start, true, 4)).add(" - ").add(String::getHexStr(data::MemoryMapAddresses::CMOS_End, true, 4)).add(": writes go through the memory map, in BIOS mode"), LiveColor);
+			m_infoLine.setMessage(String("Live chip at ").add(String::getHexStr(data::MemoryMapAddresses::CMOS_Start, true, 4)).add(" - ").add(String::getHexStr(data::MemoryMapAddresses::CMOS_End, true, 4)).add(": writes go through the memory map, in supervisor mode"), LiveColor);
 			return;
 		}
 		if (m_file == nullptr)
@@ -327,7 +327,7 @@ namespace dragon
 	bool CMOSManagerWindow::write_live(u32 offset, std::span<const u8> bytes)
 	{
 		auto& cpu = DragonRuntime::cpu;
-		const bool biosMode = cpu.isInBIOSMOde();
+		const bool supervisor = cpu.isSupervisor();
 		bool ok = true;
 		for (size_t i = 0; i < bytes.size(); i++)
 		{
@@ -337,11 +337,11 @@ namespace dragon
 				ok = false;
 				break;
 			}
-			// The chip only takes writes in BIOS mode.
-			cpu.setBIOSMode(true);
+			// The chip only takes writes in supervisor mode.
+			cpu.setSupervisor(true);
 			DragonRuntime::memMap.write8(cast<u32>(address), cast<i8>(bytes[i]));
 		}
-		cpu.setBIOSMode(biosMode);
+		cpu.setSupervisor(supervisor);
 		while (data::ErrorHandler::hasError())
 		{
 			ok = false;

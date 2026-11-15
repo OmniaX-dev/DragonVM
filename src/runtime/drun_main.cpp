@@ -179,6 +179,9 @@ static void usage(void)
 				 "                         the debugger gets), to stderr\n"
 				 "  --vsync <cycles>       Cycles between VSync interrupts (default: clock_rate_sec /\n"
 				 "                         screen_redraw_rate_per_second from the .dvm; 0 = none)\n"
+				 "  --user                 Runs the program in user mode (default: supervisor mode, like the BIOS,\n"
+				 "                         a boot loader or a kernel: privileged instructions work); a hlt in\n"
+				 "                         user mode (privileged) then ends the run, as a halt\n"
 				 "  --unix-time <seconds>  The Unix time at the start (the Timer's UnixTime; default: the host's\n"
 				 "                         clock), then running on with the machine's time\n"
 				 "  -- <arguments>         The program's arguments (main(argc, argv); argv[0] is its path)\n"
@@ -194,7 +197,7 @@ int main(int argc, char** argv)
 	}
 	std::string config = argv[1], programPath;
 	i64 at = -1;
-	bool boot = false, quiet = false, screen = false, drxEvents = false;
+	bool boot = false, quiet = false, screen = false, drxEvents = false, userMode = false;
 	u64 maxCycles = 50000000;
 	i64 vsyncCycles = -1;
 	i64 unixTime = -1;
@@ -215,6 +218,7 @@ int main(int argc, char** argv)
 		else if (a == "--quiet") quiet = true;
 		else if (a == "--screen") screen = true;
 		else if (a == "--drx-events") drxEvents = true;
+		else if (a == "--user") userMode = true;
 		else if (a == "--unix-time") unixTime = (i64)std::strtoull(l_value().c_str(), nullptr, 0);
 		else if (a == "--vsync") vsyncCycles = (i64)std::strtoull(l_value().c_str(), nullptr, 0);
 		else if (a == "--max-cycles") maxCycles = std::strtoull(l_value().c_str(), nullptr, 0);
@@ -357,16 +361,27 @@ int main(int argc, char** argv)
 		for (size_t i = 0; i < sizeof(code); i++)
 			mem.poke8(tramp + (u32)i, code[i]);
 		cpu.writeRegister32(data::Registers::IP, cast<i32>(tramp));
-		cpu.setBIOSMode(false);
+		if (userMode)
+		{
+			cpu.setSupervisor(false);
+		}
 		s_echo = true;
 		s_textBuffer.clear();
 	}
 
+	bool exited = false;
 	while (!cpu.isHalted() && cycles < maxCycles)
 	{
+		// --user: hlt is privileged in user mode; the program's (or the trampoline's) ends the run.
+		if (userMode && !cpu.isSupervisor() && mem.peek8(cast<u32>(cpu.readRegister(data::Registers::IP))) == data::OpCodes::Halt)
+		{
+			exited = true;
+			break;
+		}
 		if (!step(cycles))
 			return 1;
 	}
+	const bool finished = cpu.isHalted() || exited;
 	std::cout.flush();
 	if (!s_textBuffer.empty())
 		std::cout << s_textBuffer;
@@ -375,7 +390,7 @@ int main(int argc, char** argv)
 	const i32 rv = cpu.readRegister(data::Registers::RV);
 	if (!quiet)
 	{
-		std::fprintf(stderr, "\n[drun] %s after %llu cycles, RV = 0x%08X (%d)\n", cpu.isHalted() ? "halted" : "out of cycles", (unsigned long long)cycles, (u32)rv, rv);
+		std::fprintf(stderr, "\n[drun] %s after %llu cycles, RV = 0x%08X (%d)\n", finished ? "halted" : "out of cycles", (unsigned long long)cycles, (u32)rv, rv);
 		for (const auto& d : dumps)
 		{
 			std::fprintf(stderr, "[drun] %08X:", d.first);
@@ -394,5 +409,5 @@ int main(int argc, char** argv)
 			std::printf("\n");
 		}
 	}
-	return cpu.isHalted() ? 0 : 2;
+	return finished ? 0 : 2;
 }

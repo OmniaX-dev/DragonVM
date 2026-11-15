@@ -384,6 +384,7 @@ namespace dragon
 		add_device("Keyboard", DragonRuntime::vKeyboard);
 		add_device("Timer", DragonRuntime::vTimer);
 		add_device("Random", DragonRuntime::vRandom);
+		add_device("CPUControl", DragonRuntime::vCPUControl);
 		add_device("DiskInterface", DragonRuntime::vDiskInterface);
 		add_device("CMOS", DragonRuntime::vCMOS);
 		m_history.addSegment("CPU", reinterpret_cast<u8*>(&m_cpuState), sizeof(m_cpuState),
@@ -771,7 +772,7 @@ namespace dragon
 		info.stackFrameSize = cpu.getStackFrameSize();
 		info.debugBreak = cpu.isInDebugBreakPoint();
 		info.interruptHandlerCount = cpu.getInterruptHandlerCount();
-		info.biosMode = cpu.isInBIOSMOde();
+		info.supervisor = cpu.isSupervisor();
 		info.subroutineCounter = cpu.getSubRoutineCounter();
 		info.inSubroutine = cpu.isInSubRoutine();
 		info.halted = cpu.isHalted();

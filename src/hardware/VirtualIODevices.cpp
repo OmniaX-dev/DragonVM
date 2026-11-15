@@ -214,8 +214,23 @@ namespace dragon
 				ms = cycles * 1000 / m_clockRate;
 			else
 				ms = cast<u64>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - m_wallStart).count());
-			bytes::write32(m_data, tRegisters::Milliseconds, cast<i32>(cast<u32>(ms)));
+			const u32 now = cast<u32>(ms);
+			bytes::write32(m_data, tRegisters::Milliseconds, cast<i32>(now));
 			bytes::write32(m_data, tRegisters::UnixTime, cast<i32>(m_unixStart + cast<u32>(ms / 1000)));
+			i32 interval = 0;
+			bytes::read32(m_data, tRegisters::InterruptInterval, interval);
+			if (interval != 0)
+			{
+				i32 next = 0;
+				bytes::read32(m_data, tRegisters::NextInterrupt, next);
+				if (cast<i32>(now - cast<u32>(next)) >= 0)		// (right across the wrap)
+				{
+					// Skipped while its previous handler is still running (as the VSync).
+					if (!DragonRuntime::cpu.isInterruptInService(data::InterruptCodes::Timer))
+						DragonRuntime::cpu.handleInterrupt(data::InterruptCodes::Timer, true);
+					bytes::write32(m_data, tRegisters::NextInterrupt, cast<i32>(now + cast<u32>(interval)));
+				}
+			}
 		}
 
 		i8 VirtualTimer::read8(u32 addr)
@@ -236,11 +251,98 @@ namespace dragon
 
 		i32 VirtualTimer::write32(u32 addr, i32 value)
 		{
+			if (addr == tRegisters::InterruptInterval)
+			{
+				if (!DragonRuntime::cpu.isSupervisor())
+				{
+					data::ErrorHandler::pushError(data::ErrorCodes::AccessViolation_SupervisorRequired, String("Attempting to write the Timer's interrupt interval in user mode. Address: ").add(String::getHexStr(addr, true, 4)));
+					return 0;
+				}
+				bytes::write32(m_data, tRegisters::InterruptInterval, value);
+				bytes::write32(m_data, tRegisters::NextInterrupt, cast<i32>(getMilliseconds() + cast<u32>(value)));
+				return value;
+			}
 			data::ErrorHandler::pushError(data::ErrorCodes::Timer_WriteAttempt, String("Attempting to write word to the Timer (read-only). Address: ").add(String::getHexStr(addr, true, 4)));
 			return 0;
 		}
 
 		ostd::ByteStream* VirtualTimer::getByteStream(void)
+		{
+			return &m_data;
+		}
+
+
+
+		void VirtualCPUControl::init(void)
+		{
+			m_data.assign(data::MemoryMapAddresses::CPUControl_End - data::MemoryMapAddresses::CPUControl_Start + 1, 0x00);
+			reset();
+		}
+
+		void VirtualCPUControl::reset(void)
+		{
+			std::fill(m_data.begin(), m_data.end(), 0x00);
+			update_mode();
+		}
+
+		u32 VirtualCPUControl::get(u32 reg) const
+		{
+			i32 value = 0;
+			bytes::read32(m_data, reg, value);
+			return cast<u32>(value);
+		}
+
+		void VirtualCPUControl::set(u32 reg, u32 value)
+		{
+			bytes::write32(m_data, reg, cast<i32>(value));
+		}
+
+		void VirtualCPUControl::update_mode(void)
+		{
+			bytes::write32(m_data, tRegisters::Mode, DragonRuntime::cpu.isSupervisor() ? 1 : 0);
+		}
+
+		bool VirtualCPUControl::check_write(u32 addr, const char* what)
+		{
+			if (!DragonRuntime::cpu.isSupervisor())
+			{
+				data::ErrorHandler::pushError(data::ErrorCodes::AccessViolation_SupervisorRequired, String("Attempting to write ").add(what).add(" to the CPU control registers in user mode. Address: ").add(String::getHexStr(addr, true, 4)));
+				return false;
+			}
+			return true;
+		}
+
+		i8 VirtualCPUControl::read8(u32 addr)
+		{
+			update_mode();
+			return stream_read8(m_data, addr, data::ErrorCodes::CPUControl_InvalidAddress, "CPUControl");
+		}
+
+		i32 VirtualCPUControl::read32(u32 addr)
+		{
+			update_mode();
+			return stream_read32(m_data, addr, data::ErrorCodes::CPUControl_InvalidAddress, "CPUControl");
+		}
+
+		i8 VirtualCPUControl::write8(u32 addr, i8 value)
+		{
+			if (!check_write(addr, "a byte"))
+				return 0;
+			if (addr >= tRegisters::Mode && addr < tRegisters::Mode + 4)
+				return value;		// (read-only: ignored)
+			return stream_write8(m_data, addr, value, data::ErrorCodes::CPUControl_InvalidAddress, "CPUControl");
+		}
+
+		i32 VirtualCPUControl::write32(u32 addr, i32 value)
+		{
+			if (!check_write(addr, "a word"))
+				return 0;
+			if (addr == tRegisters::Mode)
+				return value;		// (read-only: ignored)
+			return stream_write32(m_data, addr, value, data::ErrorCodes::CPUControl_InvalidAddress, "CPUControl");
+		}
+
+		ostd::ByteStream* VirtualCPUControl::getByteStream(void)
 		{
 			return &m_data;
 		}
@@ -331,9 +433,9 @@ namespace dragon
 
 		i8 VirtualKeyboard::write8(u32 addr, i8 value)
 		{
-			if (!DragonRuntime::cpu.isInBIOSMOde())
+			if (!DragonRuntime::cpu.isSupervisor())
 			{
-				data::ErrorHandler::pushError(data::ErrorCodes::AccessViolation_BiosModeRequired, String("Attempting to write byte to KeyboardController while not in BIOS mode. Address: ").add(String::getHexStr(addr, true, 4)));
+				data::ErrorHandler::pushError(data::ErrorCodes::AccessViolation_SupervisorRequired, String("Attempting to write byte to KeyboardController in user mode. Address: ").add(String::getHexStr(addr, true, 4)));
 				return 0;
 			}
 			return stream_write8(m_data, addr, value, data::ErrorCodes::IntVector_InvalidAddress, "KeyboardController");
@@ -341,9 +443,9 @@ namespace dragon
 
 		i32 VirtualKeyboard::write32(u32 addr, i32 value)
 		{
-			if (!DragonRuntime::cpu.isInBIOSMOde())
+			if (!DragonRuntime::cpu.isSupervisor())
 			{
-				data::ErrorHandler::pushError(data::ErrorCodes::AccessViolation_BiosModeRequired, String("Attempting to write word to KeyboardController while not in BIOS mode. Address: ").add(String::getHexStr(addr, true, 4)));
+				data::ErrorHandler::pushError(data::ErrorCodes::AccessViolation_SupervisorRequired, String("Attempting to write word to KeyboardController in user mode. Address: ").add(String::getHexStr(addr, true, 4)));
 				return 0;
 			}
 			return stream_write32(m_data, addr, value, data::ErrorCodes::IntVector_InvalidAddress, "KeyboardController");
@@ -1195,9 +1297,9 @@ namespace dragon
 					data::ErrorHandler::pushError(data::ErrorCodes::CMOS_InvalidAddress, String("Invalid Byte CMOS location at address: ").add(String::getHexStr(addr, true, 4)));
 					return 0;
 				}
-				if (!DragonRuntime::cpu.isInBIOSMOde())
+				if (!DragonRuntime::cpu.isSupervisor())
 				{
-					data::ErrorHandler::pushError(data::ErrorCodes::AccessViolation_BiosModeRequired, String("Attempting to write byte to CMOS while not in BIOS mode. Address: ").add(String::getHexStr(addr, true, 4)));
+					data::ErrorHandler::pushError(data::ErrorCodes::AccessViolation_SupervisorRequired, String("Attempting to write byte to CMOS in user mode. Address: ").add(String::getHexStr(addr, true, 4)));
 					return 0;
 				}
 				m_data[addr] = value;
@@ -1228,9 +1330,9 @@ namespace dragon
 					data::ErrorHandler::pushError(data::ErrorCodes::CMOS_InvalidAddress, String("Invalid Word CMOS location at address: ").add(String::getHexStr(addr, true, 4)));
 					return 0;
 				}
-				if (!DragonRuntime::cpu.isInBIOSMOde())
+				if (!DragonRuntime::cpu.isSupervisor())
 				{
-					data::ErrorHandler::pushError(data::ErrorCodes::AccessViolation_BiosModeRequired, String("Attempting to write word to CMOS while not in BIOS mode. Address: ").add(String::getHexStr(addr, true, 4)));
+					data::ErrorHandler::pushError(data::ErrorCodes::AccessViolation_SupervisorRequired, String("Attempting to write word to CMOS in user mode. Address: ").add(String::getHexStr(addr, true, 4)));
 					return 0;
 				}
 				const u32 v = cast<u32>(value);

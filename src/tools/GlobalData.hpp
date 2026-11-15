@@ -21,7 +21,9 @@ namespace dragon
 		{
 			public:
 				inline static constexpr u64 NoError                             =             0x0000000000000000;
-				inline static constexpr u64 AccessViolation_BiosModeRequired    =             0x0000000000000001;
+				// A protected device register written in user mode (CMOS, keyboard controller, CPU
+				// control, the timer's interrupt interval).
+				inline static constexpr u64 AccessViolation_SupervisorRequired  =             0x0000000000000001;
 
 				inline static constexpr u64 MM_RegionNotFound                     =             0x1000000000000000;
 				inline static constexpr u64 MM_AtomicNotSupported                     =             0x1000000000000001;
@@ -31,6 +33,8 @@ namespace dragon
 				inline static constexpr u64 CPU_UnsupportedExtension             =             0x2000000000000001;
 				inline static constexpr u64 CPU_StackOverflow                     =             0x2000000000000002;
 				inline static constexpr u64 CPU_DivisionByZero                     =             0x2000000000000003;
+				// hlt, rti, umode, the interrupt flag, int to a fault vector: in user mode.
+				inline static constexpr u64 CPU_PrivilegedInstruction             =             0x2000000000000004;
 
 				inline static constexpr u64 BIOS_FailedToLoad                     =             0x3000000000000000;
 				inline static constexpr u64 BIOS_InvalidSize                     =             0x3000000000000001;
@@ -72,6 +76,8 @@ namespace dragon
 				inline static constexpr u64 Random_InvalidAddress                =             0xA000000000000000;
 				inline static constexpr u64 Random_WriteAttempt                  =             0xA000000000000001;
 
+				inline static constexpr u64 CPUControl_InvalidAddress            =             0xB000000000000000;
+
 		};
 
 		class ErrorHandler
@@ -80,11 +86,19 @@ namespace dragon
 			{
 				u64 code;
 				String text;
+				u32 address;		// the bus address being accessed when it happened (see currentAddress)
 			};
 
 			public:
-				inline static void pushError(u64 code, String text) { m_errorStack.push_back({ code, text }); }
+				inline static void pushError(u64 code, String text) { m_errorStack.push_back({ code, text, currentAddress }); }
 				inline static bool hasError(void) { return m_errorStack.size() > 0; }
+				// For the CPU's faults: the errors an instruction pushed are the ones from count()
+				// on (the first is the fault's cause); resize() drops them.
+				inline static size_t count(void) { return m_errorStack.size(); }
+				inline static const tError& at(size_t i) { return m_errorStack[i]; }
+				inline static void resize(size_t n) { if (n < m_errorStack.size()) m_errorStack.resize(n); }
+				// The address the memory map is accessing (set by MemoryMapper on every access).
+				inline static u32 currentAddress = 0;
 				inline static tError popError(void)
 				{
 					if (m_errorStack.size() == 0)
@@ -126,7 +140,12 @@ namespace dragon
 				inline static constexpr u32 Random_Start = 0x010006A0;
 				inline static constexpr u32 Random_End   = 0x010006AF;
 
-				// 0x010006B0 - 0x0100087F: unused (the old MBR zone; the BIOS loads the boot
+				// The CPU's control registers (see hw::VirtualCPUControl): the kernel stack, the
+				// user stack, the last fault. Written in supervisor mode only.
+				inline static constexpr u32 CPUControl_Start = 0x010006B0;
+				inline static constexpr u32 CPUControl_End   = 0x010006EF;
+
+				// 0x010006F0 - 0x0100087F: unused (the old MBR zone; the BIOS loads the boot
 				// loader at Memory_Start).
 
 				inline static constexpr u32 DiskInterface_Start = 0x01000880;
@@ -300,6 +319,17 @@ namespace dragon
 		class InterruptCodes
 		{
 			public:
+				// Faults (CPU exceptions): raised by an instruction that fails in user mode, when
+				// the vector is enabled (otherwise, and in supervisor mode, the machine stops with
+				// the error, as before). The CPU control registers tell the fault's IP and address.
+				inline static constexpr u8 Fault_DivisionByZero = 0x00;
+				inline static constexpr u8 Fault_InvalidInstruction = 0x01;
+				inline static constexpr u8 Fault_PrivilegedInstruction = 0x02;
+				inline static constexpr u8 Fault_AccessViolation = 0x03;
+				inline static constexpr u8 Fault_StackOverflow = 0x04;
+				inline static constexpr u8 Fault_General = 0x05;
+				inline static constexpr u8 LastFault = 0x0F;		// 0x00 - 0x0F: reserved for faults
+
 				inline static constexpr u8 DiskInterfaceFFinished = 0x80;
 				inline static constexpr u8 KeyPressed = 0xA0;
 				inline static constexpr u8 KeyReleased = 0xA1;
@@ -308,6 +338,9 @@ namespace dragon
 				// Raised at every tick of the screen timer (screen_redraw_rate_per_second), in every
 				// video mode, unless its previous handler is still running (then that tick is skipped).
 				inline static constexpr u8 VSync = 0xE0;
+				// Every Timer InterruptInterval milliseconds (0: off), unless its previous handler
+				// is still running.
+				inline static constexpr u8 Timer = 0xC0;
 
 				inline static String getInterruptName(u8 code)
 				{
@@ -318,6 +351,13 @@ namespace dragon
 						case KeyReleased:                 return "Key_Released";
 						case TextEntered:                 return "Text_Entered";
 						case VSync:                       return "VSync";
+						case Timer:                       return "Timer";
+						case Fault_DivisionByZero:        return "Fault_Division_By_Zero";
+						case Fault_InvalidInstruction:    return "Fault_Invalid_Instruction";
+						case Fault_PrivilegedInstruction: return "Fault_Privileged_Instruction";
+						case Fault_AccessViolation:       return "Fault_Access_Violation";
+						case Fault_StackOverflow:         return "Fault_Stack_Overflow";
+						case Fault_General:               return "Fault_General";
 						default:                        return "UNKNOWN";
 					}
 					return "UNKNOWN";
@@ -442,7 +482,9 @@ namespace dragon
 			public:
 				inline static constexpr u8 NoOp = 0x00;
 				inline static constexpr u8 DEBUG_Break = 0x01;
-				inline static constexpr u8 BIOSModeImm = 0x02;
+				// umode: in supervisor mode, switches to user mode (operand 0; other values: no
+				// change); in user mode a privileged instruction.
+				inline static constexpr u8 ModeImm = 0x02;
 				inline static constexpr u8 DEBUG_StartProfile = 0x03;
 				inline static constexpr u8 DEBUG_StopProfile = 0x04;
 				inline static constexpr u8 DEBUG_DumpRAM = 0x05;

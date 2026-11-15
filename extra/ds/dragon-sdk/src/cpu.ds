@@ -1,0 +1,109 @@
+#include(dragon.ds)
+
+// Supervisor mode and user mode, for kernels. The BIOS, the boot loader and the kernel run in
+// supervisor mode; a kernel runs programs in user mode (enter_user_mode), where privileged
+// instructions (hlt, rti, umode, the interrupt flag, int to a fault vector) and writes to the
+// protected device registers (CMOS, keyboard controller, CPU control, the Timer's interrupt
+// interval) are faults. Traps from user mode (int: system calls, hardware interrupts, faults)
+// run their handler in supervisor mode, on the kernel stack (set_kernel_stack); rti goes back.
+namespace dr::cpu {
+	// The fault vectors: an instruction that fails in user mode raises its fault when the vector
+	// is enabled (set_interrupt_vector_entry); otherwise (and in supervisor mode) the machine stops
+	// with the error. The handler returns to the faulting instruction, unless it changes the return
+	// address (set_trap_return_address) or doesn't return.
+	const Faults: struct {
+		var DivisionByZero: u8					= 0x00;
+		var InvalidInstruction: u8				= 0x01;
+		var PrivilegedInstruction: u8			= 0x02;
+		var AccessViolation: u8					= 0x03;	// a protected, read-only or missing address
+		var StackOverflow: u8					= 0x04;
+		var General: u8							= 0x05;
+		var Last: u8							= 0x0F;	// 0x00 - 0x0F: the CPU's (int can't use them in user mode)
+	};
+
+	inline sub is_supervisor() -> bool {
+		return *cast<u32*>(CPUControlRegisters.Mode) != 0;
+	}
+
+	// The stack traps from user mode switch to (top: its last word; 0: they stay on the user's
+	// stack). Each trap from user mode starts it again from the top.
+	sub set_kernel_stack(var top: u32, var size: u32) {
+		*cast<u32*>(CPUControlRegisters.KernelStackTop) = top;
+		*cast<u32*>(CPUControlRegisters.KernelStackSize) = size;
+	}
+
+	// The user program's stack, for the stack check (top 0: none).
+	sub set_user_stack(var top: u32, var size: u32) {
+		*cast<u32*>(CPUControlRegisters.UserStackTop) = top;
+		*cast<u32*>(CPUControlRegisters.UserStackSize) = size;
+	}
+
+	// The last fault: its vector, the faulting instruction, the address it accessed (memory
+	// faults; the instruction's otherwise).
+	inline sub fault_vector() -> u8 {
+		return cast<u8>(*cast<u32*>(CPUControlRegisters.FaultVector));
+	}
+	inline sub fault_ip() -> u32 {
+		return *cast<u32*>(CPUControlRegisters.FaultIP);
+	}
+	inline sub fault_address() -> u32 {
+		return *cast<u32*>(CPUControlRegisters.FaultAddress);
+	}
+
+	// Called directly from an interrupt sub: its frame (the trap's), for the subs below.
+	sub trap_frame() -> u32 {
+		var fp: u32 = 0;
+		low { mov $fp, FP }
+		return *cast<u32*>(fp + 8);		// the caller's FP (saved in this sub's frame)
+	}
+
+	// Where rti returns to (the frame's saved IP), and changing it: e.g. past a faulting
+	// instruction, or to another program (a task switch also needs its registers and stack).
+	sub trap_return_address(var frame: u32) -> u32 {
+		return *cast<u32*>(frame + 12);
+	}
+	sub set_trap_return_address(var frame: u32, var address: u32) {
+		*cast<u32*>(frame + 12) = address;
+	}
+
+	// The trap came from user mode (the mode saved under the frame).
+	sub trap_from_user(var frame: u32) -> bool {
+		var count: u32 = *cast<u32*>(frame + 4 * 26);	// the argument count (0 for traps)
+		var marker: u32 = *cast<u32*>(frame + 4 * 27);
+		var mode_at: u32 = frame + 4 * 28;
+		if (marker == 0x48574952)						// with the saved RV, S1, S2, OFFSET, FL
+			mode_at += 4 * 5;
+		return count == 0 and *cast<u32*>(mode_at) == 0;
+	}
+
+	// Supervisor mode -> user mode, here (on the same stack). Privileged.
+	sub drop_to_user() {
+		low { umode }
+	}
+
+	// Runs entry in user mode on its own stack (stack_top: the stack's last word, stack_size
+	// bytes): it never returns here. If entry returns, the next instruction is a hlt: a privileged
+	// instruction fault (the kernel's handler ends the program). From supervisor mode only.
+	sub enter_user_mode(var entry: sub(), var stack_top: u32, var stack_size: u32) {
+		set_user_stack(stack_top, stack_size);
+		// A trap frame as int from user mode leaves it (the user SP, the user mode, no saved
+		// registers, no arguments), with the return address changed: rti goes there.
+		low {
+			mov R1, $entry
+			mov R2, $stack_top
+			push R2
+			push 0x00000000
+			push 0x00000000
+			push 0x00000000
+			call $__dr_cpu_enter_user_frame
+		__dr_cpu_enter_user_frame:
+			mov R3, $__dr_cpu_user_start
+			omov *FP, R3, 0x0C
+			rti
+		__dr_cpu_user_start:
+			push 0x00000000
+			call R1
+			hlt
+		}
+	}
+}

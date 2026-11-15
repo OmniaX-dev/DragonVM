@@ -1,0 +1,21 @@
+// drun --user: the program runs in user mode; the BIOS's services (int 0x20) still work (a
+// system call from user mode), and returning from main ends the run normally.
+// drun-flags: --boot --user
+// expect-rv: 7
+#import(<dragon-sdk>)
+
+sub main() -> i32 {
+	if (dr::cpu::is_supervisor())
+		return 1;
+	var r: i32 = dr::random::next();
+	if (r < 0)
+		return 2;
+	var p: u8* = dr::malloc(64);
+	if (not p)
+		return 3;
+	p[63] = 9;
+	dr::free(p);
+	if (dr::cpu::is_supervisor())
+		return 4;
+	return 7;
+}

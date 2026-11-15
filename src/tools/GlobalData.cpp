@@ -19,7 +19,7 @@ namespace dragon
 			{
 				case data::OpCodes::NoOp: return "NoOp";
 				case data::OpCodes::DEBUG_Break: return "debug_break";
-				case data::OpCodes::BIOSModeImm: return "BIOSModeImm";
+				case data::OpCodes::ModeImm: return "ModeImm";
 				case data::OpCodes::DEBUG_StartProfile: return "debug_start_profile";
 				case data::OpCodes::DEBUG_StopProfile: return "debug_stop_profile";
 				case data::OpCodes::DEBUG_DumpRAM: return "debug_dump_ram";
@@ -151,7 +151,7 @@ namespace dragon
 			{
 				case data::OpCodes::NoOp: return 1;
 				case data::OpCodes::DEBUG_Break: return 1;
-				case data::OpCodes::BIOSModeImm: return 2;
+				case data::OpCodes::ModeImm: return 2;
 				case data::OpCodes::DEBUG_StartProfile: return 3;
 				case data::OpCodes::DEBUG_StopProfile: return 1;
 				case data::OpCodes::DEBUG_DumpRAM: return 1;

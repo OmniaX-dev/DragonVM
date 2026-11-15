@@ -206,6 +206,17 @@ namespace dragon
 		memMap.mapDevice(vRandom, dragon::data::MemoryMapAddresses::Random_Start, dragon::data::MemoryMapAddresses::Random_End, true, "Random");
 		if (info.verboseLoad)
 		{
+			out.fg(ostd::ConsoleColors::Magenta).p("    vCPUControl: ");
+			out.fg(ostd::ConsoleColors::BrightYellow);
+			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::CPUControl_Start, true, 4).cpp_str());
+			out.p(" to ");
+			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::CPUControl_End, true, 4).cpp_str());
+			out.p(" (remap=true)").nl();
+		}
+		vCPUControl.init();
+		memMap.mapDevice(vCPUControl, dragon::data::MemoryMapAddresses::CPUControl_Start, dragon::data::MemoryMapAddresses::CPUControl_End, true, "CPUCtl");
+		if (info.verboseLoad)
+		{
 			out.fg(ostd::ConsoleColors::Magenta).p("    vDiskInterface: ");
 			out.fg(ostd::ConsoleColors::BrightYellow);
 			out.p(String::getHexStr(dragon::data::MemoryMapAddresses::DiskInterface_Start, true, 4).cpp_str());
@@ -264,8 +275,8 @@ namespace dragon
 		cpu.m_debugModeEnabled = info.debugModeEnabled;
 
 		if (info.verboseLoad)
-			out.fg(ostd::ConsoleColors::BrightYellow).p("    BIOS mode enabled").nl();
-		cpu.m_biosMode = true;
+			out.fg(ostd::ConsoleColors::BrightYellow).p("    Supervisor mode").nl();
+		cpu.m_supervisor = true;
 
 		if (machine_config.cpuext_list.size() > 0)
 		{
@@ -320,6 +331,7 @@ namespace dragon
 		vKeyboard.resetState();
 		vTimer.reset();
 		vRandom.autoSeed();
+		vCPUControl.reset();
 		vDiskInterface.reset();
 		vCMOS.write16(data::CMOSRegisters::SystemSignals, 0);
 		s_resetCount++;

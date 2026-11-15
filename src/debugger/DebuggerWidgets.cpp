@@ -543,7 +543,7 @@ namespace dragon
 		const u32 prevFL = cast<u32>(prev.registers[data::Registers::FL]);
 		l_chip("Interrupts", ie, (prevFL & 1) != 0, Color(120, 230, 120));
 		l_chip("Offset mode", DragonRuntime::cpu.readFlag(data::Flags::OffsetModeEnabled), (prevFL & 2) != 0, Color(120, 200, 240));
-		l_chip("BIOS mode", curr.biosMode, prev.biosMode, Color(240, 180, 90));
+		l_chip("Supervisor", curr.supervisor, prev.supervisor, Color(240, 180, 90));
 		l_chip("Debug break", curr.debugBreak, prev.debugBreak, Color(240, 220, 90));
 		l_chip("Halted", curr.halted, prev.halted, Color(240, 90, 90));
 		l_chip(String("Subroutines ").add(curr.subroutineCounter), curr.inSubroutine, prev.inSubroutine, Color(200, 140, 240));

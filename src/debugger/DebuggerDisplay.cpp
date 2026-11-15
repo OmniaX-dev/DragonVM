@@ -149,7 +149,7 @@ namespace dragon
 		str.add("\n");
 		str.add("| INT Handler:  |*%PREV_INT_HANDLER%*****************************|*%CURR_INT_HANDLER%*****************************| R5  |*%PREV_R5%*|*%CURR_R5%*| R15 |*%PREV_R15%|*%CURR_R15%|");
 		str.add("\n");
-		str.add("| BIOS Mode:    |*%PREV_BIOS_MODE%*******************************|**%CURR_BIOS_MODE%******************************| R6  |*%PREV_R6%*|*%CURR_R6%*| R16 |*%PREV_R16%|*%CURR_R16%|");
+		str.add("| Supervisor:   |*%PREV_BIOS_MODE%*******************************|**%CURR_BIOS_MODE%******************************| R6  |*%PREV_R6%*|*%CURR_R6%*| R16 |*%PREV_R16%|*%CURR_R16%|");
 		str.add("\n");
 		str.add("| SubRoutine:   |*%PREV_SUB_ROUTINE%*****************************|**%CURR_SUB_ROUTINE%****************************| R7  |*%PREV_R7%*|*%CURR_R7%*| R17 |*%PREV_R17%|*%CURR_R17%|");
 		str.add("\n");
@@ -211,7 +211,7 @@ namespace dragon
 		l_pair("%PREV_STACK_FRAME%", l_hex(prev.stackFrameSize), "%CURR_STACK_FRAME%", l_hex(curr.stackFrameSize), item_len);
 		l_pair("%PREV_DBG_BRK%", STR_BOOL(prev.debugBreak), "%CURR_DBG_BRK%", STR_BOOL(curr.debugBreak), item_len);
 		l_pair("%PREV_INT_HANDLER%", String("").add(prev.interruptHandlerCount), "%CURR_INT_HANDLER%", String("").add(curr.interruptHandlerCount), item_len);
-		l_pair("%PREV_BIOS_MODE%", STR_BOOL(prev.biosMode), "%CURR_BIOS_MODE%", STR_BOOL(curr.biosMode), item_len);
+		l_pair("%PREV_BIOS_MODE%", STR_BOOL(prev.supervisor), "%CURR_BIOS_MODE%", STR_BOOL(curr.supervisor), item_len);
 		l_pair("%PREV_SUB_ROUTINE%", String("").add(prev.subroutineCounter).add(" (").add(STR_BOOL(prev.inSubroutine)).add(")"),
 			   "%CURR_SUB_ROUTINE%", String("").add(curr.subroutineCounter).add(" (").add(STR_BOOL(curr.inSubroutine)).add(")"), item_len);
 
@@ -245,7 +245,7 @@ namespace dragon
 		}
 
 		ostd::RegexRichString rgxstr(str);
-		rgxstr.fg("InstAddr|Code|StackFrame|DBG BRK|INT Handler|BIOS Mode|SubRoutine", "Magenta");
+		rgxstr.fg("InstAddr|Code|StackFrame|DBG BRK|INT Handler|Supervisor|SubRoutine", "Magenta");
 		rgxstr.fg("IP|SP|FP|RV|PP|FL|ACC", "Cyan");
 		rgxstr.fg("R1[0-9]|R20|R[1-9]", "BrightGreen");
 		rgxstr.fg("S1|S2|OF", "BrightRed");

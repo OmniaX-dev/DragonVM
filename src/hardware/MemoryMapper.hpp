@@ -41,7 +41,7 @@ namespace dragon
 
 				// ===== Debugger access =====
 				// These read/write the devices' memory directly (their ByteStreams), so they have
-				// no side effects: no errors pushed, no BIOS mode checks, no CPU offset. Bytes of
+				// no side effects: no errors pushed, no supervisor mode checks, no CPU offset. Bytes of
 				// devices without memory read as 0.
 				// The address space [0, size) as the CPU sees it (dst must hold size bytes).
 				void readBusImage(u8* dst, u32 size);

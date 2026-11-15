@@ -172,6 +172,31 @@ d.addDays(30)->addHours(-2);                        // addSeconds / Minutes / Ho
 - The calendar: `is_leap_year`, `days_in_month`, `days_from_civil(y, m, d)` (days from 1970-01-01),
   `civil_from_days(days, &y, &m, &d)`.
 
+### Supervisor and user mode (SDK)
+
+The CPU runs in supervisor mode (the BIOS, the boot loader, the kernel) or user mode (programs:
+no `hlt`, `rti`, `umode`, interrupt flag changes, `int` to a fault vector, or writes to the
+protected registers: those are faults). `cpu.ds` has what a kernel needs (the hardware side is
+in `other/info/info`, "Modes"):
+```
+dr::set_interrupt_vector_entry(dr::cpu::Faults.AccessViolation, &on_fault);   // 0x00 - 0x05
+dr::set_interrupt_vector_entry(0x40, &on_syscall);    // int 0x40 from user mode: a system call
+dr::cpu::set_kernel_stack(top, size);                 // traps from user mode switch to it
+dr::time::set_interrupt_interval(10);                 // the Timer interrupt (0xC0) every 10 ms
+dr::cpu::enter_user_mode(program_main, stack_top, stack_size);   // doesn't return
+```
+- In a handler (an `interrupt sub`): `dr::cpu::is_supervisor()`, `fault_vector()`, `fault_ip()`,
+  `fault_address()`; `trap_frame()` (called directly from the interrupt sub) for
+  `trap_from_user(frame)`, `trap_return_address(frame)`, `set_trap_return_address(frame, ip)`.
+- A fault's handler returns to the faulting instruction: fix the cause, return elsewhere, or
+  don't return (end the program). Faults not handled (and every error in supervisor mode) stop
+  the machine, as before.
+- `enter_user_mode`: entry runs as a call on the user stack (`set_user_stack`, for the stack
+  check); if it returns, a `hlt` follows (a privileged instruction fault). `drop_to_user()`
+  switches mode in place.
+- Not yet: memory protection (user code can still read and write all memory, the interrupt
+  vector included).
+
 ### Declarations (top level)
 ```
 var name: type = value;                 // global variable (the type can be inferred: var n = 5;)
@@ -744,6 +769,8 @@ jump: its `main(argc, argv)` always gets `0, null`. `main`'s value is returned i
   (`drun machine.dvm prog.drx -- a b`: argc = 3); the strings and the argv array are below
   the stack. The BIOS starts its boot code (raw) without arguments.
 - This is the convention a DragonOS loader will follow.
+- The program runs in supervisor mode, as the BIOS, the boot loader and a kernel do; `drun
+  --user` runs it in user mode (its `hlt`, privileged there, then ends the run).
 
 ## Tests
 

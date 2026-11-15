@@ -34,7 +34,7 @@ namespace dragon
 			m_halt = false;
 			m_currentInst = 0x00;
 			m_currentAddr = 0x0000;
-			m_biosMode = true;
+			m_supervisor = true;
 			m_interruptHandlerCount = 0;
 			std::memset(m_interruptInService, 0, sizeof(m_interruptInService));
 			m_isDebugBreakPoint = false;
@@ -65,6 +65,19 @@ namespace dragon
 		{
 			if (!data::Registers::isValid(reg)) return; //TODO: Error
 			i32& r = m_registers[reg & data::Registers::IndexMask];
+			if (!m_supervisor && (reg & data::Registers::IndexMask) == data::Registers::FL)
+			{
+				// User mode can't change the interrupt flag (the other flags: yes).
+				u32 next = cast<u32>(r);
+				switch (reg & data::Registers::ViewMask)
+				{
+					case data::Registers::ViewLow: next = (next & 0xFFFF0000u) | (value & 0xFFFF); break;
+					case data::Registers::ViewHigh: next = (next & 0x0000FFFFu) | ((value & 0xFFFF) << 16); break;
+					default: next = value; break;
+				}
+				if (((next ^ cast<u32>(r)) & (1u << data::Flags::InterruptsEnabled)) != 0 && !privileged("Changing the interrupt flag"))
+					return;
+			}
 			switch (reg & data::Registers::ViewMask)
 			{
 				case data::Registers::ViewLow: r = cast<i32>((cast<u32>(r) & 0xFFFF0000u) | (value & 0xFFFF)); break;
@@ -121,9 +134,8 @@ namespace dragon
 		void VirtualCPU::pushToStack(i32 value)
 		{
 			u32 stackAddr = cast<u32>(readRegister(data::Registers::SP));
-			u32 stack_size = cast<u32>(DragonRuntime::vCMOS.read32(data::CMOSRegisters::StackSize));
 			// The stack grows down from the stack top: SP is the next free word.
-			if (stackAddr > m_stackTop || m_stackTop - stackAddr >= stack_size)
+			if (!stack_allowed(stackAddr))
 			{
 				data::ErrorHandler::pushError(data::ErrorCodes::CPU_StackOverflow, String("Stack Overflow: SP = ").add(String::getHexStr(stackAddr, true, 4)));
 				m_halt = true;
@@ -132,6 +144,28 @@ namespace dragon
 			m_memory.write32(stackAddr, value);
 			writeRegister32(data::Registers::SP, cast<i32>(stackAddr - data::WordSize));
 			m_stackFrameSize += data::WordSize;
+		}
+
+		bool VirtualCPU::stack_allowed(u32 sp)
+		{
+			auto l_in = [sp](u32 top, u32 size) { return sp <= top && top - sp < size; };
+			if (l_in(m_stackTop, cast<u32>(DragonRuntime::vCMOS.read32(data::CMOSRegisters::StackSize))))
+				return true;
+			using CR = VirtualCPUControl::tRegisters;
+			const auto& control = DragonRuntime::vCPUControl;
+			const u32 kernelTop = control.get(CR::KernelStackTop);
+			if (kernelTop != 0 && l_in(kernelTop, control.get(CR::KernelStackSize)))
+				return true;
+			const u32 userTop = control.get(CR::UserStackTop);
+			return userTop != 0 && l_in(userTop, control.get(CR::UserStackSize));
+		}
+
+		bool VirtualCPU::privileged(const char* what)
+		{
+			if (m_supervisor)
+				return true;
+			data::ErrorHandler::pushError(data::ErrorCodes::CPU_PrivilegedInstruction, String(what).add(" in user mode (a privileged instruction) at address: ").add(String::getHexStr(m_currentAddr, true, 4)));
+			return false;
 		}
 
 		i32 VirtualCPU::popFromStack(void)
@@ -201,35 +235,102 @@ namespace dragon
 
 		bool VirtualCPU::handleInterrupt(u8 intValue, bool hardware)
 		{
-			if (!readFlag(data::Flags::InterruptsEnabled))
+			// int in user mode is a system call: it works while interrupts are disabled too (only
+			// the kernel can disable them), but not on the fault vectors (they are the CPU's).
+			const bool systemCall = !hardware && !m_supervisor;
+			if (!systemCall && !readFlag(data::Flags::InterruptsEnabled))
 				return false;
+			if (systemCall && intValue <= data::InterruptCodes::LastFault)
+			{
+				privileged("int to a fault vector");
+				return false;
+			}
 			u32 entryPointer = data::MemoryMapAddresses::IntVector_Start + (intValue * data::MemoryMapAddresses::IntVector_EntrySize);
 			u8 interruptStatus = cast<u8>(m_memory.read8(entryPointer));
 			if (interruptStatus != 0xFF) return false;
-			u32 handlerAddress = cast<u32>(m_memory.read32(entryPointer + 1));
 			// A hardware interrupt comes between any two instructions, so it also keeps what the
 			// stack frame doesn't (rti puts it back): RV (e.g. between a call and the mov that
-			// reads its return value), S1 / S2 (low blocks), OFFSET, FL and the BIOS mode. A
-			// software interrupt (int) is a call: it can return a value in RV (and flags).
-			if (hardware)
+			// reads its return value), S1 / S2 (low blocks), OFFSET and FL. A software interrupt
+			// (int) is a call: it can return a value in RV (and flags).
+			trap(intValue, hardware);
+			return true;
+		}
+
+		void VirtualCPU::trap(u8 vector, bool saveContext)
+		{
+			u32 entryPointer = data::MemoryMapAddresses::IntVector_Start + (vector * data::MemoryMapAddresses::IntVector_EntrySize);
+			u32 handlerAddress = cast<u32>(m_memory.read32(entryPointer + 1));
+			const bool fromUser = !m_supervisor;
+			const i32 previousSP = readRegister(data::Registers::SP);
+			m_supervisor = true;
+			if (fromUser)
+			{
+				const u32 kernelTop = DragonRuntime::vCPUControl.get(VirtualCPUControl::tRegisters::KernelStackTop);
+				if (kernelTop != 0)
+					writeRegister32(data::Registers::SP, cast<i32>(kernelTop));
+			}
+			pushToStack(previousSP);
+			pushToStack(fromUser ? 0 : 1);
+			if (saveContext)
 			{
 				pushToStack(readRegister(data::Registers::RV));
 				pushToStack(readRegister(data::Registers::S1));
 				pushToStack(readRegister(data::Registers::S2));
 				pushToStack(readRegister(data::Registers::OFFSET));
 				pushToStack(readRegister(data::Registers::FL));
-				pushToStack(m_biosMode ? 1 : 0);
 			}
-			pushToStack(hardware ? HardwareInterruptMarker : 0);
+			pushToStack(saveContext ? HardwareInterruptMarker : 0);
 			pushToStack(0);
 			pushStackFrame();
 			m_subroutineCounter++;
 			m_interruptHandlerCount++;
-			if (m_interruptInService[intValue] == 0)
-				m_interruptInService[intValue] = cast<u16>(std::min(m_interruptHandlerCount, 0xFFFF));
+			if (m_interruptInService[vector] == 0)
+				m_interruptInService[vector] = cast<u16>(std::min(m_interruptHandlerCount, 0xFFFF));
 			writeRegister32(data::Registers::IP, cast<i32>(handlerAddress));
 			if (m_interruptListener)
-				m_interruptListener(intValue, hardware, handlerAddress);
+				m_interruptListener(vector, saveContext, handlerAddress);
+		}
+
+		bool VirtualCPU::raise_fault(u32 instructionAddress, size_t firstError)
+		{
+			const auto error = data::ErrorHandler::at(firstError);
+			u8 vector = data::InterruptCodes::Fault_General;
+			bool memory = false;
+			switch (error.code)
+			{
+				case data::ErrorCodes::CPU_DivisionByZero: vector = data::InterruptCodes::Fault_DivisionByZero; break;
+				case data::ErrorCodes::CPU_UnknownInstruction:
+				case data::ErrorCodes::CPU_UnsupportedExtension: vector = data::InterruptCodes::Fault_InvalidInstruction; break;
+				case data::ErrorCodes::CPU_PrivilegedInstruction: vector = data::InterruptCodes::Fault_PrivilegedInstruction; break;
+				case data::ErrorCodes::CPU_StackOverflow: vector = data::InterruptCodes::Fault_StackOverflow; break;
+				default:
+				{
+					// The memory map and the devices' registers (protected, read-only, missing).
+					switch (error.code >> 60)
+					{
+						case 0x0: case 0x1: case 0x3: case 0x5: case 0x6: case 0x7: case 0x8: case 0x9: case 0xA: case 0xB:
+							vector = data::InterruptCodes::Fault_AccessViolation;
+							memory = true;
+						break;
+						default: break;
+					}
+				}
+				break;
+			}
+			const u32 entryPointer = data::MemoryMapAddresses::IntVector_Start + (vector * data::MemoryMapAddresses::IntVector_EntrySize);
+			if (cast<u8>(m_memory.read8(entryPointer)) != 0xFF)
+				return false;
+			using CR = VirtualCPUControl::tRegisters;
+			auto& control = DragonRuntime::vCPUControl;
+			control.set(CR::FaultVector, vector);
+			control.set(CR::FaultIP, instructionAddress);
+			control.set(CR::FaultAddress, memory ? error.address : instructionAddress);
+			data::ErrorHandler::resize(firstError);
+			m_halt = false;
+			// The handler returns to the instruction (rti): it can fix the cause, or change the
+			// return address in the stack frame, or never return (killing the program).
+			writeRegister32(data::Registers::IP, cast<i32>(instructionAddress));
+			trap(vector, true);
 			return true;
 		}
 
@@ -270,7 +371,7 @@ namespace dragon
 					outState.currentExtension = cast<i8>(i);
 			}
 			outState.halt = m_halt;
-			outState.biosMode = m_biosMode;
+			outState.supervisor = m_supervisor;
 			outState.isDebugBreakPoint = m_isDebugBreakPoint;
 			outState.ramDumped = m_ramDumped;
 			outState.isOffsetAddressingEnabled = m_isOffsetAddressingEnabled;
@@ -290,7 +391,7 @@ namespace dragon
 			m_currentExtInst = state.currentExtInst;
 			m_currentExtension = (state.currentExtension >= 0 && state.currentExtension < 16 ? m_extensions[state.currentExtension] : nullptr);
 			m_halt = state.halt;
-			m_biosMode = state.biosMode;
+			m_supervisor = state.supervisor;
 			m_isDebugBreakPoint = state.isDebugBreakPoint;
 			m_ramDumped = state.ramDumped;
 			m_isOffsetAddressingEnabled = state.isOffsetAddressingEnabled;
@@ -332,6 +433,17 @@ namespace dragon
 		}
 
 		bool VirtualCPU::execute(void)
+		{
+			const bool user = !m_supervisor;
+			const u32 instructionAddress = cast<u32>(readRegister(data::Registers::IP));
+			const size_t errors = data::ErrorHandler::count();
+			const bool result = execute_instruction();
+			if (user && data::ErrorHandler::count() > errors && raise_fault(instructionAddress, errors))
+				return true;
+			return result;
+		}
+
+		bool VirtualCPU::execute_instruction(void)
 		{
 			// System signals (CMOS). Read from the CMOS itself, not through the memory map: it
 			// is checked before every instruction, and would take the RAM's place in the
@@ -428,14 +540,13 @@ namespace dragon
 					m_debugProfilerStarted = false;
 				}
 				break;
-				case data::OpCodes::BIOSModeImm:
+				case data::OpCodes::ModeImm:
 				{
-					u32 tmpAddr = m_currentAddr;
 					i8 value = fetch8();
-					if (tmpAddr > data::MemoryMapAddresses::BIOS_End)
-						m_biosMode = false;
-					else
-						m_biosMode = value != 0;
+					if (!privileged("umode"))
+						break;
+					if (value == 0)
+						m_supervisor = false;
 				}
 				break;
 				case data::OpCodes::MovImmReg:
@@ -1093,6 +1204,8 @@ namespace dragon
 				break;
 				case data::OpCodes::Halt:
 				{
+					if (!privileged("hlt"))
+						break;
 					m_halt = true;
 					return true;
 				}
@@ -1152,7 +1265,9 @@ namespace dragon
 				break;
 				case data::OpCodes::RetInt:
 				{
-					m_interruptHandlerCount--;
+					if (!privileged("rti"))
+						break;
+					m_interruptHandlerCount = std::max(0, m_interruptHandlerCount - 1);
 					for (i32 i = 0; i < 256; i++)
 					{
 						if (m_interruptInService[i] > m_interruptHandlerCount)
@@ -1161,13 +1276,17 @@ namespace dragon
 					popStackFrame();
 					if (cast<u32>(popFromStack()) == HardwareInterruptMarker)
 					{
-						m_biosMode = popFromStack() != 0;
 						writeRegister32(data::Registers::FL, popFromStack());
 						writeRegister32(data::Registers::OFFSET, popFromStack());
 						writeRegister32(data::Registers::S2, popFromStack());
 						writeRegister32(data::Registers::S1, popFromStack());
 						writeRegister32(data::Registers::RV, popFromStack());
 					}
+					// The mode and the stack last: back to the user's stack (from the kernel's).
+					const bool supervisor = popFromStack() != 0;
+					const i32 previousSP = popFromStack();
+					m_supervisor = supervisor;
+					writeRegister32(data::Registers::SP, previousSP);
 					m_subroutineCounter--;
 				}
 				break;
@@ -1187,18 +1306,24 @@ namespace dragon
 				case data::OpCodes::ZeroFlag:
 				{
 					u8 flag = fetch8();
+					if (flag == data::Flags::InterruptsEnabled && !privileged("zflg (the interrupt flag)"))
+						break;
 					setFlag(flag, false);
 				}
 				break;
 				case data::OpCodes::SetFlag:
 				{
 					u8 flag = fetch8();
+					if (flag == data::Flags::InterruptsEnabled && !privileged("sflg (the interrupt flag)"))
+						break;
 					setFlag(flag, true);
 				}
 				break;
 				case data::OpCodes::ToggleFlag:
 				{
 					u8 flag = fetch8();
+					if (flag == data::Flags::InterruptsEnabled && !privileged("tflg (the interrupt flag)"))
+						break;
 					bool value = readFlag(flag);
 					setFlag(flag, !value);
 				}

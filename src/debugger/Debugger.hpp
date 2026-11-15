@@ -91,7 +91,7 @@ namespace dragon
 			u32 stackFrameSize { 0 };
 			bool debugBreak { false };
 			i32 interruptHandlerCount { 0 };
-			bool biosMode { false };
+			bool supervisor { false };
 			i32 subroutineCounter { 0 };
 			bool inSubroutine { false };
 			bool halted { false };

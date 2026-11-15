@@ -273,6 +273,10 @@ namespace dragon
 				inline static constexpr u32 CyclesHigh = 0x04;		// 4 bytes
 				inline static constexpr u32 CyclesLow = 0x08;		// 4 bytes
 				inline static constexpr u32 UnixTime = 0x0C;		// 4 bytes: seconds since 1970-01-01 00:00 UTC
+				// The Timer interrupt every this many milliseconds (0: off). Writable in supervisor
+				// mode only (the only writable register).
+				inline static constexpr u32 InterruptInterval = 0x10;	// 4 bytes
+				inline static constexpr u32 NextInterrupt = 0x14;	// 4 bytes: the time of the next one (ms)
 			};
 			public: enum class eTimeSource { WallClock = 0, MachineTime };
 
@@ -337,6 +341,51 @@ namespace dragon
 			private:
 				ostd::ByteStream m_data;
 				ostd::RandomGenerator m_rng { false };
+		};
+
+		// The CPU's control registers (big endian words). Readable by everyone, writable in
+		// supervisor mode only (Mode never: it shows the CPU's mode). See VirtualCPU for how the
+		// CPU uses them.
+		class VirtualCPUControl : public IMemoryDevice
+		{
+			public: struct tRegisters
+			{
+				// Traps from user mode (interrupts, int, faults) switch to this stack (0: they stay
+				// on the user's stack). The stack check also allows it (KernelStackSize bytes).
+				inline static constexpr u32 KernelStackTop = 0x00;
+				inline static constexpr u32 KernelStackSize = 0x04;
+				// Another stack the stack check allows (0: none): a user program's.
+				inline static constexpr u32 UserStackTop = 0x08;
+				inline static constexpr u32 UserStackSize = 0x0C;
+				// The last fault: its vector, the address of the instruction, and the address it
+				// accessed (memory faults; the instruction's otherwise).
+				inline static constexpr u32 FaultVector = 0x10;
+				inline static constexpr u32 FaultIP = 0x14;
+				inline static constexpr u32 FaultAddress = 0x18;
+				// Read-only: 1 supervisor mode, 0 user mode.
+				inline static constexpr u32 Mode = 0x1C;
+				// 0x20 - 0x3F: reserved (the memory permission map).
+			};
+
+			public:
+				void init(void);
+				void reset(void);
+				u32 get(u32 reg) const;
+				// Without the supervisor check (the CPU's own writes: the fault registers).
+				void set(u32 reg, u32 value);
+
+				i8 read8(u32 addr) override;
+				i32 read32(u32 addr) override;
+				i8 write8(u32 addr, i8 value) override;
+				i32 write32(u32 addr, i32 value) override;
+				ostd::ByteStream* getByteStream(void) override;
+
+			private:
+				void update_mode(void);
+				bool check_write(u32 addr, const char* what);
+
+			private:
+				ostd::ByteStream m_data;
 		};
 
 		class VirtualMouse : public IMemoryDevice

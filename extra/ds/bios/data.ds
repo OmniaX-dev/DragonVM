@@ -2,7 +2,6 @@ const S_REG_1 = 0x07;
 const S_REG_2 = 0x08;
 const S_REG_OFFSET = 0x09;
 
-const INST_BIOS_NODE_TOGGLE = 0x02;
 
 const BiosLogo: u8[54][] = {
     "|===================================================|",

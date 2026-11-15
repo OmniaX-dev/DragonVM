@@ -19,6 +19,13 @@ namespace dr::time {
 		return *cast<u32*>(TimerRegisters.UnixTime);
 	}
 
+	// The Timer interrupt (HardwareInterrupts.Timer) every ms milliseconds of the timer's time
+	// (0: off), e.g. a kernel's scheduler tick. A tick is skipped while its previous handler is
+	// still running. Supervisor mode only.
+	inline sub set_interrupt_interval(var ms: u32) {
+		*cast<u32*>(TimerRegisters.InterruptInterval) = ms;
+	}
+
 	// Waits ms milliseconds, by the timer: right at any clock speed (also uncapped). Interrupts
 	// keep running meanwhile (their handlers' time counts as part of the wait).
 	sub sleep(var ms: i32) {

@@ -1487,6 +1487,13 @@ namespace dragon
 				m_code.push_back(data::OpCodes::Halt);
 				return;
 			}
+			else if (String(line).toLower().startsWith("umode"))
+			{
+				// Supervisor mode -> user mode (privileged).
+				m_code.push_back(data::OpCodes::ModeImm);
+				m_code.push_back(0x00);
+				return;
+			}
 		}
 
 		void Assembler::parse1Operand(String line)

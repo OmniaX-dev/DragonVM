@@ -82,7 +82,7 @@ sub __boot_init_part(var init_part: dr::DPTPartitionBlock*) -> i32 {
 	if (r != dr::drx::Errors.NoError)
 		return r - 2000;
 	fs.unmount();
-	low { %low $INST_BIOS_NODE_TOGGLE 0x00 }
+	// The boot loader runs in supervisor mode, as the BIOS (and so does the kernel it loads).
 	const argc: u32 = 2;
 	var argv: u8*[argc];
 	argv[0] = dr::malloc(11);	// a u32 in decimal: up to 10 digits and the terminator

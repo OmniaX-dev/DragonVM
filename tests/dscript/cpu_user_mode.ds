@@ -1,0 +1,241 @@
+// Supervisor / user mode: a tiny kernel (main, in supervisor mode as drun starts programs) runs
+// user_main in user mode on its own stack. System calls (int), faults (each privileged
+// instruction and protected write, skipped by the handler) and the Timer interrupt all come back
+// to supervisor mode on the kernel stack, and rti returns to user mode on the user stack.
+// expect-rv: 0
+#import(<dragon-sdk>)
+
+var g_failures: i32 = 0;
+
+sub expect(var id: i32, var ok: bool) {
+	if (ok)
+		return;
+	var buff: u8[12];
+	debug_print("cpu_user_mode: check ");
+	debug_print(dr::itoa(id, buff));
+	debug_print(" failed\n");
+	g_failures++;
+}
+
+var kernel_stack: u32[1024];
+var user_stack: u32[1024];
+var g_kernel_top: u32 = 0;
+var g_user_top: u32 = 0;
+
+sub in_stack(var sp: u32, var top: u32) -> bool {
+	return sp <= top and top - sp < 4096;
+}
+
+// Faults: the handler counts them and returns past the faulting instruction (g_skip bytes: the
+// user code sets it before each one).
+var g_skip: u32 = 0;
+var g_faults: i32 = 0;
+var g_vector: u32 = 0;
+var g_fault_ip: u32 = 0;
+var g_fault_address: u32 = 0;
+var g_fault_from_user: bool = false;
+var g_fault_supervisor: bool = false;
+var g_fault_sp: u32 = 0;
+
+interrupt sub on_fault() {
+	var sp: u32;
+	low { mov $sp, SP }
+	g_fault_sp = sp;
+	g_faults++;
+	g_vector = dr::cpu::fault_vector();
+	g_fault_ip = dr::cpu::fault_ip();
+	g_fault_address = dr::cpu::fault_address();
+	g_fault_supervisor = dr::cpu::is_supervisor();
+	var frame: u32 = dr::cpu::trap_frame();
+	g_fault_from_user = dr::cpu::trap_from_user(frame);
+	expect(90, dr::cpu::trap_return_address(frame) == g_fault_ip);
+	dr::cpu::set_trap_return_address(frame, g_fault_ip + g_skip);
+}
+
+// System call 0x40: RV = R9 * 2.
+var g_sys_supervisor: bool = false;
+var g_sys_from_user: bool = false;
+var g_sys_sp: u32 = 0;
+interrupt sub on_syscall() {
+	var arg: u32;
+	var sp: u32;
+	low { mov $arg, R9 }
+	low { mov $sp, SP }
+	g_sys_sp = sp;
+	g_sys_supervisor = dr::cpu::is_supervisor();
+	g_sys_from_user = dr::cpu::trap_from_user(dr::cpu::trap_frame());
+	var result: u32 = arg * 2;
+	low { mov RV, $result }
+}
+
+// System call 0x41: the end (the program's result).
+interrupt sub on_exit() {
+	expect(80, dr::cpu::is_supervisor());
+	var result: i32 = g_failures;
+	low {
+		mov RV, $result
+		hlt
+	}
+}
+
+// The Timer interrupt.
+var g_ticks: i32 = 0;
+var g_ticks_from_user: i32 = 0;
+var g_tick_supervisor: bool = true;
+interrupt sub on_tick() {
+	g_ticks++;
+	if (dr::cpu::trap_from_user(dr::cpu::trap_frame()))
+		g_ticks_from_user++;
+	if (not dr::cpu::is_supervisor())
+		g_tick_supervisor = false;
+}
+
+// A fault from the code after it: the vector, from user mode, in supervisor mode on the kernel stack.
+sub fault_ok(var before: i32, var vector: u8) -> bool {
+	var ok: bool = g_faults == before + 1 and g_vector == vector and g_fault_from_user and g_fault_supervisor
+		and in_stack(g_fault_sp, g_kernel_top) and not dr::cpu::is_supervisor();
+	if (not ok) {
+		var buff: u8[12];
+		debug_print("  fault ");
+		debug_print(dr::utoa(g_vector, buff));
+		debug_print(", count ");
+		debug_print(dr::itoa(g_faults - before, buff));
+		debug_print("\n");
+	}
+	return ok;
+}
+
+sub user_main() {
+	expect(10, not dr::cpu::is_supervisor());
+	var sp: u32;
+	low { mov $sp, SP }
+	expect(11, in_stack(sp, g_user_top));
+
+	// A system call: supervisor mode on the kernel stack, back to user mode on the user stack.
+	var r: u32 = 0;
+	low {
+		mov R9, 0x00000015
+		int 0x40
+		mov $r, RV
+	}
+	expect(12, r == 42);
+	expect(13, g_sys_supervisor and g_sys_from_user);
+	expect(14, in_stack(g_sys_sp, g_kernel_top));
+	expect(15, not dr::cpu::is_supervisor());
+	low { mov $sp, SP }
+	expect(16, in_stack(sp, g_user_top));
+
+	// Privileged instructions.
+	var n: i32 = g_faults;
+	g_skip = 1;
+	low { hlt }
+	expect(20, fault_ok(n, dr::cpu::Faults.PrivilegedInstruction) and g_fault_address == g_fault_ip);
+	n = g_faults;
+	g_skip = 2;
+	low { sflg 0x00 }
+	expect(21, fault_ok(n, dr::cpu::Faults.PrivilegedInstruction));
+	n = g_faults;
+	g_skip = 1;
+	low { rti }
+	expect(22, fault_ok(n, dr::cpu::Faults.PrivilegedInstruction));
+	n = g_faults;
+	g_skip = 2;
+	low { umode }
+	expect(23, fault_ok(n, dr::cpu::Faults.PrivilegedInstruction));
+	n = g_faults;
+	g_skip = 2;
+	low { int 0x03 }
+	expect(24, fault_ok(n, dr::cpu::Faults.PrivilegedInstruction));
+	n = g_faults;
+	g_skip = 3;
+	low {
+		mov R1, 0x00000000
+		mov FL, R1
+	}							// (interrupts are enabled: this would disable them)
+	expect(25, fault_ok(n, dr::cpu::Faults.PrivilegedInstruction));
+	n = g_faults;
+	g_skip = 2;
+	low { zflg 0x01 }			// (the offset mode flag: allowed)
+	expect(26, g_faults == n);
+
+	// Protected writes: an access violation at the address.
+	n = g_faults;
+	g_skip = 3;
+	low {
+		mov R1, 0x01000014
+		mov *R1, R2
+	}
+	expect(30, fault_ok(n, dr::cpu::Faults.AccessViolation) and g_fault_address == 0x01000014);
+	n = g_faults;
+	g_skip = 3;
+	low {
+		mov R1, 0x010006B0
+		mov *R1, R2
+	}
+	expect(31, fault_ok(n, dr::cpu::Faults.AccessViolation) and g_fault_address == 0x010006B0);
+	n = g_faults;
+	g_skip = 3;
+	low {
+		mov R1, 0x01000690
+		mov *R1, R2
+	}
+	expect(32, fault_ok(n, dr::cpu::Faults.AccessViolation) and g_fault_address == 0x01000690);
+	n = g_faults;
+	g_skip = 3;
+	low {
+		mov R1, 0x00000100
+		mov *R1, R2
+	}
+	expect(33, fault_ok(n, dr::cpu::Faults.AccessViolation) and g_fault_address == 0x00000100);
+	expect(34, *cast<u32*>(dr::CPUControlRegisters.KernelStackTop) == g_kernel_top);	// (unchanged)
+
+	// Other faults.
+	n = g_faults;
+	g_skip = 6;
+	low {
+		mov R1, 0x00000005
+		div R1, 0x00000000
+	}
+	expect(40, fault_ok(n, dr::cpu::Faults.DivisionByZero));
+	n = g_faults;
+	g_skip = 1;
+	low { %low 0x0A }
+	expect(41, fault_ok(n, dr::cpu::Faults.InvalidInstruction));
+
+	// The Timer interrupt preempts user code.
+	var start: i32 = g_ticks;
+	while (g_ticks - start < 5) {}
+	expect(50, g_ticks_from_user > 0 and g_tick_supervisor);
+
+	low { int 0x41 }
+	expect(99, false);			// (not reached)
+}
+
+sub main() -> i32 {
+	expect(1, dr::cpu::is_supervisor());
+
+	// The Timer: about one interrupt every 2 ms, none with the interval 0.
+	dr::set_interrupt_vector_entry(dr::HardwareInterrupts.Timer, &on_tick);
+	dr::enable_interrupts();
+	dr::time::set_interrupt_interval(2);
+	var t0: u32 = dr::time::millis();
+	while (dr::time::millis() - t0 < 40) {}
+	expect(2, g_ticks >= 17 and g_ticks <= 21 and g_ticks_from_user == 0);
+	dr::time::set_interrupt_interval(0);
+	var stopped: i32 = g_ticks;
+	t0 = dr::time::millis();
+	while (dr::time::millis() - t0 < 10) {}
+	expect(3, g_ticks == stopped);
+
+	for (var v: u8 = 0; v <= dr::cpu::Faults.General; v++)
+		dr::set_interrupt_vector_entry(v, &on_fault);
+	dr::set_interrupt_vector_entry(0x40, &on_syscall);
+	dr::set_interrupt_vector_entry(0x41, &on_exit);
+	g_kernel_top = cast<u32>(&kernel_stack[1023]);
+	g_user_top = cast<u32>(&user_stack[1023]);
+	dr::cpu::set_kernel_stack(g_kernel_top, 4096);
+	dr::time::set_interrupt_interval(2);
+	dr::cpu::enter_user_mode(user_main, g_user_top, 4096);
+	expect(4, false);			// (not reached)
+	return 1000 + g_failures;
+}
