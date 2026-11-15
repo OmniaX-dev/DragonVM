@@ -34,7 +34,10 @@ namespace dragon
 			m_halt = false;
 			m_currentInst = 0x00;
 			m_currentAddr = 0x0000;
-			m_supervisor = true;
+			set_mode(true);
+			m_userInstruction = false;
+			m_permissionMapAddress = 0;			// (the RAM is set again: its bytes move)
+			m_permissionMap = nullptr;
 			m_interruptHandlerCount = 0;
 			std::memset(m_interruptInService, 0, sizeof(m_interruptInService));
 			m_isDebugBreakPoint = false;
@@ -246,7 +249,8 @@ namespace dragon
 				return false;
 			}
 			u32 entryPointer = data::MemoryMapAddresses::IntVector_Start + (intValue * data::MemoryMapAddresses::IntVector_EntrySize);
-			u8 interruptStatus = cast<u8>(m_memory.read8(entryPointer));
+			// (the vector table directly: user mode may not read it)
+			u8 interruptStatus = DragonRuntime::memMap.peek8(entryPointer);
 			if (interruptStatus != 0xFF) return false;
 			// A hardware interrupt comes between any two instructions, so it also keeps what the
 			// stack frame doesn't (rti puts it back): RV (e.g. between a call and the mov that
@@ -259,10 +263,10 @@ namespace dragon
 		void VirtualCPU::trap(u8 vector, bool saveContext)
 		{
 			u32 entryPointer = data::MemoryMapAddresses::IntVector_Start + (vector * data::MemoryMapAddresses::IntVector_EntrySize);
-			u32 handlerAddress = cast<u32>(m_memory.read32(entryPointer + 1));
+			u32 handlerAddress = DragonRuntime::memMap.peek32(entryPointer + 1);
 			const bool fromUser = !m_supervisor;
 			const i32 previousSP = readRegister(data::Registers::SP);
-			m_supervisor = true;
+			set_mode(true);
 			if (fromUser)
 			{
 				const u32 kernelTop = DragonRuntime::vCPUControl.get(VirtualCPUControl::tRegisters::KernelStackTop);
@@ -318,7 +322,7 @@ namespace dragon
 				break;
 			}
 			const u32 entryPointer = data::MemoryMapAddresses::IntVector_Start + (vector * data::MemoryMapAddresses::IntVector_EntrySize);
-			if (cast<u8>(m_memory.read8(entryPointer)) != 0xFF)
+			if (DragonRuntime::memMap.peek8(entryPointer) != 0xFF)
 				return false;
 			using CR = VirtualCPUControl::tRegisters;
 			auto& control = DragonRuntime::vCPUControl;
@@ -392,6 +396,10 @@ namespace dragon
 			m_currentExtension = (state.currentExtension >= 0 && state.currentExtension < 16 ? m_extensions[state.currentExtension] : nullptr);
 			m_halt = state.halt;
 			m_supervisor = state.supervisor;
+			m_userInstruction = false;
+			m_permissionMapAddress = 0;
+			m_permissionMap = nullptr;
+			update_user_checks();
 			m_isDebugBreakPoint = state.isDebugBreakPoint;
 			m_ramDumped = state.ramDumped;
 			m_isOffsetAddressingEnabled = state.isOffsetAddressingEnabled;
@@ -432,12 +440,53 @@ namespace dragon
 				std::cout << str << std::flush;
 		}
 
+		void VirtualCPU::set_mode(bool supervisor)
+		{
+			m_supervisor = supervisor;
+			update_user_checks();
+		}
+
+		void VirtualCPU::update_user_checks(void)
+		{
+			auto& map = DragonRuntime::memMap;
+			if (m_supervisor || !m_userInstruction)
+			{
+				if (map.areUserChecksOn())
+					map.setUserChecks(false, nullptr);
+				return;
+			}
+			const u32 address = DragonRuntime::vCPUControl.get(VirtualCPUControl::tRegisters::PermissionMap);
+			if (address == 0)
+			{
+				map.setUserChecks(false, nullptr);
+				return;
+			}
+			// The map is read in place (the kernel's changes count at once); not all in one
+			// device's memory: every access is denied.
+			if (address != m_permissionMapAddress || m_permissionMap == nullptr)
+			{
+				m_permissionMap = map.directSpan(address, MemoryMapper::PermissionMapSize);
+				m_permissionMapAddress = address;
+			}
+			map.setUserChecks(true, m_permissionMap);
+		}
+
 		bool VirtualCPU::execute(void)
 		{
 			const bool user = !m_supervisor;
 			const u32 instructionAddress = cast<u32>(readRegister(data::Registers::IP));
 			const size_t errors = data::ErrorHandler::count();
+			if (user)
+			{
+				m_userInstruction = true;
+				update_user_checks();
+			}
 			const bool result = execute_instruction();
+			if (m_userInstruction)
+			{
+				m_userInstruction = false;
+				update_user_checks();
+			}
 			if (user && data::ErrorHandler::count() > errors && raise_fault(instructionAddress, errors))
 				return true;
 			return result;
@@ -546,7 +595,7 @@ namespace dragon
 					if (!privileged("umode"))
 						break;
 					if (value == 0)
-						m_supervisor = false;
+						set_mode(false);
 				}
 				break;
 				case data::OpCodes::MovImmReg:
@@ -1285,8 +1334,8 @@ namespace dragon
 					// The mode and the stack last: back to the user's stack (from the kernel's).
 					const bool supervisor = popFromStack() != 0;
 					const i32 previousSP = popFromStack();
-					m_supervisor = supervisor;
 					writeRegister32(data::Registers::SP, previousSP);
+					set_mode(supervisor);
 					m_subroutineCounter--;
 				}
 				break;

@@ -24,6 +24,8 @@ namespace dragon
 				// A protected device register written in user mode (CMOS, keyboard controller, CPU
 				// control, the timer's interrupt interval).
 				inline static constexpr u64 AccessViolation_SupervisorRequired  =             0x0000000000000001;
+				// A user-mode access the permission map doesn't allow (see hw::MemoryMapper).
+				inline static constexpr u64 AccessViolation_PageProtection      =             0x0000000000000002;
 
 				inline static constexpr u64 MM_RegionNotFound                     =             0x1000000000000000;
 				inline static constexpr u64 MM_AtomicNotSupported                     =             0x1000000000000001;

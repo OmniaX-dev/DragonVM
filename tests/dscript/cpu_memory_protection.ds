@@ -1,0 +1,193 @@
+// The permission map: a tiny kernel (main) protects some pages and runs user_main in user mode.
+// Denied reads, writes and instruction fetches are access violation faults (the handler skips the
+// instruction, or grants the page and retries); supervisor mode is never checked.
+// expect-rv: 0
+#import(<dragon-sdk>)
+
+var g_failures: i32 = 0;
+
+sub expect(var id: i32, var ok: bool) {
+	if (ok)
+		return;
+	var buff: u8[12];
+	debug_print("cpu_memory_protection: check ");
+	debug_print(dr::itoa(id, buff));
+	debug_print(" failed\n");
+	g_failures++;
+}
+
+// Page aligned memory: K the kernel stack (none), U the user stack (read / write), D data (read /
+// write), RO (read), S secret (none), X code (none until its fault), then the map (4 pages, read).
+var arena: u8[11 * 4096];
+var g_base: u32 = 0;
+var g_map: u8* = null;
+inline sub page(var n: u32) -> u32 { return g_base + n * 4096; }
+const K: u32 = 0;
+const U: u32 = 1;
+const D: u32 = 2;
+const RO: u32 = 3;
+const S: u32 = 4;
+const X: u32 = 5;
+const MAP: u32 = 6;
+
+var g_skip: u32 = 0;
+var g_grant_x: bool = false;
+var g_faults: i32 = 0;
+var g_vector: u32 = 0;
+var g_fault_ip: u32 = 0;
+var g_fault_address: u32 = 0;
+
+interrupt sub on_fault() {
+	g_faults++;
+	g_vector = dr::cpu::fault_vector();
+	g_fault_ip = dr::cpu::fault_ip();
+	g_fault_address = dr::cpu::fault_address();
+	var frame: u32 = dr::cpu::trap_frame();
+	if (g_grant_x and g_fault_address == page(X)) {
+		// Like demand paging: make the page available, run the instruction again.
+		dr::cpu::set_page_permissions(g_map, page(X), 4096, dr::cpu::Permissions.Read);
+		return;
+	}
+	dr::cpu::set_trap_return_address(frame, g_fault_ip + g_skip);
+}
+
+// System call 0x41: the end. Supervisor mode reads every page.
+interrupt sub on_exit() {
+	expect(80, *cast<u32*>(page(S)) == 0x5EC12E7);
+	expect(81, *cast<u32*>(page(K) + 16) == 0x4B4B4B4B);
+	var result: i32 = g_failures;
+	low {
+		mov RV, $result
+		hlt
+	}
+}
+
+sub violation(var before: i32, var address: u32) -> bool {
+	var ok: bool = g_faults == before + 1 and g_vector == dr::cpu::Faults.AccessViolation and g_fault_address == address;
+	if (not ok) {
+		var buff: u8[12];
+		debug_print("  faults ");
+		debug_print(dr::itoa(g_faults - before, buff));
+		debug_print(", vector ");
+		debug_print(dr::utoa(g_vector, buff));
+		debug_print(", address 0x");
+		debug_print(dr::utoa(g_fault_address, buff, 16));
+		debug_print("\n");
+	}
+	return ok;
+}
+
+sub user_main() {
+	expect(10, not dr::cpu::is_supervisor());		// (the device page is readable)
+	var n: i32 = g_faults;
+
+	// Allowed: reading RO, reading and writing D, the user stack (this sub's frame).
+	expect(11, *cast<u32*>(page(RO)) == 0x1234);
+	*cast<u32*>(page(D) + 8) = 77;
+	expect(12, *cast<u32*>(page(D) + 8) == 77 and g_faults == n);
+
+	// Reading S.
+	var a: u32 = page(S);
+	var value: u32 = 1;
+	g_skip = 3;
+	low {
+		mov R1, $a
+		mov R2, *R1
+		mov $value, R2
+	}
+	expect(20, violation(n, page(S)) and value == 0);
+	// Writing RO, K, the interrupt vector, the map.
+	n = g_faults;
+	a = page(RO) + 4;
+	low {
+		mov R1, $a
+		mov *R1, R2
+	}
+	expect(21, violation(n, page(RO) + 4) and *cast<u32*>(page(RO) + 4) == 0);
+	n = g_faults;
+	a = page(K) + 16;
+	low {
+		mov R1, $a
+		mov *R1, R2
+	}
+	expect(22, violation(n, page(K) + 16));
+	n = g_faults;
+	a = dr::MemoryLayout.InterruptVector + 0x40 * 5;
+	low {
+		mov R1, $a
+		mov *R1, R2
+	}
+	expect(23, violation(n, dr::MemoryLayout.InterruptVector + 0x40 * 5));
+	n = g_faults;
+	a = page(MAP) + 100;
+	low {
+		mov R1, $a
+		mov *R1, R2
+	}
+	expect(24, violation(n, page(MAP) + 100));
+
+	// A word across D and RO: all or nothing.
+	n = g_faults;
+	*cast<u16*>(page(D) + 4094) = 0xABCD;
+	a = page(D) + 4094;
+	low {
+		mov R1, $a
+		mov R2, 0x11223344
+		mov *R1, R2
+	}
+	expect(30, violation(n, page(D) + 4094) and *cast<u16*>(page(D) + 4094) == 0xABCD);
+
+	// Running code on X: the fetch faults, the handler grants the page, the ret runs.
+	n = g_faults;
+	g_grant_x = true;
+	a = page(X);
+	low {
+		push 0x00000000
+		mov R1, $a
+		call R1
+	}
+	g_grant_x = false;
+	expect(40, violation(n, page(X)) and g_fault_ip == page(X));
+	expect(41, dr::cpu::page_permissions(g_map, page(X)) == dr::cpu::Permissions.Read);
+
+	low { int 0x41 }
+}
+
+sub main() -> i32 {
+	g_base = (cast<u32>(&arena[0]) + 4095) & ~4095;
+	g_map = cast<u8*>(page(MAP));
+
+	// The helpers.
+	dr::memset(g_map, 0, dr::cpu::PermissionMapSize);
+	dr::cpu::set_page_permissions(g_map, 0x5000, 3 * 4096 + 1, dr::cpu::Permissions.Write);	// pages 5..8
+	expect(1, dr::cpu::page_permissions(g_map, 0x4FFF) == 0 and dr::cpu::page_permissions(g_map, 0x5000) == 2
+		and dr::cpu::page_permissions(g_map, 0x8FFF) == 2 and dr::cpu::page_permissions(g_map, 0x9000) == 0);
+	dr::cpu::set_page_permissions(g_map, 0, 0x10000000, dr::cpu::Permissions.ReadWrite);
+	expect(2, g_map[0] == 0xFF and g_map[16383] == 0xFF);
+	dr::cpu::set_page_permissions(g_map, 0x0FFFF000, 4096, dr::cpu::Permissions.Read);
+	expect(3, g_map[16383] == 0x7F and dr::cpu::page_permissions(g_map, 0x0FFFFFFF) == 1);
+
+	// The map: everything, except the BIOS and the devices (read), and the pages above.
+	dr::cpu::set_page_permissions(g_map, 0, 0x10000000, dr::cpu::Permissions.ReadWrite);
+	dr::cpu::set_page_permissions(g_map, 0, 0x01000000, dr::cpu::Permissions.Read);
+	dr::cpu::set_page_permissions(g_map, 0x01000000, 0x10000, dr::cpu::Permissions.Read);
+	dr::cpu::set_page_permissions(g_map, page(K), 4096, dr::cpu::Permissions.None);
+	dr::cpu::set_page_permissions(g_map, page(RO), 4096, dr::cpu::Permissions.Read);
+	dr::cpu::set_page_permissions(g_map, page(S), 4096, dr::cpu::Permissions.None);
+	dr::cpu::set_page_permissions(g_map, page(X), 4096, dr::cpu::Permissions.None);
+	dr::cpu::set_page_permissions(g_map, page(MAP), dr::cpu::PermissionMapSize, dr::cpu::Permissions.Read);
+	*cast<u32*>(page(RO)) = 0x1234;
+	*cast<u32*>(page(S)) = 0x5EC12E7;
+	*cast<u32*>(page(K) + 16) = 0x4B4B4B4B;
+	*cast<u8*>(page(X)) = 0x55;			// ret
+
+	for (var v: u8 = 0; v <= dr::cpu::Faults.General; v++)
+		dr::set_interrupt_vector_entry(v, &on_fault);
+	dr::set_interrupt_vector_entry(0x41, &on_exit);
+	dr::cpu::set_kernel_stack(page(K) + 4092, 4096);
+	dr::cpu::set_permission_map(g_map);
+	expect(4, dr::cpu::permission_map() == g_map);
+	// (the kernel stack's page is protected: K + 16 is below its frames)
+	dr::cpu::enter_user_mode(user_main, page(U) + 4092, 4096);
+	return 1000 + g_failures;
+}

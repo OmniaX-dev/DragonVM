@@ -102,7 +102,7 @@ namespace dragon
 				// privileged instructions, no writes to protected device registers).
 				inline bool isSupervisor(void) const { return m_supervisor; }
 				// Also for the debugger's writes to protected devices (the CMOS chip).
-				inline void setSupervisor(bool supervisor) { m_supervisor = supervisor; }
+				inline void setSupervisor(bool supervisor) { set_mode(supervisor); }
 				inline bool isInSubRoutine(void) const { return m_subroutineCounter > 0; }
 				inline i32 getSubRoutineCounter(void) const { return m_subroutineCounter; }
 				inline data::CPUExtension* getCurrentCPUExtension(void) const { return m_currentExtension; }
@@ -145,6 +145,11 @@ namespace dragon
 				bool raise_fault(u32 instructionAddress, size_t firstError);
 				// SP is in a stack the CPU knows (the machine's, the kernel's, the user's).
 				bool stack_allowed(u32 sp);
+				// Changes the mode, and the memory map's user-mode checks with it.
+				void set_mode(bool supervisor);
+				// The memory map's checks: on while a user-mode instruction runs and CPU control
+				// PermissionMap isn't 0.
+				void update_user_checks(void);
 
 			private:
 				i32 m_registers[data::Registers::Last];
@@ -156,6 +161,9 @@ namespace dragon
 				u8 m_currentInst { 0x00 };
 				u32 m_currentAddr { 0x0000 };
 				bool m_supervisor { true };
+				bool m_userInstruction { false };	// a user-mode instruction is running
+				u32 m_permissionMapAddress { 0 };	// the map's bytes, for this address (cached)
+				const u8* m_permissionMap { nullptr };
 				i32 m_interruptHandlerCount { 0 };
 				// For each interrupt in service, the handler depth (m_interruptHandlerCount) of its
 				// outermost running handler; 0 = not in service. rti clears the entries deeper than

@@ -176,6 +176,7 @@ namespace dr {
 		var FaultIP: u32						= MemoryLayout.CPUControl + 0x0014;
 		var FaultAddress: u32					= MemoryLayout.CPUControl + 0x0018;
 		var Mode: u32							= MemoryLayout.CPUControl + 0x001C;	// read-only: 1 supervisor, 0 user
+		var PermissionMap: u32					= MemoryLayout.CPUControl + 0x0020;	// what user mode may access (0: everything)
 	};
 	const KeyboardRegisters: struct {
 		var ModifiersBitfield: u32				= MemoryLayout.Keyboard + 0x0000;

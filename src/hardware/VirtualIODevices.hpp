@@ -364,7 +364,10 @@ namespace dragon
 				inline static constexpr u32 FaultAddress = 0x18;
 				// Read-only: 1 supervisor mode, 0 user mode.
 				inline static constexpr u32 Mode = 0x1C;
-				// 0x20 - 0x3F: reserved (the memory permission map).
+				// The permission map's address (0: user mode may access everything): see
+				// MemoryMapper::setUserChecks. 16 KiB, all in the RAM.
+				inline static constexpr u32 PermissionMap = 0x20;
+				// 0x24 - 0x3F: reserved.
 			};
 
 			public:

@@ -16,6 +16,7 @@ namespace dragon
 		{
 			addr &= data::AddressMask;
 			data::ErrorHandler::currentAddress = addr;
+			if (m_userChecks && !user_allowed(addr, 1, false)) return 0x00;
 			auto region = findRegion(addr);
 			if (region == nullptr) return 0x00;
 			const u32 finalAddr = (region->remap ? addr - region->startAddress : addr);
@@ -26,6 +27,7 @@ namespace dragon
 		{
 			addr &= data::AddressMask;
 			data::ErrorHandler::currentAddress = addr;
+			if (m_userChecks && !user_allowed(addr, 2, false)) return 0x0000;
 			auto region = findRegion(addr);
 			if (region == nullptr) return 0x0000;
 			if (cast<u64>(addr) + 1 > region->endAddress)
@@ -38,6 +40,7 @@ namespace dragon
 		{
 			addr &= data::AddressMask;
 			data::ErrorHandler::currentAddress = addr;
+			if (m_userChecks && !user_allowed(addr, 2, true)) return 0x0000;
 			auto region = findRegion(addr);
 			if (region == nullptr) return 0x0000;
 			if (cast<u64>(addr) + 1 > region->endAddress)
@@ -50,6 +53,7 @@ namespace dragon
 		{
 			addr &= data::AddressMask;
 			data::ErrorHandler::currentAddress = addr;
+			if (m_userChecks && !user_allowed(addr, 4, false)) return 0x00000000;
 			auto region = findRegion(addr);
 			if (region == nullptr) return 0x00000000;
 			if (cast<u64>(addr) + 3 > region->endAddress)
@@ -65,6 +69,7 @@ namespace dragon
 		{
 			addr &= data::AddressMask;
 			data::ErrorHandler::currentAddress = addr;
+			if (m_userChecks && !user_allowed(addr, 1, true)) return 0x00;
 			auto region = findRegion(addr);
 			if (region == nullptr) return 0x00;
 			const u32 finalAddr = (region->remap ? addr - region->startAddress : addr);
@@ -75,6 +80,7 @@ namespace dragon
 		{
 			addr &= data::AddressMask;
 			data::ErrorHandler::currentAddress = addr;
+			if (m_userChecks && !user_allowed(addr, 4, true)) return 0x00000000;
 			auto region = findRegion(addr);
 			if (region == nullptr) return 0x00000000;
 			if (cast<u64>(addr) + 3 > region->endAddress)
@@ -198,6 +204,21 @@ namespace dragon
 					dirty->markRange(streamAddr, size);
 			}
 			return reinterpret_cast<u8*>(bytes);
+		}
+
+		bool MemoryMapper::user_allowed(u32 addr, u32 size, bool write)
+		{
+			const u8 need = (write ? PermissionWrite : PermissionRead);
+			auto l_allowed = [this, need](u32 a) -> bool {
+				if (m_permissionMap == nullptr)
+					return false;
+				const u32 page = (a & data::AddressMask) >> PageShift;
+				return ((m_permissionMap[page >> 2] >> ((page & 3) * 2)) & need) != 0;
+			};
+			if (l_allowed(addr) && (size == 1 || l_allowed(addr + size - 1)))
+				return true;
+			data::ErrorHandler::pushError(data::ErrorCodes::AccessViolation_PageProtection, String("User mode ").add(write ? "write to" : "read from").add(" a protected page (the permission map) at address: ").add(String::getHexStr(addr, true, 4)));
+			return false;
 		}
 
 		MemoryMapper::tMemoryRegion* MemoryMapper::findRegion(u32 address, bool pushError)

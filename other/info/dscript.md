@@ -194,8 +194,13 @@ dr::cpu::enter_user_mode(program_main, stack_top, stack_size);   // doesn't retu
 - `enter_user_mode`: entry runs as a call on the user stack (`set_user_stack`, for the stack
   check); if it returns, a `hlt` follows (a privileged instruction fault). `drop_to_user()`
   switches mode in place.
-- Not yet: memory protection (user code can still read and write all memory, the interrupt
-  vector included).
+- Memory protection: a permission map (16 KiB in RAM, 2 bits a 4 KiB page: user read / execute,
+  user write) set with `set_permission_map(map)`; `set_page_permissions(map, address, size,
+  dr::cpu::Permissions.ReadWrite)` (`None`, `Read`, `Write`, `ReadWrite`), `page_permissions(map,
+  address)`. Denied accesses are access violation faults (`fault_address()`); a handler can also
+  grant the page and return (the instruction runs again). No map: user mode accesses everything.
+  The devices (and the interrupt vector) share the page at 0x01000000: give it `Read` (user code
+  then still reads the timer) or `None`.
 
 ### Declarations (top level)
 ```

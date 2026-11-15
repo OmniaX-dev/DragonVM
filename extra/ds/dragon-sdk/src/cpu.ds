@@ -4,7 +4,8 @@
 // supervisor mode; a kernel runs programs in user mode (enter_user_mode), where privileged
 // instructions (hlt, rti, umode, the interrupt flag, int to a fault vector) and writes to the
 // protected device registers (CMOS, keyboard controller, CPU control, the Timer's interrupt
-// interval) are faults. Traps from user mode (int: system calls, hardware interrupts, faults)
+// interval) are faults, and so are the accesses the permission map denies (set_permission_map).
+// Traps from user mode (int: system calls, hardware interrupts, faults)
 // run their handler in supervisor mode, on the kernel stack (set_kernel_stack); rti goes back.
 namespace dr::cpu {
 	// The fault vectors: an instruction that fails in user mode raises its fault when the vector
@@ -20,6 +21,64 @@ namespace dr::cpu {
 		var General: u8							= 0x05;
 		var Last: u8							= 0x0F;	// 0x00 - 0x0F: the CPU's (int can't use them in user mode)
 	};
+
+	// Memory protection: the permission map has 2 bits for each 4 KiB page of the address space
+	// (bit 0: user mode may read and execute it, bit 1: write it); 16 KiB in the RAM, read in place
+	// (changes count at once). Without a map (0), user mode may access everything. A denied access
+	// is an access violation fault (fault_address: where).
+	const PageSize: u32 = 4096;
+	const PermissionMapSize: u32 = 16384;
+	const Permissions: struct {
+		var None: u8							= 0x00;
+		var Read: u8							= 0x01;	// read and execute
+		var Write: u8							= 0x02;
+		var ReadWrite: u8						= 0x03;
+	};
+
+	// The map user mode is checked against (null: none). Supervisor mode only.
+	sub set_permission_map(var map: u8*) {
+		*cast<u32*>(CPUControlRegisters.PermissionMap) = cast<u32>(map);
+	}
+	inline sub permission_map() -> u8* {
+		return cast<u8*>(*cast<u32*>(CPUControlRegisters.PermissionMap));
+	}
+
+	// The pages with any byte in [address, address + size) get permissions.
+	sub set_page_permissions(var map: u8*, var address: u32, var size: u32, var permissions: u8) {
+		if (size == 0)
+			return;
+		var first: u32 = (address & 0x0FFFFFFF) / PageSize;
+		var last: u32 = ((address & 0x0FFFFFFF) + (size - 1)) / PageSize;
+		if (last > 0xFFFF or last < first)
+			last = 0xFFFF;
+		permissions = permissions & 0x03;
+		var page: u32 = first;
+		// One by one up to 4 pages (a byte) boundary, then whole bytes, then the rest.
+		while (page <= last and (page & 3) != 0) {
+			__set_page(map, page, permissions);
+			page++;
+		}
+		if (page + 3 <= last) {
+			var bytes: u32 = (last + 1 - page) / 4;
+			memset(&map[page / 4], permissions * 0x55, bytes);
+			page += bytes * 4;
+		}
+		while (page <= last) {
+			__set_page(map, page, permissions);
+			page++;
+		}
+	}
+
+	inline sub __set_page(var map: u8*, var page: u32, var permissions: u8) {
+		var shift: u32 = (page & 3) * 2;
+		map[page / 4] = (map[page / 4] & ~(0x03 << shift)) | (permissions << shift);
+	}
+
+	// The permissions of the page with address.
+	sub page_permissions(var map: u8*, var address: u32) -> u8 {
+		var page: u32 = (address & 0x0FFFFFFF) / PageSize;
+		return (map[page / 4] >> ((page & 3) * 2)) & 0x03;
+	}
 
 	inline sub is_supervisor() -> bool {
 		return *cast<u32*>(CPUControlRegisters.Mode) != 0;

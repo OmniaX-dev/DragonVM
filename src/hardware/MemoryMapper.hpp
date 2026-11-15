@@ -1,6 +1,7 @@
 #pragma once
 
 #include "IMemoryDevice.hpp"
+#include "../tools/GlobalData.hpp"
 #include <ostd/string/String.hpp>
 #include <vector>
 
@@ -31,6 +32,20 @@ namespace dragon
 				i32 write32(u32 addr, i32 value) override;
 
 				void mapDevice(IMemoryDevice& device, u32 startAddr, u32 endAddr, bool remap = false, String name = "");
+
+				// The permission map: 2 bits for each 4 KiB page of the address space (65536 pages,
+				// 16 KiB), page p in byte p / 4, bits (p % 4) * 2: bit 0 user mode may read (and
+				// execute), bit 1 user mode may write. The CPU turns the checks on while it runs a
+				// user-mode instruction (so the devices' own accesses aren't checked), with the map's
+				// bytes (nullptr: every access is denied). A denied access pushes
+				// AccessViolation_PageProtection and doesn't reach the device (reads give 0).
+				inline static constexpr u32 PageShift = 12;
+				inline static constexpr u32 PageSize = 1u << PageShift;
+				inline static constexpr u32 PermissionMapSize = (data::AddressMask + 1) >> PageShift >> 2;
+				inline static constexpr u8 PermissionRead = 0x01;
+				inline static constexpr u8 PermissionWrite = 0x02;
+				inline void setUserChecks(bool on, const u8* map) { m_userChecks = on; m_permissionMap = map; }
+				inline bool areUserChecksOn(void) const { return m_userChecks; }
 				// Removes every mapping.
 				inline void clear(void) { m_regions.clear(); m_lastRegion = nullptr; }
 
@@ -59,12 +74,16 @@ namespace dragon
 				ostd::ByteStream* getByteStream(void) override;
 
 			private:
+				// The checks above: false (with the error) when user mode may not access the bytes.
+				bool user_allowed(u32 addr, u32 size, bool write);
 				tMemoryRegion* findRegion(u32 address, bool pushError = true);
 				// directSpan / writableSpan: the region and where addr is in its device's ByteStream.
 				i8* span(u32 addr, u32 size, tMemoryRegion*& region, u64& streamAddr);
 
 			private:
 				std::vector<tMemoryRegion> m_regions;
+				bool m_userChecks { false };
+				const u8* m_permissionMap { nullptr };
 				tMemoryRegion* m_lastRegion { nullptr };
 		};
 	}

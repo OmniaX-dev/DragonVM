@@ -56,6 +56,13 @@
             enabled; the error is dropped, CPU control FaultVector / FaultIP / FaultAddress tell what happened,
             and the handler returns to the faulting instruction (unless it changes the frame's saved IP). Not
             enabled, or in supervisor mode: the machine stops with the error, as before.
+        Memory protection: the permission map (CPU control PermissionMap; 16 KiB, all in the RAM, read in place)
+            has 2 bits for each 4 KiB page of the address space (65536 pages): page p in byte p / 4, bits
+            (p % 4) * 2; bit 0: user mode may read (and execute: instruction fetches are reads), bit 1: user mode
+            may write. A denied access (any byte of it) doesn't happen (reads give 0) and is an access violation
+            (fault 0x03, FaultAddress: the access's address). Only the CPU's accesses while it runs a user-mode
+            instruction are checked: not supervisor mode, not the devices (disk transfers), not the interrupt
+            vector reads of a trap. The devices share one page (0x01000000 - 0x01000FFF).
         The stack check allows SP in the machine's stack (CMOS StackSize below the stack top), the kernel stack
             and the user stack (CPU control).
 
@@ -142,7 +149,8 @@
         0x14: FaultIP (4 bytes): its instruction
         0x18: FaultAddress (4 bytes): the address it accessed (memory faults; the instruction's otherwise)
         0x1C: Mode (4 bytes, read-only): 1 supervisor, 0 user
-        0x20 - 0x3F: reserved (the memory permission map)
+        0x20: PermissionMap (4 bytes): the permission map's address (0: user mode may access everything)
+        0x24 - 0x3F: reserved
     0x010006EF
     -------
     0x010006B0 (unused, was the MBR)
