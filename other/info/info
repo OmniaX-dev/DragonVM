@@ -51,7 +51,8 @@
             OFFSET, FL], a marker (0x48574952 with the saved registers, 0 without), 0 (the argument count), then
             the stack frame. rti undoes it, the mode and SP last: it is how a kernel enters user mode (a frame
             built by hand, see dr::cpu::enter_user_mode).
-        int in user mode is a system call: it also works while interrupts are disabled.
+        int in user mode is a system call: it also works while interrupts are disabled, but only on the
+            vectors marked user-callable (interrupt vector status 0x02).
         Faults: an instruction that fails in user mode (its error) raises a fault if the fault's vector is
             enabled; the error is dropped, CPU control FaultVector / FaultIP / FaultAddress tell what happened,
             and the handler returns to the faulting instruction (unless it changes the frame's saved IP). Not
@@ -65,6 +66,8 @@
             vector reads of a trap. The devices share one page (0x01000000 - 0x01000FFF).
         The stack check allows SP in the machine's stack (CMOS StackSize below the stack top), the kernel stack
             and the user stack (CPU control).
+            CMOS StackSize is read live: a kernel that moved to its own stack can set it to 0 (the boot stack's memory
+            is then free); a reset sets it again.
 
 
 
@@ -86,16 +89,17 @@
 
         SystemSignals: (2 bytes) 0x72
         	0b00000000_00000001: Reboot
-        HeapStart: (4 bytes) 0x74
-        HeapEnd: (4 bytes) 0x78
+        HeapStart: (4 bytes) 0x74   (the system heap: its dr::Heap header, what int 0x20's allocations use)
+        HeapEnd: (4 bytes) 0x78     (the end of its first region)
 
         DiskList: (4 bytes) 0x7C
     0x0100007F
     -------
     0x01000080 INTERRUPT VECTOR (1280 Bytes: 256 entries x 5 bytes)
-        Status: 1 Byte
-            0xFF: Enabled
-            0x00: Disabled
+        Status: 1 Byte (bits; 0x00: disabled)
+            0x01: Enabled
+            0x02: User-callable: int in user mode may raise it (a system call); otherwise a privileged
+                  instruction fault (the BIOS's 0x20 and 0x30 are; 0xFF, the old "enabled", is both)
         Handler Address: 4 Bytes
         ...Repeat...
     0x0100057F

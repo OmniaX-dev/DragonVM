@@ -1,0 +1,272 @@
+// A mini kernel: the first steps of an OS, as small as possible.
+//
+//     dsc extra/ds/examples/mini-kernel/kernel.ds -L <sdk lib dir> -o kernel.drx
+//     drun <machine.dvm> kernel.drx
+//
+// It runs three tasks in user mode, switching between them on the timer interrupt (preemptive
+// multitasking), gives them two system calls (print, exit), and protects its memory from them:
+// task C writes where it may not, and the kernel ends it, the others keep running.
+//
+// The steps, in main:
+//   1. memory: page aligned areas for the stacks and the permission map
+//   2. the interrupt vector: faults, system calls (user-callable), the timer
+//   3. memory protection: what user mode may read and write
+//   4. tasks: a user stack, a kernel stack, and a start frame built by hand on it
+//   5. the timer, and the first task: rti into its frame
+//
+// The idea everything turns on: when an interrupt comes from user mode, the CPU switches to the
+// kernel stack (CPU control KernelStackTop) and pushes the task's whole state there, a "trap
+// frame" (its registers, its IP, its SP, its mode); rti pops a trap frame and continues where it
+// says, in the mode it says. So
+//   - switching tasks = rti from ANOTHER task's frame (each task has its own kernel stack, where
+//     its frame stays while it is not running);
+//   - starting a task = rti from a frame the kernel wrote itself ("built by hand"), which looks
+//     exactly like the one the CPU would have left if the task had been interrupted just before
+//     its first instruction.
+// (The layout: other/info/info, "Modes"; dr::cpu::enter_user_mode does the same for one program.)
+//
+// Simplifications: the tasks are subs in the kernel's own program (a real OS loads programs:
+// dr::drx::load), the kernel trusts the pointers tasks pass it (a real one checks they are the
+// task's memory), and output goes to the host (debug_print).
+#import(<dragon-sdk>)
+
+const SYS_PRINT: u8 = 0x40;				// R9: a string
+const SYS_EXIT: u8 = 0x41;
+
+const TASKS: u32 = 3;
+const PAGE: u32 = 4096;					// one page for each stack
+
+struct Task {
+	var name: string;
+	var frame: u32;						// its saved state (a trap frame) on its kernel stack
+	var kernel_top: u32;				// its kernel stack (CPU control KernelStackTop while it runs)
+	var user_top: u32;					// its user stack
+	var alive: bool;
+};
+
+var tasks: Task[TASKS];
+var current: u32 = 0;
+var finished: u32 = 0;					// tasks that exited
+var killed: u32 = 0;					// tasks the kernel ended (a fault)
+
+// Page aligned memory: a kernel stack and a user stack for each task, then the permission map (4
+// pages). One page more than needed: the arena itself isn't aligned.
+var arena: u8[(2 * TASKS + 4 + 1) * PAGE];
+var pages: u32 = 0;
+inline sub page(var n: u32) -> u32 { return pages + n * PAGE; }
+
+
+// ===== Tasks (user mode) =====
+
+sub sys_print(var text: string) {
+	low {
+		mov R9, $text
+		int 0x40
+	}
+}
+
+sub sys_exit() {
+	low { int 0x41 }
+}
+
+sub busy(var n: u32) {
+	var x: u32 = 0;
+	while (x < n)
+		x++;
+}
+
+sub task_a() {
+	for (var i: i32 = 0; i < 3; i++) {
+		sys_print("A: hello\n");
+		busy(400);
+	}
+	sys_exit();				// (a task never returns: nothing called it)
+}
+
+sub task_b() {
+	var line: u8[16] = "B: count 0\n";	// on the task's own (user) stack
+	for (var i: i32 = 1; i <= 3; i++) {
+		line[9] = cast<u8>('0' + i);
+		sys_print(line);
+		busy(400);
+	}
+	sys_exit();
+}
+
+sub task_c() {
+	sys_print("C: writing the kernel's memory...\n");
+	finished = 99;			// a kernel variable: read-only for user mode (an access violation)
+	sys_print("C: (never printed)\n");
+	sys_exit();
+}
+
+
+// ===== The kernel (supervisor mode) =====
+
+// The frame a new task starts from: what the CPU pushes when an interrupt comes from user mode,
+// read upwards from FP (the frame's address) in words. rti pops it, so the task "returns" to its
+// first instruction, in user mode, on its user stack.
+sub build_start_frame(var kernel_top: u32, var entry: sub(), var user_top: u32) -> u32 {
+	var fp: u32 = kernel_top - 34 * 4;	// 34 words below the stack's top (the CPU's FP = SP)
+	var f: u32* = cast<u32*>(fp);
+	// The stack frame (pushed last by the CPU, so the lowest):
+	f[1] = 9 * 4;						// the frame size bookkeeping: the 9 words pushed before it
+	f[2] = user_top;					// FP: as a call leaves it (FP = SP) when the task starts
+	f[3] = cast<u32>(entry);			// IP: where rti goes
+	f[4] = 0;							// ACC
+	f[5] = 0;							// PP: no arguments
+	for (var r: u32 = 6; r <= 25; r++)
+		f[r] = 0;						// R20 (6) .. R1 (25)
+	f[26] = 0;							// the argument count (traps have none)
+	// Pushed by the trap before the stack frame (so above it):
+	f[27] = 0x48574952;					// the marker: "RV, S1, S2, OFFSET, FL are saved above"
+	f[28] = 1 << dr::CPUFlags.InterruptsEnabled;	// FL: interrupts on (the timer takes the CPU back)
+	f[29] = 0;							// OFFSET
+	f[30] = 0;							// S2
+	f[31] = 0;							// S1
+	f[32] = 0;							// RV
+	f[33] = 0;							// the mode rti goes back to: 0 = user
+	f[34] = user_top;					// SP rti goes back to: the task's stack (the top word)
+	return fp;
+}
+
+// The next task that is alive after current (current itself if it's the only one), or TASKS.
+sub next_task() -> u32 {
+	for (var n: u32 = 1; n <= TASKS; n++) {
+		var t: u32 = (current + n) % TASKS;
+		if (tasks[t].alive)
+			return t;
+	}
+	return TASKS;
+}
+
+// Makes task t the running one: its user stack in the CPU control registers (the stack check),
+// its frame for rti. Its kernel stack comes last, just before the rti (switch_kernel_stack): the
+// stack check follows KernelStackTop, and the kernel is still running on the old task's stack.
+sub prepare(var t: u32) -> u32 {
+	current = t;
+	dr::cpu::set_user_stack(tasks[t].user_top, PAGE);
+	return tasks[t].frame;
+}
+
+sub switch_kernel_stack() {
+	dr::cpu::set_kernel_stack(tasks[current].kernel_top, PAGE);
+}
+
+// No task left: the machine stops (RV: what happened, for the test).
+sub shutdown() {
+	debug_print("kernel: no tasks left, halting\n");
+	var result: u32 = finished + 10 * killed;
+	low {
+		mov RV, $result
+		hlt
+	}
+}
+
+// The timer: the running task's time is up, the next one runs. Its frame stays where the CPU put
+// it, on its kernel stack, until it runs again.
+interrupt sub on_timer() {
+	var frame: u32 = dr::cpu::trap_frame();
+	if (not dr::cpu::trap_from_user(frame))
+		return;						// the kernel was busy (a system call): keep going
+	tasks[current].frame = frame;
+	var next: u32 = prepare(next_task());
+	switch_kernel_stack();
+	low {
+		mov FP, $next
+		rti
+	}
+}
+
+// SYS_PRINT: the string in R9 (the task's R9: traps don't change registers).
+interrupt sub on_print() {
+	var text: u32;
+	low { mov $text, R9 }
+	debug_print(cast<string>(text));
+}
+
+// A task ends: by SYS_EXIT, or by a fault. The next task runs (its saved frame).
+sub end_current(var message: string) {
+	tasks[current].alive = false;
+	debug_print("kernel: task ");
+	debug_print(tasks[current].name);
+	debug_print(message);
+}
+
+interrupt sub on_exit() {
+	end_current(" exited\n");
+	finished++;
+	var t: u32 = next_task();
+	if (t == TASKS)
+		shutdown();
+	var next: u32 = prepare(t);
+	switch_kernel_stack();
+	low {
+		mov FP, $next
+		rti
+	}
+}
+
+interrupt sub on_fault() {
+	var buff: u8[12];
+	end_current(" killed: access violation at 0x");
+	debug_print(dr::utoa(dr::cpu::fault_address(), buff, 16));
+	debug_print("\n");
+	killed++;
+	var t: u32 = next_task();
+	if (t == TASKS)
+		shutdown();
+	var next: u32 = prepare(t);
+	switch_kernel_stack();
+	low {
+		mov FP, $next
+		rti
+	}
+}
+
+sub main() -> i32 {
+	debug_print("kernel: starting\n");
+
+	// 1. Memory: page aligned.
+	pages = (cast<u32>(&arena[0]) + PAGE - 1) & ~(PAGE - 1);
+
+	// 2. The interrupt vector. Faults and the timer come by themselves; the system calls are the
+	//    only vectors user mode may raise with int.
+	for (var v: u8 = 0; v <= dr::cpu::Faults.General; v++)
+		dr::set_interrupt_vector_entry(v, &on_fault);
+	dr::set_interrupt_vector_entry(SYS_PRINT, &on_print, true);
+	dr::set_interrupt_vector_entry(SYS_EXIT, &on_exit, true);
+	dr::set_interrupt_vector_entry(dr::HardwareInterrupts.Timer, &on_timer);
+
+	// 3. Memory protection: user mode may read (and run) the RAM, where its code is, and write only
+	//    its stacks; not the BIOS, the devices (the interrupt vector too), the kernel stacks, the map.
+	var map: u8* = cast<u8*>(page(2 * TASKS));
+	dr::cpu::set_page_permissions(map, 0, 0x10000000, dr::cpu::Permissions.None);
+	dr::cpu::set_page_permissions(map, dr::MemoryLayout.RAM, 0x10000000 - dr::MemoryLayout.RAM, dr::cpu::Permissions.Read);
+	dr::cpu::set_page_permissions(map, page(2 * TASKS), dr::cpu::PermissionMapSize, dr::cpu::Permissions.None);
+
+	// 4. The tasks: a kernel stack (no user access), a user stack (read / write), a start frame.
+	var entries: sub()[TASKS] = { task_a, task_b, task_c };
+	var names: string[TASKS] = { "A", "B", "C" };
+	for (var t: u32 = 0; t < TASKS; t++) {
+		tasks[t].name = names[t];
+		tasks[t].kernel_top = page(2 * t) + PAGE - 4;
+		tasks[t].user_top = page(2 * t + 1) + PAGE - 4;
+		dr::cpu::set_page_permissions(map, page(2 * t), PAGE, dr::cpu::Permissions.None);
+		dr::cpu::set_page_permissions(map, page(2 * t + 1), PAGE, dr::cpu::Permissions.ReadWrite);
+		tasks[t].frame = build_start_frame(tasks[t].kernel_top, entries[t], tasks[t].user_top);
+		tasks[t].alive = true;
+	}
+	dr::cpu::set_permission_map(map);
+
+	// 5. A timer interrupt every millisecond, then the first task. (Interrupts are still off here:
+	//    the tasks' frames turn them on, with their FL.)
+	dr::time::set_interrupt_interval(1);
+	var first: u32 = prepare(0);
+	switch_kernel_stack();
+	low {
+		mov FP, $first
+		rti
+	}
+	return 0;						// (never: the kernel only runs in interrupts from now on)
+}

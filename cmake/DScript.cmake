@@ -35,11 +35,13 @@ file(GLOB DS_SDK_SOURCES CONFIGURE_DEPENDS ${DS_SOURCE_DIR}/dragon-sdk/src/*.ds)
 file(GLOB_RECURSE DS_BIOS_SOURCES CONFIGURE_DEPENDS ${DS_SOURCE_DIR}/bios/*.ds)
 file(GLOB_RECURSE DS_DRAKE_SOURCES CONFIGURE_DEPENDS ${DS_SOURCE_DIR}/drake/*.ds)
 file(GLOB_RECURSE DS_SNAKE_KERNEL0_SOURCES CONFIGURE_DEPENDS ${DS_SOURCE_DIR}/snake-game/*.ds)
+file(GLOB_RECURSE DS_EXAMPLE_KERNEL_SOURCES CONFIGURE_DEPENDS ${DS_SOURCE_DIR}/examples/mini-kernel/*.ds)
 
 # The disassembly file names reload_env.sh's dsc calls produce.
 string(MD5 DS_BIOS_DDS "dragon/bios.bin")
 string(MD5 DS_DRAKE_DDS "dragon/drake.bin")
 string(MD5 DS_SNAKE_KERNEL0_DDS "dragon/snake_kernel0.bin")
+string(MD5 DS_EXAMPLE_KERNEL_DDS "dragon/example-kernel.bin")
 
 # ds_add_env(<target> <mode folder> <assembler flags (comma separated, may be empty)>)
 function(ds_add_env TARGET MODE ASM_FLAGS)
@@ -92,6 +94,15 @@ function(ds_add_env TARGET MODE ASM_FLAGS)
 		COMMENT "DScript (${MODE}): SnakeGame"
 		VERBATIM)
 
+	add_custom_command(
+		OUTPUT ${OUT}/example-kernel.bin ${OUT}/disassembly/${DS_EXAMPLE_KERNEL_DDS}.dds
+		COMMAND ${DSC} ${DS_SOURCE_DIR}/examples/mini-kernel/kernel.ds -L ${OUT}/lib -o ${OUT}/example-kernel.bin
+																																	 -O --verbose --save-disassembly ${OUT}/disassembly/${DS_EXAMPLE_KERNEL_DDS}.dds ${WA}
+		DEPENDS ${DS_EXAMPLE_KERNEL_SOURCES} ${SDK} ${COMPILER_TARGET}
+		WORKING_DIRECTORY ${DS_RUN_DIR}
+		COMMENT "DScript (${MODE}): Example-kernel"
+		VERBATIM)
+
 	# Always: the results where the runtime and the debugger look for them.
 	add_custom_target(${TARGET}
 		COMMAND ${CMAKE_COMMAND} -E make_directory ${DS_RUN_DIR}/ds/dragon-sdk/lib ${DS_RUN_DIR}/dragon ${DS_RUN_DIR}/disassembly
@@ -100,11 +111,13 @@ function(ds_add_env TARGET MODE ASM_FLAGS)
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${OUT}/bios.bin ${DS_RUN_DIR}/dragon/bios.bin
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${OUT}/drake.bin ${DS_RUN_DIR}/dragon/drake.bin
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${OUT}/snake_kernel0.bin ${DS_RUN_DIR}/dragon/snake_kernel0.bin
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${OUT}/example-kernel.bin ${DS_RUN_DIR}/dragon/example-kernel.bin
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${OUT}/disassembly/${DS_DRAKE_DDS}.dds ${OUT}/disassembly/${DS_SNAKE_KERNEL0_DDS}.dds ${DS_RUN_DIR}/disassembly/
 		COMMAND ${DTOOLS} dfs dragon/disk.drd 1 mkdir -p /init
 		COMMAND ${DTOOLS} dfs dragon/disk.drd 1 put dragon/drake.bin /init/boot.img
 		COMMAND ${DTOOLS} dfs dragon/disk.drd 4 install-kernel dragon/snake_kernel0.bin
-		DEPENDS ${SDK} ${OUT}/bios.bin ${OUT}/drake.bin ${OUT}/snake_kernel0.bin ${TOOLS_TARGET}
+		COMMAND ${DTOOLS} dfs dragon/disk.drd 5 install-kernel dragon/example-kernel.bin
+		DEPENDS ${SDK} ${OUT}/bios.bin ${OUT}/drake.bin ${OUT}/snake_kernel0.bin ${OUT}/example-kernel.bin ${TOOLS_TARGET}
 		WORKING_DIRECTORY ${DS_RUN_DIR}
 		COMMENT "DScript (${MODE}): BIOS, Drake and SnakeGame in place"
 		VERBATIM)

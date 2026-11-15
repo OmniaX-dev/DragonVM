@@ -157,6 +157,21 @@ sub user_main() {
 	g_skip = 2;
 	low { zflg 0x01 }			// (the offset mode flag: allowed)
 	expect(26, g_faults == n);
+	n = g_faults;
+	g_skip = 2;
+	low { int 0x42 }			// enabled, but not user-callable
+	expect(27, fault_ok(n, dr::cpu::Faults.PrivilegedInstruction));
+	n = g_faults;
+	g_skip = 2;
+	low { int 0xC0 }			// the Timer's (a hardware interrupt)
+	expect(28, fault_ok(n, dr::cpu::Faults.PrivilegedInstruction));
+	n = g_faults;
+	dr::set_interrupt_user_callable(0x42, true);				// (no protection map: user mode writes the table)
+	low {
+		mov R9, 0x00000002
+		int 0x42
+	}
+	expect(29, g_faults == n);
 
 	// Protected writes: an access violation at the address.
 	n = g_faults;
@@ -229,8 +244,9 @@ sub main() -> i32 {
 
 	for (var v: u8 = 0; v <= dr::cpu::Faults.General; v++)
 		dr::set_interrupt_vector_entry(v, &on_fault);
-	dr::set_interrupt_vector_entry(0x40, &on_syscall);
-	dr::set_interrupt_vector_entry(0x41, &on_exit);
+	dr::set_interrupt_vector_entry(0x40, &on_syscall, true);
+	dr::set_interrupt_vector_entry(0x41, &on_exit, true);
+	dr::set_interrupt_vector_entry(0x42, &on_syscall);			// (not user-callable)
 	g_kernel_top = cast<u32>(&kernel_stack[1023]);
 	g_user_top = cast<u32>(&user_stack[1023]);
 	dr::cpu::set_kernel_stack(g_kernel_top, 4096);

@@ -1,0 +1,73 @@
+// expect-rv: 0
+// dr::Heap: alloc, free, aligned blocks, realloc in place and moved, more regions, bad pointers.
+#include(check.ds)
+#import(<dragon-sdk>)
+
+var arena: u8[64 * 1024];
+var second: u8[16 * 1024];
+var third: u8[8 * 1024];
+
+sub main() -> i32 {
+	var h: dr::Heap* = dr::Heap::create(&arena[3], 32 * 1024);
+	check(1, h != null and dr::Heap::valid(h) and h->region_count() == 1 and h->check());
+	check(2, cast<u32>(h) % 8 == 0 and dr::Heap::create(&arena[0], 40) == null);
+	var total: u32 = h->total_bytes();
+	check(3, h->free_bytes() == total and h->largest_free() == total - 8);
+
+	// Blocks: aligned, separate, freed and reused.
+	var a: u8* = h->alloc(10);
+	var b: u8* = h->alloc(100);
+	var c: u8* = h->alloc(1);
+	check(10, a != null and b != null and c != null and cast<u32>(a) % 8 == 0 and cast<u32>(b) % 8 == 0);
+	check(11, b >= a + 10 and c >= b + 100 and h->block_size(a) >= 10 and h->block_size(b) >= 100);
+	dr::memset(a, 0xAA, 10);
+	dr::memset(b, 0xBB, 100);
+	check(12, a[9] == 0xAA and b[0] == 0xBB and h->check());
+	check(13, h->free(b) and not h->free(b) and not h->free(b + 4) and not h->free(cast<void*>(0x1000)));
+	var b2: u8* = h->alloc(64);
+	check(14, b2 == b and h->check());
+	check(15, h->alloc(0) == null and h->alloc(1024 * 1024) == null and h->free(null));
+
+	// Page aligned.
+	var page: u8* = h->alloc_aligned(4096, 4096);
+	check(20, page != null and cast<u32>(page) % 4096 == 0 and h->check());
+	var odd: u8* = h->alloc_aligned(8, 64);
+	check(21, odd != null and cast<u32>(odd) % 64 == 0 and h->alloc_aligned(8, 48) == null);
+	check(22, h->free(page) and h->free(odd) and h->check());
+
+	// realloc (a heap of its own, so the layout is known): shrink in place, grow in place (the
+	// free block after it), grow by moving.
+	var h3: dr::Heap* = dr::Heap::create(&third[0], 8 * 1024);
+	var r: u8* = h3->alloc(200);
+	dr::memset(r, 0x5A, 200);
+	check(30, h3->realloc(r, 50) == r and h3->block_size(r) < 200);
+	check(31, h3->realloc(r, 400) == r and r[49] == 0x5A and h3->check());
+	var blocker: u8* = h3->alloc(8);		// right after r: r can't grow in place now
+	check(32, blocker > r);
+	var moved: u8* = h3->realloc(r, 2000);
+	check(33, moved != null and moved > blocker and moved[0] == 0x5A and moved[49] == 0x5A and h3->check());
+	check(34, h3->block_size(r) == 0 and h3->realloc(null, 16) != null and h3->realloc(blocker, 0) == null);
+	check(35, h3->realloc(moved, 100000) == null and moved[0] == 0x5A);
+
+	// Everything back: one free block again.
+	h->free(a);
+	h->free(b2);
+	h->free(c);
+	var big: u8* = h->alloc(h->largest_free());
+	check(40, big != null and h->check());
+	check(41, h->alloc(8) == null);
+
+	// A second region (not adjacent): used once the first is full; overlaps are refused.
+	check(50, not h->add_region(&arena[100], 64) and not h->add_region(cast<u8*>(h), 4096));
+	check(51, h->add_region(&second[0], 16 * 1024) and h->region_count() == 2);
+	var s: u8* = h->alloc(1000);
+	check(52, s >= &second[0] and s < &second[0] + 16 * 1024 and h->owns(s) and h->check());
+	check(53, not h->add_region(&second[100], 100));
+	check(54, h->free(big) and h->free(s) and h->free_bytes() == h->total_bytes());
+
+	// A corrupted header.
+	var x: u8* = h->alloc(16);
+	cast<u32*>(x)[-2] = 3;				// its size
+	check(60, not h->check());
+	return result();
+}

@@ -40,12 +40,32 @@ const INT30_CLEAR_SCREEN: u8 						= 0xE0;
 const INT30_REFRESH_SCREEN: u8 						= 0xE1;
 
 namespace dr {
-	struct IntVectorEntry { var enabled: u8; var handler: u32; };
-	sub set_interrupt_vector_entry(var code: u8, var handler_addr: sub()) {
+	// An entry's status: bits (0: disabled).
+	const IntVectorStatus: struct {
+		var Enabled: u8							= 0x01;
+		var UserCallable: u8					= 0x02;	// int in user mode may call it (a system call)
+	};
+	struct IntVectorEntry { var status: u8; var handler: u32; };
+
+	// The handler of interrupt code (null: disabled). user_callable: user mode may raise it with
+	// int (a system call); otherwise that's a privileged instruction fault. Hardware interrupts and
+	// faults don't need it.
+	sub set_interrupt_vector_entry(var code: u8, var handler_addr: sub(), var user_callable: bool = false) {
 	        var entry: IntVectorEntry* = cast<IntVectorEntry*>(MemoryLayout.InterruptVector) + code;
 	        var handler: u32 = cast<u32>(handler_addr);
-	        entry->enabled = handler != 0 ? 0xFF : 0x00;
+	        var status: u8 = 0x00;
+	        if (handler != 0)
+	        	status = user_callable ? IntVectorStatus.Enabled | IntVectorStatus.UserCallable : IntVectorStatus.Enabled;
+	        entry->status = status;
 	        entry->handler = handler;
+	}
+
+	// Lets user mode call an enabled interrupt (or not), keeping its handler.
+	sub set_interrupt_user_callable(var code: u8, var user_callable: bool) {
+	        var entry: IntVectorEntry* = cast<IntVectorEntry*>(MemoryLayout.InterruptVector) + code;
+	        if (entry->status == 0)
+	        	return;
+	        entry->status = user_callable ? IntVectorStatus.Enabled | IntVectorStatus.UserCallable : IntVectorStatus.Enabled;
 	}
 
 	inline sub clear_interrupt_vector_entry(var code: u8) {

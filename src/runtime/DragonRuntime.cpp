@@ -334,6 +334,8 @@ namespace dragon
 		vCPUControl.reset();
 		vDiskInterface.reset();
 		vCMOS.write16(data::CMOSRegisters::SystemSignals, 0);
+		// (a kernel may have given the boot stack away: dr::cpu::release_boot_stack)
+		vCMOS.write32(data::CMOSRegisters::StackSize, cast<i32>(std::min<u32>(data::DefaultValues::DefaultStackSize, cast<u32>(ram.getSize()) / 2)));
 		s_resetCount++;
 	}
 

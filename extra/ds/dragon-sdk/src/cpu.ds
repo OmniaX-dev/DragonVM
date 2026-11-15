@@ -135,6 +135,49 @@ namespace dr::cpu {
 		return count == 0 and *cast<u32*>(mode_at) == 0;
 	}
 
+	// The boot stack: where the CPU starts (SP at the RAM's last word, CMOS StackSize bytes below
+	// it). The BIOS, the boot loader and the kernel's main all run on it, one call inside the other.
+	inline sub boot_stack_end() -> u32 {
+		return read_cmos(CMOSRegisters.MemoryStart) + read_cmos(CMOSRegisters.MemorySize);
+	}
+	inline sub boot_stack_start() -> u32 {
+		return boot_stack_end() - read_cmos(CMOSRegisters.StackSize);
+	}
+
+	// Moves to a new stack for good: it becomes the kernel stack (set_kernel_stack(top, size): the
+	// stack check accepts it, and traps from user mode use it), SP and FP go to its top and
+	// continuation runs there. It never returns: whatever was on the old stack (this caller's
+	// locals too) is not used again, and if continuation returns, the machine halts. Supervisor
+	// mode only. Then release_boot_stack can give the boot stack's memory away.
+	// (Traps from user mode start the kernel stack again from its top, so once the kernel runs user
+	// programs, what continuation was doing before can't continue: as with enter_user_mode.)
+	sub switch_stack(var top: u32, var size: u32, var continuation: sub()) {
+		set_kernel_stack(top, size);
+		low {
+			mov R1, $continuation
+			mov R2, $top
+			mov SP, R2
+			mov FP, R2
+			push 0x00000000
+			call R1
+			hlt
+		}
+	}
+
+	// Gives up the boot stack (CMOS StackSize 0: SP there is a stack overflow from now on, so a
+	// stray use of it stops the machine instead of writing over what the memory is used for
+	// then). The memory is [boot_stack_start(), boot_stack_end()): read them first. False (and
+	// nothing changes) while SP is still on it: call it after switch_stack. Supervisor mode only;
+	// a reset gives the stack back.
+	sub release_boot_stack() -> bool {
+		var sp: u32 = 0;
+		low { mov $sp, SP }
+		if (sp >= boot_stack_start() and sp < boot_stack_end())
+			return false;
+		write_cmos(CMOSRegisters.StackSize, 0);
+		return true;
+	}
+
 	// Supervisor mode -> user mode, here (on the same stack). Privileged.
 	sub drop_to_user() {
 		low { umode }

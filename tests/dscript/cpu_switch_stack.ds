@@ -1,0 +1,53 @@
+// expect-rv: 0
+// dr::cpu::switch_stack and release_boot_stack: main moves to its own stack, gives the boot stack
+// up (CMOS StackSize 0) and hands its memory to a heap.
+#include(check.ds)
+#import(<dragon-sdk>)
+
+var stack: u8[8192];
+var arena: u8[8192];
+var g_top: u32 = 0;
+var g_boot_start: u32 = 0;
+var g_boot_end: u32 = 0;
+
+sub sp_now() -> u32 {
+	var sp: u32 = 0;
+	low { mov $sp, SP }
+	return sp;
+}
+
+sub kernel_main() {
+	var sp: u32 = sp_now();
+	check(10, sp <= g_top and g_top - sp < 512);
+	check(11, *cast<u32*>(dr::CPUControlRegisters.KernelStackTop) == g_top);
+	check(12, dr::cpu::release_boot_stack() and dr::read_cmos(dr::CMOSRegisters.StackSize) == 0);
+
+	// The boot stack's memory, in a heap.
+	var h: dr::Heap* = dr::Heap::create(&arena[0], 8192);
+	check(20, h->add_region(cast<u8*>(g_boot_start), g_boot_end - g_boot_start));
+	var big: u8* = h->alloc(256 * 1024);
+	check(21, cast<u32>(big) >= g_boot_start and cast<u32>(big) < g_boot_end);
+	dr::memset(big, 0x77, 256 * 1024);		// (over the old frames: nothing uses them)
+	check(22, h->check() and big[256 * 1024 - 1] == 0x77);
+
+	// Deep calls still work on the new stack.
+	var buff: u8[12];
+	check(23, dr::strcmp(dr::utoa(12345, buff), "12345") == 0);
+
+	var rv: i32 = result();
+	low {
+		mov RV, $rv
+		hlt
+	}
+}
+
+sub main() -> i32 {
+	g_boot_end = dr::cpu::boot_stack_end();
+	g_boot_start = dr::cpu::boot_stack_start();
+	var sp: u32 = sp_now();
+	check(1, sp >= g_boot_start and sp < g_boot_end and g_boot_end - g_boot_start >= 256 * 1024);
+	check(2, not dr::cpu::release_boot_stack());		// still on it
+	g_top = cast<u32>(&stack[8188]);
+	dr::cpu::switch_stack(g_top, 8192, kernel_main);
+	return 100;						// (not reached)
+}

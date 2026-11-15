@@ -183,7 +183,7 @@ sub main() -> i32 {
 
 	for (var v: u8 = 0; v <= dr::cpu::Faults.General; v++)
 		dr::set_interrupt_vector_entry(v, &on_fault);
-	dr::set_interrupt_vector_entry(0x41, &on_exit);
+	dr::set_interrupt_vector_entry(0x41, &on_exit, true);
 	dr::cpu::set_kernel_stack(page(K) + 4092, 4096);
 	dr::cpu::set_permission_map(g_map);
 	expect(4, dr::cpu::permission_map() == g_map);

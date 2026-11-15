@@ -1,6 +1,5 @@
 #import(<dragon-sdk>)
 
-#include(allocator.ds)
 
 interrupt sub __int_20_handler() {
 	var code: u32;
@@ -40,17 +39,16 @@ interrupt sub __int_20_handler() {
 	else if (code == INT20_ALLOC_HEAP)
 	{
 		if (not param2) return;
-		atomic {
-			*cast<u32*>(param2) = cast<u32>(Allocator::alloc(param1));
-		}
+		// (the system heap: the BIOS's, or the one a kernel replaced it with)
+		var heap: dr::Heap* = dr::system_heap();
+		*cast<u32*>(param2) = heap == null ? 0 : cast<u32>(heap->alloc(param1));
 	}
 	else if (code == INT20_FREE_HEAP)
 	{
 		if (not param1) return;
-		atomic {
-			var result: u32 = Allocator::free(cast<void*>(param1)) ? 1 : 0;
-			low { mov RV, $result }
-		}
+		var heap: dr::Heap* = dr::system_heap();
+		var result: u32 = heap != null and heap->free(cast<void*>(param1)) ? 1 : 0;
+		low { mov RV, $result }
 	}
 	else if (code == INT20_REBOOT)
 	{

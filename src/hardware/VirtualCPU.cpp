@@ -239,19 +239,20 @@ namespace dragon
 		bool VirtualCPU::handleInterrupt(u8 intValue, bool hardware)
 		{
 			// int in user mode is a system call: it works while interrupts are disabled too (only
-			// the kernel can disable them), but not on the fault vectors (they are the CPU's).
+			// the kernel can disable them), but only on the vectors marked user-callable, never on
+			// the fault vectors (they are the CPU's).
 			const bool systemCall = !hardware && !m_supervisor;
 			if (!systemCall && !readFlag(data::Flags::InterruptsEnabled))
 				return false;
-			if (systemCall && intValue <= data::InterruptCodes::LastFault)
-			{
-				privileged("int to a fault vector");
-				return false;
-			}
 			u32 entryPointer = data::MemoryMapAddresses::IntVector_Start + (intValue * data::MemoryMapAddresses::IntVector_EntrySize);
 			// (the vector table directly: user mode may not read it)
 			u8 interruptStatus = DragonRuntime::memMap.peek8(entryPointer);
-			if (interruptStatus != 0xFF) return false;
+			if ((interruptStatus & data::InterruptVectorStatus::Enabled) == 0) return false;
+			if (systemCall && (intValue <= data::InterruptCodes::LastFault || (interruptStatus & data::InterruptVectorStatus::UserCallable) == 0))
+			{
+				privileged(intValue <= data::InterruptCodes::LastFault ? "int to a fault vector" : "int to a vector user mode may not call");
+				return false;
+			}
 			// A hardware interrupt comes between any two instructions, so it also keeps what the
 			// stack frame doesn't (rti puts it back): RV (e.g. between a call and the mov that
 			// reads its return value), S1 / S2 (low blocks), OFFSET and FL. A software interrupt
@@ -322,7 +323,7 @@ namespace dragon
 				break;
 			}
 			const u32 entryPointer = data::MemoryMapAddresses::IntVector_Start + (vector * data::MemoryMapAddresses::IntVector_EntrySize);
-			if (DragonRuntime::memMap.peek8(entryPointer) != 0xFF)
+			if ((DragonRuntime::memMap.peek8(entryPointer) & data::InterruptVectorStatus::Enabled) == 0)
 				return false;
 			using CR = VirtualCPUControl::tRegisters;
 			auto& control = DragonRuntime::vCPUControl;

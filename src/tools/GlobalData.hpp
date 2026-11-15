@@ -123,7 +123,7 @@ namespace dragon
 				inline static constexpr u32 CMOS_Start = 0x01000000;
 				inline static constexpr u32 CMOS_End   = 0x0100007F;
 
-				// 256 entries of 5 bytes: status (1), handler address (4).
+				// 256 entries of 5 bytes: status (1, see InterruptVectorStatus), handler address (4).
 				inline static constexpr u32 IntVector_Start = 0x01000080;
 				inline static constexpr u32 IntVector_End   = 0x0100057F;
 				inline static constexpr u32 IntVector_EntrySize = 5;
@@ -316,6 +316,16 @@ namespace dragon
 			public:
 				inline static constexpr u8 InterruptsEnabled = 0;
 				inline static constexpr u8 OffsetModeEnabled = 1;
+		};
+
+		// An interrupt vector entry's status byte: bits.
+		class InterruptVectorStatus
+		{
+			public:
+				inline static constexpr u8 Enabled = 0x01;
+				// int in user mode may call it (a system call); otherwise a privileged instruction.
+				inline static constexpr u8 UserCallable = 0x02;
+				// (0xFF, the old "enabled": both)
 		};
 
 		class InterruptCodes

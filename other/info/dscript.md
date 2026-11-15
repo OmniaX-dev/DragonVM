@@ -180,7 +180,7 @@ protected registers: those are faults). `cpu.ds` has what a kernel needs (the ha
 in `other/info/info`, "Modes"):
 ```
 dr::set_interrupt_vector_entry(dr::cpu::Faults.AccessViolation, &on_fault);   // 0x00 - 0x05
-dr::set_interrupt_vector_entry(0x40, &on_syscall);    // int 0x40 from user mode: a system call
+dr::set_interrupt_vector_entry(0x40, &on_syscall, true);  // user-callable: a system call
 dr::cpu::set_kernel_stack(top, size);                 // traps from user mode switch to it
 dr::time::set_interrupt_interval(10);                 // the Timer interrupt (0xC0) every 10 ms
 dr::cpu::enter_user_mode(program_main, stack_top, stack_size);   // doesn't return
@@ -201,6 +201,36 @@ dr::cpu::enter_user_mode(program_main, stack_top, stack_size);   // doesn't retu
   grant the page and return (the instruction runs again). No map: user mode accesses everything.
   The devices (and the interrupt vector) share the page at 0x01000000: give it `Read` (user code
   then still reads the timer) or `None`.
+- The boot stack: the BIOS, the boot loader and the kernel's `main` run on the stack the CPU
+  starts with (CMOS StackSize bytes at the end of the RAM: `boot_stack_start()`,
+  `boot_stack_end()`). `switch_stack(top, size, kernel_main)` moves to a stack of the kernel's
+  own for good (it becomes the kernel stack; it never returns), after which
+  `release_boot_stack()` sets StackSize to 0 (SP there is a stack overflow from then on; a reset
+  gives it back) and the memory can go to a heap. It returns false while SP is still on it.
+
+### Memory: dr::Heap (SDK)
+
+`heap.ds`: an allocator over one or more regions of memory, its state in a header at the start of
+the first one (no globals: it works from ROM, and can be handed from program to program).
+```
+var heap: dr::Heap* = dr::Heap::create(start, size);   // null: too small
+heap->add_region(other_start, other_size);             // up to dr::HeapMaxRegions (16), no overlaps
+var p: u8* = heap->alloc(100);                         // 8 byte aligned; null: no room
+var page: u8* = heap->alloc_aligned(4096, 4096);
+p = heap->realloc(p, 200);                             // in place when it can, else moved
+heap->free(p);                                         // false: not the heap's, or freed already
+```
+- Also `alloc_zeroed`, `block_size(p)`, `owns(p)`, `total_bytes()`, `free_bytes()`,
+  `largest_free()`, `check()` (walks every block: false after a header was overwritten),
+  `region_count()`, `region(i)`, `dr::Heap::valid(h)`.
+- In supervisor mode each operation runs with interrupts disabled (handlers may allocate); in user
+  mode they don't (the interrupt flag is privileged there).
+- `dr::malloc` / `dr::free` use the system heap through the BIOS (int 0x20):
+  `dr::system_heap()`, its address in CMOS HeapStart. The BIOS makes it (4 MiB below the boot
+  stack); a kernel can make its own and `dr::set_system_heap(heap)` (supervisor mode): from then
+  on `dr::malloc` everywhere serves the kernel's heap. A kernel calls its heap directly where it
+  can: no interrupt (and `int` does nothing in supervisor mode while interrupts are disabled: in
+  an atomic block, or before the kernel enables them).
 
 ### Declarations (top level)
 ```
