@@ -15,6 +15,7 @@ namespace dscript
 		uint32_t count { 0 };				// Array
 		StructInfo* structInfo { nullptr };	// Struct
 		std::vector<Type*> params;			// Function
+		int variadic { 0 };					// Function: 1 ... (more arguments), 2 ...typed
 
 		bool isInteger(void) const { return kind >= Kind::Bool && kind <= Kind::U32; }
 		bool isSigned(void) const { return kind == Kind::I8 || kind == Kind::I16 || kind == Kind::I32; }
@@ -74,7 +75,7 @@ namespace dscript
 			Type* nullType(void) { return m_null; }
 			Type* pointer(Type* base);
 			Type* array(Type* base, uint32_t count);
-			Type* function(const std::vector<Type*>& params, Type* ret);
+			Type* function(const std::vector<Type*>& params, Type* ret, int variadic = 0);
 			Type* structType(StructInfo* info);
 			// The builtin type named `name` (i32, u8, string, ...), or nullptr.
 			Type* builtin(const std::string& name);

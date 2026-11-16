@@ -48,6 +48,7 @@
 (interrupt_modifier) @keyword
 (atomic_modifier) @keyword
 (inline_modifier) @keyword
+(variadic_parameter) @keyword
 (static_modifier) @keyword
 (priv_modifier) @keyword
 (readonly_modifier) @keyword
@@ -109,6 +110,11 @@
 (escape_sequence) @string.escape
 (boolean_literal) @boolean
 (null_literal) @constant.builtin
+
+; The built-ins of variadic subs.
+(call_expression
+	function: (identifier) @function.builtin
+	(#match? @function.builtin "^va_(count|start|types)$"))
 
 ; Operators and punctuation
 [

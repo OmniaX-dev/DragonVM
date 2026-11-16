@@ -1043,12 +1043,75 @@
                   "type": "BLANK"
                 }
               ]
+            },
+            {
+              "type": "SEQ",
+              "members": [
+                {
+                  "type": "SEQ",
+                  "members": [
+                    {
+                      "type": "SYMBOL",
+                      "name": "parameter"
+                    },
+                    {
+                      "type": "REPEAT",
+                      "content": {
+                        "type": "SEQ",
+                        "members": [
+                          {
+                            "type": "STRING",
+                            "value": ","
+                          },
+                          {
+                            "type": "SYMBOL",
+                            "name": "parameter"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "STRING",
+                  "value": ","
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "variadic_parameter"
+                }
+              ]
+            },
+            {
+              "type": "SYMBOL",
+              "name": "variadic_parameter"
             }
           ]
         },
         {
           "type": "STRING",
           "value": ")"
+        }
+      ]
+    },
+    "variadic_parameter": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "..."
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "STRING",
+              "value": "typed"
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
         }
       ]
     },
@@ -1455,6 +1518,48 @@
                     "type": "BLANK"
                   }
                 ]
+              },
+              {
+                "type": "SEQ",
+                "members": [
+                  {
+                    "type": "SEQ",
+                    "members": [
+                      {
+                        "type": "SYMBOL",
+                        "name": "_type"
+                      },
+                      {
+                        "type": "REPEAT",
+                        "content": {
+                          "type": "SEQ",
+                          "members": [
+                            {
+                              "type": "STRING",
+                              "value": ","
+                            },
+                            {
+                              "type": "SYMBOL",
+                              "name": "_type"
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "type": "STRING",
+                    "value": ","
+                  },
+                  {
+                    "type": "SYMBOL",
+                    "name": "variadic_parameter"
+                  }
+                ]
+              },
+              {
+                "type": "SYMBOL",
+                "name": "variadic_parameter"
               }
             ]
           },

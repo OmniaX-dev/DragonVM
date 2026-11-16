@@ -2848,6 +2848,10 @@
         {
           "type": "type_identifier",
           "named": true
+        },
+        {
+          "type": "variadic_parameter",
+          "named": true
         }
       ]
     }
@@ -3819,6 +3823,10 @@
         },
         {
           "type": "primitive_type",
+          "named": true
+        },
+        {
+          "type": "variadic_parameter",
           "named": true
         }
       ]
@@ -5095,6 +5103,11 @@
     }
   },
   {
+    "type": "variadic_parameter",
+    "named": true,
+    "fields": {}
+  },
+  {
     "type": "while_statement",
     "named": true,
     "fields": {
@@ -5354,6 +5367,10 @@
   },
   {
     "type": ".",
+    "named": false
+  },
+  {
+    "type": "...",
     "named": false
   },
   {
@@ -5634,6 +5651,10 @@
   {
     "type": "type_identifier",
     "named": true
+  },
+  {
+    "type": "typed",
+    "named": false
   },
   {
     "type": "u16",

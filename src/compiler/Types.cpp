@@ -38,6 +38,8 @@ namespace dscript
 				std::string s = "sub(";
 				for (size_t i = 0; i < params.size(); i++)
 					s += (i > 0 ? ", " : "") + params[i]->name(brief);
+				if (variadic != 0)
+					s += std::string(params.empty() ? "" : ", ") + (variadic == 2 ? "...typed" : "...");
 				return s + ") -> " + base->name(brief);
 			}
 		}
@@ -108,16 +110,17 @@ namespace dscript
 		return t;
 	}
 
-	Type* TypeTable::function(const std::vector<Type*>& params, Type* ret)
+	Type* TypeTable::function(const std::vector<Type*>& params, Type* ret, int variadic)
 	{
 		for (Type* t : m_types)
 		{
-			if (t->kind == Type::Kind::Function && t->base == ret && t->params == params)
+			if (t->kind == Type::Kind::Function && t->base == ret && t->params == params && t->variadic == variadic)
 				return t;
 		}
 		Type* t = make(Type::Kind::Function);
 		t->base = ret;
 		t->params = params;
+		t->variadic = variadic;
 		return t;
 	}
 

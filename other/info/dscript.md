@@ -232,6 +232,26 @@ heap->free(p);                                         // false: not the heap's,
   can: no interrupt (and `int` does nothing in supervisor mode while interrupts are disabled: in
   an atomic block, or before the kernel enables them).
 
+### Text formatting (SDK)
+
+`va.ds`: `dr::VaList` (the extra arguments of a variadic sub: `count`, `get_i32(i)`, `get_u32`,
+`get_f32`, `get_bool`, `get_ptr`, `get_string`, `word(i)`; `typed()`, `type_of(i)`), and
+formatting with it:
+```
+var n: u32 = dr::format(buffer, capacity, "x = {}, hex {:08x}, %-6s|%.2f", x, x, name, f);
+dr::vformat(buffer, capacity, fmt, &args);        // another variadic sub's arguments
+dr::debug_printf("ticks: {}\n", ticks);           // through debug_print (up to 255 characters)
+```
+- `{}` formats the next argument as its type says (integers in decimal, `f32` with 6 decimals,
+  strings, `bool` as true / false, pointers as `0x0000abcd`); `{:spec}` and the C style `%spec`
+  take `[-][0][width][.precision][conversion]` (`{:>8}` too): `d i u x X b o c s f p B`.
+  `{{`, `}}`, `%%`: the characters themselves.
+- With types (`format`, `debug_printf`), a value is converted to what the spec asks (`%f` of an
+  integer, `%d` of an `f32`: truncated), `%s` of a non-string writes `<not a string>`; a missing
+  argument writes `<missing>`.
+- The text is cut to capacity - 1 and always ends with a 0; the result is its whole length (as
+  `snprintf`).
+
 ### Declarations (top level)
 ```
 var name: type = value;                 // global variable (the type can be inferred: var n = 5;)
@@ -438,6 +458,34 @@ install(0x41, interrupt sub() { ticks++; });               // an interrupt sub (
 Parameters, default values and the return type work as in a named sub (no `-> type`: void).
 Lambdas capture nothing: the body can use globals, constants, subs and its own parameters,
 not the local variables or parameters of the sub around it (an error; pass them as parameters).
+
+### Variadic subs
+A sub whose parameters end with `...` takes more arguments, of any scalar type; with
+`...typed`, each one's type is passed too. Three built-ins read them, in the sub itself:
+```
+sub sum(var count: u32, ...) -> i32 {
+    var args: dr::VaList(va_start(), va_count());     // (the SDK's va.ds)
+    var total: i32 = 0;
+    for (var i: u32 = 0; i < args.count; i++)
+        total += args.get_i32(i);
+    return total;
+}
+sum(3, 10, 20, 30);
+dr::format(buffer, 64, "{} is {} ({:08x})", name, value, value);   // a ...typed sub
+```
+- `va_count()`: how many extra arguments the call gave; `va_start()`: the address of the first
+  (the next ones are each 4 bytes lower); `va_types()` (`...typed` only): the address of their
+  types (the same way down; the values are the SDK's `dr::VaTypes`: Bool 1, I8 2, U8 3, I16 4,
+  U16 5, I32 6, U32 7, F32 8, Pointer 9, String 10 (u8* / i8*), Sub 11). All three are `u32`.
+- Each extra argument is one 32-bit slot: integers smaller than 32 bits (and `bool`) are
+  widened (to `i32` if signed, else `u32`), an `f32` is passed as its bits, arrays as pointers,
+  structs only by pointer (an error otherwise). An overloaded sub's name needs a cast.
+- Overloads: a sub that takes the arguments without `...` wins (`f(i32)` over `f(i32, ...)` for
+  `f(1)`). Sub pointer types can have `...` too: `sub(string, ...typed) -> u32`.
+- Not with default values, not on inline subs, interrupt subs or `main`. Methods and lambdas can
+  have `...`.
+- Without types (`...`), the sub has to know what it got (a count, a format string), as in C;
+  `...typed` costs one more push per argument.
 
 ### Inline subs
 `inline sub` works like a sub, but every direct call generates the body in place: no `call`,
@@ -694,7 +742,9 @@ var m: i32 = MAX(x, y + 1);
 - **Calling convention** (the machine's own `call`): the arguments are pushed left to right as
   32-bit slots, then their count; `call` saves R1..R20, ACC, PP, IP and FP (the CPU's stack
   frame) and `ret` restores them. Parameter `i` is at `PP - 4 * i` (values smaller than 4 bytes
-  are in the slot's last bytes). The return value is in RV.
+  are in the slot's last bytes). The return value is in RV. A variadic sub's extra arguments
+  follow (`...typed`: then their type codes, in the same order), and the count is all the slots
+  pushed; the callee reads it in the CPU's frame (`FP + 104`, the word after the 26 of the frame).
 - **Locals** are at `FP + offset` (offset <= 0): the sub moves SP below them first.
 - **Registers**: R1..R16 hold the temporaries of an expression (as a stack; an expression can
   need 16 at most), R17..R20 are scratch, S1 / S2 hold the `$var`s of low blocks.

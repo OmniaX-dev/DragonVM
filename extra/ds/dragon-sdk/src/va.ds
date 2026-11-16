@@ -1,0 +1,343 @@
+// va.ds - variadic subs: reading the extra arguments, and text formatting with them.
+//
+// A sub whose parameters end with ... takes more arguments, of any scalar type (integers, bool,
+// f32, pointers, sub pointers; arrays as pointers, structs by pointer); with ...typed, the
+// compiler also passes each one's type. In the sub, three built-ins:
+//     va_count()   how many extra arguments the call gave
+//     va_start()   where the first one is (the others follow, each 4 bytes lower)
+//     va_types()   (...typed only) where their types are
+// and dr::VaList reads them:
+//
+//     sub sum(var count: u32, ...) -> i32 {
+//         var args: dr::VaList(va_start(), va_count());
+//         var total: i32 = 0;
+//         for (var i: u32 = 0; i < args.count; i++)
+//             total += args.get_i32(i);
+//         return total;
+//     }
+//
+// Each argument is one 32-bit slot: integers smaller than 32 bits arrive widened (as an i32 if
+// signed, else a u32), an f32 as its bits. Without types (plain ...), the sub has to know what it
+// was given (a format string, a count, ...), as in C; with ...typed it can check.
+//
+// A VaList can be passed on (by pointer) to another sub: that is how format and vformat share
+// the work.
+#include(utils.ds)
+#include(mem.ds)
+
+namespace dr {
+	// The types ...typed passes (VaList.type_of).
+	const VaTypes: struct {
+		var Unknown: u8			= 0;	// (no types: plain ..., or past the last argument)
+		var Bool: u8			= 1;
+		var I8: u8				= 2;
+		var U8: u8				= 3;
+		var I16: u8				= 4;
+		var U16: u8				= 5;
+		var I32: u8				= 6;
+		var U32: u8				= 7;
+		var F32: u8				= 8;
+		var Pointer: u8			= 9;
+		var String: u8			= 10;	// u8* / i8* (string)
+		var Sub: u8				= 11;	// a sub pointer
+	};
+
+	struct VaList {
+		readonly var count: u32;
+		priv var start: u32;
+		priv var types: u32;
+
+		// From va_start(), va_count() and (...typed) va_types().
+		sub new(var start: u32, var count: u32, var types: u32 = 0) {
+			this->start = start;
+			this->count = count;
+			this->types = types;
+		}
+
+		// The arguments' types were passed (...typed).
+		sub typed() -> bool { return this->types != 0; }
+
+		// Argument i's type (VaTypes; Unknown without types or past the last one).
+		sub type_of(var i: u32) -> u8 {
+			if (this->types == 0 or i >= this->count)
+				return VaTypes.Unknown;
+			return cast<u8>(*cast<u32*>(this->types - 4 * i));
+		}
+
+		// Argument i's slot as it is (0 past the last one).
+		sub word(var i: u32) -> u32 {
+			if (i >= this->count)
+				return 0;
+			return *cast<u32*>(this->start - 4 * i);
+		}
+
+		sub get_i32(var i: u32) -> i32 { return cast<i32>(this->word(i)); }
+		sub get_u32(var i: u32) -> u32 { return this->word(i); }
+		sub get_bool(var i: u32) -> bool { return this->word(i) != 0; }
+		sub get_ptr(var i: u32) -> void* { return cast<void*>(this->word(i)); }
+		sub get_string(var i: u32) -> string { return cast<string>(this->word(i)); }
+		sub get_f32(var i: u32) -> f32 {
+			var bits: u32 = this->word(i);
+			return *cast<f32*>(&bits);
+		}
+	};
+
+	// ===== Formatting =====
+	//
+	// format(buffer, capacity, fmt, ...) writes fmt into buffer with the arguments in place of:
+	//   {}           the next argument, as its type says (integers in decimal, f32 with 6
+	//                decimals, strings, bool as true / false, pointers as 0x0000abcd)
+	//   {:spec}      the same with a spec (below), e.g. {:08x}, {:.2}, {:>8}
+	//   %spec        C style: %d %i %u %x %X %b %o %c %s %f %p %B, with the same flags: %08x, %-6s, %.3f
+	//   {{ }} %%     a brace, a percent sign
+	// spec: [-] (left-aligned) [0] (zero-padded) [width] [.precision] [conversion]; in braces '>'
+	// is also allowed before the width (right-aligned, the default). The conversions:
+	//   d i  signed decimal      u  unsigned decimal       x X  hexadecimal      b  binary
+	//   o    octal               c  a character            s    a string (precision: at most
+	//   f    f32 (precision: decimals, 6 by default)            that many characters)
+	//   p    a pointer (0x and 8 hex digits)                B    bool: true / false
+	// With the types (format, debug_printf: ...typed), the value is converted to what is asked
+	// (an integer for %f, an f32 for %d: truncated), and %s of something that isn't a string or
+	// pointer writes <not a string>. A missing argument writes <missing>; a null string (null).
+	//
+	// The text is cut to capacity - 1 bytes and always ends with a 0 (capacity 0: nothing is
+	// written). Returns the length the whole text has (not cut): more than capacity - 1 means
+	// it was cut.
+	sub format(var buffer: u8*, var capacity: u32, var fmt: string, ...typed) -> u32 {
+		var args: VaList(va_start(), va_count(), va_types());
+		return vformat(buffer, capacity, fmt, &args);
+	}
+
+	// The same with the arguments of another variadic sub (a VaList: with or without types).
+	sub vformat(var buffer: u8*, var capacity: u32, var fmt: string, var args: VaList*) -> u32 {
+		var out: __FormatOut(buffer, capacity);
+		var next: u32 = 0;
+		var i: u32 = 0;
+		while (fmt[i] != 0) {
+			var c: u8 = fmt[i];
+			if (c == '%' and fmt[i + 1] == '%') {
+				out.put('%');
+				i += 2;
+				continue;
+			}
+			if (c == '{' and fmt[i + 1] == '{') {
+				out.put('{');
+				i += 2;
+				continue;
+			}
+			if (c == '}' and fmt[i + 1] == '}') {
+				out.put('}');
+				i += 2;
+				continue;
+			}
+			if (c == '%' or c == '{') {
+				var spec: __FormatSpec;
+				var end: u32 = __format_spec(fmt, i, &spec);
+				if (end != 0) {
+					__format_arg(&out, args, next, &spec);
+					next++;
+					i = end;
+					continue;
+				}
+			}
+			out.put(c);
+			i++;
+		}
+		out.finish();
+		return out.length;
+	}
+
+	// format, written with debug_print (to the host's terminal in drun; up to 255 characters).
+	sub debug_printf(var fmt: string, ...typed) {
+		var args: VaList(va_start(), va_count(), va_types());
+		var buffer: u8[256];
+		vformat(buffer, 256, fmt, &args);
+		debug_print(buffer);
+	}
+
+	struct __FormatOut {
+		readonly var length: u32;
+		priv var buffer: u8*;
+		priv var capacity: u32;
+
+		sub new(var buffer: u8*, var capacity: u32) {
+			this->buffer = buffer;
+			this->capacity = capacity;
+			this->length = 0;
+		}
+		sub put(var c: u8) {
+			if (this->length + 1 < this->capacity)
+				this->buffer[this->length] = c;
+			this->length++;
+		}
+		sub put_text(var s: string, var n: u32) {
+			for (var i: u32 = 0; i < n; i++)
+				this->put(s[i]);
+		}
+		sub finish() {
+			if (this->capacity == 0)
+				return;
+			this->buffer[this->length < this->capacity ? this->length : this->capacity - 1] = 0;
+		}
+	};
+
+	struct __FormatSpec {
+		var left: bool;
+		var zero: bool;
+		var width: u32;
+		var precision: i32 = -1;
+		var conversion: u8;			// 0: as the argument's type says
+	};
+
+	// The spec at fmt[at] ('%' or '{'): the index after it, 0 if it isn't one (written as it is).
+	sub __format_spec(var fmt: string, var at: u32, var spec: __FormatSpec*) -> u32 {
+		var braces: bool = fmt[at] == '{';
+		var i: u32 = at + 1;
+		if (braces) {
+			if (fmt[i] == '}')
+				return i + 1;
+			if (fmt[i] != ':')
+				return 0;
+			i++;
+			if (fmt[i] == '>')
+				i++;
+		}
+		while (fmt[i] == '-' or fmt[i] == '0') {
+			if (fmt[i] == '-')
+				spec->left = true;
+			else
+				spec->zero = true;
+			i++;
+		}
+		while (fmt[i] >= '0' and fmt[i] <= '9') {
+			spec->width = spec->width * 10 + (fmt[i] - '0');
+			i++;
+		}
+		if (fmt[i] == '.') {
+			i++;
+			spec->precision = 0;
+			while (fmt[i] >= '0' and fmt[i] <= '9') {
+				spec->precision = spec->precision * 10 + (fmt[i] - '0');
+				i++;
+			}
+		}
+		var c: u8 = fmt[i];
+		var known: bool = c == 'd' or c == 'i' or c == 'u' or c == 'x' or c == 'X' or c == 'b' or c == 'o'
+			or c == 'c' or c == 's' or c == 'f' or c == 'p' or c == 'B';
+		if (known) {
+			spec->conversion = c;
+			i++;
+		}
+		else if (not braces)
+			return 0;					// % without a conversion: not a spec
+		if (braces) {
+			if (fmt[i] != '}')
+				return 0;
+			i++;
+		}
+		return i;
+	}
+
+	sub __format_arg(var out: __FormatOut*, var args: VaList*, var index: u32, var spec: __FormatSpec*) {
+		if (index >= args->count) {
+			out->put_text("<missing>", 9);
+			return;
+		}
+		var t: u8 = args->type_of(index);
+		var c: u8 = spec->conversion;
+		if (c == 0) {
+			if (t == VaTypes.Bool) c = 'B';
+			else if (t == VaTypes.U8 or t == VaTypes.U16 or t == VaTypes.U32) c = 'u';
+			else if (t == VaTypes.F32) c = 'f';
+			else if (t == VaTypes.String) c = 's';
+			else if (t == VaTypes.Pointer or t == VaTypes.Sub) c = 'p';
+			else c = 'd';				// signed integers, and no types
+		}
+		var isFloat: bool = t == VaTypes.F32;
+		var isText: bool = t == VaTypes.String or t == VaTypes.Pointer or t == VaTypes.Unknown;
+		var tmp: u8[40];
+		var text: string = tmp;
+		var n: u32 = 0;
+		if (c == 's') {
+			if (not isText) {
+				out->put_text("<not a string>", 14);
+				return;
+			}
+			text = args->get_string(index);
+			if (text == null)
+				text = "(null)";
+			n = strlen(text);
+			if (spec->precision >= 0 and cast<u32>(spec->precision) < n)
+				n = cast<u32>(spec->precision);
+		}
+		else if (c == 'f') {
+			var v: f32 = 0.0;
+			if (isFloat or t == VaTypes.Unknown)
+				v = args->get_f32(index);
+			else if (t == VaTypes.I8 or t == VaTypes.I16 or t == VaTypes.I32)
+				v = args->get_i32(index);
+			else
+				v = args->get_u32(index);
+			ftoa(v, tmp, spec->precision >= 0 ? cast<u32>(spec->precision) : 6);
+		}
+		else if (c == 'c') {
+			tmp[0] = cast<u8>(args->word(index));
+			tmp[1] = 0;
+		}
+		else if (c == 'B') {
+			text = args->word(index) != 0 ? "true" : "false";
+		}
+		else if (c == 'p') {
+			tmp[0] = '0';
+			tmp[1] = 'x';
+			var hex: u8[12];
+			utoa(args->word(index), hex, 16);
+			var digits: u32 = strlen(hex);
+			for (var k: u32 = 0; k < 8; k++)
+				tmp[2 + k] = k < 8 - digits ? '0' : hex[k - (8 - digits)];
+			tmp[10] = 0;
+		}
+		else {
+			// The integers: an f32 (typed) truncated first.
+			var w: u32 = args->word(index);
+			if (isFloat)
+				w = cast<u32>(cast<i32>(args->get_f32(index)));
+			if (c == 'd' or c == 'i')
+				itoa(cast<i32>(w), tmp);
+			else if (c == 'u')
+				utoa(w, tmp);
+			else if (c == 'b')
+				utoa(w, tmp, 2);
+			else if (c == 'o')
+				utoa(w, tmp, 8);
+			else {
+				utoa(w, tmp, 16);
+				if (c == 'X') {
+					for (var k: u32 = 0; tmp[k] != 0; k++) {
+						if (tmp[k] >= 'a' and tmp[k] <= 'f')
+							tmp[k] = tmp[k] - 'a' + 'A';
+					}
+				}
+			}
+		}
+		if (c != 's')
+			n = strlen(text);
+		// The padding: spaces (or zeros after the sign) up to the width.
+		var pad: u32 = spec->width > n ? spec->width - n : 0;
+		if (spec->left) {
+			out->put_text(text, n);
+			for (var k: u32 = 0; k < pad; k++)
+				out->put(' ');
+			return;
+		}
+		var zeros: bool = spec->zero and c != 's' and c != 'c' and c != 'B';
+		if (zeros and n > 0 and text[0] == '-') {
+			out->put('-');
+			text = cast<string>(cast<u32>(text) + 1);
+			n--;
+		}
+		for (var k: u32 = 0; k < pad; k++)
+			out->put(zeros ? '0' : ' ');
+		out->put_text(text, n);
+	}
+}

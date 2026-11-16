@@ -1,0 +1,3 @@
+// expect-error: after '...' (it ends the parameters)
+sub f(..., var a: i32) {}
+sub main() { }

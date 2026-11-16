@@ -588,12 +588,29 @@ namespace dscript
 		return n;
 	}
 
+	// After '...': 'typed' (written right after it: ...typed).
+	bool Parser::acceptVariadicTyped(void)
+	{
+		const Token& t = peek();
+		if (t.kind != TokenKind::Identifier || t.text != "typed")
+			return false;
+		next();
+		return true;
+	}
+
 	void Parser::parseParams(Node* n)
 	{
 		if (isKeyword("void") && isPunct(")", 1))
 			next();
 		while (!acceptPunct(")"))
 		{
+			if (acceptPunct("..."))
+			{
+				// ... (more arguments, of any type) or ...typed (with their types): the last "parameter".
+				n->variadic = acceptVariadicTyped() ? 2 : 1;
+				expectPunct(")", "after '...' (it ends the parameters)");
+				break;
+			}
 			Node* p = make(NodeKind::VarDecl, peek().pos);
 			acceptKeyword("var");
 			p->pos = peek().pos;
@@ -711,6 +728,12 @@ namespace dscript
 				next();
 			while (!acceptPunct(")"))
 			{
+				if (acceptPunct("..."))
+				{
+					t->variadic = acceptVariadicTyped() ? 2 : 1;
+					expectPunct(")", "after '...' (it ends the parameter types)");
+					break;
+				}
 				t->params.push_back(parseType());
 				if (!acceptPunct(","))
 				{

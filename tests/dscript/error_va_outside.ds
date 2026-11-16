@@ -1,0 +1,3 @@
+// expect-error: va_count() is for subs with ...
+sub f(var a: i32) -> u32 { return va_count(); }
+sub main() { f(1); }

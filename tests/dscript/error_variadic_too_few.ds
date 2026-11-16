@@ -1,0 +1,3 @@
+// expect-error: this sub takes at least 2 arguments, not 1
+sub f(var a: i32, var b: i32, ...) {}
+sub main() { var p: sub(i32, i32, ...) = f; p(1); }

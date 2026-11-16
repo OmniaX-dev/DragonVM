@@ -1,0 +1,132 @@
+// expect-rv: 0
+// Variadic subs: ... and ...typed, va_count / va_start / va_types, dr::VaList, overloads, sub
+// pointers, methods, and dr::format / vformat.
+#include(check.ds)
+#import(<dragon-sdk>)
+
+sub sum(var count: u32, ...) -> i32 {
+	var args: dr::VaList(va_start(), va_count());
+	check(1, args.count == count and not args.typed());
+	var total: i32 = 0;
+	for (var i: u32 = 0; i < args.count; i++)
+		total += args.get_i32(i);
+	return total;
+}
+
+// No fixed parameters.
+sub count_all(...) -> u32 { return va_count(); }
+
+// The slots by hand: va_start() and 4 bytes lower each.
+sub second(...) -> u32 {
+	if (va_count() < 2)
+		return 0;
+	return *cast<u32*>(va_start() - 4);
+}
+
+// ...typed: the types.
+var g_types: u8[8];
+sub types_of(...typed) -> u32 {
+	var args: dr::VaList(va_start(), va_count(), va_types());
+	for (var i: u32 = 0; i < args.count and i < 8; i++)
+		g_types[i] = args.type_of(i);
+	return args.count;
+}
+
+// Overloads: the exact one wins over ...
+sub pick(var a: i32) -> i32 { return 1; }
+sub pick(var a: i32, ...) -> i32 { return 2; }
+
+// Passing the list on.
+sub vsum(var args: dr::VaList*) -> i32 {
+	var total: i32 = 0;
+	for (var i: u32 = 0; i < args->count; i++)
+		total += args->get_i32(i);
+	return total;
+}
+sub sum2(...) -> i32 {
+	var args: dr::VaList(va_start(), va_count());
+	return vsum(&args);
+}
+
+struct Acc {
+	var total: i32;
+	sub add(...) {
+		var args: dr::VaList(va_start(), va_count());
+		for (var i: u32 = 0; i < args.count; i++)
+			this->total += args.get_i32(i);
+	}
+};
+
+sub fmt_is(var id: i32, var got: string, var expected: string) {
+	if (dr::strcmp(got, expected) != 0) {
+		debug_print("variadic: got '");
+		debug_print(got);
+		debug_print("', expected '");
+		debug_print(expected);
+		debug_print("'\n");
+	}
+	check(id, dr::strcmp(got, expected) == 0);
+}
+
+// A plain ... formatter: % specs only know what the format says.
+sub cformat(var buffer: u8*, var capacity: u32, var fmt: string, ...) -> u32 {
+	var args: dr::VaList(va_start(), va_count());
+	return dr::vformat(buffer, capacity, fmt, &args);
+}
+
+sub main() -> i32 {
+	check(2, sum(3, 10, 20, 30) == 60 and sum(0) == 0);
+	check(3, sum(2, -5, cast<i8>(-3)) == -8);					// (an i8 arrives widened)
+	check(4, count_all() == 0 and count_all(1, 2, 3, 4, 5) == 5);
+	check(5, second(7, 0xDEADBEEF) == 0xDEADBEEF and second(7) == 0);
+
+	var f: f32 = 1.5;
+	var b: u8 = 200;
+	var arr: u8[4];
+	check(10, types_of(true, cast<i8>(-1), b, cast<i16>(-2), cast<u16>(3), -4, cast<u32>(5), f) == 8);
+	check(11, g_types[0] == dr::VaTypes.Bool and g_types[1] == dr::VaTypes.I8 and g_types[2] == dr::VaTypes.U8
+		and g_types[3] == dr::VaTypes.I16 and g_types[4] == dr::VaTypes.U16 and g_types[5] == dr::VaTypes.I32
+		and g_types[6] == dr::VaTypes.U32 and g_types[7] == dr::VaTypes.F32);
+	check(12, types_of("text", &f, null, arr, main) == 5);
+	check(13, g_types[0] == dr::VaTypes.String and g_types[1] == dr::VaTypes.Pointer and g_types[2] == dr::VaTypes.Pointer
+		and g_types[3] == dr::VaTypes.String and g_types[4] == dr::VaTypes.Sub);
+
+	check(20, pick(1) == 1 and pick(1, 2) == 2);
+	check(21, sum2(1, 2, 3) == 6);
+	var p: sub(u32, ...) -> i32 = sum;
+	check(22, p(2, 4, 5) == 9);
+	var acc: Acc;
+	acc.add(1, 2, 3);
+	acc.add();
+	acc.add(10);
+	check(23, acc.total == 16);
+
+	// format
+	var buff: u8[64];
+	dr::format(buff, 64, "x = {}, f = {}, s = {}, b = {}", -12, 2.5, "hi", true);
+	fmt_is(30, buff, "x = -12, f = 2.500000, s = hi, b = true");
+	dr::format(buff, 64, "%d|%5d|%-5d|%05d|%x|%X|%08x", 42, 42, 42, -42, 255, 255, 0xBEEF);
+	fmt_is(31, buff, "42|   42|42   |-0042|ff|FF|0000beef");
+	dr::format(buff, 64, "{:.2}|%.1f|{:08x}|{:>4}|{:b}|%c|%u", 3.14159, 2.25, 0xAB, 7, 5, 'Z', 4000000000);
+	fmt_is(32, buff, "3.14|2.2|000000ab|   7|101|Z|4000000000");
+	dr::format(buff, 64, "{{}} 100%% %s|%.3s|%-4s|", "ok", "abcdef", "ab");
+	fmt_is(33, buff, "{} 100% ok|abc|ab  |");
+	dr::format(buff, 64, "%s %d %f {}", 5, 7.9, 3, null);
+	fmt_is(34, buff, "<not a string> 7 3.000000 0x00000000");
+	dr::format(buff, 64, "{} {} {}", 1);
+	fmt_is(35, buff, "1 <missing> <missing>");
+	dr::format(buff, 64, "%p {}", cast<void*>(0x1234), cast<u8>(250));
+	fmt_is(36, buff, "0x00001234 250");
+	var n: u32 = dr::format(buff, 8, "{}-{}", 12345, 67890);
+	fmt_is(37, buff, "12345-6");
+	check(38, n == 11 and dr::format(buff, 0, "abc") == 3);
+	dr::format(buff, 64, "% d {x} {:} %");				// ({:}: an empty spec; the others are not specs)
+	fmt_is(39, buff, "% d {x} <missing> %");
+
+	// Plain ...: the format says the types.
+	cformat(buff, 64, "%d %u %x %s {}", -1, 7, 255, "str", 9);
+	fmt_is(40, buff, "-1 7 ff str 9");
+
+	dr::debug_printf("variadic: {} {}\n", "debug_printf", 1);
+	return result();
+}

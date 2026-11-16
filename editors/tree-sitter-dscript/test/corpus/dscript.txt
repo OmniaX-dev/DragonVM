@@ -872,3 +872,45 @@ var d: f32 = 3f;
     (identifier)
     (primitive_type)
     (number_literal)))
+
+================================================================================
+Variadic subs
+================================================================================
+
+sub sum(var count: u32, ...) -> i32 { return va_count(); }
+sub print(...typed) {}
+var p: sub(u32, ...) -> i32 = sum;
+var q: sub(...typed);
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    (identifier)
+    (parameter_list
+      (parameter
+        (identifier)
+        (primitive_type))
+      (variadic_parameter))
+    (primitive_type)
+    (block
+      (return_statement
+        (call_expression
+          (identifier)
+          (argument_list)))))
+  (function_declaration
+    (identifier)
+    (parameter_list
+      (variadic_parameter))
+    (block))
+  (variable_declaration
+    (identifier)
+    (function_type
+      (primitive_type)
+      (variadic_parameter)
+      (primitive_type))
+    (identifier))
+  (variable_declaration
+    (identifier)
+    (function_type
+      (variadic_parameter))))

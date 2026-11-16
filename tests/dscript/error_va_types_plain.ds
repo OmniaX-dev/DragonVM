@@ -1,0 +1,3 @@
+// expect-error: va_types() is for subs with ...typed
+sub f(...) -> u32 { return va_types(); }
+sub main() { f(1); }

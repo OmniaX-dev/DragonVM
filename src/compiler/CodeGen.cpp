@@ -674,7 +674,7 @@ namespace dscript
 				Type* ret = ts->base ? resolveType(ts->base) : m_types.voidType();
 				if (ret->kind != Type::Kind::Void && !ret->isScalar())
 					error(ts->pos, "subs return integers, pointers or void (not " + ret->name() + ")");
-				return m_types.function(params, ret);
+				return m_types.function(params, ret, ts->variadic);
 			}
 		}
 		return nullptr;
@@ -990,6 +990,8 @@ namespace dscript
 				std::string s = "F";
 				for (Type* p : t->params)
 					s += mangle(p);
+				if (t->variadic != 0)
+					s += t->variadic == 2 ? "VT" : "V";
 				return s + "r" + mangle(t->base);
 			}
 			default: return t->name();
@@ -1030,8 +1032,17 @@ namespace dscript
 		Type* ret = d->typeSyntax ? resolveType(d->typeSyntax) : m_types.voidType();
 		if (ret->kind != Type::Kind::Void && !ret->isScalar())
 			error(d->pos, "subs return integers, pointers or void (return structs through a pointer parameter)");
-		f->type = m_types.function(params, ret);
-		if (f->interrupt && (!params.empty() || ret->kind != Type::Kind::Void))
+		f->type = m_types.function(params, ret, d->variadic);
+		if (d->variadic != 0)
+		{
+			if (seenDefault)
+				error(d->namePos, "a sub with ... cannot also have default values (both are about the arguments after the last one given)");
+			if ((d->value & 2) != 0)
+				error(d->namePos, "inline subs cannot have ... (the extra arguments are read from the call's stack)");
+			if (f->name == "main")
+				error(d->namePos, "main cannot have ...: it takes no parameters, or (argc, argv)");
+		}
+		if (f->interrupt && (!params.empty() || d->variadic != 0 || ret->kind != Type::Kind::Void))
 			error(d->pos, "interrupt subs take no parameters and return void");
 		// A constructor: sub new(...) in a struct, on the object being built (this).
 		if ((d->value & 4) != 0 && d->shortName == "new")
@@ -1193,11 +1204,14 @@ namespace dscript
 		for (FuncInfo* f : funcs)
 		{
 			const auto& params = f->type->params;
-			if (args.size() > params.size() || args.size() < f->requiredParams)
+			if ((args.size() > params.size() && f->type->variadic == 0) || args.size() < f->requiredParams)
 				continue;
-			int cost = 0;
+			// ...: worse than a sub that takes the arguments as they are, each extra one too.
+			int cost = f->type->variadic != 0 ? 1 + 2 * (int)(args.size() > params.size() ? args.size() - params.size() : 0) : 0;
 			bool ok = true;
-			for (size_t i = 0; i < args.size() && ok; i++)
+			for (size_t i = params.size(); i < args.size() && ok; i++)
+				ok = args[i]->type != nullptr;
+			for (size_t i = 0; i < args.size() && i < params.size() && ok; i++)
 			{
 				int c = conversionCost(args[i], params[i]);
 				if (c < 0)
@@ -1848,6 +1862,22 @@ namespace dscript
 			rewriteMethodCall(e);
 		Node* callee = e->a;
 		e->func = nullptr;
+		e->vaBuiltin = 0;
+		if (callee->kind == NodeKind::Ident && lookupVar(callee->name) == nullptr && m_funcs.count(callee->name) == 0
+			&& (callee->name == "va_count" || callee->name == "va_start" || callee->name == "va_types"))
+		{
+			// A variadic sub's extra arguments: how many, where the first is, where their types are.
+			FuncInfo* f = m_func;
+			if (f == nullptr || f->type == nullptr || f->type->variadic == 0)
+				error(e->pos, callee->name + "() is for subs with ... (the extra arguments of the sub it is written in)");
+			if (callee->name == "va_types" && f->type->variadic != 2)
+				error(e->pos, "va_types() is for subs with ...typed (the arguments' types are passed only then)");
+			if (!e->list.empty())
+				error(e->pos, callee->name + "() takes no arguments");
+			e->vaBuiltin = callee->name == "va_count" ? 1 : callee->name == "va_start" ? 2 : 3;
+			e->type = m_types.u32();
+			return;
+		}
 		if (callee->kind == NodeKind::Ident && lookupVar(callee->name) == nullptr && m_funcs.count(callee->name) > 0)
 		{
 			// The subs get their types after the declarations (constants, enum values, array
@@ -1865,6 +1895,11 @@ namespace dscript
 				error(e->pos, "interrupt subs cannot be called (they end with rti)");
 			for (size_t i = 0; i < e->list.size(); i++)
 			{
+				if (i >= f->type->params.size())
+				{
+					checkVarArg(e->list[i]);
+					continue;
+				}
 				check(e->list[i], f->type->params[i]);
 				requireConvertible(e->list[i], f->type->params[i], "for parameter '" + f->paramNames[i] + "' of " + f->name);
 			}
@@ -1880,14 +1915,70 @@ namespace dscript
 			t = t->base;
 		if (t == nullptr || !t->isFunction())
 			error(callee->pos, "this is not a sub (or a sub pointer)");
-		if (e->list.size() != t->params.size())
+		if (t->variadic != 0 && e->list.size() < t->params.size())
+			error(e->pos, "this sub takes at least " + std::to_string(t->params.size()) + " arguments, not " + std::to_string(e->list.size()));
+		if (t->variadic == 0 && e->list.size() != t->params.size())
 			error(e->pos, "this sub takes " + std::to_string(t->params.size()) + " arguments, not " + std::to_string(e->list.size()));
 		for (size_t i = 0; i < e->list.size(); i++)
 		{
+			if (i >= t->params.size())
+			{
+				checkVarArg(e->list[i]);
+				continue;
+			}
 			check(e->list[i], t->params[i]);
 			requireConvertible(e->list[i], t->params[i], "for argument " + std::to_string(i + 1));
 		}
 		e->type = t->base;
+	}
+
+	// An argument for ...: any scalar (one 32-bit slot), arrays as pointers.
+	void CodeGen::checkVarArg(Node* arg)
+	{
+		check(arg);
+		Type* t = decay(arg->type);
+		if (t == nullptr)
+			error(arg->pos, "an overloaded sub as an argument for ...: cast it to the sub type it should be");
+		if (t->kind == Type::Kind::Struct)
+			error(arg->pos, "structs are passed by pointer, also to ... (&value)");
+		if (!t->isScalar())
+			error(arg->pos, "this cannot be an argument for ... (" + t->name() + ")");
+	}
+
+	// The slot an argument for ... is pushed as: integers smaller than 32 bits (and bool) widened
+	// to i32 / u32, as they would be in arithmetic.
+	Type* CodeGen::varArgType(Type* t)
+	{
+		t = decay(t);
+		if (t->kind == Type::Kind::Null)
+			return m_types.pointer(m_types.voidType());
+		if (t->isInteger() && t->kind != Type::Kind::U32 && t->kind != Type::Kind::I32)
+			return t->isSigned() ? m_types.i32() : m_types.u32();
+		return t;
+	}
+
+	// ...typed: the code each argument's type is passed with (the SDK's dr::VaTypes).
+	uint32_t CodeGen::varArgTypeCode(Type* t)
+	{
+		t = decay(t);
+		switch (t->kind)
+		{
+			case Type::Kind::Bool: return 1;
+			case Type::Kind::I8: return 2;
+			case Type::Kind::U8: return 3;
+			case Type::Kind::I16: return 4;
+			case Type::Kind::U16: return 5;
+			case Type::Kind::I32: return 6;
+			case Type::Kind::U32: return 7;
+			case Type::Kind::F32: return 8;
+			case Type::Kind::Pointer:
+				if (t->base->kind == Type::Kind::U8 || t->base->kind == Type::Kind::I8)
+					return 10;		// a string (u8*, i8*)
+				return 9;
+			case Type::Kind::Null: return 9;
+			case Type::Kind::Function: return 11;
+			default: return 0;
+		}
 	}
 
 	void CodeGen::checkMember(Node* e)
@@ -3170,6 +3261,36 @@ namespace dscript
 
 	CodeGen::Reg CodeGen::genCall(Node* e)
 	{
+		if (e->vaBuiltin != 0)
+		{
+			// The count the caller pushed is in the CPU's frame (FP + 104: after the 26 words of
+			// the frame); the arguments are at PP - 4 * i, the extra ones after the parameters,
+			// then (...typed) their types.
+			const int64_t fixed = (int64_t)m_func->type->params.size();
+			const bool typed = m_func->type->variadic == 2;
+			Reg r = alloc(e->pos);
+			if (e->vaBuiltin == 2)
+			{
+				emit("mov " + r + ", PP");
+				addImmediate(r, -4 * fixed);
+				return r;
+			}
+			emit("movo " + r + ", *FP, dword " + imm(104));
+			addImmediate(r, -fixed);
+			if (typed)
+				emit("rsh " + r + ", 1");
+			if (e->vaBuiltin == 1)
+				return r;
+			// va_types: after the count extra values.
+			Reg t = alloc(e->pos);
+			emit("lsh " + r + ", 2");
+			emit("mov " + t + ", PP");
+			addImmediate(t, -4 * fixed);
+			emit("subip " + t + ", " + r);
+			emit("mov " + r + ", " + t);
+			release(t);
+			return r;
+		}
 		FuncInfo* f = e->func;
 		if (f && f->isInline)
 			return genInlineCall(e, f);
@@ -3192,6 +3313,22 @@ namespace dscript
 		const auto& params = fnType->params;
 		for (size_t i = 0; i < e->list.size(); i++)
 		{
+			if (i >= params.size())
+			{
+				// An extra argument (...): its own type, widened to a 32-bit slot.
+				Type* slot = varArgType(e->list[i]->type);
+				const std::string value = argImmediate(e->list[i], slot);
+				if (!value.empty())
+				{
+					emit("push " + value);
+					continue;
+				}
+				Reg r = gen(e->list[i]);
+				convert(r, decay(e->list[i]->type), slot);
+				emit("push " + r);
+				release(r);
+				continue;
+			}
 			const std::string value = argImmediate(e->list[i], params[i]);
 			if (!value.empty())
 			{
@@ -3211,7 +3348,19 @@ namespace dscript
 			else
 				emit("push " + imm(constConvert(def->constValue, decay(def->type), params[i])));
 		}
-		emit("push " + std::to_string(params.size()));
+		size_t slots = params.size();
+		if (fnType->variadic != 0 && e->list.size() > params.size())
+		{
+			const size_t extra = e->list.size() - params.size();
+			if (fnType->variadic == 2)
+			{
+				for (size_t i = params.size(); i < e->list.size(); i++)
+					emit("push " + imm(varArgTypeCode(e->list[i]->type)));
+				slots += extra;
+			}
+			slots += extra;
+		}
+		emit("push " + std::to_string(slots));
 		if (f)
 			emit("call $" + f->label);
 		else
@@ -4907,6 +5056,8 @@ namespace dscript
 				}
 			}
 		}
+		if (f->type != nullptr && f->type->variadic != 0)
+			s += std::string(f->type->params.size() > first ? ", " : "") + (f->type->variadic == 2 ? "...typed" : "...");
 		s += ")";
 		if (f->type != nullptr && f->type->base->kind != Type::Kind::Void)
 			s += " -> " + f->type->base->name(true);
@@ -5299,6 +5450,8 @@ namespace dscript
 				std::string s = "sub(";
 				for (size_t i = 0; i < t->params.size(); i++)
 					s += (i > 0 ? ", " : "") + interfaceType(t->params[i]);
+				if (t->variadic != 0)
+					s += std::string(t->params.empty() ? "" : ", ") + (t->variadic == 2 ? "...typed" : "...");
 				return s + ") -> " + interfaceType(t->base);
 			}
 			case Type::Kind::Null: return "void*";
@@ -5400,6 +5553,8 @@ namespace dscript
 				if (i < f->defaults.size() && f->defaults[i] != nullptr)
 					text += " = " + interfaceValue(f->defaults[i], f->type->params[i]);
 			}
+			if (f->type->variadic != 0)
+				text += std::string(f->type->params.size() > first ? ", " : "") + (f->type->variadic == 2 ? "...typed" : "...");
 			text += ")";
 			if (f->type->base->kind != Type::Kind::Void)
 				text += " -> " + interfaceType(f->type->base);
@@ -5627,7 +5782,7 @@ namespace dscript
 				{
 					for (size_t j = i + 1; j < funcs.size(); )
 					{
-						if (funcs[i]->type->params != funcs[j]->type->params)
+						if (funcs[i]->type->params != funcs[j]->type->params || funcs[i]->type->variadic != funcs[j]->type->variadic)
 						{
 							j++;
 							continue;
@@ -5663,8 +5818,10 @@ namespace dscript
 					f->label += "__";
 					for (Type* p : f->type->params)
 						f->label += "_" + mangle(p);
-					if (f->type->params.empty())
+					if (f->type->params.empty() && f->type->variadic == 0)
 						f->label += "_void";
+					if (f->type->variadic != 0)
+						f->label += f->type->variadic == 2 ? "_vatyped" : "_va";
 				}
 			}
 		}

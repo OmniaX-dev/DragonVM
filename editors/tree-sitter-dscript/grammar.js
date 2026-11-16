@@ -166,7 +166,14 @@ module.exports = grammar({
 			choice(seq($.variable_declaration, ';'), $.const_declaration),
 		),
 		inline_modifier: _ => 'inline',
-		parameter_list: $ => seq('(', choice(alias('void', $.primitive_type), commaSep($.parameter)), ')'),
+		// ... / ...typed: more arguments (the last "parameter").
+		parameter_list: $ => seq('(', choice(
+			alias('void', $.primitive_type),
+			commaSep($.parameter),
+			seq(commaSep1($.parameter), ',', $.variadic_parameter),
+			$.variadic_parameter,
+		), ')'),
+		variadic_parameter: _ => seq('...', optional('typed')),
 		parameter: $ => seq(
 			optional('var'),
 			field('name', $.identifier),
@@ -206,7 +213,12 @@ module.exports = grammar({
 		function_type: $ => prec.right(1, seq(
 			'sub',
 			'(',
-			choice(alias('void', $.primitive_type), commaSep($._type)),
+			choice(
+				alias('void', $.primitive_type),
+				commaSep($._type),
+				seq(commaSep1($._type), ',', $.variadic_parameter),
+				$.variadic_parameter,
+			),
 			')',
 			optional(seq('->', field('return_type', $._type))),
 		)),

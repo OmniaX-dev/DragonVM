@@ -1,0 +1,3 @@
+// expect-error: inline subs cannot have ...
+inline sub f(...) -> u32 { return 0; }
+sub main() { f(1); }

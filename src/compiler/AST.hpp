@@ -22,6 +22,7 @@ namespace dscript
 		TypeSyntax* base { nullptr };		// Pointer / Array; Function: the return type (nullptr: void)
 		struct Node* count { nullptr };		// Array (a constant expression; nullptr: [], the size of the value)
 		std::vector<TypeSyntax*> params;	// Function
+		int variadic { 0 };					// Function: 1 ... (more arguments), 2 ...typed (with their types)
 	};
 
 	enum class NodeKind
@@ -53,6 +54,9 @@ namespace dscript
 		std::vector<Node*> list;		// Program / Block / struct fields / params / call arguments / ...
 		bool isPrivate { false };		// a struct field declared priv (methods: FuncDecl flag 16); a priv nested struct / enum
 		bool isReadonly { false };		// a struct field declared readonly
+		int variadic { 0 };				// FuncDecl: 1 if the parameters end with ..., 2 with ...typed
+		// Call of a variadic sub's built-in (va_count, va_start, va_types): 1, 2, 3 (0: a normal call).
+		int vaBuiltin { 0 };
 
 		// Names and scopes (namespaces, structs).
 		// Declarations: name is the full name (Bios::Text16::print), shortName the name as declared

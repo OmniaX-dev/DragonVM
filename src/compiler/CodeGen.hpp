@@ -159,6 +159,9 @@ namespace dscript
 			void checkBinary(Node* e);
 			void checkAssign(Node* e);
 			void checkCall(Node* e);
+			void checkVarArg(Node* arg);
+			Type* varArgType(Type* t);
+			uint32_t varArgTypeCode(Type* t);
 			void rewriteMethodCall(Node* e);
 			bool insideStruct(const StructInfo* info);
 			void checkFieldAccess(const StructInfo* info, const StructField* f, const SourcePos& pos);

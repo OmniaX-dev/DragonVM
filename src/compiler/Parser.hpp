@@ -40,6 +40,7 @@ namespace dscript
 			Node* parseAlias(void);
 			Node* parseVarDecl(bool allowNoType = true);
 			Node* parseFunction(int flags, const Node* owner = nullptr);
+			bool acceptVariadicTyped(void);
 			void parseParams(Node* fn);
 			Node* parseLambda(void);
 			Node* parseLow(void);
