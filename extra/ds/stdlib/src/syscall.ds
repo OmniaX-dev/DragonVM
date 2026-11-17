@@ -16,6 +16,24 @@ namespace std {
 		TimeUnix = 0x1102,
 	};
 
+	// A system call with up to 4 arguments (R8, R7, R6, R5; the unused ones are 0) and its result
+	// (RV): >= 0 a value (an fd, a count, a pid, ...), < 0 an error. Pointers and strings go as
+	// cast<u32>(p). The typed wrappers (std::fs::open, ...) are one line on top of it:
+	//     return syscall4(SystemCalls.Open, cast<u32>(path), mode);
+	sub syscall4(var function: u32, var a: u32 = 0, var b: u32 = 0, var c: u32 = 0, var d: u32 = 0) -> i32 {
+		var rv: i32 = 0;
+		low {
+			mov R9, $function
+			mov R8, $a
+			mov R7, $b
+			mov R6, $c
+			mov R5, $d
+			int 0x40
+			mov $rv, RV
+		}
+		return rv;
+	}
+
 	sub syscall(var function: u32, var out_rv: u32*, ...typed) -> bool {
 		var l_is_simple_call = sub(var fn: u32) -> bool {
 			return fn == SystemCalls.Random or

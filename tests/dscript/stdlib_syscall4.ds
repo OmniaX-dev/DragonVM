@@ -1,0 +1,66 @@
+// std::syscall4: the function in R9, the arguments in R8, R7, R6, R5 (0 when not given), the
+// result from RV (also negative: an error). A tiny kernel here (main, in supervisor mode) answers
+// int 0x40 and runs user_main in user mode.
+// expect-rv: 0
+#include(check.ds)
+#import(<dragon-sdk>)
+#import(<stdlib>)
+
+var kernel_stack: u32[1024];
+var user_stack: u32[1024];
+var g_args: u32[5];
+var g_text: u8[16];
+
+// Function 0x7001: the sum of the arguments; 0x7002: an error (-5); 0x7003: copies the string
+// at R8 (a pointer); 0x10 (Exit): the end of the test.
+interrupt sub on_syscall() {
+	var function: u32;
+	var a: u32;
+	var b: u32;
+	var c: u32;
+	var d: u32;
+	low {
+		mov $function, R9
+		mov $a, R8
+		mov $b, R7
+		mov $c, R6
+		mov $d, R5
+	}
+	g_args[0] = function;
+	g_args[1] = a;
+	g_args[2] = b;
+	g_args[3] = c;
+	g_args[4] = d;
+	var answer: i32 = 0;
+	if (function == 0x7001)
+		answer = cast<i32>(a + b + c + d);
+	else if (function == 0x7002)
+		answer = -5;
+	else if (function == 0x7003)
+		std::strcpy(g_text, cast<string>(a));
+	else if (function == std::SystemCalls.Exit) {
+		var rv: i32 = result();
+		low {
+			mov RV, $rv
+			hlt
+		}
+	}
+	low { mov RV, $answer }
+}
+
+sub user_main() {
+	check(1, std::syscall4(0x7001, 1, 20, 300, 4000) == 4321);
+	check(2, g_args[0] == 0x7001 and g_args[1] == 1 and g_args[2] == 20 and g_args[3] == 300 and g_args[4] == 4000);
+	check(3, std::syscall4(0x7001, 7) == 7 and g_args[2] == 0 and g_args[3] == 0 and g_args[4] == 0);
+	check(4, std::syscall4(0x7002) == -5 and g_args[1] == 0);
+	check(5, std::syscall4(0x7003, cast<u32>("hello")) == 0 and std::strcmp(g_text, "hello") == 0);
+	std::syscall4(std::SystemCalls.Exit, 0);
+	check(6, false);			// (not reached)
+}
+
+sub main() -> i32 {
+	dr::set_interrupt_vector_entry(0x40, &on_syscall, true);
+	dr::cpu::set_kernel_stack(cast<u32>(&kernel_stack[1023]), 4096);
+	dr::cpu::enter_user_mode(user_main, cast<u32>(&user_stack[1023]), 4096);
+	return 100;
+}
