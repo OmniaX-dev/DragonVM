@@ -11,13 +11,13 @@ var g_disk: u8* = null;
 
 sub ram_read(var user: void*, var offset: u32, var buffer: u8*, var size: u32) -> i32 {
 	if (offset > DiskSize or size > DiskSize - offset) return dr::dfs::IOError;
-	dr::dfs::mem_copy(buffer, g_disk + offset, size);
+	std::memcpy(buffer, g_disk + offset, size);
 	return 0;
 }
 
 sub ram_write(var user: void*, var offset: u32, var buffer: u8*, var size: u32) -> i32 {
 	if (offset > DiskSize or size > DiskSize - offset) return dr::dfs::IOError;
-	dr::dfs::mem_copy(g_disk + offset, buffer, size);
+	std::memcpy(g_disk + offset, buffer, size);
 	return 0;
 }
 

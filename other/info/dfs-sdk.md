@@ -195,8 +195,9 @@ it from the cache.
 
 The order of the Volume's fields matters in DScript, where structs are packed. The buffers come right after fields
 whose sizes are multiples of 4 bytes (the `bool`s and `u16`s are at the end), so they start at 4-byte aligned
-addresses. `mem_copy` copies words only between aligned addresses. Misaligned buffers made every block copy about
-9× slower, and that was the case before this was fixed.
+addresses. DFS's old copy helper only copied words between aligned addresses, so misaligned buffers made every
+block copy about 9× slower; it now uses libcore's `std::memcpy`, which copies words at any alignment, but the buffers
+stay aligned.
 
 ### The device: how DFS reaches the disk
 

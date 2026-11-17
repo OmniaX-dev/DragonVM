@@ -32,9 +32,9 @@ sub main() -> i32 {
 	dr::dfs::disk_device(&dev1, &part1);
 	check(10, dr::dfs::mount(vol, &dev1, false) == 0);
 	check(11, vol->layout.block_size == 1024);
-	check(12, dr::dfs::read_file(vol, "/hello.txt", a, 64) == 13 and dr::dfs::mem_equal(a, "Hello, DFS!\n", 12));
+	check(12, dr::dfs::read_file(vol, "/hello.txt", a, 64) == 13 and (std::memcmp(a, "Hello, DFS!\n", 12) == 0));
 	pattern(b, 20000, 5);
-	check(13, dr::dfs::read_file(vol, "/docs/big.bin", a, BigSize) == 20000 and dr::dfs::mem_equal(a, b, 20000));
+	check(13, dr::dfs::read_file(vol, "/docs/big.bin", a, BigSize) == 20000 and (std::memcmp(a, b, 20000) == 0));
 	pattern(a, BigSize, 9);
 	check(14, dr::dfs::mkdir(vol, "/vm", 0x1ED) == 0);
 	check(15, dr::dfs::write_file(vol, "/vm/out.bin", a, BigSize) == cast<i32>(BigSize));

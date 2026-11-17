@@ -16,13 +16,13 @@ var g_reads: u32 = 0;		// device reads (the pointer cache)
 sub ram_read(var user: void*, var offset: u32, var buffer: u8*, var size: u32) -> i32 {
 	g_reads++;
 	if (offset > DiskSize or size > DiskSize - offset) return dr::dfs::IOError;
-	dr::dfs::mem_copy(buffer, g_disk + offset, size);
+	std::memcpy(buffer, g_disk + offset, size);
 	return 0;
 }
 
 sub ram_write(var user: void*, var offset: u32, var buffer: u8*, var size: u32) -> i32 {
 	if (offset > DiskSize or size > DiskSize - offset) return dr::dfs::IOError;
-	dr::dfs::mem_copy(g_disk + offset, buffer, size);
+	std::memcpy(g_disk + offset, buffer, size);
 	return 0;
 }
 
@@ -73,9 +73,9 @@ sub main() -> i32 {
 	check(10, dr::dfs::create(g_vol, "/a.txt", 0x1A4, &ino) == 0 and ino == 8);
 	check(11, dr::dfs::write_file(g_vol, "/a.txt", g_data, Size) == cast<i32>(Size));
 	check(12, g_vol->sb.free_blocks == free0 - 15);
-	dr::dfs::mem_set(g_back, 0, Size + 16);
+	std::memset(g_back, 0, Size + 16);
 	check(13, dr::dfs::read_file(g_vol, "/a.txt", g_back, Size + 16) == cast<i32>(Size));
-	check(14, dr::dfs::mem_equal(g_data, g_back, Size));
+	check(14, std::memcmp(g_data, g_back, Size) == 0);
 	var node: dr::dfs::Inode;
 	check(15, dr::dfs::stat(g_vol, "/a.txt", &node) == 0 and node.size == Size and node.indirect != 0 and node.links == 1 and node.mtime == 1234);
 
@@ -112,7 +112,7 @@ sub main() -> i32 {
 	// Truncate to the middle, then away: the blocks come back.
 	check(41, dr::dfs::stat(g_vol, "/e2/b.txt", &node, &ino) == 0);
 	check(42, dr::dfs::truncate(g_vol, ino, &node, 2000) == 0 and node.indirect == 0 and node.direct[2] == 0);
-	check(43, dr::dfs::inode_read(g_vol, &node, 0, g_back, 4000) == 2000 and dr::dfs::mem_equal(g_back, g_data, 1000));
+	check(43, dr::dfs::inode_read(g_vol, &node, 0, g_back, 4000) == 2000 and (std::memcmp(g_back, g_data, 1000) == 0));
 	check(44, dr::dfs::unlink(g_vol, "/e2/b.txt") == 0);
 	check(45, dr::dfs::chmod(g_vol, "/e2", 0x1C0) == 0 and dr::dfs::chown(g_vol, "/e2", 7, 9) == 0);
 	check(46, dr::dfs::stat(g_vol, "/e2", &node) == 0 and node.mode == 0x41C0 and node.uid == 7 and node.gid == 9);
@@ -129,7 +129,7 @@ sub main() -> i32 {
 	check(72, dr::dfs::stat(g_vol, "/big", &node) == 0);
 	var reads: u32 = g_reads;
 	check(73, dr::dfs::inode_read(g_vol, &node, 0, g_back, 24 * 1024) == 24 * 1024 and g_reads - reads == 24 + 1);
-	check(74, dr::dfs::mem_equal(g_data, g_back, 24 * 1024) and dr::dfs::unlink(g_vol, "/big") == 0);
+	check(74, std::memcmp(g_data, g_back, 24 * 1024) == 0 and dr::dfs::unlink(g_vol, "/big") == 0);
 	check(51, dr::dfs::unmount(g_vol) == 0);
 	check(52, dr::dfs::mount(g_vol, &dev, true) == 0 and g_vol->sb.state == dr::dfs::StateClean);
 	check(53, g_vol->sb.free_blocks == free0 - 1 and g_vol->sb.mount_count == 3);
@@ -140,6 +140,6 @@ sub main() -> i32 {
 	// Not a DFS partition.
 	g_disk[0x20] = 0;
 	check(60, dr::dfs::mount(g_vol, &dev, false) == dr::dfs::Unsupported);
-	check(61, dr::dfs::str_len(dr::dfs::error_name(dr::dfs::NotEmpty)) == 19);
+	check(61, std::strlen(dr::dfs::error_name(dr::dfs::NotEmpty)) == 19);
 	return result();
 }

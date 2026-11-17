@@ -172,9 +172,9 @@ namespace dr::dfs {
 
 	// The mounted volume. All the memory DFS needs is in here: the block buffers have a role
 	// each (which subs use which is noted on the subs).
-	// The buffers must stay 4 byte aligned (DScript structs are packed: every field before
-	// them is a multiple of 4 bytes, the bools and u16s go at the end). mem_copy copies words
-	// only between aligned addresses: misaligned buffers make every block copy ~9 times slower.
+	// The buffers stay 4 byte aligned (DScript structs are packed: every field before them is a
+	// multiple of 4 bytes, the bools and u16s go at the end). std::memcpy copies words at any
+	// alignment, but aligned buffers keep the on-disk structures' words aligned too.
 	struct Volume {
 		var dev: Device;
 		var layout: Layout;
@@ -201,76 +201,6 @@ namespace dr::dfs {
 	// ============================================================================
 	// Helpers
 	// ============================================================================
-	// Word copies, 8 per round, when everything is 4 byte aligned (block buffers and on disk
-	// structures always are): most of DFS's time is spent copying blocks.
-	sub mem_copy(var dst: void*, var src: void*, var size: u32) {
-		var d: u8* = cast<u8*>(dst);
-		var s: u8* = cast<u8*>(src);
-		if (((cast<u32>(d) | cast<u32>(s) | size) & 3) == 0) {
-			var dw: u32* = cast<u32*>(dst);
-			var sw: u32* = cast<u32*>(src);
-			var rounds: u32 = size >> 5;
-			while (rounds > 0) {
-				dw[0] = sw[0]; dw[1] = sw[1]; dw[2] = sw[2]; dw[3] = sw[3];
-				dw[4] = sw[4]; dw[5] = sw[5]; dw[6] = sw[6]; dw[7] = sw[7];
-				dw += 8;
-				sw += 8;
-				rounds--;
-			}
-			var words: u32 = (size >> 2) & 7;
-			while (words > 0) {
-				*dw = *sw;
-				dw++;
-				sw++;
-				words--;
-			}
-			return;
-		}
-		for (var i: u32 = 0; i < size; i++)
-			d[i] = s[i];
-	}
-
-	sub mem_set(var dst: void*, var value: u8, var size: u32) {
-		var d: u8* = cast<u8*>(dst);
-		if (((cast<u32>(d) | size) & 3) == 0) {
-			var dw: u32* = cast<u32*>(dst);
-			var v: u32 = value;
-			v = v | (v << 8);
-			v = v | (v << 16);
-			var rounds: u32 = size >> 5;
-			while (rounds > 0) {
-				dw[0] = v; dw[1] = v; dw[2] = v; dw[3] = v;
-				dw[4] = v; dw[5] = v; dw[6] = v; dw[7] = v;
-				dw += 8;
-				rounds--;
-			}
-			var words: u32 = (size >> 2) & 7;
-			while (words > 0) {
-				*dw = v;
-				dw++;
-				words--;
-			}
-			return;
-		}
-		for (var i: u32 = 0; i < size; i++)
-			d[i] = value;
-	}
-
-	sub mem_equal(var a: u8*, var b: u8*, var size: u32) -> bool {
-		for (var i: u32 = 0; i < size; i++) {
-			if (a[i] != b[i])
-				return false;
-		}
-		return true;
-	}
-
-	sub str_len(var str: u8*) -> u32 {
-		var len: u32 = 0;
-		while (str[len] != 0)
-			len++;
-		return len;
-	}
-
 	// Big endian loads and stores (the machine's order: plain accesses).
 	inline sub get16(var p: u8*) -> u16 { return *cast<u16*>(p); }
 	inline sub get32(var p: u8*) -> u32 { return *cast<u32*>(p); }
@@ -575,7 +505,7 @@ namespace dr::dfs {
 		vol->inode_hint = 0;
 		vol->ind_block = 0;
 		vol->ind2_block = 0;
-		mem_set(vol->buf_zero, 0, MaxBlockSize);
+		std::memset(vol->buf_zero, 0, MaxBlockSize);
 		var r: i32 = dev_read(vol, SuperblockOffset, cast<u8*>(&vol->sb), SuperblockSize);
 		if (r < 0) return r;
 		var sb: Superblock* = &vol->sb;
@@ -623,22 +553,22 @@ namespace dr::dfs {
 	}
 
 	sub fill_dir_entry(var entry: u8*, var size: u32, var ino: u32, var name: u8*, var name_len: u32, var mode: u16) {
-		mem_set(entry, 0, size);
+		std::memset(entry, 0, size);
 		put32(entry + DirEntInode, ino);
 		entry[DirEntNameLen] = cast<u8>(name_len);
 		entry[DirEntType] = cast<u8>(mode >> 12);
-		mem_copy(entry + DirEntName, name, name_len);
+		std::memcpy(entry + DirEntName, name, name_len);
 	}
 
 	// A new directory's first block (. and ..) in buf_dir.
 	sub make_dir_block(var vol: Volume*, var ino: u32, var parent: u32) {
-		mem_set(vol->buf_dir, 0, vol->layout.block_size);
+		std::memset(vol->buf_dir, 0, vol->layout.block_size);
 		fill_dir_entry(vol->buf_dir, vol->layout.dirent_size, ino, "..", 1, ModeDir);
 		fill_dir_entry(vol->buf_dir + vol->layout.dirent_size, vol->layout.dirent_size, parent, "..", 2, ModeDir);
 	}
 
 	sub init_inode(var vol: Volume*, var node: Inode*, var mode: u16, var links: u16) {
-		mem_set(node, 0, sizeof(Inode));
+		std::memset(node, 0, sizeof(Inode));
 		node->mode = mode;
 		node->links = links;
 		node->uid = vol->uid;
@@ -659,7 +589,7 @@ namespace dr::dfs {
 		vol->gid = 0;
 		vol->ind_block = 0;
 		vol->ind2_block = 0;
-		mem_set(vol->buf_zero, 0, MaxBlockSize);
+		std::memset(vol->buf_zero, 0, MaxBlockSize);
 		var log2: u32 = (params->block_size_log2 != 0 ? params->block_size_log2 : 12);
 		var bytes_per_inode: u32 = (params->bytes_per_inode != 0 ? params->bytes_per_inode : 16384);
 		var l: Layout* = &vol->layout;
@@ -686,7 +616,7 @@ namespace dr::dfs {
 		r = dev_write(vol, tail, vol->buf_zero, l->block_size - tail);
 		if (r < 0) return r;
 		var sb: Superblock* = &vol->sb;
-		mem_set(sb, 0, sizeof(Superblock));
+		std::memset(sb, 0, sizeof(Superblock));
 		sb->magic = Magic;
 		sb->version = Version;
 		sb->block_size_log2 = l->block_size_log2;
@@ -712,7 +642,7 @@ namespace dr::dfs {
 				sb->label[i] = params->label[i];
 		}
 		if (params->uuid != null)
-			mem_copy(sb->uuid, params->uuid, 16);
+			std::memcpy(sb->uuid, params->uuid, 16);
 		r = write_superblock(vol);
 		if (r < 0) return r;
 
@@ -747,7 +677,7 @@ namespace dr::dfs {
 		if (r < 0) return r;
 		r = read_block(vol, block, vol->buf_inode);
 		if (r < 0) return r;
-		mem_copy(out, vol->buf_inode + offset, InodeSize);
+		std::memcpy(out, vol->buf_inode + offset, InodeSize);
 		return Ok;
 	}
 
@@ -758,7 +688,7 @@ namespace dr::dfs {
 		if (r < 0) return r;
 		r = read_block(vol, block, vol->buf_inode);
 		if (r < 0) return r;
-		mem_copy(vol->buf_inode + offset, node, InodeSize);
+		std::memcpy(vol->buf_inode + offset, node, InodeSize);
 		return write_block(vol, block, vol->buf_inode);
 	}
 
@@ -864,8 +794,8 @@ namespace dr::dfs {
 		}
 		if (start > 0 and first < P) {
 			// Detach the entries on disk, keeping a copy to free them from.
-			mem_copy(vol->buf_data, entries, size);
-			mem_set(entries + first * 4, 0, (P - first) * 4);
+			std::memcpy(vol->buf_data, entries, size);
+			std::memset(entries + first * 4, 0, (P - first) * 4);
 			r = write_block(vol, block, entries);
 			if (r < 0) return r;
 			entries = vol->buf_data;
@@ -911,7 +841,7 @@ namespace dr::dfs {
 				r = read_block(vol, block, vol->buf_data);
 				if (r < 0) return r;
 				var offset: u32 = new_size & l->block_mask;
-				mem_set(vol->buf_data + offset, 0, l->block_size - offset);
+				std::memset(vol->buf_data + offset, 0, l->block_size - offset);
 				r = write_block(vol, block, vol->buf_data);
 				if (r < 0) return r;
 			}
@@ -983,12 +913,12 @@ namespace dr::dfs {
 			var r: i32 = bmap(vol, node, pos >> l->block_size_log2, false, &block);
 			if (r < 0) return r;
 			if (block == 0)
-				mem_set(buffer + done, 0, n);
+				std::memset(buffer + done, 0, n);
 			else if (n == l->block_size)
 				r = read_block(vol, block, buffer + done);
 			else {
 				r = read_block(vol, block, vol->buf_data);
-				mem_copy(buffer + done, vol->buf_data + in_block, n);
+				std::memcpy(buffer + done, vol->buf_data + in_block, n);
 			}
 			if (r < 0) return r;
 			done += n;
@@ -1022,13 +952,13 @@ namespace dr::dfs {
 				r = write_block(vol, block, buffer + done);
 			else {
 				if (r == 1)
-					mem_set(vol->buf_data, 0, l->block_size);		// just allocated
+					std::memset(vol->buf_data, 0, l->block_size);		// just allocated
 				else {
 					r = read_block(vol, block, vol->buf_data);
 					if (r < 0)
 						break;
 				}
-				mem_copy(vol->buf_data + in_block, buffer + done, n);
+				std::memcpy(vol->buf_data + in_block, buffer + done, n);
 				r = write_block(vol, block, vol->buf_data);
 			}
 			if (r < 0)
@@ -1091,7 +1021,7 @@ namespace dr::dfs {
 			else if (match == MatchNotDot)
 				hit = not is_dot_name(entry + DirEntName, len);
 			else
-				hit = (len == name_len and mem_equal(entry + DirEntName, name, len));
+				hit = (len == name_len and std::memcmp(entry + DirEntName, name, len) == 0);
 			if (hit) {
 				*index = i;
 				*out_block = block;
@@ -1148,7 +1078,7 @@ namespace dr::dfs {
 		if (r != NotFound)
 			return r;
 		// Full: append a block (inode_write writes the inode).
-		mem_set(vol->buf_dir, 0, l->block_size);
+		std::memset(vol->buf_dir, 0, l->block_size);
 		fill_dir_entry(vol->buf_dir, l->dirent_size, ino, name, name_len, mode);
 		r = inode_write(vol, dir_ino, dir, dir->size, vol->buf_dir, l->block_size);
 		if (r < 0) return r;
@@ -1164,7 +1094,7 @@ namespace dr::dfs {
 		var r: i32 = dir_find(vol, dir, &index, MatchName, name, name_len, &block, &offset);
 		if (r < 0) return r;
 		*out_ino = get32(vol->buf_dir + offset + DirEntInode);
-		mem_set(vol->buf_dir + offset, 0, vol->layout.dirent_size);
+		std::memset(vol->buf_dir + offset, 0, vol->layout.dirent_size);
 		r = write_block(vol, block, vol->buf_dir);
 		if (r < 0) return r;
 		return touch_dir(vol, dir_ino, dir);
@@ -1194,7 +1124,7 @@ namespace dr::dfs {
 		out->name_len = entry[DirEntNameLen];
 		if (out->name_len > MaxNameLength)
 			return Corrupt;
-		mem_copy(out->name, entry + DirEntName, out->name_len);
+		std::memcpy(out->name, entry + DirEntName, out->name_len);
 		out->name[out->name_len] = 0;
 		*cursor = *cursor + 1;
 		return Ok;
@@ -1274,7 +1204,7 @@ namespace dr::dfs {
 	sub release_inode(var vol: Volume*, var ino: u32, var node: Inode*) -> i32 {
 		var r: i32 = truncate(vol, ino, node, 0);
 		if (r < 0) return r;
-		mem_set(node, 0, sizeof(Inode));
+		std::memset(node, 0, sizeof(Inode));
 		r = write_inode(vol, ino, node);
 		if (r < 0) return r;
 		return free_inode(vol, ino);

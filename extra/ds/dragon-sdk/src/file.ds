@@ -137,24 +137,24 @@ namespace dr::fs {
 	// Copies a 0 terminated string into buffer (capacity bytes, the 0 included). False if it
 	// doesn't fit.
 	sub copy_string(var buffer: u8*, var capacity: u32, var text: string) -> bool {
-		var len: u32 = dr::dfs::str_len(text);
+		var len: u32 = std::strlen(text);
 		if (len + 1 > capacity)
 			return false;
-		dr::dfs::mem_copy(buffer, text, len + 1);
+		std::memcpy(buffer, text, len + 1);
 		return true;
 	}
 
 	// buffer = dir + "/" + name (no double '/' after the root). False if it doesn't fit.
 	sub join_path(var buffer: u8*, var capacity: u32, var dir: string, var name: string) -> bool {
-		var dir_len: u32 = dr::dfs::str_len(dir);
-		var name_len: u32 = dr::dfs::str_len(name);
+		var dir_len: u32 = std::strlen(dir);
+		var name_len: u32 = std::strlen(name);
 		var slash: u32 = (dir_len > 0 and dir[dir_len - 1] == '/') ? 0 : 1;
 		if (dir_len + slash + name_len + 1 > capacity)
 			return false;
-		dr::dfs::mem_copy(buffer, dir, dir_len);
+		std::memcpy(buffer, dir, dir_len);
 		if (slash == 1)
 			buffer[dir_len] = '/';
-		dr::dfs::mem_copy(buffer + dir_len + slash, name, name_len + 1);
+		std::memcpy(buffer + dir_len + slash, name, name_len + 1);
 		return true;
 	}
 
@@ -279,7 +279,7 @@ namespace dr::fs {
 				len++;
 			if (len + 1 > capacity)
 				return this->fail(dr::dfs::NameTooLong);
-			dr::dfs::mem_copy(buffer, this->m_vol->sb.label, len);
+			std::memcpy(buffer, this->m_vol->sb.label, len);
 			buffer[len] = 0;
 			return this->ok();
 		}
@@ -370,7 +370,7 @@ namespace dr::fs {
 
 		// The same with a string (without its 0).
 		sub write_text(var path: string, var text: string) -> bool {
-			return this->write_all(path, text, dr::dfs::str_len(text));
+			return this->write_all(path, text, std::strlen(text));
 		}
 
 		// Adds size bytes at the end of the file (created if needed).
@@ -387,7 +387,7 @@ namespace dr::fs {
 		}
 
 		sub append_text(var path: string, var text: string) -> bool {
-			return this->append(path, text, dr::dfs::str_len(text));
+			return this->append(path, text, std::strlen(text));
 		}
 
 		// ---- Directories and names ----
@@ -408,7 +408,7 @@ namespace dr::fs {
 			var buffer: u8[256];
 			if (not copy_string(buffer, MaxPath, path))
 				return this->fail(PathTooLong);
-			var len: u32 = dr::dfs::str_len(buffer);
+			var len: u32 = std::strlen(buffer);
 			// Each prefix ending before a '/', then the whole path.
 			for (var i: u32 = 1; i <= len; i++) {
 				if (i < len and buffer[i] != '/')
@@ -749,7 +749,7 @@ namespace dr::fs {
 
 		// A string, without its 0.
 		sub write_text(var text: string) -> i32 {
-			return this->write(text, dr::dfs::str_len(text));
+			return this->write(text, std::strlen(text));
 		}
 
 		// Moves the position: from the start, the current position or the end (offset can be
@@ -905,7 +905,7 @@ namespace dr::fs {
 				if (not dr::dfs::is_dot_name(entry.name, entry.name_len))
 					break;
 			}
-			dr::dfs::mem_copy(out->name, entry.name, cast<u32>(entry.name_len) + 1);
+			std::memcpy(out->name, entry.name, cast<u32>(entry.name_len) + 1);
 			out->inode = entry.inode;
 			out->type = type_from_mode(cast<u16>(cast<u32>(entry.type) << 12));
 			out->size = 0;
