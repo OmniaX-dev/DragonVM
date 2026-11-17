@@ -1,0 +1,51 @@
+#import(<dragon-sdk>)
+
+#include(syscall.ds)
+#include(video.ds)
+#include(logging.ds)
+#include(args.ds)
+#include(heap.ds)
+#include(kernel0.ds)
+#include(panic.ds)
+
+sub init_stack_and_switch(var __kernel_main: sub()) {
+	const stack_size: u32 = 64 * 1024;
+	var stack: u32 = cast<u32>(g_heap->alloc_aligned(stack_size, 4096));
+	dr::cpu::switch_stack(stack + stack_size - 4, stack_size, __kernel_main);
+}
+
+sub print_logo() {
+	const LOGO_LINES: u8 = 17;
+	var logo: string[LOGO_LINES] = {
+	"===============================================",
+	"              ______________",
+	"        ,===:'.,            `-._",
+	"             `:.`---.__         `-._",
+	"               `:.     `--.         `.",
+	"                 \\.        `.         `.",
+	"         (,,(,    \\.         `.   ____,-`.,",
+	"      (,'     `/   \\.   ,--.___`.'",
+	"  ,  ,'  ,--.  `,   \\.;'         `",
+	"   `{D, {    \\  :    \\;",
+	"     V,,'    /  /    //",
+	"     j;;    /  ,' ,-//.    ,---.      ,",
+	"     \\;'   /  ,' /  _  \\  /  _  \\   ,'/",
+	"           \\   `'  / \\  `'  / \\  `.' /",
+	"            `.___,'   `.__,'   `.__,'",
+	"===============================================",
+	"Welcome to DragonOS! :)"
+	};
+	for (var i = 0; i < LOGO_LINES; i++)
+		kernel_log(logo[i]);
+}
+
+sub main(var argc: i32, var argv: string*) -> i32 {
+	init_interrupt_vector();
+	init_video();
+	kernel_assert(argc > 1, "Missing arguments to load the kernel.");
+	print_logo();
+	init_allocator(argc, argv);
+	copy_args(g_heap, argc, argv);
+	init_stack_and_switch(kernel_main);
+	panic("Reached the end of main().");
+}

@@ -1,0 +1,30 @@
+#import(<dragon-sdk>)
+
+sub init_video() {
+	dr::vga_enable_double_buffering(false);
+	dr::vga_set_video_mode(dr::VGAVideoModes.TextSingleColor);
+	var device = dr::vga_get_device();
+	device->signal = dr::VGATextSingleColorSignals.ClearScreen;
+}
+
+sub kernel_print(var str: string, var nl: bool = true) {
+	if (not str) return;
+	var device = dr::vga_get_device();
+	device->textSingleColorBufferStringAddr = cast<u32>(str);
+	device->signal = dr::VGATextSingleColorSignals.PrintString;
+	if (nl)
+	{
+		device->textSingleColorChar = 10;
+		device->signal = dr::VGATextSingleColorSignals.PrintChar;
+	}
+}
+
+inline sub kernel_print(var i: i32, var base: u8 = 10, var nl: bool = true) {
+	var buff: u8[12];
+	kernel_print(dr::itoa(i, buff, base), nl);
+}
+
+inline sub kernel_print(var i: u32, var base: u8 = 10, var nl: bool = true) {
+	var buff: u8[12];
+	kernel_print(dr::utoa(i, buff, base), nl);
+}

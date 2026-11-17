@@ -1,0 +1,30 @@
+#import(<dragon-sdk>)
+
+#include(video.ds)
+
+var g_panicking: bool = false;
+
+sub panic_begin(var title: string) {
+	dr::disable_interrupts();
+	if (g_panicking)
+		halt_forever();
+	init_video();
+	g_panicking = true;
+	kernel_print("", true);
+	kernel_print("*** KERNEL PANIC: ", false);
+	kernel_print(title, true);
+}
+
+sub halt_forever() {
+	while (true)
+		low { hlt } // in a loop: in case eventually something can wake the CPU
+}
+
+sub panic(var msg: string) {
+	panic_begin(msg);
+	halt_forever();
+}
+
+inline sub kernel_assert(var cond: bool, var msg: string) {
+	if (not cond) panic(msg);
+}

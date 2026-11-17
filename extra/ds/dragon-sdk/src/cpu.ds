@@ -8,10 +8,12 @@
 // Traps from user mode (int: system calls, hardware interrupts, faults)
 // run their handler in supervisor mode, on the kernel stack (set_kernel_stack); rti goes back.
 namespace dr::cpu {
-	// The fault vectors: an instruction that fails in user mode raises its fault when the vector
-	// is enabled (set_interrupt_vector_entry); otherwise (and in supervisor mode) the machine stops
-	// with the error. The handler returns to the faulting instruction, unless it changes the return
-	// address (set_trap_return_address) or doesn't return.
+	// The fault vectors: an instruction that fails raises its fault when the vector is enabled
+	// (set_interrupt_vector_entry); otherwise the machine stops with the error. In supervisor mode
+	// too (the kernel's own bugs), except a stack overflow (the handler would run on the same
+	// stack) and a fault while a fault handler is running (a double fault): those stop the machine.
+	// trap_from_user tells the two apart. The handler returns to the faulting instruction, unless
+	// it changes the return address (set_trap_return_address) or doesn't return.
 	const Faults: struct {
 		var DivisionByZero: u8					= 0x00;
 		var InvalidInstruction: u8				= 0x01;
@@ -145,10 +147,11 @@ namespace dr::cpu {
 	}
 
 	// Moves to a new stack for good: it becomes the kernel stack (set_kernel_stack(top, size): the
-	// stack check accepts it, and traps from user mode use it), SP and FP go to its top and
-	// continuation runs there. It never returns: whatever was on the old stack (this caller's
-	// locals too) is not used again, and if continuation returns, the machine halts. Supervisor
-	// mode only. Then release_boot_stack can give the boot stack's memory away.
+	// stack check accepts it, and traps from user mode use it), SP goes to its top and continuation
+	// runs there (called with FP 0: a backtrace ends there). It never returns: whatever was on the
+	// old stack (this caller's locals too) is not used again, and if continuation returns, the
+	// machine halts. Supervisor mode only. Then release_boot_stack can give the boot stack's memory
+	// away.
 	// (Traps from user mode start the kernel stack again from its top, so once the kernel runs user
 	// programs, what continuation was doing before can't continue: as with enter_user_mode.)
 	sub switch_stack(var top: u32, var size: u32, var continuation: sub()) {
@@ -157,7 +160,8 @@ namespace dr::cpu {
 			mov R1, $continuation
 			mov R2, $top
 			mov SP, R2
-			mov FP, R2
+			mov R2, 0x00000000
+			mov FP, R2				// (the continuation's saved FP is 0: a backtrace ends there)
 			push 0x00000000
 			call R1
 			hlt
@@ -186,6 +190,8 @@ namespace dr::cpu {
 	// Runs entry in user mode on its own stack (stack_top: the stack's last word, stack_size
 	// bytes): it never returns here. If entry returns, the next instruction is a hlt: a privileged
 	// instruction fault (the kernel's handler ends the program). From supervisor mode only.
+	// entry is called with FP 0: its frame's saved FP is 0, which ends a backtrace (following the
+	// saved FPs) there, instead of going on into the kernel's stack.
 	sub enter_user_mode(var entry: sub(), var stack_top: u32, var stack_size: u32) {
 		set_user_stack(stack_top, stack_size);
 		// A trap frame as int from user mode leaves it (the user SP, the user mode, no saved
@@ -203,6 +209,8 @@ namespace dr::cpu {
 			omov *FP, R3, 0x0C
 			rti
 		__dr_cpu_user_start:
+			mov R2, 0x00000000
+			mov FP, R2
 			push 0x00000000
 			call R1
 			hlt

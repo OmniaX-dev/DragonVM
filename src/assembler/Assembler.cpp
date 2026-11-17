@@ -280,7 +280,7 @@ namespace dragon
 				out.fg(ostd::ConsoleColors::Cyan).p(String("Entry Point: ").new_fixedLength(symbol_len)).fg(ostd::ConsoleColors::BrightRed).p(String::getHexStr(m_dataSize + m_loadAddress + EntryJumpSize, true, 4)).nl();
 			}
 
-			out.nl();
+			out.reset().nl();
 		}
 
 
@@ -423,7 +423,7 @@ namespace dragon
 			{
 				String lineEdit(line);
 				if (lineEdit.startsWith(".srcfile ") || lineEdit.startsWith(".loc "))
-					continue;	// source markers: paths and numbers, no defines
+					continue;    // source markers: paths and numbers, no defines
 				for (i32 i = defines.size() - 1; i >= 0; i--)
 					lineEdit.replaceAll(defines[i].name, defines[i].value.new_trim());
 				line = lineEdit;

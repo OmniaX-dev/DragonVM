@@ -325,6 +325,19 @@ namespace dragon
 			const u32 entryPointer = data::MemoryMapAddresses::IntVector_Start + (vector * data::MemoryMapAddresses::IntVector_EntrySize);
 			if ((DragonRuntime::memMap.peek8(entryPointer) & data::InterruptVectorStatus::Enabled) == 0)
 				return false;
+			if (m_supervisor)
+			{
+				// Supervisor mode (the kernel): the trap stays on the current stack, so a stack
+				// overflow can't be one; and a fault while a fault handler runs (a double fault)
+				// stops the machine, instead of faulting again and again.
+				if (vector == data::InterruptCodes::Fault_StackOverflow)
+					return false;
+				for (u32 v = 0; v <= data::InterruptCodes::LastFault; v++)
+				{
+					if (m_interruptInService[v] != 0)
+						return false;
+				}
+			}
 			using CR = VirtualCPUControl::tRegisters;
 			auto& control = DragonRuntime::vCPUControl;
 			control.set(CR::FaultVector, vector);
@@ -488,7 +501,8 @@ namespace dragon
 				m_userInstruction = false;
 				update_user_checks();
 			}
-			if (user && data::ErrorHandler::count() > errors && raise_fault(instructionAddress, errors))
+			// An error is a fault (both modes) when its vector is enabled; otherwise the machine stops.
+			if (data::ErrorHandler::count() > errors && raise_fault(instructionAddress, errors))
 				return true;
 			return result;
 		}

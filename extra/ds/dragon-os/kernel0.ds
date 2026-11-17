@@ -1,0 +1,8 @@
+#import(<dragon-sdk>)
+
+#include(heap.ds)
+
+sub kernel_main() {
+	init_heap();
+	panic("Reached the end of kernel_main().");
+}

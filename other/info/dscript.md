@@ -189,10 +189,12 @@ dr::cpu::enter_user_mode(program_main, stack_top, stack_size);   // doesn't retu
   `fault_address()`; `trap_frame()` (called directly from the interrupt sub) for
   `trap_from_user(frame)`, `trap_return_address(frame)`, `set_trap_return_address(frame, ip)`.
 - A fault's handler returns to the faulting instruction: fix the cause, return elsewhere, or
-  don't return (end the program). Faults not handled (and every error in supervisor mode) stop
-  the machine, as before.
+  don't return (end the program). Faults not handled stop the machine, as before. Supervisor
+  mode faults too (the kernel's own bugs: `trap_from_user(frame)` is false), except a stack
+  overflow and a fault inside a fault handler (a double fault): those stop the machine.
 - `enter_user_mode`: entry runs as a call on the user stack (`set_user_stack`, for the stack
-  check); if it returns, a `hlt` follows (a privileged instruction fault). `drop_to_user()`
+  check), called with FP 0 (a backtrace ends there); if it returns, a `hlt` follows (a
+  privileged instruction fault). `drop_to_user()`
   switches mode in place.
 - Memory protection: a permission map (16 KiB in RAM, 2 bits a 4 KiB page: user read / execute,
   user write) set with `set_permission_map(map)`; `set_page_permissions(map, address, size,

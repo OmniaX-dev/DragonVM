@@ -1,0 +1,59 @@
+#import(<dragon-sdk>)
+
+#include(video.ds)
+#include(syscall.ds)
+#include(panic.ds)
+
+sub fault_name(var v: u8) -> string {
+	if (v == dr::cpu::Faults.DivisionByZero) return "division by zero";
+	if (v == dr::cpu::Faults.InvalidInstruction) return "invalid instruction";
+	if (v == dr::cpu::Faults.PrivilegedInstruction) return "privileged instruction";
+	if (v == dr::cpu::Faults.AccessViolation) return "access violation";
+	if (v == dr::cpu::Faults.StackOverflow) return "stack overflow";
+	if (v == dr::cpu::Faults.General) return "general fault";
+	return "unknown fault";
+}
+
+sub dump_frame(var f: TrapFrame*) {
+	kernel_print("IP=", false); kernel_print(f->ip, 16, false);
+	kernel_print(" SP=", false); kernel_print(f->sp, 16, false);
+	kernel_print(" FP=", false); kernel_print(f->fp, 16, false);
+	kernel_print(" FL=", false); kernel_print(f->fl, 16, false);
+	kernel_print(" mode=", false); kernel_print(f->mode == 0 ? "user" : "kernel", true);
+	for (var n: u32 = 1; n <= 20; n++)
+	{
+		kernel_print("R", false); kernel_print(n, 10, false); kernel_print("=", false); kernel_print(f->regs.R(n), 16, false);
+		if (n % 4 == 0) kernel_print(""); else kernel_print("  ", false);
+	}
+	kernel_print("ACC=", false); kernel_print(f->acc, 16, false);
+	kernel_print(" RV=", false); kernel_print(f->rv, 16);
+}
+
+sub backtrace(var fp: u32) {
+	kernel_print("backtrace:");
+	for (var depth: u32 = 0; depth < 16 and fp != 0; depth++) {
+		// TODO: sanity check: stop if fp leaves the kernel stack (a corrupted chain must not fault again)
+		var w: u32* = cast<u32*>(fp);
+		kernel_print("  ", false); kernel_print(w[3], 16);
+		fp = w[2];
+	}
+}
+
+inline sub __on_fault() {
+	var vector: u8 = dr::cpu::fault_vector();
+	var addr: u32 = dr::cpu::fault_address();
+	var ip: u32 = dr::cpu::fault_ip();
+	var f: TrapFrame* = current_trap_frame();
+
+	if (f->mode == 0) {
+		// TODO: log "process X killed: <fault> at <addr>", end it, schedule the next one
+		panic_begin("user fault, but no processes exist yet");
+	} else {
+		panic_begin(fault_name(vector));
+	}
+	kernel_print("address=", false); kernel_print(addr, 16, false);
+	kernel_print(" ip=", false); kernel_print(ip, 16);
+	dump_frame(f);
+	backtrace(f->fp);
+	halt_forever();
+}

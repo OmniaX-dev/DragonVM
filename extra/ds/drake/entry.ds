@@ -17,6 +17,8 @@ var pressedKey: u32 = 0;
 var boot_error: string = null;
 var drake_load_addr: u32 = 0;
 var drake_size: u32 = 0;
+var kernel_size: u32 = 0;
+var kernel_load_addr: u32 = 0;
 
 // load_kernel0's own errors (below dr::dfs's, which go from -1 to -14).
 const KernelNotAFile: i32 = -100;
@@ -170,7 +172,13 @@ sub execute_selected_entry() {
 				hlt
 			}
 		}
-		dr::drx::run(load_addr);
+		const argc: u32 = 2;
+		var argv: u8*[argc];
+		argv[0] = dr::malloc(11);
+		argv[1] = dr::malloc(11);
+		dr::utoa(cast<u32>(kernel_load_addr), argv[0]);
+		dr::utoa(cast<u32>(kernel_size), argv[1]);
+		dr::drx::run(load_addr, argc, argv);
 		low { hlt }
 	}
 }
@@ -271,6 +279,8 @@ sub load_kernel0(var part: dr::DPTPartitionBlock*, var out_load_addr: u32*) -> b
 		return false;
 	}
 	*out_load_addr = entry_addr;
+	kernel_size = info.size;
+	kernel_load_addr = cast<u32>(load_addr);
 	return true;
 }
 

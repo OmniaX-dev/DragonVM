@@ -1,0 +1,79 @@
+// expect-rv: 0
+// Faults in supervisor mode: with the fault vectors enabled, the kernel's own failing instructions
+// raise them (on the current stack, the saved mode 1) instead of stopping the machine.
+#include(check.ds)
+#import(<dragon-sdk>)
+
+var g_skip: u32 = 0;
+var g_faults: i32 = 0;
+var g_vector: u32 = 0;
+var g_fault_ip: u32 = 0;
+var g_fault_address: u32 = 0;
+var g_from_user: bool = true;
+var g_sp: u32 = 0;
+
+interrupt sub on_fault() {
+	var sp: u32;
+	low { mov $sp, SP }
+	g_sp = sp;
+	g_faults++;
+	g_vector = dr::cpu::fault_vector();
+	g_fault_ip = dr::cpu::fault_ip();
+	g_fault_address = dr::cpu::fault_address();
+	var frame: u32 = dr::cpu::trap_frame();
+	g_from_user = dr::cpu::trap_from_user(frame);
+	dr::cpu::set_trap_return_address(frame, g_fault_ip + g_skip);
+}
+
+sub fault_ok(var before: i32, var vector: u8, var sp_before: u32) -> bool {
+	// (the handler ran on the same stack, below the code that faulted)
+	return g_faults == before + 1 and g_vector == vector and not g_from_user and g_sp < sp_before
+		and sp_before - g_sp < 4096 and dr::cpu::is_supervisor();
+}
+
+sub main() -> i32 {
+	for (var v: u8 = 0; v <= dr::cpu::Faults.General; v++)
+		dr::set_interrupt_vector_entry(v, &on_fault);
+	var sp: u32;
+	low { mov $sp, SP }
+
+	var n: i32 = g_faults;
+	var r: u32 = 1;
+	g_skip = 6;
+	low {
+		mov R1, 0x00000005
+		div R1, 0x00000000
+	}
+	check(1, fault_ok(n, dr::cpu::Faults.DivisionByZero, sp));
+
+	n = g_faults;
+	g_skip = 1;
+	low { %low 0x0A }
+	check(2, fault_ok(n, dr::cpu::Faults.InvalidInstruction, sp) and g_fault_address == g_fault_ip);
+
+	// The BIOS's ROM is read-only (also for the kernel).
+	n = g_faults;
+	g_skip = 3;
+	low {
+		mov R1, 0x00000100
+		mov *R1, R2
+	}
+	check(3, fault_ok(n, dr::cpu::Faults.AccessViolation, sp) and g_fault_address == 0x100);
+
+	// The handler can also fix the cause and return to the instruction: the next run works.
+	n = g_faults;
+	g_skip = 0;
+	dr::set_interrupt_vector_entry(dr::cpu::Faults.DivisionByZero, interrupt sub() {
+		g_faults++;
+		// (rti restores the registers from the frame: the saved R2, word 24, is what counts)
+		*cast<u32*>(dr::cpu::trap_frame() + 4 * 24) = 4;
+	});
+	low {
+		mov R1, 0x00000014
+		mov R2, 0x00000000
+		div R1, R2
+		mov $r, ACC
+	}
+	check(4, g_faults == n + 1 and r == 5);
+	return result();
+}

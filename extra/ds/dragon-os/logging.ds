@@ -1,0 +1,7 @@
+#import(<dragon-sdk>)
+
+#include(syscall.ds)
+
+inline sub kernel_log(var str: string) {
+	kernel_print(str);
+}
