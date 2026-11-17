@@ -1,4 +1,5 @@
-#include(mem.ds)
+#include(hardware.ds)
+
 
 namespace dr::drx {
 	const Magic: u32 = 0x44525831;	// "DRX1"
@@ -97,17 +98,17 @@ namespace dr::drx {
 		var h: Header;
 		var r: i32 = read_header(file_bytes, file_size, &h);
 		if (r != Errors.NoError) return r;
-		outProgram->image = malloc(h.image_size == 0 ? 1 : h.image_size);
+		outProgram->image = bios_alloc(h.image_size == 0 ? 1 : h.image_size);
 		if (not outProgram->image)
 			return Errors.InvalidAllocation;
-		memcpy(outProgram->image, &file_bytes[h.header_size], h.image_size);
+		std::memcpy(outProgram->image, &file_bytes[h.header_size], h.image_size);
 		outProgram->image_size = h.image_size;
 		outProgram->entry = h.entry;
 		outProgram->id_hi = h.id_hi;
 		outProgram->id_lo = h.id_lo;
 		if (h.reloc_count == 0)
 			return Errors.NoError;
-		outProgram->relocations = malloc(h.reloc_count * 4);
+		outProgram->relocations = bios_alloc(h.reloc_count * 4);
 		if (not outProgram->relocations)
 			return Errors.InvalidAllocation;
 		for (var i: u32 = 0; i < h.reloc_count; i++)
@@ -126,9 +127,9 @@ namespace dr::drx {
 		if (not prog) return;
 		if (prog->image) {
 			notify_unloaded(cast<u32>(prog->image));
-			free(prog->image);
+			bios_free(prog->image);
 		}
-		if (prog->relocations) free(prog->relocations);
+		if (prog->relocations) bios_free(prog->relocations);
 		var empty: Program;
 		*prog = empty;
 	}

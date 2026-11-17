@@ -58,7 +58,7 @@ namespace proc {
 			return false;
 		as->map = cast<u8*>(map);
 		as->count = 0;
-		dr::memset(as->map, 0, dr::cpu::PermissionMapSize);                                     // all None
+		std::memset(as->map, 0, dr::cpu::PermissionMapSize);                                     // all None
 		return true;
 	}
 

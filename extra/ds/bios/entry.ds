@@ -24,7 +24,7 @@ sub main() {
 	var stack_size: u32 = dr::read_cmos(dr::CMOSRegisters.StackSize);
 	var heap_size: u32 = 4*1024*1024;
 	var heap_addr: u32 = dr::read_cmos(dr::CMOSRegisters.MemoryStart) + dr::read_cmos(dr::CMOSRegisters.MemorySize) - stack_size - heap_size;
-	// The system heap (dr::malloc): a kernel can replace it (dr::set_system_heap).
+	// The system heap (dr::bios_alloc): a kernel can replace it (dr::set_system_heap).
 	dr::set_system_heap(dr::Heap::create(cast<u8*>(heap_addr), heap_size));
 
 	var dpt_block: dr::DPTBlock;
@@ -93,8 +93,8 @@ sub __boot_init_part(var init_part: dr::DPTPartitionBlock*) -> i32 {
 	// The boot loader runs in supervisor mode, as the BIOS (and so does the kernel it loads).
 	const argc: u32 = 2;
 	var argv: u8*[argc];
-	argv[0] = dr::malloc(11);	// a u32 in decimal: up to 10 digits and the terminator
-	argv[1] = dr::malloc(11);
+	argv[0] = dr::bios_alloc(11);	// a u32 in decimal: up to 10 digits and the terminator
+	argv[1] = dr::bios_alloc(11);
 	std::utoa(cast<u32>(load_addr), argv[0]);
 	std::utoa(info.size, argv[1]);
 	dr::drx::run(entry_addr, argc, argv); // Bootloader should never return from main

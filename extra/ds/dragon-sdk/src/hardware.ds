@@ -1,4 +1,5 @@
 #include(dragon.ds)
+#include(int.ds)
 
 namespace dr {
 	struct VGADevice {
@@ -108,4 +109,20 @@ namespace dr {
 	inline sub random_get_next_int() -> i32 { return *cast<i32*>(dr::RandomRegisters.Int); }
 	sub random_get_next_float() -> f32 { low { mov RV, [$dr::RandomRegisters.Float] }; }
 	inline sub random_set_seed(var seed: u32) { *cast<u32*>(dr::RandomRegisters.Seed) = seed; }
+
+	// The system heap through the BIOS (int 0x20): CMOS HeapStart's dr::Heap (the BIOS's, or the
+	// kernel's after dr::set_system_heap). Null / false: no room / not the heap's. A kernel calls
+	// its heap directly where it can (int does nothing in supervisor mode while interrupts are off).
+	inline sub bios_alloc(var size: u32) -> void* {
+		var ptr: void* = null;
+		raise_interrupt(0x20, INT20_ALLOC_HEAP, size, cast<u32>(&ptr));
+		return ptr;
+	}
+
+	sub bios_free(var ptr: void*) -> bool {
+		raise_interrupt(0x20, INT20_FREE_HEAP, cast<u32>(ptr));
+		var rv: u32 = 0;
+		low { mov $rv, RV };
+		return rv != 0;
+	}
 }

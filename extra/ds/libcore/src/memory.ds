@@ -1,7 +1,7 @@
-// DScript SDK: memory and string helpers.
-#include(int.ds)
+// memory.ds - memcpy, memset, memcmp: plain loads and stores (no devices, no privileged
+// instructions), so they work in any mode (in user mode, on the memory the process may access).
 
-namespace dr {
+namespace std {
 	// Copies size bytes from src to dst, forward (as a byte loop would: dst may overlap src at or
 	// below it, and dst 1 - 3 bytes above src repeats the first bytes, as before). A word at a time
 	// (a dasm loop, ~7 instructions per 4 bytes; the machine takes unaligned words), the last 0 - 3
@@ -76,44 +76,5 @@ namespace dr {
 	            return cast<i32>(x[i]) - cast<i32>(y[i]);
 	    }
 	    return 0;
-	}
-
-	sub strlen(var s: string) -> u32 {
-	    var n: u32 = 0;
-	    while (s[n] != 0)
-	        n++;
-	    return n;
-	}
-
-	sub strcmp(var a: string, var b: string) -> i32 {
-	    while (*a != 0 and *a == *b) {
-	        a++;
-	        b++;
-	    }
-	    return cast<i32>(*a) - cast<i32>(*b);
-	}
-
-	sub strcpy(var dst: string, var src: string) -> string {
-	    var d: string = dst;
-	    while (*src != 0) {
-	        *d = *src;
-	        d++;
-	        src++;
-	    }
-	    *d = 0;
-	    return dst;
-	}
-
-	inline sub malloc(var size: u32) -> void* {
-		var ptr: void* = null;
-		raise_interrupt(0x20, INT20_ALLOC_HEAP, size, cast<u32>(&ptr));
-		return ptr;
-	}
-
-	sub free(var ptr: void*) -> bool {
-		raise_interrupt(0x20, INT20_FREE_HEAP, cast<u32>(ptr));
-		var rv: u32 = 0;
-		low { mov $rv, RV };
-		return rv != 0;
 	}
 }

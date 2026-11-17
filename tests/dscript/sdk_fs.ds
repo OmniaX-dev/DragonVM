@@ -28,7 +28,7 @@ sub count_visitor(var entry: dr::fs::Entry*, var context: void*) -> bool {
 }
 
 sub main() -> i32 {
-	g_disk = cast<u8*>(dr::malloc(DiskSize));
+	g_disk = cast<u8*>(dr::bios_alloc(DiskSize));
 	check(1, g_disk != null);
 	if (g_disk == null) return result();
 	var dev: dr::dfs::Device;
@@ -44,7 +44,7 @@ sub main() -> i32 {
 	check(5, disk.mount_device(&dev) and disk.is_mounted() and not disk.is_read_only());
 	check(6, not disk.mount_device(&dev) and disk.last_error() == dr::fs::AlreadyMounted);
 	var label: u8[17];
-	check(7, disk.label(label, 17) and dr::strcmp(label, "fstest") == 0 and disk.block_size() == 1024);
+	check(7, disk.label(label, 17) and std::strcmp(label, "fstest") == 0 and disk.block_size() == 1024);
 	var free0: u32 = disk.free_bytes();
 	check(8, disk.total_bytes() == DiskSize and free0 > 0 and free0 < DiskSize);
 
@@ -56,7 +56,7 @@ sub main() -> i32 {
 	var size: u32 = 0;
 	var text: u8* = disk.load("/hello.txt", &size);
 	check(14, text != null and size == 18 and text[18] == 0 and text[0] == 'H' and text[17] == 't');
-	dr::free(text);
+	dr::bios_free(text);
 	check(15, disk.load("/nope") == null and disk.last_error() == dr::dfs::NotFound);
 	check(16, disk.append_text("/hello.txt", "!!") and disk.size_of("/hello.txt") == 20);
 	var buffer: u8[64];
@@ -66,9 +66,9 @@ sub main() -> i32 {
 	// Lines.
 	var file: dr::fs::File;
 	check(20, disk.open("/hello.txt", dr::fs::OpenMode.Read, &file));
-	check(21, file.read_line(buffer, 64) == 5 and dr::strcmp(buffer, "Hello") == 0);
-	check(22, file.read_line(buffer, 64) == 6 and dr::strcmp(buffer, "Dragon") == 0);
-	check(23, file.read_line(buffer, 64) == 6 and dr::strcmp(buffer, "last!!") == 0);
+	check(21, file.read_line(buffer, 64) == 5 and std::strcmp(buffer, "Hello") == 0);
+	check(22, file.read_line(buffer, 64) == 6 and std::strcmp(buffer, "Dragon") == 0);
+	check(23, file.read_line(buffer, 64) == 6 and std::strcmp(buffer, "last!!") == 0);
 	check(24, file.read_line(buffer, 64) == -1 and file.eof() and file.last_error() == 0);
 	check(25, file.write("x", 1) == -1 and file.last_error() == dr::fs::NotWritable);
 	file.close();
@@ -107,8 +107,8 @@ sub main() -> i32 {
 	check(55, disk.open_dir("/a/b", &dir));
 	var seen: u32 = 0;
 	while (dir.next(&entry)) {
-		if (dr::strcmp(entry.name, "c") == 0 and entry.type == dr::fs::Type.Directory) seen = seen | 1;
-		if (dr::strcmp(entry.name, "copy.bin") == 0 and entry.type == dr::fs::Type.File and entry.size == 4) seen = seen | 2;
+		if (std::strcmp(entry.name, "c") == 0 and entry.type == dr::fs::Type.Directory) seen = seen | 1;
+		if (std::strcmp(entry.name, "copy.bin") == 0 and entry.type == dr::fs::Type.File and entry.size == 4) seen = seen | 2;
 		if (entry.name[0] == '.') seen = seen | 4;
 	}
 	check(56, seen == 3 and dir.last_error() == 0);
@@ -142,6 +142,6 @@ sub main() -> i32 {
 	check(77, disk.unmount() and disk.mount_device(&dev));
 	check(78, disk.remove_all("/") and disk.list("/", count_visitor, &total) == 0 and disk.free_bytes() == free0);
 	check(79, disk.unmount() and disk.unmount());
-	dr::free(g_disk);
+	dr::bios_free(g_disk);
 	return result();
 }

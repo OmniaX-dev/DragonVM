@@ -24,7 +24,7 @@ struct PageAllocator {
 		this->count = (end - base) >> PAGE_SHIFT;
 		this->_free = 0;
 		this->hint = 0;
-		dr::memset(storage, 0xFF, PageAllocator::bitmap_bytes(base, end));
+		std::memset(storage, 0xFF, PageAllocator::bitmap_bytes(base, end));
 	}
 
 	// The whole pages inside [addr, addr + size) become free (rounded inwards).

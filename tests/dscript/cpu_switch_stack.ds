@@ -27,12 +27,12 @@ sub kernel_main() {
 	check(20, h->add_region(cast<u8*>(g_boot_start), g_boot_end - g_boot_start));
 	var big: u8* = h->alloc(256 * 1024);
 	check(21, cast<u32>(big) >= g_boot_start and cast<u32>(big) < g_boot_end);
-	dr::memset(big, 0x77, 256 * 1024);		// (over the old frames: nothing uses them)
+	std::memset(big, 0x77, 256 * 1024);		// (over the old frames: nothing uses them)
 	check(22, h->check() and big[256 * 1024 - 1] == 0x77);
 
 	// Deep calls still work on the new stack.
 	var buff: u8[12];
-	check(23, dr::strcmp(std::utoa(12345, buff), "12345") == 0);
+	check(23, std::strcmp(std::utoa(12345, buff), "12345") == 0);
 
 	var rv: i32 = result();
 	low {

@@ -6,9 +6,9 @@ var g_argv: string* = null;
 sub copy_args(var heap: dr::Heap*, var argc: i32, var argv: string*) {
 	g_argv = cast<string*>(heap->alloc(argc * 4));
 	for (var i: i32 = 0; i < argc; i++) {
-		var n: u32 = dr::strlen(argv[i]) + 1;
+		var n: u32 = std::strlen(argv[i]) + 1;
 		g_argv[i] = cast<string>(heap->alloc(n));
-		dr::memcpy(g_argv[i], argv[i], n);
+		std::memcpy(g_argv[i], argv[i], n);
 	}
 	g_argc = argc;
 }

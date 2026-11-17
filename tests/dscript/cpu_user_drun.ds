@@ -10,11 +10,11 @@ sub main() -> i32 {
 	var r: i32 = dr::random_get_next_int();
 	if (r < 0)
 		return 2;
-	var p: u8* = dr::malloc(64);
+	var p: u8* = dr::bios_alloc(64);
 	if (not p)
 		return 3;
 	p[63] = 9;
-	dr::free(p);
+	dr::bios_free(p);
 	if (dr::cpu::is_supervisor())
 		return 4;
 	return 7;

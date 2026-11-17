@@ -95,7 +95,7 @@ sub expected(var a: u32, var b: u32) -> u32 {
 sub main() -> i32 {
 	// Register stores.
 	var buf: u8[16];
-	dr::memset(buf, 0, 16);
+	std::memset(buf, 0, 16);
 	var p: u8* = buf;
 	low {
 		mov R1, $p

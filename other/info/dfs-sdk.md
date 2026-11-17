@@ -184,7 +184,7 @@ That makes about 28 KiB, and DFS allocates nothing else. Each buffer has one job
 `buf_inode` for inode table blocks, `buf_ind` for pointer blocks, `buf_dir` for directory blocks, and so on. That is
 how a sub can read a directory block while `bmap` reads a pointer block, without the two overwriting each other.
 
-28 KiB is too big for the stack, so put the Volume on the heap (`dr::malloc`) or at a fixed address. One Volume is
+28 KiB is too big for the stack, so put the Volume on the heap (`dr::bios_alloc`) or at a fixed address. One Volume is
 one mounted partition. Two partitions at the same time need two Volumes.
 
 Two of the buffers are also **caches**. `buf_ind` keeps the last pointer block that `bmap` read, and `buf_ind2` the
@@ -246,7 +246,7 @@ things it holds `startAddress` (where the partition begins on the disk) and `siz
 ---
 
 ```
-	var vol: dr::dfs::Volume* = cast<dr::dfs::Volume*>(dr::malloc(sizeof(dr::dfs::Volume)));
+	var vol: dr::dfs::Volume* = cast<dr::dfs::Volume*>(dr::bios_alloc(sizeof(dr::dfs::Volume)));
 	if (not vol)
 		return dr::dfs::NoSpace;
 ```
@@ -256,9 +256,9 @@ everything it uses. If the heap is full, they return an error instead of crashin
 ---
 
 ```
-	defer dr::free(vol);
+	defer dr::bios_free(vol);
 ```
-`defer` runs `dr::free(vol)` whenever the sub returns, on every `return` below, so there is no leak whichever way the
+`defer` runs `dr::bios_free(vol)` whenever the sub returns, on every `return` below, so there is no leak whichever way the
 sub exits. If several defers apply, they run in reverse order: here, `unmount` (below) runs first, then `free`.
 
 ---
@@ -499,8 +499,8 @@ var part: dr::dfs::DiskPartition;
 var dev: dr::dfs::Device;
 dr::dfs::dpt_partition(&part, &dpt.entries[2]);         // the third partition
 dr::dfs::disk_device(&dev, &part);
-var vol: dr::dfs::Volume* = cast<dr::dfs::Volume*>(dr::malloc(sizeof(dr::dfs::Volume)));
-defer dr::free(vol);
+var vol: dr::dfs::Volume* = cast<dr::dfs::Volume*>(dr::bios_alloc(sizeof(dr::dfs::Volume)));
+defer dr::bios_free(vol);
 var r: i32 = dr::dfs::mount(vol, &dev, false);          // false: read-write
 if (r < 0)
 	return r;
@@ -570,7 +570,7 @@ disk.info("/etc/motd", &info);                   // type, size, links, permissio
 disk.write_text("/etc/motd", "Welcome\n");       // creates or replaces
 disk.append_text("/var/log", "booted\n");        // adds at the end (creates it)
 var size: u32 = 0;
-var text: u8* = disk.load("/etc/motd", &size);   // dr::malloc'd, 0 terminated: dr::free it
+var text: u8* = disk.load("/etc/motd", &size);   // dr::bios_alloc'd, 0 terminated: dr::bios_free it
 disk.read_all("/etc/motd", buffer, sizeof(buffer));     // into your buffer: the bytes read
 
 // Directories and names
@@ -624,7 +624,7 @@ There are three shortcuts: `ReadWrite`, `NewFile` (Write | Create | Truncate) an
 ### How it maps onto `dr::dfs`
 
 - `FileSystem.mount(n)` reads the DPT, then does what section 4 does by hand: `dpt_partition`, `disk_device`,
-  `dr::malloc` of a Volume, and `dr::dfs::mount`. `unmount` is `dr::dfs::unmount` + `dr::free`.
+  `dr::bios_alloc` of a Volume, and `dr::dfs::mount`. `unmount` is `dr::dfs::unmount` + `dr::bios_free`.
 - The path subs call the matching `dr::dfs` sub (`make_dir` → `mkdir`, `remove` → `unlink` or `rmdir`, ...) and
   turn the `i32` into a bool + `last_error`.
 - A `File` is only an inode number, a position and the open mode. **Every call reads the inode again** (one inode

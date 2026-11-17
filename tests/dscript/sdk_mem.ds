@@ -5,12 +5,12 @@
 sub main() -> i32 {
     var a: u8[16];
     var b: u8[16];
-    dr::memset(a, 'z', 16);
+    std::memset(a, 'z', 16);
     check(1, a[0] == 'z' && a[15] == 'z');
-    dr::strcpy(a, "dragon");
-    check(2, dr::strlen(a) == 6 && dr::strcmp(a, "dragon") == 0);
-    check(3, dr::strcmp("abc", "abd") < 0 && dr::strcmp("b", "a") > 0);
-    dr::memcpy(b, a, 7);
-    check(4, dr::memcmp(a, b, 7) == 0 && b[6] == 0);
+    std::strcpy(a, "dragon");
+    check(2, std::strlen(a) == 6 && std::strcmp(a, "dragon") == 0);
+    check(3, std::strcmp("abc", "abd") < 0 && std::strcmp("b", "a") > 0);
+    std::memcpy(b, a, 7);
+    check(4, std::memcmp(a, b, 7) == 0 && b[6] == 0);
     return result();
 }

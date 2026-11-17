@@ -232,10 +232,10 @@ heap->free(p);                                         // false: not the heap's,
   `region_count()`, `region(i)`, `dr::Heap::valid(h)`.
 - In supervisor mode each operation runs with interrupts disabled (handlers may allocate); in user
   mode they don't (the interrupt flag is privileged there).
-- `dr::malloc` / `dr::free` use the system heap through the BIOS (int 0x20):
+- `dr::bios_alloc` / `dr::bios_free` use the system heap through the BIOS (int 0x20):
   `dr::system_heap()`, its address in CMOS HeapStart. The BIOS makes it (4 MiB below the boot
   stack); a kernel can make its own and `dr::set_system_heap(heap)` (supervisor mode): from then
-  on `dr::malloc` everywhere serves the kernel's heap. A kernel calls its heap directly where it
+  on `dr::bios_alloc` everywhere serves the kernel's heap. A kernel calls its heap directly where it
   can: no interrupt (and `int` does nothing in supervisor mode while interrupts are disabled: in
   an atomic block, or before the kernel enables them).
 
@@ -860,9 +860,10 @@ sub main() -> i32 { return Gfx::width(); }
 DragonVM's own libraries (`extra/ds/<name>/src`, built by `ds_env` into `<name>.dlib`, copied to
 `extra/ds/<name>/lib`):
 - `libcore`: freestanding utilities, in `std`: `itoa` / `utoa` / `ftoa`, `atou` / `atoi` / `atof`,
-  `format_size`, `BitField32` / `16`, strings, `VaList` and `format`, `U64` / `I64`, `std::math`,
-  `RingBuffer`, the calendar (`std::time::DateTime`), `std::data::ASCII` and `KeyCodes`. No
-  hardware, no system calls, no `__assert_fail`: any program can link it.
+  `format_size`, `BitField32` / `16`, `memcpy` / `memset` / `memcmp`, strings, `VaList` and
+  `format`, `U64` / `I64`, `std::math`, `RingBuffer`, the calendar (`std::time::DateTime`),
+  `std::data::ASCII` and `KeyCodes`. No hardware, no system calls, no `__assert_fail`: any program
+  can link it.
 - `dragon-sdk`: the hardware and the BIOS services, in `dr`, for programs in supervisor mode (the
   BIOS, Drake, the kernels). Imports libcore.
 - `stdlib`: the runtime of DragonOS programs (user mode): `std::syscall`, `std::rand`, the clock

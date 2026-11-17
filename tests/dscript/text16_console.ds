@@ -55,7 +55,7 @@ sub bgOf(var c: u32) -> u8 { return cast<u8>((c >> 8) & 0xFF); }
 
 // Row y of the screen is text, then spaces.
 sub row_is(var con: Con*, var y: u32, var text: string) -> bool {
-	var n: u32 = dr::strlen(text);
+	var n: u32 = std::strlen(text);
 	for (var x: u32 = 0; x < view(con)->cols; x++) {
 		var want: u8 = x < n ? text[x] : ' ';
 		if (ch(cell(con, x, y)) != want)
@@ -243,7 +243,7 @@ sub main() -> i32 {
 	var ok: bool = true;
 	for (var y: u32 = 0; y < rows - 1; y++) {
 		var want: u8[16] = "line ";
-		dr::strcpy(&want[5], std::itoa(cast<i32>(50 - (rows - 1) + y), buff));
+		std::strcpy(&want[5], std::itoa(cast<i32>(50 - (rows - 1) + y), buff));
 		if (not row_is(&con, y, want))
 			ok = false;
 	}

@@ -18,10 +18,10 @@ sub pattern(var buffer: u8*, var size: u32, var seed: u32) {
 sub main() -> i32 {
 	var dpt: dr::DPTBlock;
 	check(1, dr::dpt_load_block(&dpt) and dpt.partitionCount >= 2);
-	var vol: dr::dfs::Volume* = cast<dr::dfs::Volume*>(dr::malloc(sizeof(dr::dfs::Volume)));
+	var vol: dr::dfs::Volume* = cast<dr::dfs::Volume*>(dr::bios_alloc(sizeof(dr::dfs::Volume)));
 	const BigSize: u32 = 300 * 1024;			// 1 KiB blocks: into the double indirect block
-	var a: u8* = cast<u8*>(dr::malloc(BigSize));
-	var b: u8* = cast<u8*>(dr::malloc(BigSize));
+	var a: u8* = cast<u8*>(dr::bios_alloc(BigSize));
+	var b: u8* = cast<u8*>(dr::bios_alloc(BigSize));
 	check(2, vol != null and a != null and b != null);
 	if (g_failed != 0) return g_failed;
 

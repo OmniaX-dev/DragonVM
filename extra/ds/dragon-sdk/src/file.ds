@@ -18,9 +18,9 @@
 //     }
 //
 //     var size: u32 = 0;
-//     var text: u8* = disk.load("/home/player/name.txt", &size);   // malloc'd, 0 terminated
+//     var text: u8* = disk.load("/home/player/name.txt", &size);   // dr::bios_alloc'd, 0 terminated
 //     ...
-//     dr::free(text);
+//     dr::bios_free(text);
 //
 // Conventions:
 //   - Paths are absolute ("/a/b/c"); repeated '/' are fine. A name is 1 to 56 bytes, without
@@ -33,7 +33,6 @@
 //   - Nothing is cached or buffered here: every call reaches the disk when it returns.
 //   - Not thread or interrupt safe: don't use the same FileSystem from an interrupt handler.
 #include(dfs.ds)
-#include(mem.ds)
 
 namespace dr::fs {
 	const MaxPath: u32 = 256;			// the longest path dr::fs builds itself, with its 0
@@ -43,7 +42,7 @@ namespace dr::fs {
 	const NotMounted: i32 = -20;		// the FileSystem isn't mounted
 	const AlreadyMounted: i32 = -21;	// mount / format on a mounted FileSystem
 	const NoPartition: i32 = -22;		// no DPT, or no partition with that number
-	const NoMemory: i32 = -23;			// dr::malloc failed
+	const NoMemory: i32 = -23;			// dr::bios_alloc failed
 	const NotOpen: i32 = -24;			// a closed File / Dir (or its FileSystem was unmounted)
 	const NotReadable: i32 = -25;		// reading a File opened without OpenMode.Read
 	const NotWritable: i32 = -26;		// writing a File opened without OpenMode.Write
@@ -208,7 +207,7 @@ namespace dr::fs {
 			if (this->m_vol == null)
 				return true;
 			var r: i32 = dr::dfs::unmount(this->m_vol);
-			dr::free(this->m_vol);
+			dr::bios_free(this->m_vol);
 			this->m_vol = null;
 			this->m_generation++;
 			return this->check(r);
@@ -246,12 +245,12 @@ namespace dr::fs {
 				if ((cast<u32>(1) << log2) != block_size)
 					return this->fail(dr::dfs::Invalid);
 			}
-			var vol: dr::dfs::Volume* = cast<dr::dfs::Volume*>(dr::malloc(sizeof(dr::dfs::Volume)));
+			var vol: dr::dfs::Volume* = cast<dr::dfs::Volume*>(dr::bios_alloc(sizeof(dr::dfs::Volume)));
 			if (vol == null)
 				return this->fail(NoMemory);
 			var params: dr::dfs::MkfsParams = { size, log2, 0, label, null };
 			var r: i32 = dr::dfs::mkfs(vol, dev, &params);
-			dr::free(vol);
+			dr::bios_free(vol);
 			return this->check(r);
 		}
 
@@ -330,8 +329,8 @@ namespace dr::fs {
 			return this->count(dr::dfs::read_file(this->m_vol, path, buffer, capacity));
 		}
 
-		// Reads the whole file into new memory (dr::malloc, one byte more, set to 0: text files
-		// are ready to use as strings). Free it with dr::free. Null on errors; out_size gets the
+		// Reads the whole file into new memory (dr::bios_alloc, one byte more, set to 0: text files
+		// are ready to use as strings). Free it with dr::bios_free. Null on errors; out_size gets the
 		// size (it may be null).
 		sub load(var path: string, var out_size: u32* = null) -> u8* {
 			var node: dr::dfs::Inode;
@@ -341,14 +340,14 @@ namespace dr::fs {
 				this->fail(dr::dfs::IsDir);
 				return null;
 			}
-			var data: u8* = cast<u8*>(dr::malloc(node.size + 1));
+			var data: u8* = cast<u8*>(dr::bios_alloc(node.size + 1));
 			if (data == null) {
 				this->fail(NoMemory);
 				return null;
 			}
 			var r: i32 = dr::dfs::inode_read(this->m_vol, &node, 0, data, node.size);
 			if (r < 0) {
-				dr::free(data);
+				dr::bios_free(data);
 				this->fail(r);
 				return null;
 			}
@@ -497,10 +496,10 @@ namespace dr::fs {
 			if (not this->open(to, OpenMode.NewFile, &dst))
 				return false;
 			defer dst.close();
-			var chunk: u8* = cast<u8*>(dr::malloc(4096));
+			var chunk: u8* = cast<u8*>(dr::bios_alloc(4096));
 			if (chunk == null)
 				return this->fail(NoMemory);
-			defer dr::free(chunk);
+			defer dr::bios_free(chunk);
 			while (true) {
 				var n: i32 = src.read(chunk, 4096);
 				if (n < 0)
@@ -632,12 +631,12 @@ namespace dr::fs {
 		}
 
 		priv sub open_volume(var read_only: bool) -> bool {
-			var vol: dr::dfs::Volume* = cast<dr::dfs::Volume*>(dr::malloc(sizeof(dr::dfs::Volume)));
+			var vol: dr::dfs::Volume* = cast<dr::dfs::Volume*>(dr::bios_alloc(sizeof(dr::dfs::Volume)));
 			if (vol == null)
 				return this->fail(NoMemory);
 			var r: i32 = dr::dfs::mount(vol, &this->m_dev, read_only);
 			if (r < 0) {
-				dr::free(vol);
+				dr::bios_free(vol);
 				return this->fail(r);
 			}
 			this->m_vol = vol;

@@ -21,7 +21,6 @@
 // the heap the code it interrupted is using); in user mode (where the interrupt flag is
 // privileged) they don't: a user program has no interrupt handlers of its own.
 #include(cpu.ds)
-#include(mem.ds)
 
 namespace dr {
 	const HeapMaxRegions: u32 = 16;
@@ -108,7 +107,7 @@ namespace dr {
 		sub alloc_zeroed(var size: u32) -> void* {
 			var p: void* = this->alloc(size);
 			if (p != null)
-				memset(p, 0, size);
+				std::memset(p, 0, size);
 			return p;
 		}
 
@@ -148,7 +147,7 @@ namespace dr {
 			var q: void* = this->alloc(size);
 			if (q == null)
 				return null;
-			memcpy(q, p, old < size ? old : size);
+			std::memcpy(q, p, old < size ? old : size);
 			this->free(p);
 			return q;
 		}
@@ -356,11 +355,11 @@ namespace dr {
 		}
 	};
 
-	// The system heap: the one dr::malloc and dr::free use (through the BIOS's int 0x20), its
+	// The system heap: the one dr::bios_alloc and dr::bios_free use (through the BIOS's int 0x20), its
 	// header's address in the CMOS (HeapStart; HeapEnd: the end of its first region). The BIOS
 	// makes one (4 MiB under the stack, at the end of the RAM); a kernel can make its own and
-	// make it the system heap: from then on the BIOS's malloc serves the kernel's heap, and
-	// programs that use dr::malloc need no changes. null if there is none.
+	// make it the system heap: from then on dr::bios_alloc serves the kernel's heap, and
+	// programs that use dr::bios_alloc need no changes. null if there is none.
 	sub system_heap() -> Heap* {
 		var h: Heap* = cast<Heap*>(read_cmos(CMOSRegisters.HeapStart));
 		if (not Heap::valid(h))

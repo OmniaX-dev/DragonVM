@@ -158,7 +158,7 @@ sub main() -> i32 {
 	g_map = cast<u8*>(page(MAP));
 
 	// The helpers.
-	dr::memset(g_map, 0, dr::cpu::PermissionMapSize);
+	std::memset(g_map, 0, dr::cpu::PermissionMapSize);
 	dr::cpu::set_page_permissions(g_map, 0x5000, 3 * 4096 + 1, dr::cpu::Permissions.Write);	// pages 5..8
 	expect(1, dr::cpu::page_permissions(g_map, 0x4FFF) == 0 and dr::cpu::page_permissions(g_map, 0x5000) == 2
 		and dr::cpu::page_permissions(g_map, 0x8FFF) == 2 and dr::cpu::page_permissions(g_map, 0x9000) == 0);

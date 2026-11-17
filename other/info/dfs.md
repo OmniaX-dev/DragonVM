@@ -205,7 +205,7 @@ var part: dr::dfs::DiskPartition;
 var dev: dr::dfs::Device;
 dr::dfs::dpt_partition(&part, &dpt.entries[0]);     // a DPT entry on the boot disk
 dr::dfs::disk_device(&dev, &part);                  // reads and writes through the BIOS (int 0x20)
-var vol: dr::dfs::Volume* = cast<dr::dfs::Volume*>(dr::malloc(sizeof(dr::dfs::Volume)));   // ~28 KiB
+var vol: dr::dfs::Volume* = cast<dr::dfs::Volume*>(dr::bios_alloc(sizeof(dr::dfs::Volume)));   // ~28 KiB
 dr::dfs::mount(vol, &dev, false);
 dr::dfs::write_file(vol, "/etc/motd", "hello\n", 6);
 var n: i32 = dr::dfs::read_file(vol, "/etc/motd", buffer, size);

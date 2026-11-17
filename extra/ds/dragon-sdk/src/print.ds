@@ -1,6 +1,5 @@
 #include(dragon.ds)
 #include(int.ds)
-#include(mem.ds)
 
 namespace dr {
 	struct TextSingle {
@@ -191,8 +190,8 @@ namespace dr {
 			this->m_screen_y = *cast<u32*>(CMOSRegisters.ScreenRows);
 			this->m_screenBufferSize = this->m_screen_x * this->m_screen_y * 4;
 			if (this->m_screenBuffer)
-				free(this->m_screenBuffer);
-			this->m_screenBuffer = malloc(this->m_screenBufferSize);
+				bios_free(this->m_screenBuffer);
+			this->m_screenBuffer = bios_alloc(this->m_screenBufferSize);
 			if (not this->m_screenBuffer)
 			{
 				this->set_error(Errors.ScreenBufferAllocFail);
@@ -206,7 +205,7 @@ namespace dr {
 		}
 		sub destroy() {
 			if (this->m_screenBuffer)
-				free(this->m_screenBuffer);
+				bios_free(this->m_screenBuffer);
 			this->m_screenBuffer = null;
 			this->set_error(Errors.NoError);
 			var device = vga_get_device();

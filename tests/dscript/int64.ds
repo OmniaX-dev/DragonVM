@@ -3016,11 +3016,11 @@ sub main() -> i32 {
 		var n: u32 = i / 4;
 		id = 500000 + cast<i32>(n) * 2;
 		if (Tx[i] == 0) {
-			expect(id, dr::strcmp(x.set(Tx[i + 2], Tx[i + 3])->str(buf, Tx[i + 1]), TxS[n]) == 0);
+			expect(id, std::strcmp(x.set(Tx[i + 2], Tx[i + 3])->str(buf, Tx[i + 1]), TxS[n]) == 0);
 			expect(id + 1, o.parse(TxS[n], Tx[i + 1]) and o.eq(&x));
 		}
 		else {
-			expect(id, dr::strcmp(y.set(Tx[i + 2], Tx[i + 3])->str(buf, Tx[i + 1]), TxS[n]) == 0);
+			expect(id, std::strcmp(y.set(Tx[i + 2], Tx[i + 3])->str(buf, Tx[i + 1]), TxS[n]) == 0);
 			expect(id + 1, p.parse(TxS[n], Tx[i + 1]) and p.eq(&y));
 		}
 	}

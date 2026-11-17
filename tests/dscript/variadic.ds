@@ -58,14 +58,14 @@ struct Acc {
 };
 
 sub fmt_is(var id: i32, var got: string, var expected: string) {
-	if (dr::strcmp(got, expected) != 0) {
+	if (std::strcmp(got, expected) != 0) {
 		debug_print("variadic: got '");
 		debug_print(got);
 		debug_print("', expected '");
 		debug_print(expected);
 		debug_print("'\n");
 	}
-	check(id, dr::strcmp(got, expected) == 0);
+	check(id, std::strcmp(got, expected) == 0);
 }
 
 // A plain ... formatter: % specs only know what the format says.

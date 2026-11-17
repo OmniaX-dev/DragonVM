@@ -20,8 +20,8 @@ sub main() -> i32 {
 	var c: u8* = h->alloc(1);
 	check(10, a != null and b != null and c != null and cast<u32>(a) % 8 == 0 and cast<u32>(b) % 8 == 0);
 	check(11, b >= a + 10 and c >= b + 100 and h->block_size(a) >= 10 and h->block_size(b) >= 100);
-	dr::memset(a, 0xAA, 10);
-	dr::memset(b, 0xBB, 100);
+	std::memset(a, 0xAA, 10);
+	std::memset(b, 0xBB, 100);
 	check(12, a[9] == 0xAA and b[0] == 0xBB and h->check());
 	check(13, h->free(b) and not h->free(b) and not h->free(b + 4) and not h->free(cast<void*>(0x1000)));
 	var b2: u8* = h->alloc(64);
@@ -39,7 +39,7 @@ sub main() -> i32 {
 	// free block after it), grow by moving.
 	var h3: dr::Heap* = dr::Heap::create(&third[0], 8 * 1024);
 	var r: u8* = h3->alloc(200);
-	dr::memset(r, 0x5A, 200);
+	std::memset(r, 0x5A, 200);
 	check(30, h3->realloc(r, 50) == r and h3->block_size(r) < 200);
 	check(31, h3->realloc(r, 400) == r and r[49] == 0x5A and h3->check());
 	var blocker: u8* = h3->alloc(8);		// right after r: r can't grow in place now

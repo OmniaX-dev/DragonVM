@@ -1,5 +1,4 @@
 #include(dragon.ds)
-#include(mem.ds)
 
 namespace dr {
 	struct DPTBlock {
@@ -61,7 +60,7 @@ namespace dr {
 		raise_interrupt(0x20, INT20_LOAD_FROM_DDD_BLOCKING, cast<u32>(&ddd));
 		if (outBlock->ID != DPTStructure.ID or outBlock->partitionCount > dr::DPTStructure.MaxPartitions)
 		{
-			memset(outBlock, 0, sizeof(DPTBlock));
+			std::memset(outBlock, 0, sizeof(DPTBlock));
 			return false;
 		}
 		return true;

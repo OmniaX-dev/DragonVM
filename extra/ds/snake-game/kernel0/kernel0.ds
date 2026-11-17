@@ -64,15 +64,15 @@ struct SnakeGame {
 		this->m_board_w = (console->get_console_width() - this->m_offset_x - 1) / 2;
 		this->m_board_h = console->get_console_height() - this->m_offset_y - 1;
 		this->m_capacity = this->m_board_w * this->m_board_h;
-		this->m_board = dr::malloc(this->m_capacity);
+		this->m_board = dr::bios_alloc(this->m_capacity);
 		if (not this->m_board) return;
-		dr::memset(this->m_board, Cell.Empty, this->m_capacity);
-		this->m_body = dr::malloc(this->m_capacity * sizeof(i32));
+		std::memset(this->m_board, Cell.Empty, this->m_capacity);
+		this->m_body = dr::bios_alloc(this->m_capacity * sizeof(i32));
 		if (not this->m_body) return;
 		this->m_console->clear(bgcol);
 		this->m_backgroundColor = bgcol;
 
-		this->m_horizontalLine = dr::malloc((this->m_board_w * 2) + 1);
+		this->m_horizontalLine = dr::bios_alloc((this->m_board_w * 2) + 1);
 		if (not this->m_horizontalLine) return;
 		for (var i: u16 = 0; i < this->m_board_w * 2; i++)
 			this->m_horizontalLine[i] = std::data::ASCII.BoxDoubleHorizontal;

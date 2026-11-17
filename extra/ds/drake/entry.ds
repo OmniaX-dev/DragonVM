@@ -59,7 +59,7 @@ sub main(var argc: i32, var argv: u8**) {
 	dr::set_interrupt_vector_entry(dr::HardwareInterrupts.VSync, &on_draw);
 
 	var screenWidth: u16 = console.get_console_width();
-	horizontalLine = dr::malloc(screenWidth - 1);		// between the two corners
+	horizontalLine = dr::bios_alloc(screenWidth - 1);		// between the two corners
 	halt_on_condition(not horizontalLine, "Allocation for <horizontalLine> failed.");
 	for (var i: u16 = 0; i < screenWidth - 2; i++)
 		horizontalLine[i] = std::data::ASCII.BoxHorizontal;
@@ -180,8 +180,8 @@ sub execute_selected_entry() {
 		}
 		const argc: u32 = 2;
 		var argv: u8*[argc];
-		argv[0] = dr::malloc(11);
-		argv[1] = dr::malloc(11);
+		argv[0] = dr::bios_alloc(11);
+		argv[1] = dr::bios_alloc(11);
 		std::utoa(cast<u32>(kernel_load_addr), argv[0]);
 		std::utoa(cast<u32>(kernel_size), argv[1]);
 		dr::drx::run(load_addr, argc, argv);
@@ -291,10 +291,10 @@ sub load_kernel0(var part: dr::DPTPartitionBlock*, var out_load_addr: u32*) -> b
 }
 
 sub load_kernel0_dfs_fixed(var part: dr::DPTPartitionBlock*) -> i32 {
-	var vol: dr::dfs::Volume* = cast<dr::dfs::Volume*>(dr::malloc(sizeof(dr::dfs::Volume)));
+	var vol: dr::dfs::Volume* = cast<dr::dfs::Volume*>(dr::bios_alloc(sizeof(dr::dfs::Volume)));
 	if (not vol)
 		return dr::dfs::NoSpace;
-	defer dr::free(vol);
+	defer dr::bios_free(vol);
 	var disk: dr::dfs::DiskPartition;
 	var dev: dr::dfs::Device;
 	dr::dfs::dpt_partition(&disk, part);
@@ -350,7 +350,7 @@ sub get_bootable_partitions(var dpt_block: dr::DPTBlock*, var outEntries: dr::DP
 				fs.unmount();
 			}
 			if (bootPartsLbl[j - 1][0] == 0)
-				dr::memcpy(bootPartsLbl[j - 1], dpt_block->entries[i].label, 64);
+				std::memcpy(bootPartsLbl[j - 1], dpt_block->entries[i].label, 64);
 		}
 	}
 	boot_part_count = j;

@@ -62,7 +62,7 @@ namespace dr::cpu {
 		}
 		if (page + 3 <= last) {
 			var bytes: u32 = (last + 1 - page) / 4;
-			memset(&map[page / 4], permissions * 0x55, bytes);
+			std::memset(&map[page / 4], permissions * 0x55, bytes);
 			page += bytes * 4;
 		}
 		while (page <= last) {

@@ -19,7 +19,7 @@ sub expect(var id: i32, var ok: bool) {
 sub text_is(var d: std::time::DateTime*, var fmt: string, var expected: string) -> bool {
 	var buff: u8[48];
 	d->setFormat(fmt)->toString(buff, 48);
-	var ok: bool = dr::strcmp(buff, expected) == 0;
+	var ok: bool = std::strcmp(buff, expected) == 0;
 	if (not ok) {
 		debug_print(buff);
 		debug_print(" != ");
