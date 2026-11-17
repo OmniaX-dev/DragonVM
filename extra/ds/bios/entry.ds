@@ -38,7 +38,7 @@ sub main() {
 	{
 		debug_print("Failed to boot init partition: ");
 		var buff: u8[10];
-		debug_print(dr::itoa(r, buff));
+		debug_print(std::itoa(r, buff));
 		low { hlt }
 	} //TODO: Error
 }
@@ -90,8 +90,8 @@ sub __boot_init_part(var init_part: dr::DPTPartitionBlock*) -> i32 {
 	var argv: u8*[argc];
 	argv[0] = dr::malloc(11);	// a u32 in decimal: up to 10 digits and the terminator
 	argv[1] = dr::malloc(11);
-	dr::utoa(cast<u32>(load_addr), argv[0]);
-	dr::utoa(info.size, argv[1]);
+	std::utoa(cast<u32>(load_addr), argv[0]);
+	std::utoa(info.size, argv[1]);
 	dr::drx::run(entry_addr, argc, argv); // Bootloader should never return from main
 	low { hlt };
 	return 0; // Unreacheable
@@ -143,13 +143,12 @@ sub __print_machine_info(var reserved_ram: u32) {
 			var memSize: u32 = *cast<u32*>(dr::CMOSRegisters.MemorySize);
 			var mem: u32 = memSize - reserved_ram;
 			var buff: u8[10];
-			dr::format_size(mem, buff, true, 2);
+			std::format_size(mem, buff, true, 2);
 			dr::TextSingle::print(buff);
 			dr::TextSingle::print("/");
-			dr::format_size(memSize, buff);
+			std::format_size(memSize, buff);
 			dr::TextSingle::print(buff);
 		}
 		dr::TextSingle::new_line();
 	}
-	// TODO: Add back the info
 }

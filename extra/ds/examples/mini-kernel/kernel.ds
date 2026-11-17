@@ -29,6 +29,7 @@
 // dr::drx::load), the kernel trusts the pointers tasks pass it (a real one checks they are the
 // task's memory), and output goes to the host (debug_print).
 #import(<dragon-sdk>)
+#import(<stdlib>)
 
 const SYS_PRINT: u8 = 0x40;				// R9: a string
 const SYS_EXIT: u8 = 0x41;
@@ -210,7 +211,7 @@ interrupt sub on_exit() {
 interrupt sub on_fault() {
 	var buff: u8[12];
 	end_current(" killed: access violation at 0x");
-	debug_print(dr::utoa(dr::cpu::fault_address(), buff, 16));
+	debug_print(std::utoa(dr::cpu::fault_address(), buff, 16));
 	debug_print("\n");
 	killed++;
 	var t: u32 = next_task();
@@ -261,7 +262,7 @@ sub main() -> i32 {
 
 	// 5. A timer interrupt every millisecond, then the first task. (Interrupts are still off here:
 	//    the tasks' frames turn them on, with their FL.)
-	dr::time::set_interrupt_interval(1);
+	dr::set_interrupt_interval(1);
 	var first: u32 = prepare(0);
 	switch_kernel_stack();
 	low {

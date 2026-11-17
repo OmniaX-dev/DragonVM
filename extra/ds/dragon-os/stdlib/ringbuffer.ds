@@ -18,7 +18,7 @@
 // buffer without disabling interrupts: push only writes head (after the element is copied),
 // pop only writes tail (after the element is read). push_overwrite and clear write both, so
 // they are not safe in that setup.
-namespace dr {
+namespace std {
 	struct RingBuffer {
 	    priv var data: u8*;
 	    priv var elem_size: u32;

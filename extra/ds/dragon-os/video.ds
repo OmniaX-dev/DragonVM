@@ -1,4 +1,5 @@
 #import(<dragon-sdk>)
+#import(<stdlib>)
 
 sub init_video() {
 	dr::vga_enable_double_buffering(false);
@@ -21,10 +22,10 @@ sub kernel_print(var str: string, var nl: bool = true) {
 
 inline sub kernel_print(var i: i32, var base: u8 = 10, var nl: bool = true) {
 	var buff: u8[12];
-	kernel_print(dr::itoa(i, buff, base), nl);
+	kernel_print(std::itoa(i, buff, base), nl);
 }
 
 inline sub kernel_print(var i: u32, var base: u8 = 10, var nl: bool = true) {
 	var buff: u8[12];
-	kernel_print(dr::utoa(i, buff, base), nl);
+	kernel_print(std::utoa(i, buff, base), nl);
 }

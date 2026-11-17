@@ -1,9 +1,10 @@
 #import(<dragon-sdk>)
+#import(<stdlib>)
 
 #define(KEY_BUFF_SIZE = 128)
 
 var keyBuff: u32[KEY_BUFF_SIZE];
-var keyRingBuff: dr::RingBuffer;
+var keyRingBuff: std::RingBuffer;
 var pressedKey: u32 = 0;
 
 sub main() {
@@ -69,7 +70,7 @@ struct SnakeGame {
 		this->m_horizontalLine = dr::malloc((this->m_board_w * 2) + 1);
 		if (not this->m_horizontalLine) return;
 		for (var i: u16 = 0; i < this->m_board_w * 2; i++)
-			this->m_horizontalLine[i] = dr::ASCII.BoxDoubleHorizontal;
+			this->m_horizontalLine[i] = std::data::ASCII.BoxDoubleHorizontal;
 		this->m_horizontalLine[this->m_board_w * 2] = '\0';
 		this->draw_border();
 
@@ -77,7 +78,7 @@ struct SnakeGame {
 		this->m_tail_index = 0;
 		this->m_body[0] = (this->m_board_h / 2) * this->m_board_w + this->m_board_w / 2;
 		this->m_board[this->m_body[0]] = Cell.Snake;
-		this->draw_cell(this->m_body[0], dr::ASCII.FullBlock, dr::DefaultPaletteText16.Yellow);
+		this->draw_cell(this->m_body[0], std::data::ASCII.FullBlock, dr::DefaultPaletteText16.Yellow);
 		this->m_growth = 3;
 		this->place_food();
 
@@ -85,10 +86,10 @@ struct SnakeGame {
 	}
 	sub mainLoop() {
 		while(true) {
-			if (dr::time::millis() - this->m_lastTime < this->m_tick_delay)
+			if (dr::time_get_millis() - this->m_lastTime < this->m_tick_delay)
 				continue;
 			this->draw_top_bar();
-			this->m_lastTime = dr::time::millis();
+			this->m_lastTime = dr::time_get_millis();
 			if (!this->read_input())
 				break;
 			if (!this->game_tick())
@@ -134,23 +135,23 @@ struct SnakeGame {
 		var top: u16 = this->m_offset_y - 1;
 		var bottom: u16 = this->m_offset_y + this->m_board_h;
 		this->m_console->store_colors()->bg(dr::DefaultPaletteText16.DarkGreen)->fg(dr::DefaultPaletteText16.Lime);
-		this->m_console->xy(left, top)->print(dr::ASCII.BoxDoubleDownRight)->print(this->m_horizontalLine)->print(dr::ASCII.BoxDoubleDownLeft);
+		this->m_console->xy(left, top)->print(std::data::ASCII.BoxDoubleDownRight)->print(this->m_horizontalLine)->print(std::data::ASCII.BoxDoubleDownLeft);
 		for (var y: u16 = top + 1; y < bottom; y++)
 		{
-			this->m_console->xy(left, y)->print(dr::ASCII.BoxDoubleVertical);
-			this->m_console->xy(right, y)->print(dr::ASCII.BoxDoubleVertical);
+			this->m_console->xy(left, y)->print(std::data::ASCII.BoxDoubleVertical);
+			this->m_console->xy(right, y)->print(std::data::ASCII.BoxDoubleVertical);
 		}
-		this->m_console->xy(left, bottom)->print(dr::ASCII.BoxDoubleUpRight)->print(this->m_horizontalLine)->print(dr::ASCII.BoxDoubleUpLeft);
+		this->m_console->xy(left, bottom)->print(std::data::ASCII.BoxDoubleUpRight)->print(this->m_horizontalLine)->print(std::data::ASCII.BoxDoubleUpLeft);
 		this->m_console->restore_colors();
 	}
 	priv sub place_food() {
 		var position: i32 = 0;
 		do {
-			position = dr::random::next() % this->m_capacity;
+			position = dr::random_get_next_int() % this->m_capacity;
 		} while (this->m_board[position] != Cell.Empty);
 
 		this->m_board[position] = Cell.Food;
-		this->draw_cell(position, dr::ASCII.FullBlock, dr::DefaultPaletteText16.Lime);
+		this->draw_cell(position, std::data::ASCII.FullBlock, dr::DefaultPaletteText16.Lime);
 	}
 	priv sub game_tick() -> i32 {
 		this->m_score += this->m_level * this->snake_len();
@@ -184,9 +185,9 @@ struct SnakeGame {
 		this->m_head_index = this->next_slot(this->m_head_index);
 		this->m_body[this->m_head_index] = new_head_position;
 		this->m_board[new_head_position] = Cell.Snake;
-		this->draw_cell(new_head_position, dr::ASCII.FullBlock, dr::DefaultPaletteText16.Yellow);
+		this->draw_cell(new_head_position, std::data::ASCII.FullBlock, dr::DefaultPaletteText16.Yellow);
 		if (this->snake_len() > 1)
-			this->draw_cell(this->m_body[this->prev_slot(this->m_head_index)], dr::ASCII.FullBlock, dr::DefaultPaletteText16.Green);
+			this->draw_cell(this->m_body[this->prev_slot(this->m_head_index)], std::data::ASCII.FullBlock, dr::DefaultPaletteText16.Green);
 		if (ate_food)
 		{
 			this->m_growth += 1;
@@ -202,15 +203,15 @@ struct SnakeGame {
 		while (keyRingBuff.pop(&key)) {
 			var key_x: i32 = 0;
 			var key_y: i32 = 0;
-			if (key == dr::KeyCodes.UpArrow)
+			if (key == std::data::KeyCodes.UpArrow)
 				key_y = -1;
-			else if (key == dr::KeyCodes.DownArrow)
+			else if (key == std::data::KeyCodes.DownArrow)
 				key_y = 1;
-			else if (key == dr::KeyCodes.LeftArrow)
+			else if (key == std::data::KeyCodes.LeftArrow)
 				key_x = -1;
-			else if (key == dr::KeyCodes.RightArrow)
+			else if (key == std::data::KeyCodes.RightArrow)
 				key_x = 1;
-			else if (key == dr::KeyCodes.LowerCase_q or key == dr::KeyCodes.UpperCase_Q)
+			else if (key == std::data::KeyCodes.LowerCase_q or key == std::data::KeyCodes.UpperCase_Q)
 				return 0;
 			else continue;
 			var is_reversal: i32 = (key_x == -this->m_direction_x && key_y == -this->m_direction_y);

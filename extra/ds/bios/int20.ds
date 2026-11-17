@@ -1,5 +1,5 @@
 #import(<dragon-sdk>)
-
+#import(<stdlib>)
 
 interrupt sub __int_20_handler() {
 	var code: u32;
@@ -55,7 +55,7 @@ interrupt sub __int_20_handler() {
 		atomic {
 			// (the CMOS is writable in supervisor mode only, which interrupt handlers run in; the
 			// machine resets before the next instruction, so this handler doesn't return)
-			var signals: dr::BitField16* = cast<dr::BitField16*>(dr::CMOSRegisters.SystemSignals);
+			var signals: std::BitField16* = cast<std::BitField16*>(dr::CMOSRegisters.SystemSignals);
 			signals->set(dr::SystemSignals.Reboot);
 		}
 	}

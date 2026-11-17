@@ -1,4 +1,4 @@
-// dr::math: constants, and the f32 functions of the FPU (the extfpu CPU extension: the machine
+// std::math: constants, and the f32 functions of the FPU (the extfpu CPU extension: the machine
 // config needs "cpuext = ..., extfpu"). min / max / abs / clamp also have integer overloads
 // (an integer argument picks those).
 //
@@ -6,7 +6,7 @@
 // host (IEEE 754); sin, cos, tan, exp, log, pow, atan2 come from the host's math library and
 // can differ in the last bit between hosts.
 
-namespace dr::math {
+namespace std::math {
 	const PI: f32 = 3.14159265358979;
 	const TAU: f32 = 6.28318530717959;
 	const HALF_PI: f32 = 1.57079632679490;

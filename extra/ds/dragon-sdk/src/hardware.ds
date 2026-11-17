@@ -72,7 +72,7 @@ namespace dr {
 	inline sub vga_enable_double_buffering(var enable: bool = true) {
 		if (not vga_is_text16())
 			return;
-		var flags: BitField32* = cast<BitField32*>(VGARegisters.Flags);
+		var flags: std::BitField32* = cast<std::BitField32*>(VGARegisters.Flags);
 		flags->val(VGAFlags.DoubleBufferingEnabled, enable);
 	}
 
@@ -83,4 +83,20 @@ namespace dr {
 	inline sub write_cmos(var addr: u32, var value: u32) {
 		*cast<u32*>(addr) = value;
 	}
+
+	// The Timer interrupt (HardwareInterrupts.Timer) every ms milliseconds of the timer's time
+	// (0: off), e.g. a kernel's scheduler tick. A tick is skipped while its previous handler is
+	// still running. Supervisor mode only.
+	inline sub set_interrupt_interval(var ms: u32) {
+		*cast<u32*>(TimerRegisters.InterruptInterval) = ms;
+	}
+
+	inline sub time_get_millis() -> u32 { return *cast<u32*>(dr::TimerRegisters.Milliseconds); }
+	inline sub time_get_cycles() -> u32 { return *cast<u32*>(dr::TimerRegisters.CyclesLow); }
+	inline sub time_get_unix() -> u32 { return *cast<u32*>(dr::TimerRegisters.UnixTime); }
+
+
+	inline sub random_get_next_int() -> i32 { return *cast<i32*>(dr::RandomRegisters.Int); }
+	sub random_get_next_float() -> f32 { low { mov RV, [$dr::RandomRegisters.Float] }; }
+	inline sub random_set_seed(var seed: u32) { *cast<u32*>(dr::RandomRegisters.Seed) = seed; }
 }

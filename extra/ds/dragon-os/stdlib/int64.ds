@@ -1,24 +1,6 @@
-// 64-bit integers as structs: dr::U64 (unsigned) and dr::I64 (signed, two's complement).
-//
-// The CPU is 32-bit, so every operation is a few (add, compare, bits) to hundreds (div / mod)
-// of instructions: use them where 32 bits aren't enough.
-//
-//   var a: dr::U64(5);                     // constructors: (), (u32), (i32), (hi, lo), (U64*), (I64*)
-//   var b: dr::U64(0x1, 0x00000000);       // hi, lo: 0x1_00000000
-//   a.mul(3)->add(&b)->shl(4);             // the operations change the struct and return it
-//   if (a.gt(1000)) ...                    // comparisons return bool (cmp: -1 / 0 / 1)
-//   var text: u8[24]; a.str(text);          // to text (str(buffer, base)), parse(text, base)
-//   console.print(&a);                     // the print classes take U64* / I64*
-//
-// Every operation takes a u32, an i32 or a U64* (I64* for I64): the smaller integer types use
-// the u32 / i32 one (a u8 / u16 is zero extended, an i8 / i16 / i32 sign extended), so does an
-// integer literal (i32). The words are fields, hi then lo: the same bytes as a big endian 64-bit
-// value in memory (a pointer to one, e.g. in a disk structure, can be cast to U64* / I64*).
-//
-// Names: subt (sub is a keyword), band / bor / bxor / bnot (and / or / not are keywords).
-// Division by zero is the CPU's (as for u32 / i32).
-
-namespace dr {
+namespace std {
+	const INT32_MAX: i32 = 2147483647;
+	const UINT32_MAX: u32 = 4294967295;
 	// The operations both types share, on the words (I64 casts itself to U64*).
 	namespace int64 {
 		sub add(var a: U64*, var h: u32, var l: u32) {
@@ -318,27 +300,27 @@ namespace dr {
 		inline sub set(var o: I64*) -> U64* { this->hi = o->hi; this->lo = o->lo; return this; }
 
 		// ---- Arithmetic ----
-		inline sub add(var v: u32) -> U64* { dr::int64::add(this, 0, v); return this; }
-		inline sub add(var v: i32) -> U64* { dr::int64::add(this, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v)); return this; }
-		inline sub add(var o: U64*) -> U64* { dr::int64::add(this, o->hi, o->lo); return this; }
-		inline sub subt(var v: u32) -> U64* { dr::int64::subt(this, 0, v); return this; }
-		inline sub subt(var v: i32) -> U64* { dr::int64::subt(this, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v)); return this; }
-		inline sub subt(var o: U64*) -> U64* { dr::int64::subt(this, o->hi, o->lo); return this; }
-		inline sub mul(var v: u32) -> U64* { dr::int64::mul(this, 0, v); return this; }
-		inline sub mul(var v: i32) -> U64* { dr::int64::mul(this, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v)); return this; }
-		inline sub mul(var o: U64*) -> U64* { dr::int64::mul(this, o->hi, o->lo); return this; }
-		inline sub div(var v: u32) -> U64* { dr::int64::udivmod(this->hi, this->lo, 0, v, this, null); return this; }
-		inline sub div(var v: i32) -> U64* { dr::int64::udivmod(this->hi, this->lo, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v), this, null); return this; }
-		inline sub div(var o: U64*) -> U64* { dr::int64::udivmod(this->hi, this->lo, o->hi, o->lo, this, null); return this; }
-		inline sub mod(var v: u32) -> U64* { dr::int64::udivmod(this->hi, this->lo, 0, v, null, this); return this; }
-		inline sub mod(var v: i32) -> U64* { dr::int64::udivmod(this->hi, this->lo, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v), null, this); return this; }
-		inline sub mod(var o: U64*) -> U64* { dr::int64::udivmod(this->hi, this->lo, o->hi, o->lo, null, this); return this; }
+		inline sub add(var v: u32) -> U64* { int64::add(this, 0, v); return this; }
+		inline sub add(var v: i32) -> U64* { int64::add(this, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v)); return this; }
+		inline sub add(var o: U64*) -> U64* { int64::add(this, o->hi, o->lo); return this; }
+		inline sub subt(var v: u32) -> U64* { int64::subt(this, 0, v); return this; }
+		inline sub subt(var v: i32) -> U64* { int64::subt(this, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v)); return this; }
+		inline sub subt(var o: U64*) -> U64* { int64::subt(this, o->hi, o->lo); return this; }
+		inline sub mul(var v: u32) -> U64* { int64::mul(this, 0, v); return this; }
+		inline sub mul(var v: i32) -> U64* { int64::mul(this, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v)); return this; }
+		inline sub mul(var o: U64*) -> U64* { int64::mul(this, o->hi, o->lo); return this; }
+		inline sub div(var v: u32) -> U64* { int64::udivmod(this->hi, this->lo, 0, v, this, null); return this; }
+		inline sub div(var v: i32) -> U64* { int64::udivmod(this->hi, this->lo, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v), this, null); return this; }
+		inline sub div(var o: U64*) -> U64* { int64::udivmod(this->hi, this->lo, o->hi, o->lo, this, null); return this; }
+		inline sub mod(var v: u32) -> U64* { int64::udivmod(this->hi, this->lo, 0, v, null, this); return this; }
+		inline sub mod(var v: i32) -> U64* { int64::udivmod(this->hi, this->lo, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v), null, this); return this; }
+		inline sub mod(var o: U64*) -> U64* { int64::udivmod(this->hi, this->lo, o->hi, o->lo, null, this); return this; }
 		// this / d, and the remainder in rem (rem may be this' own: then it gets the remainder).
-		inline sub divmod(var d: u32, var rem: u32*) -> U64* { var r: U64; dr::int64::udivmod(this->hi, this->lo, 0, d, this, &r); if (rem) *rem = r.lo; return this; }
-		inline sub divmod(var d: U64*, var rem: U64*) -> U64* { var r: U64; dr::int64::udivmod(this->hi, this->lo, d->hi, d->lo, this, &r); if (rem) { rem->hi = r.hi; rem->lo = r.lo; } return this; }
-		inline sub neg() -> U64* { this->hi = ~this->hi; this->lo = ~this->lo; dr::int64::add(this, 0, 1); return this; }
-		inline sub inc() -> U64* { dr::int64::add(this, 0, 1); return this; }
-		inline sub dec() -> U64* { dr::int64::subt(this, 0, 1); return this; }
+		inline sub divmod(var d: u32, var rem: u32*) -> U64* { var r: U64; int64::udivmod(this->hi, this->lo, 0, d, this, &r); if (rem) *rem = r.lo; return this; }
+		inline sub divmod(var d: U64*, var rem: U64*) -> U64* { var r: U64; int64::udivmod(this->hi, this->lo, d->hi, d->lo, this, &r); if (rem) { rem->hi = r.hi; rem->lo = r.lo; } return this; }
+		inline sub neg() -> U64* { this->hi = ~this->hi; this->lo = ~this->lo; int64::add(this, 0, 1); return this; }
+		inline sub inc() -> U64* { int64::add(this, 0, 1); return this; }
+		inline sub dec() -> U64* { int64::subt(this, 0, 1); return this; }
 		inline sub min(var v: u32) -> U64* { if (this->gt(v)) this->set(v); return this; }
 		inline sub min(var v: i32) -> U64* { if (this->gt(v)) this->set(v); return this; }
 		inline sub min(var o: U64*) -> U64* { if (this->gt(o)) this->set(o); return this; }
@@ -357,23 +339,23 @@ namespace dr {
 		inline sub bxor(var v: i32) -> U64* { this->hi = this->hi ^ (v < 0 ? 0xFFFFFFFF : 0); this->lo = this->lo ^ cast<u32>(v); return this; }
 		inline sub bxor(var o: U64*) -> U64* { this->hi = this->hi ^ o->hi; this->lo = this->lo ^ o->lo; return this; }
 		inline sub bnot() -> U64* { this->hi = ~this->hi; this->lo = ~this->lo; return this; }
-		inline sub shl(var n: u32) -> U64* { dr::int64::shl(this, n); return this; }
-		inline sub shr(var n: u32) -> U64* { dr::int64::shr(this, n, 0); return this; }
-		inline sub rol(var n: u32) -> U64* { dr::int64::rol(this, n); return this; }
-		inline sub ror(var n: u32) -> U64* { dr::int64::rol(this, 64 - (n & 63)); return this; }
+		inline sub shl(var n: u32) -> U64* { int64::shl(this, n); return this; }
+		inline sub shr(var n: u32) -> U64* { int64::shr(this, n, 0); return this; }
+		inline sub rol(var n: u32) -> U64* { int64::rol(this, n); return this; }
+		inline sub ror(var n: u32) -> U64* { int64::rol(this, 64 - (n & 63)); return this; }
 		// Bit n (0 = the lowest).
 		inline sub bit(var n: u32) -> bool { n = n & 63; return ((n >= 32 ? this->hi >> (n - 32) : this->lo >> n) & 1) != 0; }
 		inline sub setb(var n: u32) -> U64* { n = n & 63; if (n >= 32) this->hi = this->hi | (1 << (n - 32)); else this->lo = this->lo | (1 << n); return this; }
 		inline sub clrb(var n: u32) -> U64* { n = n & 63; if (n >= 32) this->hi = this->hi & ~(1 << (n - 32)); else this->lo = this->lo & ~(1 << n); return this; }
 		// Leading / trailing zero bits (64 for 0), set bits.
-		inline sub clz() -> u32 { return (this->hi != 0 ? dr::int64::clz32(this->hi) : 32 + dr::int64::clz32(this->lo)); }
-		inline sub ctz() -> u32 { return (this->lo != 0 ? dr::int64::ctz32(this->lo) : 32 + dr::int64::ctz32(this->hi)); }
-		inline sub popc() -> u32 { return dr::int64::popc32(this->hi) + dr::int64::popc32(this->lo); }
+		inline sub clz() -> u32 { return (this->hi != 0 ? int64::clz32(this->hi) : 32 + int64::clz32(this->lo)); }
+		inline sub ctz() -> u32 { return (this->lo != 0 ? int64::ctz32(this->lo) : 32 + int64::ctz32(this->hi)); }
+		inline sub popc() -> u32 { return int64::popc32(this->hi) + int64::popc32(this->lo); }
 
 		// ---- Comparisons ----
-		inline sub cmp(var v: u32) -> i32 { return dr::int64::ucmp(this->hi, this->lo, 0, v); }
-		inline sub cmp(var v: i32) -> i32 { return dr::int64::ucmp(this->hi, this->lo, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v)); }
-		inline sub cmp(var o: U64*) -> i32 { return dr::int64::ucmp(this->hi, this->lo, o->hi, o->lo); }
+		inline sub cmp(var v: u32) -> i32 { return int64::ucmp(this->hi, this->lo, 0, v); }
+		inline sub cmp(var v: i32) -> i32 { return int64::ucmp(this->hi, this->lo, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v)); }
+		inline sub cmp(var o: U64*) -> i32 { return int64::ucmp(this->hi, this->lo, o->hi, o->lo); }
 		inline sub eq(var v: u32) -> bool { return this->hi == 0 and this->lo == v; }
 		inline sub eq(var v: i32) -> bool { return this->hi == (v < 0 ? 0xFFFFFFFF : 0) and this->lo == cast<u32>(v); }
 		inline sub eq(var o: U64*) -> bool { return this->hi == o->hi and this->lo == o->lo; }
@@ -400,10 +382,10 @@ namespace dr {
 		// ---- Text ----
 		// The value in text (base 2 - 36, lowercase digits): buffer needs 21 bytes in base 10,
 		// 65 in base 2. Returns buffer.
-		inline sub str(var buffer: u8*, var base: u32 = 10) -> string { return dr::int64::to_text(this->hi, this->lo, false, buffer, base); }
+		inline sub str(var buffer: u8*, var base: u32 = 10) -> string { return int64::to_text(this->hi, this->lo, false, buffer, base); }
 		// The value of a text of digits (base 16 also takes 0x): false (and no change) on an empty
 		// or invalid text, or over 2^64 - 1.
-		inline sub parse(var text: string, var base: u32 = 10) -> bool { return dr::int64::from_text(text, base, 0xFFFFFFFF, 0xFFFFFFFF, this); }
+		inline sub parse(var text: string, var base: u32 = 10) -> bool { return int64::from_text(text, base, 0xFFFFFFFF, 0xFFFFFFFF, this); }
 	};
 
 	// ============================================================================
@@ -429,28 +411,28 @@ namespace dr {
 		inline sub set(var o: U64*) -> I64* { this->hi = o->hi; this->lo = o->lo; return this; }
 
 		// ---- Arithmetic ----
-		inline sub add(var v: u32) -> I64* { dr::int64::add(this->u(), 0, v); return this; }
-		inline sub add(var v: i32) -> I64* { dr::int64::add(this->u(), (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v)); return this; }
-		inline sub add(var o: I64*) -> I64* { dr::int64::add(this->u(), o->hi, o->lo); return this; }
-		inline sub subt(var v: u32) -> I64* { dr::int64::subt(this->u(), 0, v); return this; }
-		inline sub subt(var v: i32) -> I64* { dr::int64::subt(this->u(), (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v)); return this; }
-		inline sub subt(var o: I64*) -> I64* { dr::int64::subt(this->u(), o->hi, o->lo); return this; }
-		inline sub mul(var v: u32) -> I64* { dr::int64::mul(this->u(), 0, v); return this; }
-		inline sub mul(var v: i32) -> I64* { dr::int64::mul(this->u(), (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v)); return this; }
-		inline sub mul(var o: I64*) -> I64* { dr::int64::mul(this->u(), o->hi, o->lo); return this; }
-		inline sub div(var v: u32) -> I64* { dr::int64::sdivmod(this->hi, this->lo, 0, v, this->u(), null); return this; }
-		inline sub div(var v: i32) -> I64* { dr::int64::sdivmod(this->hi, this->lo, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v), this->u(), null); return this; }
-		inline sub div(var o: I64*) -> I64* { dr::int64::sdivmod(this->hi, this->lo, o->hi, o->lo, this->u(), null); return this; }
-		inline sub mod(var v: u32) -> I64* { dr::int64::sdivmod(this->hi, this->lo, 0, v, null, this->u()); return this; }
-		inline sub mod(var v: i32) -> I64* { dr::int64::sdivmod(this->hi, this->lo, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v), null, this->u()); return this; }
-		inline sub mod(var o: I64*) -> I64* { dr::int64::sdivmod(this->hi, this->lo, o->hi, o->lo, null, this->u()); return this; }
+		inline sub add(var v: u32) -> I64* { int64::add(this->u(), 0, v); return this; }
+		inline sub add(var v: i32) -> I64* { int64::add(this->u(), (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v)); return this; }
+		inline sub add(var o: I64*) -> I64* { int64::add(this->u(), o->hi, o->lo); return this; }
+		inline sub subt(var v: u32) -> I64* { int64::subt(this->u(), 0, v); return this; }
+		inline sub subt(var v: i32) -> I64* { int64::subt(this->u(), (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v)); return this; }
+		inline sub subt(var o: I64*) -> I64* { int64::subt(this->u(), o->hi, o->lo); return this; }
+		inline sub mul(var v: u32) -> I64* { int64::mul(this->u(), 0, v); return this; }
+		inline sub mul(var v: i32) -> I64* { int64::mul(this->u(), (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v)); return this; }
+		inline sub mul(var o: I64*) -> I64* { int64::mul(this->u(), o->hi, o->lo); return this; }
+		inline sub div(var v: u32) -> I64* { int64::sdivmod(this->hi, this->lo, 0, v, this->u(), null); return this; }
+		inline sub div(var v: i32) -> I64* { int64::sdivmod(this->hi, this->lo, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v), this->u(), null); return this; }
+		inline sub div(var o: I64*) -> I64* { int64::sdivmod(this->hi, this->lo, o->hi, o->lo, this->u(), null); return this; }
+		inline sub mod(var v: u32) -> I64* { int64::sdivmod(this->hi, this->lo, 0, v, null, this->u()); return this; }
+		inline sub mod(var v: i32) -> I64* { int64::sdivmod(this->hi, this->lo, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v), null, this->u()); return this; }
+		inline sub mod(var o: I64*) -> I64* { int64::sdivmod(this->hi, this->lo, o->hi, o->lo, null, this->u()); return this; }
 		// this / d (toward zero), and the remainder (the dividend's sign) in rem.
-		inline sub divmod(var d: i32, var rem: i32*) -> I64* { var r: U64; dr::int64::sdivmod(this->hi, this->lo, (d < 0 ? 0xFFFFFFFF : 0), cast<u32>(d), this->u(), &r); if (rem) *rem = cast<i32>(r.lo); return this; }
-		inline sub divmod(var d: I64*, var rem: I64*) -> I64* { var r: U64; dr::int64::sdivmod(this->hi, this->lo, d->hi, d->lo, this->u(), &r); if (rem) { rem->hi = r.hi; rem->lo = r.lo; } return this; }
-		inline sub neg() -> I64* { this->hi = ~this->hi; this->lo = ~this->lo; dr::int64::add(this->u(), 0, 1); return this; }
+		inline sub divmod(var d: i32, var rem: i32*) -> I64* { var r: U64; int64::sdivmod(this->hi, this->lo, (d < 0 ? 0xFFFFFFFF : 0), cast<u32>(d), this->u(), &r); if (rem) *rem = cast<i32>(r.lo); return this; }
+		inline sub divmod(var d: I64*, var rem: I64*) -> I64* { var r: U64; int64::sdivmod(this->hi, this->lo, d->hi, d->lo, this->u(), &r); if (rem) { rem->hi = r.hi; rem->lo = r.lo; } return this; }
+		inline sub neg() -> I64* { this->hi = ~this->hi; this->lo = ~this->lo; int64::add(this->u(), 0, 1); return this; }
 		inline sub abs() -> I64* { if (this->is_neg()) this->neg(); return this; }
-		inline sub inc() -> I64* { dr::int64::add(this->u(), 0, 1); return this; }
-		inline sub dec() -> I64* { dr::int64::subt(this->u(), 0, 1); return this; }
+		inline sub inc() -> I64* { int64::add(this->u(), 0, 1); return this; }
+		inline sub dec() -> I64* { int64::subt(this->u(), 0, 1); return this; }
 		inline sub min(var v: u32) -> I64* { if (this->gt(v)) this->set(v); return this; }
 		inline sub min(var v: i32) -> I64* { if (this->gt(v)) this->set(v); return this; }
 		inline sub min(var o: I64*) -> I64* { if (this->gt(o)) this->set(o); return this; }
@@ -469,11 +451,11 @@ namespace dr {
 		inline sub bxor(var v: i32) -> I64* { this->hi = this->hi ^ (v < 0 ? 0xFFFFFFFF : 0); this->lo = this->lo ^ cast<u32>(v); return this; }
 		inline sub bxor(var o: I64*) -> I64* { this->hi = this->hi ^ o->hi; this->lo = this->lo ^ o->lo; return this; }
 		inline sub bnot() -> I64* { this->hi = ~this->hi; this->lo = ~this->lo; return this; }
-		inline sub shl(var n: u32) -> I64* { dr::int64::shl(this->u(), n); return this; }
+		inline sub shl(var n: u32) -> I64* { int64::shl(this->u(), n); return this; }
 		// Arithmetic: the sign bit comes in at the top.
-		inline sub shr(var n: u32) -> I64* { dr::int64::shr(this->u(), n, ((this->hi & 0x80000000) != 0 ? 0xFFFFFFFF : 0)); return this; }
-		inline sub rol(var n: u32) -> I64* { dr::int64::rol(this->u(), n); return this; }
-		inline sub ror(var n: u32) -> I64* { dr::int64::rol(this->u(), 64 - (n & 63)); return this; }
+		inline sub shr(var n: u32) -> I64* { int64::shr(this->u(), n, ((this->hi & 0x80000000) != 0 ? 0xFFFFFFFF : 0)); return this; }
+		inline sub rol(var n: u32) -> I64* { int64::rol(this->u(), n); return this; }
+		inline sub ror(var n: u32) -> I64* { int64::rol(this->u(), 64 - (n & 63)); return this; }
 		inline sub bit(var n: u32) -> bool { return this->u()->bit(n); }
 		inline sub setb(var n: u32) -> I64* { this->u()->setb(n); return this; }
 		inline sub clrb(var n: u32) -> I64* { this->u()->clrb(n); return this; }
@@ -482,9 +464,9 @@ namespace dr {
 		inline sub popc() -> u32 { return this->u()->popc(); }
 
 		// ---- Comparisons ----
-		inline sub cmp(var v: u32) -> i32 { return dr::int64::scmp(this->hi, this->lo, 0, v); }
-		inline sub cmp(var v: i32) -> i32 { return dr::int64::scmp(this->hi, this->lo, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v)); }
-		inline sub cmp(var o: I64*) -> i32 { return dr::int64::scmp(this->hi, this->lo, o->hi, o->lo); }
+		inline sub cmp(var v: u32) -> i32 { return int64::scmp(this->hi, this->lo, 0, v); }
+		inline sub cmp(var v: i32) -> i32 { return int64::scmp(this->hi, this->lo, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v)); }
+		inline sub cmp(var o: I64*) -> i32 { return int64::scmp(this->hi, this->lo, o->hi, o->lo); }
 		inline sub eq(var v: u32) -> bool { return this->hi == 0 and this->lo == v; }
 		inline sub eq(var v: i32) -> bool { return this->hi == (v < 0 ? 0xFFFFFFFF : 0) and this->lo == cast<u32>(v); }
 		inline sub eq(var o: I64*) -> bool { return this->hi == o->hi and this->lo == o->lo; }
@@ -517,7 +499,7 @@ namespace dr {
 			var m: U64(this);
 			if (this->is_neg())
 				m.neg();
-			return dr::int64::to_text(m.hi, m.lo, this->is_neg(), buffer, base);
+			return int64::to_text(m.hi, m.lo, this->is_neg(), buffer, base);
 		}
 		// The value of a text of digits, with an optional '-' / '+' (base 16 also takes 0x): false
 		// (and no change) on an empty or invalid text, or outside -2^63 .. 2^63 - 1.
@@ -529,7 +511,7 @@ namespace dr {
 			if (text[0] == '-' or text[0] == '+')
 				p = p + 1;
 			var m: U64;
-			if (not dr::int64::from_text(p, base, 0x80000000, (negative ? 0 : 0xFFFFFFFF), &m))
+			if (not int64::from_text(p, base, 0x80000000, (negative ? 0 : 0xFFFFFFFF), &m))
 				return false;
 			if (not negative and m.hi == 0x80000000)
 				return false;

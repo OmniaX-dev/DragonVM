@@ -1,0 +1,72 @@
+
+#include(va.ds)
+
+namespace std {
+	enum SystemCalls: u32 {
+		Exit = 0x0010,
+		Print = 0x0011,
+
+		Random = 0x1000,
+		RandomF32 = 0x1001,
+		SeedRandom = 0x1002,
+
+		TimeMillis = 0x1100,
+		TimeCycles = 0x1101,
+		TimeUnix = 0x1102,
+	};
+
+	sub syscall(var function: u32, var out_rv: u32*, ...typed) -> bool {
+		var l_is_simple_call = sub(var fn: u32) -> bool {
+			return fn == SystemCalls.Random or
+				   fn == SystemCalls.RandomF32 or
+				   fn == SystemCalls.TimeMillis or
+				   fn == SystemCalls.TimeCycles or
+				   fn == SystemCalls.TimeUnix;
+		};
+		var args: VaList(va_start(), va_count(), va_types());
+		var null_rv: u32 = 0;
+		if (not out_rv)
+			out_rv = &null_rv;
+		if (l_is_simple_call(function))
+		{
+			low {
+				mov R9, $function
+				int 0x40
+				mov [$out_rv], RV
+			}
+			return true;
+		}
+		else if (function == SystemCalls.Print) //TODO: Eventually put each branch in an __internal:: dedicated function
+		{
+			if (args.count == 0) return false;
+			else {
+				if (args.type_of(0) != VaTypes.String) return false;
+				var str: u8* = args.get_string(0);
+				var nl: u32 = 0;
+				if (args.count > 1 and args.get_bool(1))
+					nl = 1;
+				low {
+					mov R9, $function
+					mov R8, $str
+					mov R7, $nl
+					int 0x40
+				}
+				*out_rv = 0;
+				return true;
+			}
+		}
+		else if (function == SystemCalls.SeedRandom)
+		{
+			if (args.count == 0) return false;
+			var seed: i32 = args.get_i32(0);
+			low {
+				mov R9, $function
+				mov R8, $seed
+				int 0x40
+			}
+			*out_rv = 0;
+			return true;
+		}
+		return false;
+	}
+}

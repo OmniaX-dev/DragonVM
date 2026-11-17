@@ -40,13 +40,13 @@ interrupt sub __int_30_handler() {
 	else if (code == INT30_DIRECT_PRINT_INTEGER_TEXT_SINGLE)
 	{
 		var buff: u8[12];
-		dr::utoa(param1, buff);
+		std::utoa(param1, buff);
 		l_textSingleStr(cast<u32>(buff), device, false);
 	}
 	else if (code == INT30_STORE_INTEGER_TEXT_SINGLE)
 	{
 		var buff: u8[12];
-		dr::utoa(param1, buff);
+		std::utoa(param1, buff);
 		l_textSingleStr(cast<u32>(buff), device, true);
 	}
 	else if (code == INT30_STORE_CHAR_TEXT_SINGLE)
@@ -84,7 +84,7 @@ interrupt sub __int_30_handler() {
 	}
 	else if (code == INT30_WRITE_VRAM_TEXT16)
 	{
-		var flags: dr::BitField32 = *cast<dr::BitField32*>(&param3);
+		var flags: std::BitField32 = *cast<std::BitField32*>(&param3);
 		var allow_x_wrap: bool = flags.get(dr::Text16Flags.AllowXWrap);
 		var allow_scroll: bool = flags.get(dr::Text16Flags.AllowScroll);
 		var cell: dr::VGAText16Cell* = cast<dr::VGAText16Cell*>(param1);
@@ -100,7 +100,7 @@ interrupt sub __int_30_handler() {
 	}
 	else if (code == INT30_PRINT_STRING_TEXT16)
 	{
-		var flags: dr::BitField32 = *cast<dr::BitField32*>(&param3);
+		var flags: std::BitField32 = *cast<std::BitField32*>(&param3);
 		var allow_x_wrap: bool = flags.get(dr::Text16Flags.AllowXWrap);
 		var allow_scroll: bool = flags.get(dr::Text16Flags.AllowScroll);
 		var cell: dr::VGAText16Cell* = cast<dr::VGAText16Cell*>(param1);
@@ -119,7 +119,7 @@ interrupt sub __int_30_handler() {
 	}
 	else if (code == INT30_PRINT_INTEGER_TEXT16)
 	{
-		var flags: dr::BitField32 = *cast<dr::BitField32*>(&param3);
+		var flags: std::BitField32 = *cast<std::BitField32*>(&param3);
 		var allow_x_wrap: bool = flags.get(dr::Text16Flags.AllowXWrap);
 		var allow_scroll: bool = flags.get(dr::Text16Flags.AllowScroll);
 		var cell: dr::VGAText16Cell* = cast<dr::VGAText16Cell*>(param1);
@@ -168,7 +168,7 @@ interrupt sub __int_30_handler() {
 
 sub __int30_print_integer_text16(var num: i32, var cell: dr::VGAText16Cell*, var allow_x_wrap: bool = true, var allow_scroll: bool = true) {
 	var buff: u8[12];
-	dr::itoa(num, buff);
+	std::itoa(num, buff);
 	__int30_print_string_text16(buff, cell, allow_x_wrap, allow_scroll);
 }
 

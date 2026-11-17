@@ -1,9 +1,10 @@
 #import(<dragon-sdk>)
+#import(<stdlib>)
 
 #define(KEY_BUFF_SIZE = 128)
 
 var keyBuff: u32[KEY_BUFF_SIZE];
-var keyRingBuff: dr::RingBuffer;
+var keyRingBuff: std::RingBuffer;
 var console: dr::Text16Console;
 var bootParts: dr::DPTPartitionBlock*[dr::DPTStructure.MaxPartitions];
 var bootPartsLbl: u8[64][dr::DPTStructure.MaxPartitions];
@@ -38,7 +39,7 @@ sub main(var argc: i32, var argv: u8**) {
 	dr::TextSingle::clear_screen();
 	dr::vga_set_video_mode(dr::VGAVideoModes.Text16Color);
 
-	halt_on_condition(argc != 2 or not dr::atou(argv[0], &drake_load_addr) or not dr::atou(argv[1], &drake_size),
+	halt_on_condition(argc != 2 or not std::atou(argv[0], &drake_load_addr) or not std::atou(argv[1], &drake_size),
 		"Invalid arguments from the BIOS (Drake's load address and size).");
 
 	halt_on_condition(not dr::dpt_load_block(&dpt_block), "No valid DPT block found.");
@@ -56,7 +57,7 @@ sub main(var argc: i32, var argv: u8**) {
 	horizontalLine = dr::malloc(screenWidth - 1);		// between the two corners
 	halt_on_condition(not horizontalLine, "Allocation for <horizontalLine> failed.");
 	for (var i: u16 = 0; i < screenWidth - 2; i++)
-		horizontalLine[i] = dr::ASCII.BoxHorizontal;
+		horizontalLine[i] = std::data::ASCII.BoxHorizontal;
 	horizontalLine[screenWidth - 2] = '\0';
 
 	#ifdef(DRAKE_AUTOBOOT)
@@ -75,11 +76,11 @@ sub main(var argc: i32, var argv: u8**) {
 }
 
 sub on_key_pressed(var key: u32) {
-	if (key == dr::KeyCodes.DownArrow)
+	if (key == std::data::KeyCodes.DownArrow)
 		update_list_index(true);
-	else if (key == dr::KeyCodes.UpArrow)
+	else if (key == std::data::KeyCodes.UpArrow)
 		update_list_index(false);
-	else if (key == dr::KeyCodes.Return)
+	else if (key == std::data::KeyCodes.Return)
 		execute_selected_entry();
 }
 
@@ -101,16 +102,16 @@ interrupt sub on_draw() {
 }
 
 inline sub print_top_line() {
-	console.print(dr::ASCII.BoxDownRight);
+	console.print(std::data::ASCII.BoxDownRight);
 	console.print(horizontalLine);
-	console.print(dr::ASCII.BoxDownLeft);
+	console.print(std::data::ASCII.BoxDownLeft);
 	console.nl();
 }
 
 inline sub print_bottom_line() {
-	console.print(dr::ASCII.BoxUpRight);
+	console.print(std::data::ASCII.BoxUpRight);
 	console.print(horizontalLine);
-	console.print(dr::ASCII.BoxUpLeft);
+	console.print(std::data::ASCII.BoxUpLeft);
 	console.nl();
 }
 
@@ -118,9 +119,9 @@ inline sub print_box_sides() {
 	for (var y: u16 = 2; y < 12; y++)
 	{
 		console.xy(0, y);
-		console.print(dr::ASCII.BoxVertical);
+		console.print(std::data::ASCII.BoxVertical);
 		console.xy(console.get_console_width() - 1, y);
-		console.print(dr::ASCII.BoxVertical);
+		console.print(std::data::ASCII.BoxVertical);
 	}
 	console.nl();
 }
@@ -176,8 +177,8 @@ sub execute_selected_entry() {
 		var argv: u8*[argc];
 		argv[0] = dr::malloc(11);
 		argv[1] = dr::malloc(11);
-		dr::utoa(cast<u32>(kernel_load_addr), argv[0]);
-		dr::utoa(cast<u32>(kernel_size), argv[1]);
+		std::utoa(cast<u32>(kernel_load_addr), argv[0]);
+		std::utoa(cast<u32>(kernel_size), argv[1]);
 		dr::drx::run(load_addr, argc, argv);
 		low { hlt }
 	}
@@ -251,7 +252,7 @@ sub load_kernel0(var part: dr::DPTPartitionBlock*, var out_load_addr: u32*) -> b
 	}
 	var last: u32 = (heap_start - info.size) & ~(KASLR_ALIGN - 1);  // round down
 	var slots: u32 = (last - first) / KASLR_ALIGN + 1;
-	var slot: u32 = cast<u32>(dr::random::next()) % slots;
+	var slot: u32 = cast<u32>(dr::random_get_next_int()) % slots;
 	var load_addr: u8* = cast<u8*>(first + slot * KASLR_ALIGN);
 	var r: i32 = fs.read_all(KERNEL0_PATH, load_addr, info.size);
 	if (r < 0)

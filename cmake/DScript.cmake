@@ -26,12 +26,14 @@
 # ============================================================================
 
 option(DS_UPDATE_EXTRA_SDK "ds_env*: copy the built SDK to extra/ds/dragon-sdk/lib too" ON)
+option(DS_UPDATE_EXTRA_STDLIB "ds_env*: copy the built STDLIB to extra/ds/dragon-os/lib too" ON)
 
 set(DS_SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/../extra/ds)
 get_filename_component(DS_SOURCE_DIR ${DS_SOURCE_DIR} ABSOLUTE)
 set(DS_RUN_DIR ${CMAKE_BINARY_DIR})
 
-file(GLOB DS_SDK_SOURCES CONFIGURE_DEPENDS ${DS_SOURCE_DIR}/dragon-sdk/src/*.ds)
+file(GLOB_RECURSE DS_STDLIB_SOURCES CONFIGURE_DEPENDS ${DS_SOURCE_DIR}/dragon-os/stdlib/*.ds)
+file(GLOB_RECURSE DS_SDK_SOURCES CONFIGURE_DEPENDS ${DS_SOURCE_DIR}/dragon-sdk/src/*.ds)
 file(GLOB_RECURSE DS_BIOS_SOURCES CONFIGURE_DEPENDS ${DS_SOURCE_DIR}/bios/*.ds)
 file(GLOB_RECURSE DS_DRAKE_SOURCES CONFIGURE_DEPENDS ${DS_SOURCE_DIR}/drake/*.ds)
 file(GLOB_RECURSE DS_SNAKE_KERNEL0_SOURCES CONFIGURE_DEPENDS ${DS_SOURCE_DIR}/snake-game/*.ds)
@@ -52,16 +54,31 @@ function(ds_add_env TARGET MODE ASM_FLAGS)
 	set(DTOOLS $<TARGET_FILE:${TOOLS_TARGET}>)
 	set(WA "-Wa,${ASM_FLAGS}")
 	set(SDK ${OUT}/lib/dragon-sdk.dlib)
+	set(STDLIB ${OUT}/lib/stdlib.dlib)
 	if(DS_UPDATE_EXTRA_SDK)
 		set(SDK_EXTRA_COPY ${DS_SOURCE_DIR}/dragon-sdk/lib/dragon-sdk.dlib)
 	else()
 		set(SDK_EXTRA_COPY ${DS_RUN_DIR}/ds/dragon-sdk/lib/dragon-sdk.dlib)
 	endif()
+	if(DS_UPDATE_EXTRA_SDK)
+		set(STDLIB_EXTRA_COPY ${DS_SOURCE_DIR}/dragon-os/lib/stdlib.dlib)
+	else()
+		set(STDLIB_EXTRA_COPY ${DS_RUN_DIR}/ds/dragon-os/lib/stdlib.dlib)
+	endif()
+
+	add_custom_command(
+		OUTPUT ${STDLIB}
+		COMMAND ${CMAKE_COMMAND} -E make_directory ${OUT}/lib ${OUT}/disassembly
+		COMMAND ${DSC} --lib ${DS_STDLIB_SOURCES} -o ${STDLIB} -O ${WA}
+		DEPENDS ${DS_STDLIB_SOURCES} ${COMPILER_TARGET}
+		WORKING_DIRECTORY ${DS_RUN_DIR}
+		COMMENT "DScript (${MODE}): DragonOS stdlib"
+		VERBATIM)
 
 	add_custom_command(
 		OUTPUT ${SDK}
 		COMMAND ${CMAKE_COMMAND} -E make_directory ${OUT}/lib ${OUT}/disassembly
-		COMMAND ${DSC} --lib ${DS_SDK_SOURCES} -o ${SDK} -O ${WA}
+		COMMAND ${DSC} --lib ${DS_SDK_SOURCES} -o ${SDK} -L ${OUT}/lib -O ${WA}
 		DEPENDS ${DS_SDK_SOURCES} ${COMPILER_TARGET}
 		WORKING_DIRECTORY ${DS_RUN_DIR}
 		COMMENT "DScript (${MODE}): dragon-sdk"
@@ -135,7 +152,7 @@ function(ds_add_env TARGET MODE ASM_FLAGS)
 		COMMAND ${DTOOLS} dfs dragon/disk.drd 2 install-kernel dragon/dragon-os.bin
 		COMMAND ${DTOOLS} dfs dragon/disk.drd 3 install-kernel dragon/snake_kernel0.bin
 		COMMAND ${DTOOLS} dfs dragon/disk.drd 4 install-kernel dragon/example-kernel.bin
-		DEPENDS ${SDK} ${OUT}/bios.bin ${OUT}/drake.bin ${OUT}/snake_kernel0.bin ${OUT}/example-kernel.bin ${OUT}/dragon-os.bin ${TOOLS_TARGET}
+		DEPENDS ${STDLIB} ${SDK} ${OUT}/bios.bin ${OUT}/drake.bin ${OUT}/snake_kernel0.bin ${OUT}/example-kernel.bin ${OUT}/dragon-os.bin ${TOOLS_TARGET}
 		WORKING_DIRECTORY ${DS_RUN_DIR}
 		COMMENT "DScript (${MODE}): BIOS, Drake and SnakeGame in place"
 		VERBATIM)

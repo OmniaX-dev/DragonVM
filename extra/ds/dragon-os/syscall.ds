@@ -3,8 +3,16 @@
 #include(fault.ds)
 
 const SYSCALL: u32 = 0x40;
-const SYSCALL_EXIT: u32 = 0x10;
-const SYSCALL_PRINT: u32 = 0x11;
+const SYSCALL_EXIT: u32 = 0x00_10;
+const SYSCALL_PRINT: u32 = 0x00_11;
+
+const SYSCALL_RANDOM: u32 = 0x10_00;
+const SYSCALL_RANDOM_F32: u32 = 0x10_01;
+const SYSCALL_SEED_RANDOM: u32 = 0x10_02;
+
+const SYSCALL_TIME_MILLIS: u32 = 0x11_00;
+const SYSCALL_TIME_CYCLES: u32 = 0x11_01;
+const SYSCALL_TIME_UNIX: u32 = 0x11_02;
 
 struct SavedRegisters {
 	var r: u32[20];              // r[0] = R20 ... r[19] = R1   →  Rn = r[20 - n]
@@ -53,7 +61,38 @@ namespace __internal {
 		var f: SyscallFrame* = current_syscall_frame();
 		var function: u32 = f->regs.R(9);
 		if (function == SYSCALL_PRINT)
+		{
 			on_print(f->regs.R(8), f->regs.R(7));
+		}
+		else if (function == SYSCALL_RANDOM)
+		{
+			var value: u32 = *cast<u32*>(dr::RandomRegisters.Int);
+			low { mov RV, $value }
+		}
+		else if (function == SYSCALL_RANDOM_F32)
+		{
+			var value: u32 = *cast<u32*>(dr::RandomRegisters.Float);
+			low { mov RV, $value }
+		}
+		else if (function == SYSCALL_SEED_RANDOM)
+		{
+			*cast<u32*>(dr::RandomRegisters.Seed) = f->regs.R(8);
+		}
+		else if (function == SYSCALL_TIME_MILLIS)
+		{
+			var value: u32 = *cast<u32*>(dr::TimerRegisters.Milliseconds);
+			low { mov RV, $value }
+		}
+		else if (function == SYSCALL_TIME_CYCLES)
+		{
+			var value: u32 = *cast<u32*>(dr::TimerRegisters.CyclesLow);
+			low { mov RV, $value }
+		}
+		else if (function == SYSCALL_TIME_UNIX)
+		{
+			var value: u32 = *cast<u32*>(dr::TimerRegisters.UnixTime);
+			low { mov RV, $value }
+		}
 	}
 
 	sub on_print(var param1: u32, var param2: u32) {
@@ -66,34 +105,6 @@ namespace __internal {
 				dr::TextSingle.new_line();
 		}
 	}
-}
-
-// TODO: This belongs in a user-side library eventually
-sub syscall(var function: u32, var out_rv: u32*, ...typed) -> bool {
-	var args: dr::VaList(va_start(), va_count(), va_types());
-	var null_rv: u32 = 0;
-	if (not out_rv)
-		out_rv = &null_rv;
-	if (function == SYSCALL_PRINT)
-	{
-		if (args.count == 0) return false;
-		else {
-			if (args.type_of(0) != dr::VaTypes.String) return false;
-			var str: u8* = args.get_string(0);
-			var nl: u32 = 0;
-			if (args.count > 1 and args.get_bool(1))
-				nl = 1;
-			low {
-				mov R9, $SYSCALL_PRINT
-				mov R8, $str
-				mov R7, $nl
-				int $SYSCALL
-			}
-			*out_rv = 0;
-			return true;
-		}
-	}
-	return false;
 }
 
 sub init_interrupt_vector() {

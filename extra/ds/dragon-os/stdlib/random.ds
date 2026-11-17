@@ -1,0 +1,20 @@
+#include(syscall.ds)
+
+// Random numbers from the machine's random device. The generator is
+// seeded from the host's clock at start; seed() makes the numbers that follow repeatable.
+namespace std::rand {
+	// A random number in 0..INT32_MAX (2147483647).
+	sub next() -> i32 {
+		var n: u32 = 0;
+		syscall(SystemCalls.Random, &n);
+		return n;
+	}
+	sub next_float() -> f32 {
+		var n: u32 = 0;
+		syscall(SystemCalls.RandomF32, &n);
+		var value: f32 = 0;
+		low { mov $value, $n };
+		return value;
+	}
+	inline sub seed(var seed: u32) { syscall(SystemCalls.SeedRandom, null, seed); }
+}

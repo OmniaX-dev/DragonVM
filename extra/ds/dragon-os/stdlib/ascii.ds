@@ -1,13 +1,13 @@
 // ascii.ds - every character of Code Page 437 (the PC's character set, which DragonVM's
-// font uses), by name: dr::ASCII.Escape, dr::ASCII.a, dr::ASCII.BoxDoubleDownRight.
+// font uses), by name: std::ASCII.Escape, std::ASCII.a, std::ASCII.BoxDoubleDownRight.
 //
 // 0..31 and 127 have their ASCII control names; the screen shows them as the pictures in the
 // comments (as on the IBM PC). 32..126 are ASCII; 128..255 are CP437's accented letters,
 // symbols, box drawing, blocks, Greek letters and maths. Accented letters keep the letter's
 // case (CCedilla: Ç, cCedilla: ç), Greek letters too (Sigma: Σ, sigma: σ).
-// At the end, 1..31 and 127 again, named after their pictures: dr::ASCII.Escape and
-// dr::ASCII.ArrowLeft are both 0x1B.
-namespace dr {
+// At the end, 1..31 and 127 again, named after their pictures: std::ASCII.Escape and
+// std::ASCII.ArrowLeft are both 0x1B.
+namespace std::data {
 	const ASCII: struct {
 		var Null: u8										= 0x00;	// (blank)
 		var StartOfHeading: u8								= 0x01;	// ☺

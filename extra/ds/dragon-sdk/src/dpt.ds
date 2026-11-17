@@ -1,6 +1,5 @@
 #include(dragon.ds)
 #include(mem.ds)
-#include(math.ds)
 
 namespace dr {
 	struct DPTBlock {

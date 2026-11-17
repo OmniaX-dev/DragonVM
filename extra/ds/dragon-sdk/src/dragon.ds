@@ -1,58 +1,10 @@
 // DScript SDK: the BIOS text output (int 0x30, single color text mode).
 // The BIOS must have run (it installs the interrupt handlers).
-#include(utils.ds)
 #include(print.ds)
 #include(hardware.ds)
-#include(ringbuffer.ds)
 #include(dpt.ds)
 
 namespace dr {
-	const INT32_MAX: i32 = 2147483647;
-	const UINT32_MAX: u32 = 4294967295;
-
-	struct BitField32 {
-		priv var m_value: u32 = 0;
-
-		inline sub set(var mask: u32) {
-			this->m_value |= mask;
-		}
-		inline sub clr(var mask: u32) {
-			this->m_value &= ~mask;
-		}
-		inline sub val(var mask: u32, var value: bool) {
-			if (value) this->set(mask);
-			else this->clr(mask);
-		}
-		inline sub tgl(var mask: u32) {
-			if (this->get(mask)) this->clr(mask);
-			else this->set(mask);
-		}
-		inline sub get(var mask: u32) -> bool {
-			return (this->m_value & mask) == mask;
-		}
-	};
-	struct BitField16 {
-		priv var m_value: u16 = 0;
-
-		inline sub set(var mask: u16) {
-			this->m_value |= mask;
-		}
-		inline sub clr(var mask: u16) {
-			this->m_value &= ~mask;
-		}
-		inline sub val(var mask: u16, var value: bool) {
-			if (value) this->set(mask);
-			else this->clr(mask);
-		}
-		inline sub tgl(var mask: u16) {
-			if (this->get(mask)) this->clr(mask);
-			else this->set(mask);
-		}
-		inline sub get(var mask: u16) -> bool {
-			return (this->m_value & mask) == mask;
-		}
-	};
-
 	struct VGAText16Cell {
 		var character: u8;
 		var foreground: u8;

@@ -1,29 +1,28 @@
-#include(dragon.ds)
+#include(syscall.ds)
 
-namespace dr::time {
+namespace std::time {
 	// Milliseconds since the machine started (the timer device). Wraps after about 49.7 days:
 	// measure intervals as millis() - start, which stays right across the wrap.
 	inline sub millis() -> u32 {
-		return *cast<u32*>(TimerRegisters.Milliseconds);
+		var n: u32 = 0;
+		syscall(SystemCalls.TimeMillis, &n);
+		return n;
 	}
 
 	// The low 32 bits of the cycles executed since the machine started (for short measurements:
 	// cycles() - start is right up to 2^32 cycles).
 	inline sub cycles() -> u32 {
-		return *cast<u32*>(TimerRegisters.CyclesLow);
+		var n: u32 = 0;
+		syscall(SystemCalls.TimeCycles, &n);
+		return n;
 	}
 
 	// The time: seconds since 1970-01-01 00:00 UTC (the timer device: the host's clock when the
 	// machine started, running on with it). Unsigned: right until 2106-02-07.
 	inline sub unix_time() -> u32 {
-		return *cast<u32*>(TimerRegisters.UnixTime);
-	}
-
-	// The Timer interrupt (HardwareInterrupts.Timer) every ms milliseconds of the timer's time
-	// (0: off), e.g. a kernel's scheduler tick. A tick is skipped while its previous handler is
-	// still running. Supervisor mode only.
-	inline sub set_interrupt_interval(var ms: u32) {
-		*cast<u32*>(TimerRegisters.InterruptInterval) = ms;
+		var n: u32 = 0;
+		syscall(SystemCalls.TimeUnix, &n);
+		return n;
 	}
 
 	// Waits ms milliseconds, by the timer: right at any clock speed (also uncapped). Interrupts
@@ -195,8 +194,8 @@ namespace dr::time {
 	// From 1970-01-01 00:00:00 to 2106-02-07 06:28:15 UTC (the timer's u32 Unix time); the add*
 	// subs wrap around beyond them.
 	//
-	//     var now: dr::time::DateTime();                          // the timer's time
-	//     var d: dr::time::DateTime(1993, 12, 19, 18, 30);        // a date (UTC), time optional
+	//     var now: std::time::DateTime();                          // the timer's time
+	//     var d: std::time::DateTime(1993, 12, 19, 18, 30);        // a date (UTC), time optional
 	//     var buff: u8[32];
 	//     d.setFormat("YYYY-MM-DD HH:Min:SS")->toString(buff, 32);   // "1993-12-19 18:30:00"
 	//     d.parse("01.02.2026");                                 // with a format (default DD.MM.YYYY)

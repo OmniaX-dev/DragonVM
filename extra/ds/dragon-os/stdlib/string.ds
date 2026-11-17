@@ -1,0 +1,28 @@
+
+namespace std {
+	sub strlen(var s: string) -> u32 {
+	    var n: u32 = 0;
+	    while (s[n] != 0)
+	        n++;
+	    return n;
+	}
+
+	sub strcmp(var a: string, var b: string) -> i32 {
+	    while (*a != 0 and *a == *b) {
+	        a++;
+	        b++;
+	    }
+	    return cast<i32>(*a) - cast<i32>(*b);
+	}
+
+	sub strcpy(var dst: string, var src: string) -> string {
+	    var d: string = dst;
+	    while (*src != 0) {
+	        *d = *src;
+	        d++;
+	        src++;
+	    }
+	    *d = 0;
+	    return dst;
+	}
+}

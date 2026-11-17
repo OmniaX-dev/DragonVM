@@ -8,8 +8,8 @@ var g_pages: PageAllocator;
 sub init_allocator(var argc: i32, var argv: string*) {
 	var kernel_start: u32 = 0;
 	var kernel_size: u32 = 0;
-	dr::atou(argv[0], &kernel_start);
-	dr::atou(argv[1], &kernel_size);
+	std::atou(argv[0], &kernel_start);
+	std::atou(argv[1], &kernel_size);
 	var kernel_end: u32 = kernel_start + kernel_size;
 	var bios_heap_start: u32 = dr::read_cmos(dr::CMOSRegisters.HeapStart);
 	kernel_assert(dr::MemoryLayout.RAM <= kernel_start and kernel_start < kernel_end and kernel_end <= bios_heap_start, "Invalid memory layout.");

@@ -6,10 +6,10 @@
 //     va_count()   how many extra arguments the call gave
 //     va_start()   where the first one is (the others follow, each 4 bytes lower)
 //     va_types()   (...typed only) where their types are
-// and dr::VaList reads them:
+// and std::VaList reads them:
 //
 //     sub sum(var count: u32, ...) -> i32 {
-//         var args: dr::VaList(va_start(), va_count());
+//         var args: std::VaList(va_start(), va_count());
 //         var total: i32 = 0;
 //         for (var i: u32 = 0; i < args.count; i++)
 //             total += args.get_i32(i);
@@ -22,10 +22,11 @@
 //
 // A VaList can be passed on (by pointer) to another sub: that is how format and vformat share
 // the work.
-#include(utils.ds)
-#include(mem.ds)
 
-namespace dr {
+#include(utils.ds)
+#include(string.ds)
+
+namespace std {
 	// The types ...typed passes (VaList.type_of).
 	const VaTypes: struct {
 		var Unknown: u8			= 0;	// (no types: plain ..., or past the last argument)
