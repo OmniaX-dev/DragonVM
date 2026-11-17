@@ -1,0 +1,150 @@
+#import(<dragon-sdk>)
+
+const PAGE_SIZE: u32 = 4096;
+const PAGE_SHIFT: u32 = 12;
+
+struct PageAllocator {
+	priv var bits: u32*;            // 1 bit per page, 1 = used (word i holds pages 32i .. 32i + 31)
+	priv var base: u32;             // the first page's address
+	priv var count: u32;            // pages covered
+	priv var _free: u32;           	// free pages
+	priv var hint: u32;             // where the next search starts (next-fit)
+
+	// The bitmap's size for [base, end): a whole number of words.
+	static sub bitmap_bytes(var base: u32, var end: u32) -> u32 {
+		var pages: u32 = (end - base) >> PAGE_SHIFT;
+		return ((pages + 31) / 32) * 4;
+	}
+
+	// Covers [base, end) (base page-aligned); the bitmap goes at storage (bitmap_bytes).
+	// Everything starts used: add_free gives the allocator what it may hand out.
+	sub init(var storage: u32*, var base: u32, var end: u32) {
+		this->bits = storage;
+		this->base = base;
+		this->count = (end - base) >> PAGE_SHIFT;
+		this->_free = 0;
+		this->hint = 0;
+		dr::memset(storage, 0xFF, PageAllocator::bitmap_bytes(base, end));
+	}
+
+	// The whole pages inside [addr, addr + size) become free (rounded inwards).
+	sub add_free(var addr: u32, var size: u32) {
+		var first: u32 = 0;
+		var last: u32 = 0;              // (one past)
+		if (not this->__inner(addr, size, &first, &last))
+			return;
+		for (var p: u32 = first; p < last; p++) {
+			if (this->__used(p)) {
+				this->__set(p, false);
+				this->_free++;
+			}
+		}
+	}
+
+	// The pages touching [addr, addr + size) become used (rounded outwards): memory that
+	// must never be handed out.
+	sub reserve(var addr: u32, var size: u32) {
+		if (size == 0 or addr + size <= this->base)
+			return;
+		var first: u32 = addr < this->base ? 0 : (addr - this->base) >> PAGE_SHIFT;
+		var last: u32 = (addr + size - this->base + PAGE_SIZE - 1) >> PAGE_SHIFT;
+		if (last > this->count)
+			last = this->count;
+		for (var p: u32 = first; p < last; p++) {
+			if (not this->__used(p)) {
+				this->__set(p, true);
+				this->_free--;
+			}
+		}
+	}
+
+	// n contiguous pages: their address, 0 if there is no such run.
+	atomic sub alloc(var n: u32) -> u32 {
+		if (n == 0 or n > this->_free)
+			return 0;
+		var p: u32 = this->__find(this->hint, this->count, n);
+		if (p == 0xFFFFFFFF)
+			p = this->__find(0, this->count, n);    // wrap around: the start of the RAM
+		if (p == 0xFFFFFFFF)
+			return 0;
+		for (var i: u32 = 0; i < n; i++)
+			this->__set(p + i, true);
+		this->_free -= n;
+		this->hint = p + n;
+		return this->base + (p << PAGE_SHIFT);
+	}
+
+	// Gives back n pages at addr (what alloc returned). False (and nothing changes) for an
+	// address that isn't a page of the allocator's, or pages that aren't all in use.
+	atomic sub free(var addr: u32, var n: u32) -> bool {
+		if (addr < this->base or (addr & (PAGE_SIZE - 1)) != 0 or n == 0)
+			return false;
+		var first: u32 = (addr - this->base) >> PAGE_SHIFT;
+		if (first + n > this->count or first + n < first)
+			return false;
+		for (var i: u32 = 0; i < n; i++) {
+			if (not this->__used(first + i))
+				return false;                                   // a double free, or the wrong n
+		}
+		for (var i: u32 = 0; i < n; i++)
+			this->__set(first + i, false);
+		this->_free += n;
+		if (first < this->hint)
+			this->hint = first;
+		return true;
+	}
+
+	sub free_pages() -> u32 { return this->_free; }
+	sub total_pages() -> u32 { return this->count; }
+
+	// ===== The implementation =====
+
+	priv sub __used(var p: u32) -> bool {
+		return ((this->bits[p >> 5] >> (p & 31)) & 1) != 0;
+	}
+	priv sub __set(var p: u32, var used: bool) {
+		var mask: u32 = cast<u32>(1) << (p & 31);
+		if (used)
+			this->bits[p >> 5] = this->bits[p >> 5] | mask;
+		else
+			this->bits[p >> 5] = this->bits[p >> 5] & ~mask;
+	}
+
+	// The first run of n free pages in [from, to): its first page, or 0xFFFFFFFF.
+	priv sub __find(var from: u32, var to: u32, var n: u32) -> u32 {
+		var run: u32 = 0;
+		var p: u32 = from;
+		while (p < to) {
+			// A full word (32 used pages): skip it at once.
+			if ((p & 31) == 0 and p + 32 <= to and this->bits[p >> 5] == 0xFFFFFFFF) {
+				run = 0;
+				p += 32;
+				continue;
+			}
+			if (this->__used(p))
+				run = 0;
+			else {
+				run++;
+				if (run == n)
+					return p + 1 - n;
+			}
+			p++;
+		}
+		return 0xFFFFFFFF;
+	}
+
+	// The whole pages inside [addr, addr + size), clipped to the allocator: false if none.
+	priv sub __inner(var addr: u32, var size: u32, var first: u32*, var last: u32*) -> bool {
+		var start: u32 = (addr + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+		var end: u32 = (addr + size) & ~(PAGE_SIZE - 1);
+		if (start < this->base)
+			start = this->base;
+		if (end > this->base + (this->count << PAGE_SHIFT))
+			end = this->base + (this->count << PAGE_SHIFT);
+		if (end <= start)
+			return false;
+		*first = (start - this->base) >> PAGE_SHIFT;
+		*last = (end - this->base) >> PAGE_SHIFT;
+		return true;
+	}
+};

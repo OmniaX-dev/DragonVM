@@ -4,13 +4,17 @@
 #include(video.ds)
 #include(logging.ds)
 #include(args.ds)
-#include(heap.ds)
+#include(memory.ds)
 #include(kernel0.ds)
 #include(panic.ds)
+#include(process.ds)
+
 
 sub init_stack_and_switch(var __kernel_main: sub()) {
-	const stack_size: u32 = 64 * 1024;
-	var stack: u32 = cast<u32>(g_heap->alloc_aligned(stack_size, 4096));
+	const stack_pages: u32 = 16;
+	const stack_size: u32 = stack_pages * PAGE_SIZE;
+	var stack: u32 = g_pages.alloc(stack_pages);
+	kernel_assert(stack != 0, "Failed to allocate initial kernel stack.");
 	dr::cpu::switch_stack(stack + stack_size - 4, stack_size, __kernel_main);
 }
 

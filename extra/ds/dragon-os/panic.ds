@@ -16,8 +16,7 @@ sub panic_begin(var title: string) {
 }
 
 sub halt_forever() {
-	while (true)
-		low { hlt } // in a loop: in case eventually something can wake the CPU
+	while (true) low { hlt } // in a loop: in case eventually something can wake the CPU
 }
 
 sub panic(var msg: string) {

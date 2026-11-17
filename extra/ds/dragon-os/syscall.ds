@@ -44,25 +44,27 @@ struct SyscallFrame {            // at trap_frame() + 4
 inline sub current_trap_frame() -> TrapFrame* { return cast<TrapFrame*>(dr::cpu::trap_frame() + 4); }
 inline sub current_syscall_frame() -> SyscallFrame* { return cast<SyscallFrame*>(dr::cpu::trap_frame() + 4); }
 
-interrupt sub on_fault() { __on_fault(); }
+namespace __internal {
+	interrupt sub on_fault() { __on_fault(); }
 
-interrupt sub on_timer() {}
+	interrupt sub on_timer() {}
 
-interrupt sub on_syscall() {
-	var f: SyscallFrame* = current_syscall_frame();
-	var function: u32 = f->regs.R(9);
-	if (function == SYSCALL_PRINT)
-		on_print(f->regs.R(8), f->regs.R(7));
-}
+	interrupt sub on_syscall() {
+		var f: SyscallFrame* = current_syscall_frame();
+		var function: u32 = f->regs.R(9);
+		if (function == SYSCALL_PRINT)
+			on_print(f->regs.R(8), f->regs.R(7));
+	}
 
-sub on_print(var param1: u32, var param2: u32) {
-	if (dr::vga_is_textSingle())
-	{
-		// param1 = u8* string
-		// param2 = new_line
-		dr::TextSingle.print(cast<u8*>(param1)); // TODO: Check the entire string is accessible by the calling process
-		if (param2 != 0)
-			dr::TextSingle.new_line();
+	sub on_print(var param1: u32, var param2: u32) {
+		if (dr::vga_is_textSingle())
+		{
+			// param1 = u8* string
+			// param2 = new_line
+			dr::TextSingle.print(cast<u8*>(param1)); // TODO: Check the entire string is accessible by the calling process
+			if (param2 != 0)
+				dr::TextSingle.new_line();
+		}
 	}
 }
 
@@ -96,7 +98,7 @@ sub syscall(var function: u32, var out_rv: u32*, ...typed) -> bool {
 
 sub init_interrupt_vector() {
 	for (var v: u8 = 0; v <= dr::cpu::Faults.General; v++)
-		dr::set_interrupt_vector_entry(v, &on_fault);
-	dr::set_interrupt_vector_entry(SYSCALL, &on_syscall, true);
-	dr::set_interrupt_vector_entry(dr::HardwareInterrupts.Timer, &on_timer);
+		dr::set_interrupt_vector_entry(v, &__internal::on_fault);
+	dr::set_interrupt_vector_entry(SYSCALL, &__internal::on_syscall, true);
+	dr::set_interrupt_vector_entry(dr::HardwareInterrupts.Timer, &__internal::on_timer);
 }

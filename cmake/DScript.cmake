@@ -108,7 +108,7 @@ function(ds_add_env TARGET MODE ASM_FLAGS)
 	add_custom_command(
 		OUTPUT ${OUT}/dragon-os.bin ${OUT}/disassembly/${DS_DRAGON_OS_DDS}.dds
 		COMMAND ${DSC} ${DS_SOURCE_DIR}/dragon-os/main.ds -L ${OUT}/lib -o ${OUT}/dragon-os.bin
-																																	 -O --verbose --save-disassembly ${OUT}/disassembly/${DS_DRAGON_OS_DDS}.dds ${WA}
+																																	  --verbose --save-disassembly ${OUT}/disassembly/${DS_DRAGON_OS_DDS}.dds ${WA}
 		DEPENDS ${DS_DRAGON_OS_SOURCES} ${SDK} ${COMPILER_TARGET}
 		WORKING_DIRECTORY ${DS_RUN_DIR}
 		COMMENT "DScript (${MODE}): DragonOS"

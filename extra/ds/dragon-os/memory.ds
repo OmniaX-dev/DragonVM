@@ -1,0 +1,42 @@
+#import(<dragon-sdk>)
+
+#include(page_alloc.ds)
+
+var g_heap: dr::Heap* = null;
+var g_pages: PageAllocator;
+
+sub init_allocator(var argc: i32, var argv: string*) {
+	var kernel_start: u32 = 0;
+	var kernel_size: u32 = 0;
+	dr::atou(argv[0], &kernel_start);
+	dr::atou(argv[1], &kernel_size);
+	var kernel_end: u32 = kernel_start + kernel_size;
+	var bios_heap_start: u32 = dr::read_cmos(dr::CMOSRegisters.HeapStart);
+	kernel_assert(dr::MemoryLayout.RAM <= kernel_start and kernel_start < kernel_end and kernel_end <= bios_heap_start, "Invalid memory layout.");
+	// ... kernel_start, kernel_end, bios_heap_start as now ...
+	var ram_end: u32 = dr::read_cmos(dr::CMOSRegisters.MemoryStart) + dr::read_cmos(dr::CMOSRegisters.MemorySize);
+
+	// The bitmap: the first page after the kernel.
+	var bitmap: u32 = (kernel_end + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+	var bitmap_size: u32 = PageAllocator::bitmap_bytes(dr::MemoryLayout.RAM, ram_end);
+	kernel_assert(bitmap + bitmap_size <= bios_heap_start, "No room for the page bitmap.");
+	g_pages.init(cast<u32*>(bitmap), dr::MemoryLayout.RAM, ram_end);
+
+	// Free: Drake's area below the kernel, and from the bitmap's end to the BIOS heap.
+	// (Not the kernel, not the bitmap; the BIOS heap and the boot stack come in kernel_main.)
+	g_pages.add_free(dr::MemoryLayout.RAM, kernel_start - dr::MemoryLayout.RAM);
+	g_pages.add_free(bitmap + bitmap_size, bios_heap_start - (bitmap + bitmap_size));
+
+	// The kernel heap: 1 MiB of pages to start with.
+	const HEAP_PAGES: u32 = 256;
+	g_heap = dr::Heap::create(cast<u8*>(g_pages.alloc(HEAP_PAGES)), HEAP_PAGES * PAGE_SIZE);
+	kernel_assert(g_heap != null, "Unable to setup memory allocator.");
+}
+
+sub init_heap() {
+	var bios_heap_start: u32 = dr::read_cmos(dr::CMOSRegisters.HeapStart);
+	var boot_stack_end: u32 = dr::cpu::boot_stack_end();
+	dr::cpu::release_boot_stack();
+	g_pages.add_free(bios_heap_start, boot_stack_end - bios_heap_start);
+	dr::set_system_heap(g_heap);
+}

@@ -1,0 +1,138 @@
+#import(<dragon-sdk>)
+
+#include(memory.ds)
+
+namespace proc {
+	const AS_MAX_REGIONS: u32 = 16;
+	const MAX_PROCESSES: u32 = 32;
+	const KSTACK_PAGES: u32 = 2;                    // 8 KiB: traps and syscalls only
+	const USTACK_PAGES: u32 = 16;                   // 64 KiB
+
+	enum RegionKind: u8 { Image, Stack, Heap, Shared }
+	struct Region {
+		var start: u32;                 // page-aligned
+		var pages: u32;
+		var permissions: u8;    		// dr::cpu::Permissions
+		var kind: RegionKind;
+		var owned: bool;                // its pages are the process's: freed with it (false: shared, e.g. the trampoline)
+	};
+
+	struct AddressSpace {
+		var map: u8*;                   // the permission map (16 KiB = 4 pages, from g_pages)
+		var regions: Region[AS_MAX_REGIONS];
+		var count: u32;
+	};
+
+	enum ProcessState: u8 {
+		Free,           // an unused slot
+		Ready,          // can run, waiting for its turn
+		Running,        // the one on the CPU (g_current)
+		Blocked,        // waiting for something (a key, the disk, a child): later
+		Zombie          // ended; its kernel stack and slot are not freed yet (see "end process")
+	}
+	struct Process {
+		var pid: u32;
+		var state: ProcessState;
+		var name: u8[32];
+		var parent: u32;                        // the pid that started it (for wait / the exit code, later)
+		var exit_code: i32;
+
+		var as: AddressSpace;             		// its map and its regions (image, stack, ...)
+		var entry: u32;                         // the DRX entry point (in its image)
+		var user_stack_top: u32;                // for set_user_stack (the stack check)
+		var user_stack_size: u32;
+
+		var kernel_stack: u32;                  // the pages (KSTACK_PAGES), for freeing
+		var kernel_top: u32;                    // for set_kernel_stack: where its traps land
+		var frame: u32;                         // its saved trap frame (an address on its kernel stack), while it isn't running
+	};
+
+	var g_processes: Process[MAX_PROCESSES];
+	var g_current: Process* = null;
+	var g_next_pid: u32 = 1;
+
+	// false: no memory for the map
+	sub as_create(var as: AddressSpace*) -> bool {
+		var map: u32 = g_pages.alloc(dr::cpu::PermissionMapSize / PAGE_SIZE);   // 4 pages
+		if (map == 0)
+			return false;
+		as->map = cast<u8*>(map);
+		as->count = 0;
+		dr::memset(as->map, 0, dr::cpu::PermissionMapSize);                                     // all None
+		return true;
+	}
+
+	// Gives the process [start, start + pages * PAGE_SIZE) with permissions, and remembers it.
+	sub as_map(var as: AddressSpace*, var start: u32, var pages: u32, var permissions: u8, var kind: RegionKind, var owned: bool) -> bool {
+		if (as->count == AS_MAX_REGIONS or (start & (PAGE_SIZE - 1)) != 0 or pages == 0)
+			return false;
+		var r: Region* = &as->regions[as->count];
+		r->start = start;
+		r->pages = pages;
+		r->permissions = permissions;
+		r->kind = kind;
+		r->owned = owned;
+		as->count++;
+		dr::cpu::set_page_permissions(as->map, start, pages * PAGE_SIZE, permissions);
+		return true;
+	}
+
+	// The region starting at start: back to None, its pages freed if the process owned them.
+	sub as_unmap(var as: AddressSpace*, var start: u32) -> bool {
+		for (var i: u32 = 0; i < as->count; i++) {
+			var r: Region* = &as->regions[i];
+			if (r->start != start)
+				continue;
+			dr::cpu::set_page_permissions(as->map, r->start, r->pages * PAGE_SIZE, dr::cpu::Permissions.None);
+			if (r->owned)
+				g_pages.free(r->start, r->pages);
+			as->regions[i] = as->regions[as->count - 1];    // (the last one in its place)
+			as->count--;
+			return true;
+		}
+		return false;
+	}
+
+	sub as_destroy(var as: AddressSpace*) {
+		for (var i: u32 = 0; i < as->count; i++) {
+			if (as->regions[i].owned)
+				g_pages.free(as->regions[i].start, as->regions[i].pages);
+		}
+		g_pages.free(cast<u32>(as->map), dr::cpu::PermissionMapSize / PAGE_SIZE);
+		as->count = 0;
+		as->map = null;
+	}
+
+	inline sub user_readable(var as: proc::AddressSpace*, var ptr: u32, var size: u32) -> bool { return __internal::as_check_user_permission(as, ptr, size, dr::cpu::Permissions.Read); }
+	inline sub user_writable(var as: proc::AddressSpace*, var ptr: u32, var size: u32) -> bool { return __internal::as_check_user_permission(as, ptr, size, dr::cpu::Permissions.Write); }
+
+	sub switch_to(var p: Process*) {                                // never returns
+		g_current = p;
+		p->state = ProcessState.Running;
+		dr::cpu::set_permission_map(p->as.map);
+		dr::cpu::set_user_stack(p->user_stack_top, p->user_stack_size);
+		var frame: u32 = p->frame;
+		dr::cpu::set_kernel_stack(p->kernel_top, KSTACK_PAGES * PAGE_SIZE);     // last: see below
+		low {
+			mov R1, $frame
+			mov FP, R1
+			rti
+		}
+	}
+
+	namespace __internal {
+		sub as_check_user_permission(var as: proc::AddressSpace*, var ptr: u32, var size: u32, var permission: u8) -> bool {
+			if (size == 0)
+				return true;
+			if (ptr + size < ptr)
+				return false;                                                   // wraps around the address space
+			var page: u32 = ptr & ~(PAGE_SIZE - 1);
+			while (page < ptr + size) {
+				if ((dr::cpu::page_permissions(as->map, page) & permission) == 0)
+					return false;
+				page += PAGE_SIZE;
+			}
+			return true;
+		}
+	}
+}

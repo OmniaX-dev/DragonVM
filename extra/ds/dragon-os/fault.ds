@@ -39,21 +39,23 @@ sub backtrace(var fp: u32) {
 	}
 }
 
-inline sub __on_fault() {
-	var vector: u8 = dr::cpu::fault_vector();
-	var addr: u32 = dr::cpu::fault_address();
-	var ip: u32 = dr::cpu::fault_ip();
-	var f: TrapFrame* = current_trap_frame();
+namespace __internal {
+	inline sub __on_fault() {
+		var vector: u8 = dr::cpu::fault_vector();
+		var addr: u32 = dr::cpu::fault_address();
+		var ip: u32 = dr::cpu::fault_ip();
+		var f: TrapFrame* = current_trap_frame();
 
-	if (f->mode == 0) {
-		// TODO: log "process X killed: <fault> at <addr>", end it, schedule the next one
-		panic_begin("user fault, but no processes exist yet");
-	} else {
-		panic_begin(fault_name(vector));
+		if (f->mode == 0) {
+			// TODO: log "process X killed: <fault> at <addr>", end it, schedule the next one
+			panic_begin("user fault, but no processes exist yet");
+		} else {
+			panic_begin(fault_name(vector));
+		}
+		kernel_print("address=", false); kernel_print(addr, 16, false);
+		kernel_print(" ip=", false); kernel_print(ip, 16);
+		dump_frame(f);
+		backtrace(f->fp);
+		halt_forever();
 	}
-	kernel_print("address=", false); kernel_print(addr, 16, false);
-	kernel_print(" ip=", false); kernel_print(ip, 16);
-	dump_frame(f);
-	backtrace(f->fp);
-	halt_forever();
 }
