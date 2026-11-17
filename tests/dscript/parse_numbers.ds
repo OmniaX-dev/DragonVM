@@ -1,4 +1,4 @@
-// dr::atou, dr::atoi and dr::atof (the opposites of utoa, itoa and ftoa).
+// std::atou, std::atoi and std::atof (the opposites of utoa, itoa and ftoa).
 // expect-rv: 0
 #import(<dragon-sdk>)
 
@@ -9,31 +9,31 @@ sub expect(var id: i32, var ok: bool) {
 		return;
 	var buff: u8[12];
 	debug_print("parse_numbers: check ");
-	debug_print(dr::itoa(id, buff));
+	debug_print(std::itoa(id, buff));
 	debug_print(" failed\n");
 	g_failures++;
 }
 
 sub u(var text: string, var expected: u32, var base: i32 = 10) -> bool {
 	var v: u32 = 12345;
-	return dr::atou(text, &v, base) and v == expected;
+	return std::atou(text, &v, base) and v == expected;
 }
 sub ubad(var text: string, var base: i32 = 10) -> bool {
 	var v: u32 = 12345;
-	return not dr::atou(text, &v, base) and v == 12345;
+	return not std::atou(text, &v, base) and v == 12345;
 }
 sub i(var text: string, var expected: i32, var base: i32 = 10) -> bool {
 	var v: i32 = 12345;
-	return dr::atoi(text, &v, base) and v == expected;
+	return std::atoi(text, &v, base) and v == expected;
 }
 sub ibad(var text: string, var base: i32 = 10) -> bool {
 	var v: i32 = 12345;
-	return not dr::atoi(text, &v, base) and v == 12345;
+	return not std::atoi(text, &v, base) and v == 12345;
 }
 // Within a relative error (f32: about 7 digits).
 sub f(var text: string, var expected: f32) -> bool {
 	var v: f32 = 0.0;
-	if (not dr::atof(text, &v))
+	if (not std::atof(text, &v))
 		return false;
 	var diff: f32 = v - expected;
 	if (diff < 0.0) diff = -diff;
@@ -42,7 +42,7 @@ sub f(var text: string, var expected: f32) -> bool {
 }
 sub fbad(var text: string) -> bool {
 	var v: f32 = 7.0;
-	return not dr::atof(text, &v) and v == 7.0;
+	return not std::atof(text, &v) and v == 7.0;
 }
 
 sub main() -> i32 {
@@ -82,10 +82,10 @@ sub main() -> i32 {
 
 	var buff: u8[33];
 	var v: i32 = 0;
-	expect(40, dr::atoi(dr::itoa(-123456, buff), &v) and v == -123456);
+	expect(40, std::atoi(std::itoa(-123456, buff), &v) and v == -123456);
 	var w: u32 = 0;
-	expect(41, dr::atou(dr::utoa(0xCAFEBABE, buff, 16), &w, 16) and w == 0xCAFEBABE);
-	expect(42, dr::atou(dr::utoa(0x80000001, buff, 2), &w, 2) and w == 0x80000001);
+	expect(41, std::atou(std::utoa(0xCAFEBABE, buff, 16), &w, 16) and w == 0xCAFEBABE);
+	expect(42, std::atou(std::utoa(0x80000001, buff, 2), &w, 2) and w == 0x80000001);
 
 	expect(50, f("0", 0.0));
 	expect(51, f("3.5", 3.5));
@@ -101,19 +101,19 @@ sub main() -> i32 {
 	expect(61, f("0.1", 0.1));
 	expect(62, f("3.4e38", 3.4e38));
 	var x: f32 = 0.0;
-	expect(63, dr::atof("inf", &x) and x == 1.0 / 0.0);
-	expect(64, dr::atof("-inf", &x) and x == -1.0 / 0.0);
-	expect(65, dr::atof("nan", &x) and x != x);
-	expect(66, dr::atof("1e50", &x) and x == 1.0 / 0.0);
-	expect(67, dr::atof("1e-60", &x) and x == 0.0);
+	expect(63, std::atof("inf", &x) and x == 1.0 / 0.0);
+	expect(64, std::atof("-inf", &x) and x == -1.0 / 0.0);
+	expect(65, std::atof("nan", &x) and x != x);
+	expect(66, std::atof("1e50", &x) and x == 1.0 / 0.0);
+	expect(67, std::atof("1e-60", &x) and x == 0.0);
 	expect(68, fbad(""));
 	expect(69, fbad("."));
 	expect(70, fbad("1e"));
 	expect(71, fbad("1.2.3"));
 	expect(72, fbad("abc"));
 	expect(73, fbad("-"));
-	expect(74, dr::atof(dr::ftoa(-12.5, buff), &x) and x == -12.5);
-	expect(75, dr::atof(dr::ftoa(1234567.0, buff, 2), &x) and x == 1234567.0);
-	expect(76, f(dr::ftoa(2.5e12, buff), 2.5e12));
+	expect(74, std::atof(std::ftoa(-12.5, buff), &x) and x == -12.5);
+	expect(75, std::atof(std::ftoa(1234567.0, buff, 2), &x) and x == 1234567.0);
+	expect(76, f(std::ftoa(2.5e12, buff), 2.5e12));
 	return g_failures;
 }

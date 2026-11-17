@@ -27,3 +27,17 @@ sub panic(var msg: string) {
 inline sub kernel_assert(var cond: bool, var msg: string) {
 	if (not cond) panic(msg);
 }
+
+// A failed assert(...) in the kernel: the panic screen, with where and what.
+sub __assert_fail(var file: string, var line: u32, var condition: string, var message: string) {
+	panic_begin("assertion failed");
+	kernel_print(condition, false);
+	kernel_print(" (", false);
+	kernel_print(file, false);
+	kernel_print(":", false);
+	kernel_print(line, 10, false);
+	kernel_print(")", true);
+	if (message[0] != 0)
+		kernel_print(message, true);
+	halt_forever();
+}

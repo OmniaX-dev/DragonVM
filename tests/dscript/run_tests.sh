@@ -14,7 +14,7 @@
 #                              debugger) has the source lines of these files (also the libraries')
 #   // dsc-lib: <file.ds> ...  libraries to compile first (dsc --lib, in this order, into a
 #                              directory given to the test with -L: #import(<file>))
-# DSCRIPT_TEST_DSC_FLAGS=<options>: added to every dsc command (the SDK's too), e.g. -O.
+# DSCRIPT_TEST_DSC_FLAGS=<options>: added to every dsc command (the libraries' too), e.g. -O.
 # Every test runs twice: as a DRX (relocatable, loaded at 0x01020000) and as a raw binary
 # (--raw --load 0x01030000).
 
@@ -29,12 +29,15 @@ dsc() { "$DSC" "$@" "${EXTRA_FLAGS[@]}"; }
 OUT="$(mktemp -d)"
 trap 'rm -rf "$OUT"' EXIT
 
-# The SDK library, built from its sources (the tests use it with #import(<dragon-sdk>)).
-mkdir -p "$OUT/sdk"
-if ! dsc --lib "$ROOT"/extra/ds/dragon-sdk/src/*.ds -o "$OUT/sdk/dragon-sdk.dlib"; then
-	echo "cannot build the SDK library"
-	exit 1
-fi
+# The libraries, built from their sources into one directory (the tests use them with
+# #import(<libcore>), #import(<dragon-sdk>), #import(<stdlib>)): libcore first, the others import it.
+mkdir -p "$OUT/lib"
+for lib in libcore dragon-sdk stdlib; do
+	if ! dsc --lib "$ROOT"/extra/ds/$lib/src/*.ds -L "$OUT/lib" -o "$OUT/lib/$lib.dlib"; then
+		echo "cannot build the $lib library"
+		exit 1
+	fi
+done
 
 pass=0
 fail=0
@@ -59,7 +62,7 @@ for t in "${tests[@]}"; do
 		for lib in "${libs[@]}"; do
 			# a.ds,b.ds: one library from several files (named after the first one)
 			IFS=, read -r -a lib_sources <<< "$lib"
-			if ! dsc "${lib_sources[@]}" --lib -L "$OUT/sdk" -L "$OUT/$name.libs" -o "$OUT/$name.libs/$(basename "${lib_sources[0]}" .ds).dlib" > "$OUT/$name.log" 2>&1; then
+			if ! dsc "${lib_sources[@]}" --lib -L "$OUT/lib" -L "$OUT/$name.libs" -o "$OUT/$name.libs/$(basename "${lib_sources[0]}" .ds).dlib" > "$OUT/$name.log" 2>&1; then
 				ok=0; msg="library $lib: compile error: $(cat "$OUT/$name.log")"
 			fi
 		done
@@ -68,14 +71,14 @@ for t in "${tests[@]}"; do
 	if [ $ok -eq 0 ]; then
 		:
 	elif [ -n "$err" ]; then
-		if dsc "$t" -L "$OUT/sdk" "${flags[@]}" -o "$OUT/$name.drx" > "$OUT/$name.log" 2>&1; then
+		if dsc "$t" -L "$OUT/lib" "${flags[@]}" -o "$OUT/$name.drx" > "$OUT/$name.log" 2>&1; then
 			ok=0; msg="compiled, but should fail with: $err"
 		elif ! grep -qF -- "$err" "$OUT/$name.log"; then
 			ok=0; msg="wrong error: $(head -1 "$OUT/$name.log") (expected: $err)"
 		fi
 	elif [ -n "$romrv" ]; then
 		cfg="$CONFIG"; [[ "$cfg" = /* ]] || cfg="$BIN/$cfg"
-		if ! dsc "$t" -L "$OUT/sdk" "${flags[@]}" --rom --fixed 16777216,0xFF -o "$OUT/$name.rom" > "$OUT/$name.log" 2>&1; then
+		if ! dsc "$t" -L "$OUT/lib" "${flags[@]}" --rom --fixed 16777216,0xFF -o "$OUT/$name.rom" > "$OUT/$name.log" 2>&1; then
 			ok=0; msg="rom: compile error: $(cat "$OUT/$name.log")"
 		else
 			sed "s|^Bios = .*|Bios = $OUT/$name.rom|" "$cfg" > "$OUT/$name.dvm"
@@ -91,10 +94,10 @@ for t in "${tests[@]}"; do
 	else
 		for mode in drx raw; do
 			if [ $mode = drx ]; then
-				dsc "$t" -L "$OUT/sdk" "${flags[@]}" -o "$OUT/$name.drx" > "$OUT/$name.log" 2>&1 || { ok=0; msg="$mode: compile error: $(cat "$OUT/$name.log")"; break; }
+				dsc "$t" -L "$OUT/lib" "${flags[@]}" -o "$OUT/$name.drx" > "$OUT/$name.log" 2>&1 || { ok=0; msg="$mode: compile error: $(cat "$OUT/$name.log")"; break; }
 				prog="$OUT/$name.drx"; at=()
 			else
-				dsc "$t" -L "$OUT/sdk" "${flags[@]}" --raw --load 0x01030000 --save-disassembly "$OUT/$name.dds" -o "$OUT/$name.bin" > "$OUT/$name.log" 2>&1 || { ok=0; msg="$mode: compile error: $(cat "$OUT/$name.log")"; break; }
+				dsc "$t" -L "$OUT/lib" "${flags[@]}" --raw --load 0x01030000 --save-disassembly "$OUT/$name.dds" -o "$OUT/$name.bin" > "$OUT/$name.log" 2>&1 || { ok=0; msg="$mode: compile error: $(cat "$OUT/$name.log")"; break; }
 				for src in "${sources[@]}"; do
 					grep -qaF "/$src" "$OUT/$name.dds" || { ok=0; msg="the disassembly has no source lines of $src"; }
 				done

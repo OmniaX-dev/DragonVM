@@ -7,7 +7,7 @@
 sub main() -> i32 {
 	if (dr::cpu::is_supervisor())
 		return 1;
-	var r: i32 = dr::random::next();
+	var r: i32 = dr::random_get_next_int();
 	if (r < 0)
 		return 2;
 	var p: u8* = dr::malloc(64);

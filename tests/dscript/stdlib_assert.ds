@@ -1,0 +1,71 @@
+// The stdlib's __assert_fail, in a user program: a false assert prints where it is and what
+// failed with the Print system call (int 0x40, R9 0x11: R8 the text, R7 1 for a new line) and
+// ends the process with the Exit system call (R9 0x10: R8 the exit code, 134). A tiny kernel
+// here (main, in supervisor mode) answers the system calls and runs user_main in user mode.
+// expect-output: Assertion failed: n * 2 == 7 (stdlib_assert.ds:61): user maths\nexit 134\n
+#import(<dragon-sdk>)
+#import(<stdlib>)
+
+var kernel_stack: u32[1024];
+var user_stack: u32[1024];
+var g_exit_code: i32 = -1;
+var g_after_assert: bool = false;
+var g_out: u8[256];
+var g_out_length: u32 = 0;
+
+sub out(var text: string) {
+	var i: u32 = 0;
+	while (text[i] != 0 and g_out_length < 255) {
+		g_out[g_out_length] = text[i];
+		g_out_length++;
+		i++;
+	}
+	g_out[g_out_length] = 0;
+}
+
+interrupt sub on_syscall() {
+	var function: u32;
+	var a: u32;
+	var b: u32;
+	low {
+		mov $function, R9
+		mov $a, R8
+		mov $b, R7
+	}
+	if (function == std::SystemCalls.Print) {
+		out(cast<string>(a));
+		if (b != 0)
+			out("\n");
+	} else if (function == std::SystemCalls.Exit) {
+		g_exit_code = cast<i32>(a);
+		// The process is over: show what it printed and stop (a kernel would run the next one).
+		var buff: u8[12];
+		debug_print(g_out);
+		debug_print("exit ");
+		debug_print(std::itoa(g_exit_code, buff));
+		debug_print("\n");
+		if (g_after_assert)
+			debug_print("(the assert returned)\n");
+		var rv: i32 = g_exit_code;
+		low {
+			mov RV, $rv
+			hlt
+		}
+	}
+}
+
+sub user_main() {
+	var n: i32 = 3;
+	assert(n > 0);
+	assert(n * 2 == 6, "a true one");
+	assert(n * 2 == 7, "user maths");
+	g_after_assert = true;			// (not reached: __assert_fail ends the process)
+	std::syscall(std::SystemCalls.Exit, null, 0);
+}
+
+sub main() -> i32 {
+	dr::set_interrupt_vector_entry(0x40, &on_syscall, true);
+	dr::cpu::set_kernel_stack(cast<u32>(&kernel_stack[1023]), 4096);
+	dr::cpu::enter_user_mode(user_main, cast<u32>(&user_stack[1023]), 4096);
+	return 1;
+}

@@ -1,30 +1,39 @@
-// assert(condition) / assert(condition, "message"): when the condition is false, the program
-// calls __assert_fail with where it is and what failed. This default prints it to the host's
-// terminal (with debug_print: it doesn't need the VGA stack) and stops the machine; with dsc -g,
-// ddb stops first at the debug_break.
-// Define NDEBUG (dsc -D NDEBUG, or #define(NDEBUG)) to compile the asserts out: the conditions
-// are still checked by the compiler, but not run.
-// It is global: the compiler looks for ::__assert_fail.
-// A program (or an OS) can write its own __assert_fail instead of including this file.
+// A failed-assert handler for programs that run without an OS: a BIOS, a boot loader, a kernel.
+//
+// assert(condition[, message]) calls the global ::__assert_fail when the condition is false. The
+// libraries don't define it (neither libcore nor the SDK): each program decides what a failed
+// assert does. DragonOS programs get it from the stdlib (#import(<stdlib>)); a program on the SDK
+// writes its own, which can be just this:
+//
+//     sub __assert_fail(var file: string, var line: u32, var condition: string, var message: string) {
+//         dr::assert_fail_halt(file, line, condition, message);
+//     }
+//
+// (or a kernel's panic screen). Define NDEBUG (dsc -D NDEBUG) to compile the asserts out.
 
-// TODO Fix
-// sub __assert_fail(var file: string, var line: u32, var condition: string, var message: string) {
-// 	var buff: u8[12];
-// 	debug_print("Assertion failed: ");
-// 	debug_print(condition);
-// 	debug_print(" (");
-// 	debug_print(file);
-// 	debug_print(":");
-// 	// debug_print(dr::itoa(cast<i32>(line), buff));
-// 	debug_print(")");
-// 	if (message[0])
-// 	{
-// 		debug_print(": ");
-// 		debug_print(message);
-// 	}
-// 	debug_print("\n");
-// 	low {
-// 		debug_break
-// 		hlt
-// 	}
-// }
+#include(dragon.ds)
+
+namespace dr {
+	// Prints "Assertion failed: <condition> (<file>:<line>): <message>" to the host's terminal
+	// (debug_print: it doesn't need the VGA stack) and stops the machine; with dsc -g, ddb stops
+	// first at the debug_break.
+	sub assert_fail_halt(var file: string, var line: u32, var condition: string, var message: string) {
+		var buff: u8[12];
+		debug_print("Assertion failed: ");
+		debug_print(condition);
+		debug_print(" (");
+		debug_print(file);
+		debug_print(":");
+		debug_print(std::utoa(line, buff));
+		debug_print(")");
+		if (message[0] != 0) {
+			debug_print(": ");
+			debug_print(message);
+		}
+		debug_print("\n");
+		low {
+			debug_break
+			hlt
+		}
+	}
+}

@@ -12,7 +12,7 @@ sub expect(var id: i32, var ok: bool) {
 		return;
 	var buff: u8[12];
 	debug_print("f32_basics: check ");
-	debug_print(dr::itoa(id, buff));
+	debug_print(std::itoa(id, buff));
 	debug_print(" failed\n");
 	g_failures++;
 }

@@ -1,4 +1,5 @@
-// dr::time: the timer's Unix time (fixed by drun --unix-time) and DateTime.
+// The timer's Unix time (dr::time_get_unix, fixed by drun --unix-time) and libcore's std::time
+// (DateTime, the calendar).
 // drun-flags: --unix-time 1763200000
 // expect-rv: 0
 #import(<dragon-sdk>)
@@ -10,12 +11,12 @@ sub expect(var id: i32, var ok: bool) {
 		return;
 	var buff: u8[12];
 	debug_print("sdk_time: check ");
-	debug_print(dr::itoa(id, buff));
+	debug_print(std::itoa(id, buff));
 	debug_print(" failed\n");
 	g_failures++;
 }
 
-sub text_is(var d: dr::time::DateTime*, var fmt: string, var expected: string) -> bool {
+sub text_is(var d: std::time::DateTime*, var fmt: string, var expected: string) -> bool {
 	var buff: u8[48];
 	d->setFormat(fmt)->toString(buff, 48);
 	var ok: bool = dr::strcmp(buff, expected) == 0;
@@ -30,37 +31,37 @@ sub text_is(var d: dr::time::DateTime*, var fmt: string, var expected: string) -
 
 sub main() -> i32 {
 	// 1763200000 = 2025-11-15 09:46:40 UTC (a Saturday); the run takes a few machine seconds.
-	var t: u32 = dr::time::unix_time();
+	var t: u32 = dr::time_get_unix();
 	expect(1, t >= 1763200000 and t < 1763200000 + 60);
-	var now: dr::time::DateTime();
+	var now: std::time::DateTime(dr::time_get_unix());
 	expect(2, now.getUnixTime() >= 1763200000 and now.getYear() == 2025 and now.getMonth() == 11 and now.getDay() == 15);
 
-	var d: dr::time::DateTime(1763200000);
+	var d: std::time::DateTime(1763200000);
 	expect(10, text_is(&d, "YYYY-MM-DD HH:Min:SS", "2025-11-15 09:46:40"));
 	expect(11, text_is(&d, "DD.MM.YY hh:min:ss", "15.11.25 9:46:40"));
 	expect(12, d.getWeekDay() == 6 and d.getDayOfYear() == 319);
 	expect(13, text_is(&d, "[YYYY/MM] at hh", "[2025/11] at 9"));
 
 	// Calendar edges.
-	var e: dr::time::DateTime(0);
+	var e: std::time::DateTime(0);
 	expect(20, text_is(&e, "YYYY-MM-DD HH:Min:SS", "1970-01-01 00:00:00") and e.getWeekDay() == 4);
-	var last: dr::time::DateTime(4294967295);
+	var last: std::time::DateTime(4294967295);
 	expect(21, text_is(&last, "YYYY-MM-DD HH:Min:SS", "2106-02-07 06:28:15"));
-	var leap: dr::time::DateTime(2024, 2, 29, 23, 59, 59);
+	var leap: std::time::DateTime(2024, 2, 29, 23, 59, 59);
 	expect(22, leap.isValid() and text_is(&leap, "DD.MM.YYYY HH:Min:SS", "29.02.2024 23:59:59"));
 	leap.addSeconds(1);
 	expect(23, text_is(&leap, "DD.MM.YYYY HH:Min:SS", "01.03.2024 00:00:00"));
-	var noLeap: dr::time::DateTime(2100, 2, 29);
+	var noLeap: std::time::DateTime(2100, 2, 29);
 	expect(24, not noLeap.isValid());
-	var y2000: dr::time::DateTime(2000, 2, 29);
+	var y2000: std::time::DateTime(2000, 2, 29);
 	expect(25, y2000.isValid() and y2000.getDayOfYear() == 60);
-	var tooEarly: dr::time::DateTime(1969, 12, 31, 23, 59, 59);
+	var tooEarly: std::time::DateTime(1969, 12, 31, 23, 59, 59);
 	expect(26, not tooEarly.isValid());
-	var tooLate: dr::time::DateTime(2106, 2, 7, 6, 28, 16);
+	var tooLate: std::time::DateTime(2106, 2, 7, 6, 28, 16);
 	expect(27, not tooLate.isValid());
-	var bad: dr::time::DateTime(2025, 13, 1);
+	var bad: std::time::DateTime(2025, 13, 1);
 	expect(28, not bad.isValid());
-	expect(29, dr::time::days_in_month(1900, 2) == 28 and dr::time::days_in_month(2000, 2) == 29);
+	expect(29, std::time::days_in_month(1900, 2) == 28 and std::time::days_in_month(2000, 2) == 29);
 
 	// The round trip through the calendar for many days.
 	var okDays: bool = true;
@@ -68,28 +69,28 @@ sub main() -> i32 {
 		var y: i32;
 		var m: u32;
 		var dd: u32;
-		dr::time::civil_from_days(day, &y, &m, &dd);
-		if (dr::time::days_from_civil(y, m, dd) != day)
+		std::time::civil_from_days(day, &y, &m, &dd);
+		if (std::time::days_from_civil(y, m, dd) != day)
 			okDays = false;
 	}
 	expect(30, okDays);
 
 	// Time zones: the fields move, the moment doesn't.
-	var z: dr::time::DateTime(1763200000);
+	var z: std::time::DateTime(1763200000);
 	z.setTimeZone(-600);
 	expect(40, text_is(&z, "YYYY-MM-DD HH:Min", "2025-11-14 23:46") and z.getWeekDay() == 5);
 	z.setTimeZone(330);
 	expect(41, text_is(&z, "HH:Min", "15:16") and z.getUnixTime() == 1763200000);
-	var zero: dr::time::DateTime(0);
+	var zero: std::time::DateTime(0);
 	zero.setTimeZone(-60);
 	expect(42, text_is(&zero, "YYYY-MM-DD HH", "1969-12-31 23"));
-	var local: dr::time::DateTime(0);
+	var local: std::time::DateTime(0);
 	local.setTimeZone(120);
 	expect(43, local.set(2025, 11, 15, 11, 46, 40) and local.getUnixTime() == 1763200000);
 
 	// Arithmetic and comparisons.
-	var a: dr::time::DateTime(2025, 1, 31);
-	var b: dr::time::DateTime(2025, 1, 31);
+	var a: std::time::DateTime(2025, 1, 31);
+	var b: std::time::DateTime(2025, 1, 31);
 	b.addDays(30)->addHours(5);
 	expect(50, text_is(&b, "DD.MM.YYYY HH", "02.03.2025 05"));
 	expect(51, a.daysUntil(&b) == 30 and b.daysUntil(&a) == -30);
@@ -98,7 +99,7 @@ sub main() -> i32 {
 	expect(53, a.compare(&b) == 0 and a.equals(&b));
 
 	// Parsing.
-	var p: dr::time::DateTime(0);
+	var p: std::time::DateTime(0);
 	expect(60, p.parse("19.12.1993") and p.getYear() == 1993 and p.getMonth() == 12 and p.getDay() == 19);
 	expect(61, p.parse("2026-02-01 7:05:09", "YYYY-MM-DD hh:Min:SS") and text_is(&p, "DD.MM.YYYY HH:Min:SS", "01.02.2026 07:05:09"));
 	var keep: u32 = p.getUnixTime();

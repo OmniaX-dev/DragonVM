@@ -1,17 +1,17 @@
-// dr::ASCII (ascii.ds): the 256 characters of CP437 by name (1..31 and 127 also by their pictures).
+// std::data::ASCII (ascii.ds): the 256 characters of CP437 by name (1..31 and 127 also by their pictures).
 // expect-rv: 0
 #include(check.ds)
 #import(<dragon-sdk>)
 
 sub main() -> i32 {
-	check(1, dr::ASCII.Null == 0 and dr::ASCII.StartOfHeading == 1 and dr::ASCII.Escape == 27 and dr::ASCII.UnitSeparator == 31);
-	check(2, dr::ASCII.Space == ' ' and dr::ASCII.Digit0 == '0' and dr::ASCII.Digit9 == '9' and dr::ASCII.Tilde == '~');
-	check(3, dr::ASCII.A == 'A' and dr::ASCII.Z == 'Z' and dr::ASCII.a == 'a' and dr::ASCII.z == 'z' and dr::ASCII.Backslash == '\\');
-	check(4, dr::ASCII.Delete == 0x7F and dr::ASCII.CCedilla == 0x80 and dr::ASCII.BoxDoubleDownRight == 0xC9);
-	check(5, dr::ASCII.FullBlock == 0xDB and dr::ASCII.alpha == 0xE0 and dr::ASCII.Sigma == 0xE4 and dr::ASCII.sigma == 0xE5);
-	check(6, dr::ASCII.NoBreakSpace == 0xFF and sizeof(dr::ASCII) == 288);
-	var row: u8[4] = { dr::ASCII.BoxDoubleDownRight, dr::ASCII.BoxDoubleHorizontal, dr::ASCII.BoxDoubleDownLeft, 0 };
+	check(1, std::data::ASCII.Null == 0 and std::data::ASCII.StartOfHeading == 1 and std::data::ASCII.Escape == 27 and std::data::ASCII.UnitSeparator == 31);
+	check(2, std::data::ASCII.Space == ' ' and std::data::ASCII.Digit0 == '0' and std::data::ASCII.Digit9 == '9' and std::data::ASCII.Tilde == '~');
+	check(3, std::data::ASCII.A == 'A' and std::data::ASCII.Z == 'Z' and std::data::ASCII.a == 'a' and std::data::ASCII.z == 'z' and std::data::ASCII.Backslash == '\\');
+	check(4, std::data::ASCII.Delete == 0x7F and std::data::ASCII.CCedilla == 0x80 and std::data::ASCII.BoxDoubleDownRight == 0xC9);
+	check(5, std::data::ASCII.FullBlock == 0xDB and std::data::ASCII.alpha == 0xE0 and std::data::ASCII.Sigma == 0xE4 and std::data::ASCII.sigma == 0xE5);
+	check(6, std::data::ASCII.NoBreakSpace == 0xFF and sizeof(std::data::ASCII) == 288);
+	var row: u8[4] = { std::data::ASCII.BoxDoubleDownRight, std::data::ASCII.BoxDoubleHorizontal, std::data::ASCII.BoxDoubleDownLeft, 0 };
 	check(7, row[1] == 0xCD);
-	check(8, dr::ASCII.Smiley == 1 and dr::ASCII.ArrowLeft == dr::ASCII.Escape and dr::ASCII.TriangleDown == 0x1F and dr::ASCII.House == dr::ASCII.Delete);
+	check(8, std::data::ASCII.Smiley == 1 and std::data::ASCII.ArrowLeft == std::data::ASCII.Escape and std::data::ASCII.TriangleDown == 0x1F and std::data::ASCII.House == std::data::ASCII.Delete);
 	return result();
 }

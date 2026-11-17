@@ -1,0 +1,38 @@
+// assert(condition) / assert(condition, "message") in a DragonOS program: when the condition is
+// false, the program calls __assert_fail, which prints where it is and what failed (the Print
+// system call) and ends the process with exit code 134 (the Exit system call).
+// Define NDEBUG (dsc -D NDEBUG, or #define(NDEBUG)) to compile the asserts out.
+//
+// It is global (the compiler looks for ::__assert_fail) and only the stdlib defines it: libcore
+// and the SDK don't, so that each program decides what a failed assert does. Programs without
+// the stdlib (a BIOS, a boot loader, a kernel) write their own, e.g. with the SDK's
+// dr::assert_fail_halt (prints to the host's terminal and stops the machine):
+//
+//     sub __assert_fail(var file: string, var line: u32, var condition: string, var message: string) {
+//         dr::assert_fail_halt(file, line, condition, message);
+//     }
+
+#include(syscall.ds)
+#import(<libcore>)
+
+namespace std {
+	const ASSERT_EXIT_CODE: i32 = 134;
+}
+
+sub __assert_fail(var file: string, var line: u32, var condition: string, var message: string) {
+	var buff: u8[12];
+	std::syscall(std::SystemCalls.Print, null, "Assertion failed: ", false);
+	std::syscall(std::SystemCalls.Print, null, condition, false);
+	std::syscall(std::SystemCalls.Print, null, " (", false);
+	std::syscall(std::SystemCalls.Print, null, file, false);
+	std::syscall(std::SystemCalls.Print, null, ":", false);
+	std::syscall(std::SystemCalls.Print, null, std::utoa(line, buff), false);
+	std::syscall(std::SystemCalls.Print, null, ")", false);
+	if (message[0] != 0) {
+		std::syscall(std::SystemCalls.Print, null, ": ", false);
+		std::syscall(std::SystemCalls.Print, null, message, false);
+	}
+	std::syscall(std::SystemCalls.Print, null, "", true);
+	std::syscall(std::SystemCalls.Exit, null, std::ASSERT_EXIT_CODE);
+	while (true) {}		// (if the kernel lets the process go on anyway)
+}

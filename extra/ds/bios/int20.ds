@@ -1,5 +1,5 @@
 #import(<dragon-sdk>)
-#import(<stdlib>)
+#import(<libcore>)
 
 interrupt sub __int_20_handler() {
 	var code: u32;

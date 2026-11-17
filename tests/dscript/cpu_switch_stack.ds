@@ -32,7 +32,7 @@ sub kernel_main() {
 
 	// Deep calls still work on the new stack.
 	var buff: u8[12];
-	check(23, dr::strcmp(dr::utoa(12345, buff), "12345") == 0);
+	check(23, dr::strcmp(std::utoa(12345, buff), "12345") == 0);
 
 	var rv: i32 = result();
 	low {

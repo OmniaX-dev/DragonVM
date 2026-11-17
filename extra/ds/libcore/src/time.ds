@@ -1,89 +1,8 @@
-#include(syscall.ds)
+// std::time: the calendar and DateTime (no clock: they work with the Unix times they are
+// given; the clock is the SDK's dr::time_get_unix() in supervisor mode, std::time::unix_time()
+// from the stdlib in a DragonOS program).
 
 namespace std::time {
-	// Milliseconds since the machine started (the timer device). Wraps after about 49.7 days:
-	// measure intervals as millis() - start, which stays right across the wrap.
-	inline sub millis() -> u32 {
-		var n: u32 = 0;
-		syscall(SystemCalls.TimeMillis, &n);
-		return n;
-	}
-
-	// The low 32 bits of the cycles executed since the machine started (for short measurements:
-	// cycles() - start is right up to 2^32 cycles).
-	inline sub cycles() -> u32 {
-		var n: u32 = 0;
-		syscall(SystemCalls.TimeCycles, &n);
-		return n;
-	}
-
-	// The time: seconds since 1970-01-01 00:00 UTC (the timer device: the host's clock when the
-	// machine started, running on with it). Unsigned: right until 2106-02-07.
-	inline sub unix_time() -> u32 {
-		var n: u32 = 0;
-		syscall(SystemCalls.TimeUnix, &n);
-		return n;
-	}
-
-	// Waits ms milliseconds, by the timer: right at any clock speed (also uncapped). Interrupts
-	// keep running meanwhile (their handlers' time counts as part of the wait).
-	sub sleep(var ms: i32) {
-		if (ms <= 0)
-			return;
-		var start: u32 = millis();
-		while (millis() - start < cast<u32>(ms));
-	}
-
-	struct Timer {
-		priv var m_interval_ms: u32 = 0;
-		priv var m_callback: sub(void*) = null;
-		priv var m_context: void* = null;
-		priv var m_running: bool = false;
-		priv var m_lastTime: u32 = 0;
-
-		sub new(var interval_ms: u32, var callback: sub(void*), var context: void* = null, var start: bool = false) {
-			if (not callback) return;
-			this->m_interval_ms = interval_ms;
-			this->m_callback = callback;
-			this->m_context = context;
-			this->m_running = start;
-		}
-
-		inline sub isValid() -> bool {
-			return this->m_callback != null;
-		}
-		inline sub start() {
-			if (not this->isValid()) return;
-			this->m_lastTime = millis();
-			this->m_running = true;
-		}
-		inline sub stop() {
-			if (not this->isValid()) return;
-			this->m_running = false;
-		}
-		inline sub isRunning() -> bool {
-			if (not this->isValid()) return false;
-			return this->m_running;
-		}
-		inline sub setInterval(var interval_ms: u32) {
-			if (not this->isValid()) return;
-			this->m_interval_ms = interval_ms;
-			if (this->isRunning())
-				this->start();
-		}
-		inline sub getInterval() -> u32 {
-			return this->m_interval_ms;
-		}
-		sub update() {
-			if (not this->isRunning()) return;
-			if (millis() - this->m_lastTime >= this->m_interval_ms)
-			{
-				this->m_callback(this->m_context);
-				this->m_lastTime = millis();
-			}
-		}
-	};
-
 	// The calendar (proleptic Gregorian: today's rules for every year).
 	sub is_leap_year(var year: i32) -> bool {
 		return (year % 4 == 0 and year % 100 != 0) or year % 400 == 0;
@@ -194,7 +113,7 @@ namespace std::time {
 	// From 1970-01-01 00:00:00 to 2106-02-07 06:28:15 UTC (the timer's u32 Unix time); the add*
 	// subs wrap around beyond them.
 	//
-	//     var now: std::time::DateTime();                          // the timer's time
+	//     var now: std::time::DateTime(std::time::unix_time());   // now (or dr::time_get_unix())
 	//     var d: std::time::DateTime(1993, 12, 19, 18, 30);        // a date (UTC), time optional
 	//     var buff: u8[32];
 	//     d.setFormat("YYYY-MM-DD HH:Min:SS")->toString(buff, 32);   // "1993-12-19 18:30:00"
@@ -210,9 +129,9 @@ namespace std::time {
 		priv var m_valid: bool = true;
 		priv var m_format: string = "DD.MM.YYYY";
 
-		// Now (the timer's Unix time).
+		// 1970-01-01 00:00 UTC (Unix time 0).
 		sub new() {
-			this->m_seconds = unix_time();
+			this->m_seconds = 0;
 		}
 		// A Unix time.
 		sub new(var unix_seconds: u32) {
@@ -232,8 +151,6 @@ namespace std::time {
 			this->m_valid = true;
 			return this;
 		}
-		// Now (the timer's Unix time).
-		inline sub setNow() -> DateTime* { return this->setUnixTime(unix_time()); }
 
 		// The fields, in the DateTime's time zone. False (the DateTime unchanged, not valid) when
 		// they aren't a date and time or the moment is out of range.

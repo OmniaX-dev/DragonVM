@@ -7,6 +7,10 @@
 #import(<geom>)
 #import(<shapes>)
 
+sub __assert_fail(var file: string, var line: u32, var condition: string, var message: string) {
+	dr::assert_fail_halt(file, line, condition, message);
+}
+
 sub inc(var n: i32) -> i32 { return n + 1; }
 
 sub main() -> i32 {

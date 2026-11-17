@@ -1,5 +1,6 @@
-
-#include(va.ds)
+// System calls: how a DragonOS program asks the kernel for things (int 0x40, the function in R9,
+// its arguments in R8, R7, ...; the result in RV).
+#import(<libcore>)
 
 namespace std {
 	enum SystemCalls: u32 {
@@ -54,6 +55,19 @@ namespace std {
 				*out_rv = 0;
 				return true;
 			}
+		}
+		else if (function == SystemCalls.Exit)
+		{
+			// The process ends: the exit code (default 0) goes to the kernel. Doesn't return.
+			var code: i32 = 0;
+			if (args.count > 0)
+				code = args.get_i32(0);
+			low {
+				mov R9, $function
+				mov R8, $code
+				int 0x40
+			}
+			return false;		// (only if the kernel didn't end the process)
 		}
 		else if (function == SystemCalls.SeedRandom)
 		{

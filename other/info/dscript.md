@@ -112,24 +112,24 @@ a `u32` (its 32 bits), so it is passed, returned, stored and copied like one.
   As a condition, an `f32` is true unless it is `0.0` / `-0.0` (NaN is true).
 - Constants fold at compile time (`const HALF: f32 = 1.0 / 2;`), also in struct constants and
   default values. An overloaded sub called with an integer prefers its integer overload.
-- To look at the bits: `*cast<u32*>(&f)` (or `dr::math::f32_bits(f)` / `dr::math::f32_from_bits(bits)`).
-- The SDK's `math.ds`, in `dr::math`: `sqrt`, `floor`, `ceil`, `round`, `trunc`, `abs`, `min`, `max`,
+- To look at the bits: `*cast<u32*>(&f)` (or `std::math::f32_bits(f)` / `std::math::f32_from_bits(bits)`).
+- libcore's `math.ds`, in `std::math`: `sqrt`, `floor`, `ceil`, `round`, `trunc`, `abs`, `min`, `max`,
   `clamp`, `lerp`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `exp`, `log`, `log2`,
   `log10`, `pow`, `fmod`, `is_nan`, `is_inf`, `is_finite`, and `PI`, `TAU`, `E`, `INFINITY`,
-  `NAN`, ... `dr::ftoa(f, buffer, decimals)` writes one as text; `print(f32)` prints one
-  (`TextSingle`, `Text16`, `Text16Console`; 6 decimals by default). `dr::atof(text, &f)` reads
-  one back (also `inf`, `nan`, `1.5e-3`); `dr::atou` / `dr::atoi(text, &n, base)` do the same for
+  `NAN`, ... `std::ftoa(f, buffer, decimals)` writes one as text; `print(f32)` prints one
+  (`TextSingle`, `Text16`, `Text16Console`; 6 decimals by default). `std::atof(text, &f)` reads
+  one back (also `inf`, `nan`, `1.5e-3`); `std::atou` / `std::atoi(text, &n, base)` do the same for
   integers (base 0: from a `0x` / `0b` / `0o` prefix). They return false when the text isn't a
   number (or it doesn't fit).
 
-### 64-bit integers (SDK)
+### 64-bit integers (libcore)
 
-There is no 64-bit type in the language: the SDK's `int64.ds` has two structs, `dr::U64` and
-`dr::I64` (two's complement), with the words as fields (`hi`, then `lo`: the bytes of a big endian
+There is no 64-bit type in the language: libcore's `int64.ds` has two structs, `std::U64` and
+`std::I64` (two's complement), with the words as fields (`hi`, then `lo`: the bytes of a big endian
 64-bit value, so a pointer to one in memory can be cast to `U64*` / `I64*`). The operations
 change the struct and return it, so they chain:
 ```
-var a: dr::U64(5);                      // constructors: (), (u32), (i32), (hi, lo), (U64*), (I64*)
+var a: std::U64(5);                     // constructors: (), (u32), (i32), (hi, lo), (U64*), (I64*)
 a.mul(3)->add(&b)->shl(4);              // a = ((a * 3) + b) << 4
 if (a.gt(1000)) ...                     // eq ne lt le gt ge (bool), cmp (-1 / 0 / 1)
 var text: u8[24]; a.str(text);           // str(buffer, base = 10), parse(text, base = 10) -> bool
@@ -147,15 +147,20 @@ console.print(&a);                      // TextSingle / Text16 / Text16Console p
 - The cost: add / sub / compare / bits are a few instructions on each word, `mul` about 20,
   `div` / `mod` up to several hundred (a divisor under 65536 takes a faster path).
 
-### Time and dates (SDK)
+### Time and dates (SDK, libcore, stdlib)
 
-`time.ds` has the timer: `dr::time::millis()` (since the machine started), `cycles()`, `sleep(ms)`,
-`unix_time()` (seconds since 1970-01-01 00:00 UTC: the host's clock when the machine started,
-running on with it; `drun --unix-time <seconds>` fixes it for tests), and `dr::time::DateTime`, a
-moment in time like `ostd::Date` (1970 to 2106-02-07, the timer's `u32`):
+The clock: in supervisor mode, the SDK reads the timer directly: `dr::time_get_millis()` (since
+the machine started), `dr::time_get_cycles()`, `dr::time_sleep(ms)`, `dr::time_get_unix()`
+(seconds since 1970-01-01 00:00 UTC: the host's clock when the machine started, running on with
+it; `drun --unix-time <seconds>` fixes it for tests). A DragonOS program asks the kernel with the
+stdlib's `std::time::millis()`, `cycles()`, `unix_time()`, `sleep(ms)` and `std::time::Timer`
+(system calls).
+
+The calendar is libcore's (no clock: it works with the times it is given): `std::time::DateTime`,
+a moment in time like `ostd::Date` (1970 to 2106-02-07, the timer's `u32`):
 ```
-var now: dr::time::DateTime();                      // constructors: () now, (unix_seconds),
-var d: dr::time::DateTime(1993, 12, 19, 18, 30);    //   (year, month, day, hour, minute, second) UTC
+var now: std::time::DateTime(dr::time_get_unix());   // constructors: () 1970-01-01, (unix_seconds),
+var d: std::time::DateTime(1993, 12, 19, 18, 30);    //   (year, month, day, hour, minute, second) UTC
 var text: u8[32];
 d.setFormat("YYYY-MM-DD HH:Min:SS")->toString(text, 32);    // "1993-12-19 18:30:00"
 if (d.parse("01.02.2026", "DD.MM.YYYY")) ...          // strict; false: unchanged, not valid
@@ -164,7 +169,7 @@ d.addDays(30)->addHours(-2);                        // addSeconds / Minutes / Ho
 - Format tokens (as in `ostd::Date`): `YYYY`, `YY` (parsed: 00..69 the 2000s), `MM`, `DD`, `HH` /
   `hh` (24h, padded / not), `Min` / `min`, `SS` / `ss`; anything else is literal text.
 - `getYear`, `getMonth`, `getDay`, `getHour`, `getMinute`, `getSecond`, `getWeekDay` (0 Sunday),
-  `getDayOfYear`, `getFields(&y, &m, &d, &h, &mi, &s)`, `getUnixTime`, `setUnixTime`, `setNow`,
+  `getDayOfYear`, `getFields(&y, &m, &d, &h, &mi, &s)`, `getUnixTime`, `setUnixTime`,
   `set(y, m, d, h, mi, s) -> bool`, `isValid`, `compare(&other)` (-1 / 0 / 1), `equals`,
   `daysUntil(&other)`.
 - `setTimeZone(minutes)`: a fixed UTC offset (no daylight saving) for the fields (the getters,
@@ -182,7 +187,7 @@ in `other/info/info`, "Modes"):
 dr::set_interrupt_vector_entry(dr::cpu::Faults.AccessViolation, &on_fault);   // 0x00 - 0x05
 dr::set_interrupt_vector_entry(0x40, &on_syscall, true);  // user-callable: a system call
 dr::cpu::set_kernel_stack(top, size);                 // traps from user mode switch to it
-dr::time::set_interrupt_interval(10);                 // the Timer interrupt (0xC0) every 10 ms
+dr::set_interrupt_interval(10);                       // the Timer interrupt (0xC0) every 10 ms
 dr::cpu::enter_user_mode(program_main, stack_top, stack_size);   // doesn't return
 ```
 - In a handler (an `interrupt sub`): `dr::cpu::is_supervisor()`, `fault_vector()`, `fault_ip()`,
@@ -234,15 +239,15 @@ heap->free(p);                                         // false: not the heap's,
   can: no interrupt (and `int` does nothing in supervisor mode while interrupts are disabled: in
   an atomic block, or before the kernel enables them).
 
-### Text formatting (SDK)
+### Text formatting (libcore)
 
-`va.ds`: `dr::VaList` (the extra arguments of a variadic sub: `count`, `get_i32(i)`, `get_u32`,
+`va.ds`: `std::VaList` (the extra arguments of a variadic sub: `count`, `get_i32(i)`, `get_u32`,
 `get_f32`, `get_bool`, `get_ptr`, `get_string`, `word(i)`; `typed()`, `type_of(i)`), and
 formatting with it:
 ```
-var n: u32 = dr::format(buffer, capacity, "x = {}, hex {:08x}, %-6s|%.2f", x, x, name, f);
-dr::vformat(buffer, capacity, fmt, &args);        // another variadic sub's arguments
-dr::debug_printf("ticks: {}\n", ticks);           // through debug_print (up to 255 characters)
+var n: u32 = std::format(buffer, capacity, "x = {}, hex {:08x}, %-6s|%.2f", x, x, name, f);
+std::vformat(buffer, capacity, fmt, &args);       // another variadic sub's arguments
+std::debug_printf("ticks: {}\n", ticks);          // through debug_print (up to 255 characters)
 ```
 - `{}` formats the next argument as its type says (integers in decimal, `f32` with 6 decimals,
   strings, `bool` as true / false, pointers as `0x0000abcd`); `{:spec}` and the C style `%spec`
@@ -466,18 +471,18 @@ A sub whose parameters end with `...` takes more arguments, of any scalar type; 
 `...typed`, each one's type is passed too. Three built-ins read them, in the sub itself:
 ```
 sub sum(var count: u32, ...) -> i32 {
-    var args: dr::VaList(va_start(), va_count());     // (the SDK's va.ds)
+    var args: std::VaList(va_start(), va_count());    // (libcore's va.ds)
     var total: i32 = 0;
     for (var i: u32 = 0; i < args.count; i++)
         total += args.get_i32(i);
     return total;
 }
 sum(3, 10, 20, 30);
-dr::format(buffer, 64, "{} is {} ({:08x})", name, value, value);   // a ...typed sub
+std::format(buffer, 64, "{} is {} ({:08x})", name, value, value);  // a ...typed sub
 ```
 - `va_count()`: how many extra arguments the call gave; `va_start()`: the address of the first
   (the next ones are each 4 bytes lower); `va_types()` (`...typed` only): the address of their
-  types (the same way down; the values are the SDK's `dr::VaTypes`: Bool 1, I8 2, U8 3, I16 4,
+  types (the same way down; the values are libcore's `std::VaTypes`: Bool 1, I8 2, U8 3, I16 4,
   U16 5, I32 6, U32 7, F32 8, Pointer 9, String 10 (u8* / i8*), Sub 11). All three are `u32`.
 - Each extra argument is one 32-bit slot: integers smaller than 32 bits (and `bool`) are
   widened (to `i32` if signed, else `u32`), an `f32` is passed as its bits, arrays as pointers,
@@ -508,17 +513,30 @@ var y = square(a + 1);      // the parameter is a copy: a is not changed
 
 ### assert
 ```
-#include(<assert.ds>)
 assert(p != null);
 assert(count < MAX, "too many entries");    // an optional message (a string)
 ```
-When the condition is false, the program calls `__assert_fail(file, line, condition, message)`
-(the condition as written, the message or ""). The SDK's (`assert.ds`) prints them to the
-host's terminal with `debug_print` (no VGA needed), then stops the machine (`hlt`; with `dsc -g`,
-ddb stops first at a `debug_break`). A program (an OS, for example) can write its own
-`__assert_fail` instead, to show it on the screen. With `NDEBUG` defined
-(`dsc -D NDEBUG` or `#define(NDEBUG)`), asserts are only checked by the compiler: no code, the
-conditions are not run (so they should not have side effects that matter).
+When the condition is false, the program calls the global `__assert_fail(file, line, condition,
+message)` (the condition as written, the message or ""); without one, an assert is an error.
+The program decides what a failed assert does, not its libraries: libcore and the SDK don't
+define it.
+- A DragonOS program gets it from the stdlib (`#import(<stdlib>)`): it prints the failure with
+  the Print system call and ends the process (the Exit system call, code 134).
+- A program on the SDK (a BIOS, a boot loader, a kernel) writes its own; the SDK's
+  `dr::assert_fail_halt` prints to the host's terminal with `debug_print` (no VGA needed), then
+  stops the machine (`hlt`; with `dsc -g`, ddb stops first at a `debug_break`):
+  ```
+  sub __assert_fail(var file: string, var line: u32, var condition: string, var message: string) {
+      dr::assert_fail_halt(file, line, condition, message);
+  }
+  ```
+  DragonOS's kernel shows its panic screen instead.
+- A library can't use assert: it would need the handler when it is compiled (and it would then
+  be the library's, for every program).
+
+With `NDEBUG` defined (`dsc -D NDEBUG` or `#define(NDEBUG)`), asserts are only checked by the
+compiler: no code, the conditions are not run (so they should not have side effects that
+matter), and no `__assert_fail` is needed.
 
 ### debug_print
 ```
@@ -839,6 +857,17 @@ sub main() -> i32 { return Gfx::width(); }
 - For now: the whole library is linked (also what the program doesn't use); a raw program with
   libraries is padded (`--fixed`) after linking.
 
+DragonVM's own libraries (`extra/ds/<name>/src`, built by `ds_env` into `<name>.dlib`, copied to
+`extra/ds/<name>/lib`):
+- `libcore`: freestanding utilities, in `std`: `itoa` / `utoa` / `ftoa`, `atou` / `atoi` / `atof`,
+  `format_size`, `BitField32` / `16`, strings, `VaList` and `format`, `U64` / `I64`, `std::math`,
+  `RingBuffer`, the calendar (`std::time::DateTime`), `std::data::ASCII` and `KeyCodes`. No
+  hardware, no system calls, no `__assert_fail`: any program can link it.
+- `dragon-sdk`: the hardware and the BIOS services, in `dr`, for programs in supervisor mode (the
+  BIOS, Drake, the kernels). Imports libcore.
+- `stdlib`: the runtime of DragonOS programs (user mode): `std::syscall`, `std::rand`, the clock
+  (`std::time::millis`, ...), `__assert_fail`. Imports libcore.
+
 
 ## Starting a program
 The loader calls the entry with the program's arguments, or with none:
@@ -865,9 +894,9 @@ jump: its `main(argc, argv)` always gets `0, null`. `main`'s value is returned i
 `drun` and checks its return value (`// expect-rv:`), its output (`// expect-output:`, the BIOS
 runs first) or the compilation error (`// expect-error:`). `// expect-rom-rv:` compiles the
 test with `--rom` as the machine's BIOS, boots it and checks `main`'s return value;
-`// dsc-flags:` adds dsc options. `DSCRIPT_TEST_CONFIG=<file.dvm>` runs the tests on another
+`// dsc-flags:` adds dsc options. The runner builds libcore, the SDK and the stdlib first. `DSCRIPT_TEST_CONFIG=<file.dvm>` runs the tests on another
 machine config (e.g. one with a known-good BIOS); `DSCRIPT_TEST_DSC_FLAGS=<options>` adds dsc
-options to every compilation, the SDK's too (`DSCRIPT_TEST_DSC_FLAGS=-O`: the whole suite
+options to every compilation, the libraries' too (`DSCRIPT_TEST_DSC_FLAGS=-O`: the whole suite
 optimized).
 
 

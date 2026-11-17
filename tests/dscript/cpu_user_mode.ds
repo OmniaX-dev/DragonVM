@@ -12,7 +12,7 @@ sub expect(var id: i32, var ok: bool) {
 		return;
 	var buff: u8[12];
 	debug_print("cpu_user_mode: check ");
-	debug_print(dr::itoa(id, buff));
+	debug_print(std::itoa(id, buff));
 	debug_print(" failed\n");
 	g_failures++;
 }
@@ -97,9 +97,9 @@ sub fault_ok(var before: i32, var vector: u8) -> bool {
 	if (not ok) {
 		var buff: u8[12];
 		debug_print("  fault ");
-		debug_print(dr::utoa(g_vector, buff));
+		debug_print(std::utoa(g_vector, buff));
 		debug_print(", count ");
-		debug_print(dr::itoa(g_faults - before, buff));
+		debug_print(std::itoa(g_faults - before, buff));
 		debug_print("\n");
 	}
 	return ok;
@@ -232,14 +232,14 @@ sub main() -> i32 {
 	// The Timer: about one interrupt every 2 ms, none with the interval 0.
 	dr::set_interrupt_vector_entry(dr::HardwareInterrupts.Timer, &on_tick);
 	dr::enable_interrupts();
-	dr::time::set_interrupt_interval(2);
-	var t0: u32 = dr::time::millis();
-	while (dr::time::millis() - t0 < 40) {}
+	dr::set_interrupt_interval(2);
+	var t0: u32 = dr::time_get_millis();
+	while (dr::time_get_millis() - t0 < 40) {}
 	expect(2, g_ticks >= 17 and g_ticks <= 21 and g_ticks_from_user == 0);
-	dr::time::set_interrupt_interval(0);
+	dr::set_interrupt_interval(0);
 	var stopped: i32 = g_ticks;
-	t0 = dr::time::millis();
-	while (dr::time::millis() - t0 < 10) {}
+	t0 = dr::time_get_millis();
+	while (dr::time_get_millis() - t0 < 10) {}
 	expect(3, g_ticks == stopped);
 
 	for (var v: u8 = 0; v <= dr::cpu::Faults.General; v++)
@@ -250,7 +250,7 @@ sub main() -> i32 {
 	g_kernel_top = cast<u32>(&kernel_stack[1023]);
 	g_user_top = cast<u32>(&user_stack[1023]);
 	dr::cpu::set_kernel_stack(g_kernel_top, 4096);
-	dr::time::set_interrupt_interval(2);
+	dr::set_interrupt_interval(2);
 	dr::cpu::enter_user_mode(user_main, g_user_top, 4096);
 	expect(4, false);			// (not reached)
 	return 1000 + g_failures;

@@ -1,5 +1,5 @@
 #import(<dragon-sdk>)
-#import(<stdlib>)
+#import(<libcore>)
 
 sub init_video() {
 	dr::vga_enable_double_buffering(false);

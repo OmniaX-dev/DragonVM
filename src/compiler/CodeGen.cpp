@@ -3692,7 +3692,8 @@ namespace dscript
 					break;
 				if (m_funcs.count("__assert_fail") == 0)
 					error(s->pos, "assert needs a sub __assert_fail(var file: string, var line: u32, var condition: string, "
-						"var message: string) to call when the condition is false: #include(<assert.ds>), or write your own");
+						"var message: string) to call when the condition is false: #import(<stdlib>) in a DragonOS program, or write "
+						"your own (e.g. calling the SDK's dr::assert_fail_halt)");
 				auto l_node = [&](NodeKind kind) { Node* n = new Node(); n->kind = kind; n->pos = s->pos; return n; };
 				Node* call = l_node(NodeKind::Call);
 				call->a = l_node(NodeKind::Ident);

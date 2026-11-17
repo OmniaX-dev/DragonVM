@@ -1,4 +1,4 @@
-// dr::U64 / dr::I64 (int64.ds) against values computed on the host: edge cases and random values
+// std::U64 / std::I64 (int64.ds) against values computed on the host: edge cases and random values
 // for every operation, the u32 / i32 overloads (sign / zero extension, the smaller types), text,
 // parse errors, chaining, aliasing, constructors. Generated (the cases are tables: one call of
 // each method, in the dispatchers). Signed division truncates toward zero, as for i32.
@@ -12,12 +12,12 @@ sub expect(var id: i32, var ok: bool) {
 		return;
 	var buff: u8[12];
 	debug_print("int64: check ");
-	debug_print(dr::itoa(id, buff));
+	debug_print(std::itoa(id, buff));
 	debug_print(" failed\n");
 	g_failures++;
 }
 
-sub same(var a: dr::U64*, var hi: u32, var lo: u32) -> bool { return a->hi == hi and a->lo == lo; }
+sub same(var a: std::U64*, var hi: u32, var lo: u32) -> bool { return a->hi == hi and a->lo == lo; }
 const BinU: u32[] = {
 	0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1, 0x0, 0x0, 0x0, 0x0,
 	0x0, 0x0, 0x2, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x5, 0x0, 0x0,
@@ -2940,7 +2940,7 @@ const TxS: string[] = {
 };
 
 // BinU / BinI: op, a, b, expected (7 words).
-sub bin_u(var op: u32, var x: dr::U64*, var o: dr::U64*) -> u32 {
+sub bin_u(var op: u32, var x: std::U64*, var o: std::U64*) -> u32 {
 	if (op == 0) x->add(o); else if (op == 1) x->subt(o); else if (op == 2) x->mul(o); else if (op == 3) x->div(o);
 	else if (op == 4) x->mod(o); else if (op == 5) x->band(o); else if (op == 6) x->bor(o); else if (op == 7) x->bxor(o);
 	else if (op == 8) x->min(o); else if (op == 9) x->max(o);
@@ -2950,7 +2950,7 @@ sub bin_u(var op: u32, var x: dr::U64*, var o: dr::U64*) -> u32 {
 	else if (op == 15) return (x->eq(o) ? 1 : 0); else if (op == 16) return (x->ne(o) ? 1 : 0);
 	return 0xDEAD;
 }
-sub bin_i(var op: u32, var x: dr::I64*, var o: dr::I64*) -> u32 {
+sub bin_i(var op: u32, var x: std::I64*, var o: std::I64*) -> u32 {
 	if (op == 0) x->add(o); else if (op == 1) x->subt(o); else if (op == 2) x->mul(o); else if (op == 3) x->div(o);
 	else if (op == 4) x->mod(o); else if (op == 5) x->min(o); else if (op == 6) x->max(o);
 	else if (op == 7) return cast<u32>(x->cmp(o));
@@ -2959,8 +2959,8 @@ sub bin_i(var op: u32, var x: dr::I64*, var o: dr::I64*) -> u32 {
 	return 0xDEAD;
 }
 // Un: op, a, k, expected (6 words).
-sub un_op(var op: u32, var x: dr::U64*, var k: u32) -> u32 {
-	var y: dr::I64* = cast<dr::I64*>(x);
+sub un_op(var op: u32, var x: std::U64*, var k: u32) -> u32 {
+	var y: std::I64* = cast<std::I64*>(x);
 	if (op == 0) x->shl(k); else if (op == 1) x->shr(k); else if (op == 2) y->shr(k); else if (op == 3) x->rol(k);
 	else if (op == 4) x->ror(k); else if (op == 5) return (x->bit(k) ? 1 : 0); else if (op == 6) x->setb(k);
 	else if (op == 7) x->clrb(k); else if (op == 8) return x->clz(); else if (op == 9) return x->ctz();
@@ -2972,10 +2972,10 @@ sub un_op(var op: u32, var x: dr::U64*, var k: u32) -> u32 {
 }
 
 sub main() -> i32 {
-	var x: dr::U64;
-	var o: dr::U64;
-	var y: dr::I64;
-	var p: dr::I64;
+	var x: std::U64;
+	var o: std::U64;
+	var y: std::I64;
+	var p: std::I64;
 	var id: i32 = 0;
 	var r: u32 = 0;
 	for (var i: u32 = 0; i < sizeof(BinU) / 4; i += 7) {
@@ -3053,11 +3053,11 @@ sub main() -> i32 {
 	x.divmod(&o, &o);
 	expect(17, same(&x, 0x0299C335, 0xCCF668FD) and same(&o, 0, 5));		// 0x123456789ABCDEF0 / 7, % 7
 	// Constructors and conversions.
-	var c1: dr::U64(-2);
-	var c2: dr::I64(7, 8);
-	var c3: dr::U64(&c2);
-	var c4: dr::I64(&c1);
-	var c5: dr::U64(cast<u32>(0x80000000));
+	var c1: std::U64(-2);
+	var c2: std::I64(7, 8);
+	var c3: std::U64(&c2);
+	var c4: std::I64(&c1);
+	var c5: std::U64(cast<u32>(0x80000000));
 	expect(18, same(&c1, 0xFFFFFFFF, 0xFFFFFFFE) and same(c2.u(), 7, 8) and same(&c3, 7, 8) and c4.to_i32() == -2 and c4.is_neg());
 	expect(19, same(&c5, 0, 0x80000000) and c5.to_u32() == 0x80000000);
 	// Parse errors: false, no change.

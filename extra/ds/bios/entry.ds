@@ -7,6 +7,11 @@
 const BOOTLOADER_PATH: string = "/init/boot.img";
 const MAX_BOOTLOADER_SIZE: u32 = 1024*1024*10; // 10 MiB
 
+// A failed assert: print it to the host's terminal and stop (the libraries don't decide this).
+sub __assert_fail(var file: string, var line: u32, var condition: string, var message: string) {
+	dr::assert_fail_halt(file, line, condition, message);
+}
+
 sub main() {
 	*cast<u8*>(dr::VGARegisters.VideoMode) = dr::VGAVideoModes.TextSingleColor;
 	dr::enable_interrupts();

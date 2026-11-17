@@ -95,6 +95,15 @@ namespace dr {
 	inline sub time_get_cycles() -> u32 { return *cast<u32*>(dr::TimerRegisters.CyclesLow); }
 	inline sub time_get_unix() -> u32 { return *cast<u32*>(dr::TimerRegisters.UnixTime); }
 
+	// Waits ms milliseconds, by the timer: right at any clock speed (also uncapped). Interrupts
+	// keep running meanwhile (their handlers' time counts as part of the wait).
+	sub time_sleep(var ms: i32) {
+		if (ms <= 0)
+			return;
+		var start: u32 = time_get_millis();
+		while (time_get_millis() - start < cast<u32>(ms));
+	}
+
 
 	inline sub random_get_next_int() -> i32 { return *cast<i32*>(dr::RandomRegisters.Int); }
 	sub random_get_next_float() -> f32 { low { mov RV, [$dr::RandomRegisters.Float] }; }

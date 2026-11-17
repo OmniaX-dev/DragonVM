@@ -1,5 +1,5 @@
 {
-	"args": ["-L", "extra/ds/dragon-sdk/lib", "-L", "extra/ds/dragon-os/lib"],
+	"args": ["-L", "extra/ds/libcore/lib", "-L", "extra/ds/dragon-sdk/lib", "-L", "extra/ds/stdlib/lib"],
 	"files": {
 		"extra/ds/bios/entry.ds": ["--rom"]
 	}

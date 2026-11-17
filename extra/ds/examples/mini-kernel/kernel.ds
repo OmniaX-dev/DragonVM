@@ -29,13 +29,18 @@
 // dr::drx::load), the kernel trusts the pointers tasks pass it (a real one checks they are the
 // task's memory), and output goes to the host (debug_print).
 #import(<dragon-sdk>)
-#import(<stdlib>)
+#import(<libcore>)
 
 const SYS_PRINT: u8 = 0x40;				// R9: a string
 const SYS_EXIT: u8 = 0x41;
 
 const TASKS: u32 = 3;
 const PAGE: u32 = 4096;					// one page for each stack
+
+// A failed assert: print it to the host's terminal and stop (the libraries don't decide this).
+sub __assert_fail(var file: string, var line: u32, var condition: string, var message: string) {
+	dr::assert_fail_halt(file, line, condition, message);
+}
 
 struct Task {
 	var name: string;

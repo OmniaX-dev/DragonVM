@@ -1,7 +1,12 @@
 #import(<dragon-sdk>)
-#import(<stdlib>)
+#import(<libcore>)
 
 #define(KEY_BUFF_SIZE = 128)
+
+// A failed assert: print it to the host's terminal and stop (the libraries don't decide this).
+sub __assert_fail(var file: string, var line: u32, var condition: string, var message: string) {
+	dr::assert_fail_halt(file, line, condition, message);
+}
 
 var keyBuff: u32[KEY_BUFF_SIZE];
 var keyRingBuff: std::RingBuffer;

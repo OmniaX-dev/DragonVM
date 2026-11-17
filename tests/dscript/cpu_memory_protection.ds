@@ -11,7 +11,7 @@ sub expect(var id: i32, var ok: bool) {
 		return;
 	var buff: u8[12];
 	debug_print("cpu_memory_protection: check ");
-	debug_print(dr::itoa(id, buff));
+	debug_print(std::itoa(id, buff));
 	debug_print(" failed\n");
 	g_failures++;
 }
@@ -67,11 +67,11 @@ sub violation(var before: i32, var address: u32) -> bool {
 	if (not ok) {
 		var buff: u8[12];
 		debug_print("  faults ");
-		debug_print(dr::itoa(g_faults - before, buff));
+		debug_print(std::itoa(g_faults - before, buff));
 		debug_print(", vector ");
-		debug_print(dr::utoa(g_vector, buff));
+		debug_print(std::utoa(g_vector, buff));
 		debug_print(", address 0x");
-		debug_print(dr::utoa(g_fault_address, buff, 16));
+		debug_print(std::utoa(g_fault_address, buff, 16));
 		debug_print("\n");
 	}
 	return ok;
