@@ -14,7 +14,7 @@ namespace dscript
 	{
 		const char* name;
 		// One letter per argument: T a type, N a name (an identifier or a string); a final '*'
-		// repeats the letter before it (one or more).
+		// repeats the letter before it (one or more), a final '?' makes it optional.
 		const char* args;
 		const char* help;
 	};

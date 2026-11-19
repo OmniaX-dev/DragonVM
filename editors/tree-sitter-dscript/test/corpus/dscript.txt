@@ -1258,3 +1258,166 @@ sub f() {
             (pointer_type
               (primitive_type))))
         (null_literal)))))
+
+================================================================================
+Template values, if constexpr declarations, static_assert
+================================================================================
+
+template(T, N: u32 = 8, C: Config = SMALL, optional U = T*) {
+	struct Buffer {
+		var data: T[N];
+		if constexpr (N > 4) { var big: bool; } else { var small: bool; }
+		static_assert(sizeof(Buffer) > 0);
+	};
+	if constexpr (is_float(T)) { sub kind() -> u32 { return 1; } }
+	else if constexpr (is_signed(T)) { sub kind() -> u32 { return 2; } }
+	else { sub kind() -> u32 { return 3; } }
+	static_assert(N > 0, "positive");
+}
+if constexpr (WIDE) { alias Word = u32; } else { alias Word = u16; }
+static_assert(sizeof(Word) == 4, "32 bits");
+sub main() {
+	var b: Buffer<u16, 4>;
+	var g: Grid<config(3, 3)>;
+	var h: Grid<SMALL>;
+	var k = kind<f32>();
+	var z = a < 5;
+	static_assert(1 == 1);
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (template_declaration
+    (template_parameter
+      (type_identifier))
+    (template_parameter
+      (type_identifier)
+      (primitive_type)
+      (number_literal))
+    (template_parameter
+      (type_identifier)
+      (type_identifier)
+      (identifier))
+    (template_parameter
+      (type_identifier)
+      (pointer_type
+        (type_identifier)))
+    (template_body
+      (struct_declaration
+        (type_identifier)
+        (field_list
+          (field_declaration
+            (field_identifier)
+            (array_type
+              (type_identifier)
+              (identifier)))
+          (conditional_member
+            (binary_expression
+              (identifier)
+              (number_literal))
+            (field_declaration
+              (field_identifier)
+              (primitive_type))
+            (field_declaration
+              (field_identifier)
+              (primitive_type)))
+          (static_assert
+            (binary_expression
+              (sizeof_expression
+                (type_identifier))
+              (number_literal)))))
+      (conditional_template_item
+        (call_expression
+          (identifier)
+          (argument_list
+            (identifier)))
+        (function_declaration
+          (identifier)
+          (parameter_list)
+          (primitive_type)
+          (block
+            (return_statement
+              (number_literal))))
+        (conditional_template_item
+          (call_expression
+            (identifier)
+            (argument_list
+              (identifier)))
+          (function_declaration
+            (identifier)
+            (parameter_list)
+            (primitive_type)
+            (block
+              (return_statement
+                (number_literal))))
+          (function_declaration
+            (identifier)
+            (parameter_list)
+            (primitive_type)
+            (block
+              (return_statement
+                (number_literal))))))
+      (static_assert
+        (binary_expression
+          (identifier)
+          (number_literal))
+        (string_literal))))
+  (conditional_declaration
+    (identifier)
+    (alias_declaration
+      (type_identifier)
+      (primitive_type))
+    (alias_declaration
+      (type_identifier)
+      (primitive_type)))
+  (static_assert
+    (binary_expression
+      (sizeof_expression
+        (type_identifier))
+      (number_literal))
+    (string_literal))
+  (function_declaration
+    (identifier)
+    (parameter_list)
+    (block
+      (variable_declaration
+        (identifier)
+        (generic_type
+          (type_identifier)
+          (template_arguments
+            (primitive_type)
+            (number_literal))))
+      (variable_declaration
+        (identifier)
+        (generic_type
+          (type_identifier)
+          (template_arguments
+            (call_expression
+              (identifier)
+              (argument_list
+                (number_literal)
+                (number_literal))))))
+      (variable_declaration
+        (identifier)
+        (generic_type
+          (type_identifier)
+          (template_arguments
+            (type_identifier))))
+      (variable_declaration
+        (identifier)
+        (call_expression
+          (generic_expression
+            (identifier)
+            (template_arguments
+              (primitive_type)))
+          (argument_list)))
+      (variable_declaration
+        (identifier)
+        (binary_expression
+          (identifier)
+          (number_literal)))
+      (static_assert
+        (binary_expression
+          (number_literal)
+          (number_literal))))))

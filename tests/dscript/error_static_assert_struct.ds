@@ -1,0 +1,3 @@
+// expect-error: static_assert failed: sizeof(Packet) == 6
+struct Packet { var kind: u8; var length: u32; static_assert(sizeof(Packet) == 6); };
+sub main() { var p: Packet; }

@@ -44,6 +44,11 @@ namespace dscript
 			Node* parseDeclaration(void);
 			Node* parseStruct(const Node* owner = nullptr);
 			void parseStructFields(Node* decl);
+			void parseStructMember(Node* decl);
+			void parseDeclIf(std::vector<Node*>& out, Node* structDecl);
+			Node* parseStaticAssert(void);
+			Node* m_guard { nullptr };		// the if constexpr around the declarations being parsed
+			bool m_guardElse { false };
 			Node* parseEnum(const Node* owner = nullptr);
 			Node* parseConst(void);
 			Node* parseAlias(void);

@@ -1629,10 +1629,15 @@ namespace
 				const std::string args = b->args;
 				for (size_t i = 0; i < args.size(); i++)
 				{
+					const std::string arg = std::string(i > 0 ? ", " : "") + (args[i] == 'T' ? "T" : "name");
 					if (args[i] == '*')
 						sig += "...";
+					else if (args[i] == '?')
+						continue;
+					else if (i + 1 < args.size() && args[i + 1] == '?')
+						sig += "[" + arg + "]";		// (optional)
 					else
-						sig += std::string(i > 0 ? ", " : "") + (args[i] == 'T' ? "T" : "name");
+						sig += arg;
 				}
 				sig += ")";
 				l_add(b->name, CS::Sub, sig + "\n// " + b->help, 0);
@@ -1641,7 +1646,7 @@ namespace
 
 		static const char* builtinTypes[] = { "i8", "u8", "i16", "u16", "i32", "u32", "f32", "bool", "char", "int", "uint", "float", "string", "void", nullptr };
 		static const char* keywords[] = { "var", "auto", "const", "constexpr", "consteval", "constinit", "readonly", "sub", "template", "struct", "enum", "alias", "return", "if", "else", "while", "do", "for",
-			"break", "continue", "null", "true", "false", "cast", "sizeof", "low", "interrupt", "inline", "static", "priv", "assert",
+			"break", "continue", "null", "true", "false", "cast", "sizeof", "low", "interrupt", "inline", "static", "priv", "assert", "static_assert",
 			"debug_print", "namespace", "defer", "atomic", "and", "or", "not", nullptr };
 		if (where == General || where == TypeName)
 		{

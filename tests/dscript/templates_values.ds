@@ -1,0 +1,77 @@
+// Templates with value parameters (numbers, struct values; deduced from an array's size),
+// defaults for optional parameters, if constexpr around declarations (in a template's body, in a
+// struct, at the top level) and static_assert (top level, struct, template body, statement).
+// expect-rv: 0
+struct Config { var width: u32; var height: u32; };
+constexpr SMALL: Config = { 4, 2 };
+constexpr sub config(var w: u32, var h: u32) -> Config { var c: Config = { w, h }; return c; }
+
+// value parameters, a default type and value
+template(T, N: u32 = 8) {
+	struct Buffer {
+		var data: T[N];
+		readonly sub capacity() -> u32 { return N; }
+		static_assert(sizeof(Buffer) == sizeof(T) * N, "no padding");
+	};
+	static_assert(N > 0, "a buffer holds at least one element");
+}
+// a struct value
+template(C: Config) {
+	struct Grid {
+		var cells: u8[C.width * C.height];
+		readonly sub area() -> u32 { return C.width * C.height; }
+		static sub config() -> Config { return C; }
+	};
+}
+// N deduced from an array
+template(T, N: u32) { sub count(var a: T[N]*) -> u32 { return N; } }
+// if constexpr around subs in a template body
+template(T) {
+	if constexpr (is_float(T)) {
+		sub kind() -> u32 { return 1; }
+	} else if constexpr (is_signed(T)) {
+		sub kind() -> u32 { return 2; }
+	} else {
+		sub kind() -> u32 { return 3; }
+	}
+}
+// if constexpr around fields and methods in a struct
+template(T) {
+	struct Holder {
+		var value: T;
+		if constexpr (sizeof(T) > 2) {
+			var extra: u32;
+			readonly sub has_extra() -> bool { return true; }
+		} else {
+			readonly sub has_extra() -> bool { return false; }
+		}
+	};
+}
+// top level
+constexpr WIDE = true;
+if constexpr (WIDE) {
+	alias Word = u32;
+	sub word_bits() -> u32 { return 32; }
+} else {
+	alias Word = u16;
+	sub word_bits() -> u32 { return 16; }
+}
+static_assert(sizeof(Word) == 4, "Word is 32 bits");
+
+sub main() -> i32 {
+	var b: Buffer<u16, 4>;
+	var d: Buffer<u8>;				// N = 8 (default)
+	if (b.capacity() != 4 or sizeof(b) != 8 or d.capacity() != 8) return 1;
+	var g: Grid<SMALL>;
+	var h: Grid<config(3, 3)>;
+	if (g.area() != 8 or sizeof(h) != 9 or Grid<SMALL>.config().height != 2) return 2;
+	var arr: i32[5];
+	if (count(&arr) != 5) return 3;
+	if (kind<f32>() != 1 or kind<i8>() != 2 or kind<u16>() != 3) return 4;
+	var x: Holder<u32>;
+	var y: Holder<u8>;
+	if (not x.has_extra() or y.has_extra() or sizeof(x) != 8 or sizeof(y) != 1) return 5;
+	if (word_bits() != 32) return 6;
+	static_assert(sizeof(Holder<u32>) == 8);
+	return 0;
+}

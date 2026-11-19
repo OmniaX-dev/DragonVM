@@ -44,6 +44,7 @@
 	"break"
 	"continue"
 	"assert"
+	"static_assert"
 	"debug_print"
 	"defer"
 	"atomic"

@@ -802,6 +802,68 @@ var k: Key<u32, i8>;    // error: Key doesn't use V
 ```
 `is_given(V)` tells if it was given (in a `where` or an `if constexpr`).
 
+**Defaults**: a parameter with a default is optional, and an instance without it gets the default
+(`template(T, U = T*, N: u32 = 16)`: `Box<u8>` is `Box<u8, u8*, 16>`, the same instance as when
+they are written). A default can use the parameters before it (`N: u32 = sizeof(T) * 4`).
+
+**Value parameters**: `name: type` is a value known when compiling (a number, a `bool`, an `f32`,
+or a struct value), given like a type (`Ring<u8, 16>`, `Grid<SMALL>`, `Grid<config(3, 3)>`):
+```
+struct Config { var width: u32; var height: u32; };
+constexpr SMALL: Config = { 4, 2 };
+
+template(T, N: u32 = 8) {
+    struct Ring { var items: T[N]; readonly sub capacity() -> u32 { return N; } };
+}
+template(C: Config) {
+    struct Grid { var cells: u8[C.width * C.height]; };
+}
+template(T, N: u32) { sub count(var a: T[N]*) -> u32 { return N; } }
+
+var r: Ring<u16, 4>;        // Ring<u16, 4>
+var g: Grid<SMALL>;         // Grid<Config{4, 2}>
+var arr: i32[5];
+count(&arr);                // N deduced from the array: 5
+```
+- In the template, the parameter is a compile-time constant (array sizes, conditions, `C.field`,
+  `C` as a value...). The argument is any constant expression: a literal, a constant, `N + 1`,
+  `-1`, a struct constant, a constexpr sub's value (a comparison needs parentheses: `B<(A > 2)>`).
+- An instance is made once per value: `Ring<u16, 4>`, `Ring<u16, 4u>` and `Ring<u16>` with a
+  default of 4 are one (the value is converted to the parameter's type). A struct value's
+  instance is named by its fields (`Grid<Config{4, 2}>`).
+- A value parameter deduced from a sub's arguments: from an array's size (`T[N]`), or from an
+  instance's (`Ring<T, N>*`). The others are given (or have a default).
+- In a condition, a value parameter is its value: `where N > 0`, `if constexpr (C.width == 4)`.
+
+**if constexpr around declarations**: at the top level, in a namespace, in a struct's body, and in
+a template's body, `if constexpr (condition) { declarations } else { ... }` keeps the declarations
+of the branch the condition chooses (the others don't exist: no names, no code). In a template,
+the condition is about its parameters, for each instance:
+```
+template(T) {
+    if constexpr (is_float(T)) { sub kind() -> u32 { return 1; } }
+    else if constexpr (is_signed(T)) { sub kind() -> u32 { return 2; } }
+    else { sub kind() -> u32 { return 3; } }
+    struct Holder {
+        var value: T;
+        if constexpr (sizeof(T) > 2) { var extra: u32; }    // fields and methods too
+    };
+}
+if constexpr (WIDE) { alias Word = u32; } else { alias Word = u16; }
+```
+- Outside templates, the conditions use constants and types (as `#if` uses `#define`s, but with
+  the language's constants and `sizeof`). They are decided in the order of the source: a
+  condition can use what an earlier one declared.
+- A template's sub or struct that its if constexpr leaves out for an instance is not there for
+  it (`kind<...>: not there for these arguments`).
+
+**static_assert**: `static_assert(condition, "message")` (the message is optional) stops the
+compilation if the condition is false: `static_assert failed: message`. It is checked when
+compiling (no code, nothing to provide, unlike `assert`): at the top level and in namespaces
+(after the declarations), in a struct (with its layout: `static_assert(sizeof(Packet) == 6)`), in
+a sub (where it is), and in a template's body (for each instance, with its parameters:
+`static_assert(N > 0, "a ring holds at least one item")`, the error says which instance).
+
 **Conditions**: `template(T) where <condition> { ... }`: an instance is made only if the condition
 holds for its types; otherwise the error names the part that is false
 (`four<u8>: its where is false: sizeof(T) == 4`). Several templates can declare the same struct /
@@ -825,6 +887,8 @@ arguments are types: `T*`, `Array<u32>`, `u8`):
 | `is_type(T, U)`, `is_one_of(T, A, B, ...)` | the same type; one of them |
 | `is_pointer_to(T, U)`, `is_convertible(T, U)` | `T` is a `U*`; a `T` converts to a `U` |
 | `has_method(T, name)`, `has_field(T, name)` | a struct (or a pointer to one) with that method (or method template) / field |
+| `has_method(T, name, sub(u32, f32) -> i32*)` | a method with that sub type (`this` not counted; one of its overloads; not a method template) |
+| `has_field(T, name, u32)` | a field of that type |
 | `is_range(T)` | an array, or a struct with `begin()` and `end()` (a for-in works on it) |
 | `size_of(T)` (= `sizeof(T)`), `array_count(T)` | numbers: the size; an array's element count (0 otherwise) |
 
@@ -1210,7 +1274,7 @@ optimized).
 - One source file (plus includes) per program (a library: several, compiled as one).
 - `#define` has no stringizing or token pasting.
 - No `switch`, `goto`, unions, 64-bit floats.
-- Templates take types only (no values: `Array<T, 16>`); arrays are passed by pointer.
+- Arrays are passed by pointer (structs by value).
 - Lambdas do not capture the variables of the sub around them.
 - Uninitialized global arrays are stored in the program (zeroes).
 - The assembler replaces data symbols line by line: very big programs assemble slowly.

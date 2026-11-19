@@ -1,0 +1,3 @@
+// expect-error: has_method's third argument is a sub type
+struct B { var x: u32; sub f() { } };
+sub main() { static_assert(has_method(B, f, u32)); }

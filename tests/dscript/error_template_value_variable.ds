@@ -1,0 +1,4 @@
+// expect-error: 'g' is a variable: a template's value argument must be a compile-time constant
+template(T, N: u32) { struct B { var d: T[N]; }; }
+var g: u32 = 3;
+sub main() { var b: B<u8, g>; }

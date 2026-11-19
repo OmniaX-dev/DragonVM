@@ -1,0 +1,25 @@
+// has_field / has_method with a type: the field's type, the method's sub type (this not counted;
+// overloads, readonly and static subs), in a where and in static_asserts.
+// expect-rv: 0
+struct Bag {
+	var count: u32;
+	var data: i32*;
+	sub find(var key: u32, var scale: f32) -> i32* { return null; }
+	sub find(var key: u32) -> i32* { return null; }
+	readonly sub size() -> u32 { return this->count; }
+	static sub make(var n: u32) -> Bag { var b: Bag; b.count = n; return b; }
+};
+template(T) where has_method(T, find, sub(u32, f32) -> i32*) and has_field(T, count, u32) {
+	sub lookup(var t: T*) -> u32 { return 1; }
+}
+sub main() -> i32 {
+	static_assert(has_field(Bag, count) and has_field(Bag, count, u32) and not has_field(Bag, count, i32));
+	static_assert(has_field(Bag, data, i32*) and not has_field(Bag, data, u32*));
+	static_assert(has_method(Bag, find, sub(u32, f32) -> i32*) and has_method(Bag, find, sub(u32) -> i32*));
+	static_assert(not has_method(Bag, find, sub(u32) -> u32) and not has_method(Bag, find, sub(f32) -> i32*));
+	static_assert(has_method(Bag, size, sub() -> u32) and has_method(Bag, make, sub(u32) -> Bag));
+	static_assert(not has_method(Bag, missing, sub() -> void));
+	var b: Bag;
+	if (lookup(&b) != 1) return 1;
+	return 0;
+}

@@ -1,0 +1,3 @@
+// expect-error: B<u8, u32>: N is a value (N: u32), not the type u32
+template(T, N: u32) { struct B { var d: T[N]; }; }
+sub main() { var b: B<u8, u32>; }

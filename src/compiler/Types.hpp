@@ -19,6 +19,11 @@ namespace dscript
 		// Pointer: what it points at is constant (const T*: reading it is fine, changing it through
 		// the pointer is an error). Values have no const of their own: only what a pointer points at.
 		bool constTarget { false };
+		// A template's value argument (not a type: Array<u32, 16>): its value is the compile-time
+		// constant valueConst (of type base); name() is how it is written in the instance's name.
+		bool valueArg { false };
+		std::string valueConst;
+		std::string valueText;
 
 		bool isInteger(void) const { return kind >= Kind::Bool && kind <= Kind::U32; }
 		bool isSigned(void) const { return kind == Kind::I8 || kind == Kind::I16 || kind == Kind::I32; }
@@ -79,6 +84,9 @@ namespace dscript
 			Type* f32(void) { return m_f32; }
 			Type* nullType(void) { return m_null; }
 			Type* pointer(Type* base, bool constTarget = false);
+			// A template's value argument (interned by its type and text).
+			Type* valueArg(Type* type, const std::string& text, const std::string& constName);
+			Type* findValueArg(Type* type, const std::string& text);
 			Type* array(Type* base, uint32_t count);
 			Type* function(const std::vector<Type*>& params, Type* ret, int variadic = 0);
 			Type* structType(StructInfo* info);

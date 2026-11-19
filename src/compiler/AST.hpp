@@ -13,7 +13,8 @@ namespace dscript
 	// can be used before they are declared).
 	struct TypeSyntax
 	{
-		enum class Kind { Named, Pointer, Array, Function };
+		// Value: a template's value argument (Array<u32, 16>): the expression in value.
+		enum class Kind { Named, Pointer, Array, Function, Value };
 		Kind kind { Kind::Named };
 		SourcePos pos;
 		std::string name;					// Named (the full name once the code generator resolved it)
@@ -26,20 +27,32 @@ namespace dscript
 		int variadic { 0 };					// Function: 1 ... (more arguments), 2 ...typed (with their types)
 		std::vector<TypeSyntax*> args;		// Named: a template's arguments (Array<u32>)
 		Type* fixed { nullptr };			// a template parameter in an instance: the type it stands for (name: the parameter)
+		struct Node* value { nullptr };		// Value
 	};
 
 	// template(T1, optional T2) where (condition) { structs and subs }: kept as tokens, each struct /
 	// sub instantiated on use with the parameters replaced by types (CodeGen::instantiate).
+	// An if constexpr (condition) around declarations: true (else: false) for them to exist.
+	struct Guard { struct Node* condition { nullptr }; bool expected { true }; };
 	struct TemplateEntity
 	{
 		std::string name;					// as declared (Array)
 		bool isStruct { false };
 		size_t first { 0 }, last { 0 };		// its tokens in TemplateDef::tokens: [first, last)
 		size_t nameToken { 0 };				// the token of its name
+		std::vector<Guard> guards;			// the template body's if constexpr around it (outer first)
 	};
+	// static_assert(condition, message) in a template's body: checked for each instance.
+	struct TemplateAssert { struct Node* condition { nullptr }; std::string message; std::string text; std::vector<Guard> guards; SourcePos pos; };
 	struct TemplateDef
 	{
 		std::vector<std::string> params;
+		// A value parameter's type (N: u32; nullptr: a type parameter), and the defaults (a type
+		// parameter's, a value parameter's: a parameter with a default is optional).
+		std::vector<TypeSyntax*> paramTypes;
+		std::vector<TypeSyntax*> defaultTypes;
+		std::vector<struct Node*> defaultValues;
+		std::vector<TemplateAssert> asserts;
 		size_t required { 0 };				// the parameters before 'optional'
 		struct Node* where { nullptr };		// nullptr: none
 		std::vector<std::string> whereParts;	// the source of each part of a top-level 'and' (for errors)
@@ -56,6 +69,8 @@ namespace dscript
 	{
 		// Declarations
 		Program, NamespaceDecl, StructDecl, EnumDecl, EnumMember, ConstDecl, AliasDecl, VarDecl, FuncDecl, TemplateDecl,
+		// if constexpr (a) around declarations (their guard; value: -1 not decided, 0 / 1), static_assert(a, text)
+		DeclIf, StaticAssert,
 		// Statements
 		Block, If, While, DoWhile, For, ForIn, Return, Break, Continue, ExprStmt, LowBlock, Assert, DebugPrint, Defer,
 		// Expressions
@@ -93,6 +108,10 @@ namespace dscript
 		// VarDecl in a block with hoisted set: the place of that local constant (hoisted points at it).
 		int hoistKind { 0 };
 		Node* hoisted { nullptr };
+		// Declarations in an if constexpr (at the top level, in a namespace or a struct): the DeclIf
+		// (its condition) and the branch they are in (guardElse: its else). A DeclIf has its own.
+		Node* guard { nullptr };
+		bool guardElse { false };
 		int variadic { 0 };				// FuncDecl: 1 if the parameters end with ..., 2 with ...typed
 		// Call of a variadic sub's built-in (va_count, va_start, va_types): 1, 2, 3 (0: a normal call).
 		int vaBuiltin { 0 };

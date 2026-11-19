@@ -1,0 +1,11 @@
+// A library with value templates (templates_library.ds): the template is in its interface (as written).
+namespace sz {
+	struct Limits { var lo: i32; var hi: i32; };
+	constexpr PERCENT: Limits = { 0, 100 };
+	template(T, N: u32 = 4) {
+		struct Ring { var items: T[N]; var count: u32; readonly sub capacity() -> u32 { return N; } };
+		static_assert(N >= 2, "a ring holds at least two items");
+	}
+	template(L: Limits) { sub clamp(var v: i32) -> i32 { return v < L.lo ? L.lo : (v > L.hi ? L.hi : v); } }
+	if constexpr (sizeof(Limits) == 8) { sub limits_size() -> u32 { return 8; } }
+}

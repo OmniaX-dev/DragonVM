@@ -1,0 +1,6 @@
+// expect-error: static_assert failed: a buffer holds at least one element (in Buffer<u8, 0>
+template(T, N: u32) {
+	struct Buffer { var data: T[N]; };
+	static_assert(N > 0, "a buffer holds at least one element");
+}
+sub main() { var b: Buffer<u8, 0>; }

@@ -1,0 +1,3 @@
+// expect-error: B<4>: T is a type, not the value 4
+template(T) { struct B { var d: T; }; }
+sub main() { var b: B<4>; }

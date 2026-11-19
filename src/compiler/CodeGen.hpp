@@ -308,7 +308,20 @@ namespace dscript
 			int m_instanceDepth { 0 };
 			size_t m_globalsTyped { 0 }, m_globalsGenerated { 0 };
 			int32_t m_initLocalMin { 4 };
+			typedef std::map<std::string, Type*> Bindings;
 			void registerTemplate(Node* d);
+			// A template's argument: a type, or a value (a value-arg Type: Array<u32, 16>, Box<CONFIG>).
+			Type* templateArgument(TypeSyntax* a, const Bindings* bindings = nullptr);
+			// A value argument from a compile-time constant (of its own type; paramType: converted to it).
+			Type* valueArgument(Node* e, Type* paramType, const Bindings* bindings);
+			Type* makeValueArg(Type* t, int64_t value, const std::vector<uint8_t>* bytes, const SourcePos& pos);
+			int m_valueArgCount { 0 };
+			// if constexpr around declarations: does d exist (its guards' conditions say so)?
+			bool guardHolds(Node* d);
+			void applyGuards(Node* program);
+			void filterMembers(Node* structDecl);
+			void checkStaticAssert(Node* s, const Bindings* bindings);
+			std::vector<Node*> m_staticAsserts;		// top-level ones (checked after the declarations)
 			// The instance of the template `name` for these arguments (explicit, then deduced from
 			// callArgs for a sub; owner: the struct of a method template): its full name. Instantiates
 			// it the first time (its declarations registered; its subs generated if used).
@@ -322,7 +335,6 @@ namespace dscript
 			void markUsed(FuncInfo* f);
 			// A compile-time condition (where, if constexpr): its value. bindings: a template's
 			// parameters (nullptr: an optional one not given) while its where is checked.
-			typedef std::map<std::string, Type*> Bindings;
 			int64_t evalCondition(Node* e, const Bindings* bindings);
 			Type* conditionType(TypeSyntax* ts, const Bindings* bindings);
 			void genGlobalTypes(size_t from);

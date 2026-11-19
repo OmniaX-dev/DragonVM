@@ -1,0 +1,4 @@
+// expect-error: unknown name: legacy
+constexpr NEW_API = true;
+if constexpr (NEW_API) { sub modern() { } } else { sub legacy() { } }
+sub main() { legacy(); }

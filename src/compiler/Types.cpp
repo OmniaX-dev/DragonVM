@@ -18,6 +18,8 @@ namespace dscript
 
 	std::string Type::name(bool brief) const
 	{
+		if (valueArg)
+			return valueText;
 		switch (kind)
 		{
 			case Kind::Void: return "void";
@@ -100,6 +102,28 @@ namespace dscript
 		Type* t = make(Type::Kind::Pointer);
 		t->base = base;
 		t->constTarget = constTarget;
+		return t;
+	}
+
+	Type* TypeTable::findValueArg(Type* type, const std::string& text)
+	{
+		for (Type* t : m_types)
+		{
+			if (t->valueArg && t->base == type && t->valueText == text)
+				return t;
+		}
+		return nullptr;
+	}
+
+	Type* TypeTable::valueArg(Type* type, const std::string& text, const std::string& constName)
+	{
+		if (Type* t = findValueArg(type, text))
+			return t;
+		Type* t = make(Type::Kind::Void);
+		t->valueArg = true;
+		t->base = type;
+		t->valueText = text;
+		t->valueConst = constName;
 		return t;
 	}
 

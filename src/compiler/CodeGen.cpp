@@ -453,6 +453,8 @@ namespace dscript
 	{
 		for (Node* d : program->list)
 		{
+			if (d->guard != nullptr)
+				continue;		// (in an if constexpr: when it is decided)
 			attempt([&] {
 				if (d->kind == NodeKind::StructDecl)
 				{
@@ -528,6 +530,9 @@ namespace dscript
 					resolveTypeNames(p, scope);
 				resolveTypeNames(ts->base, scope);
 			break;
+			case TypeSyntax::Kind::Value:
+				resolveNames(ts->value, scope);
+			break;
 		}
 	}
 
@@ -535,6 +540,8 @@ namespace dscript
 	{
 		for (Node* d : program->list)
 		{
+			if (d->guard != nullptr)
+				continue;		// (in an if constexpr: applyGuards)
 			attempt([&] {
 				switch (d->kind)
 				{
@@ -631,6 +638,9 @@ namespace dscript
 					case NodeKind::TemplateDecl:
 						registerTemplate(d);
 					break;
+					case NodeKind::StaticAssert:
+						m_staticAsserts.push_back(d);	// (checked after the declarations)
+					break;
 					default:
 						error(d->pos, "unexpected declaration");
 				}
@@ -663,7 +673,7 @@ namespace dscript
 						error(ts->pos, written + " is a template: give its types (" + written + "<...>)");
 					std::vector<Type*> args;
 					for (TypeSyntax* a : ts->args)
-						args.push_back(resolveType(a));
+						args.push_back(templateArgument(a));
 					return m_types.structType(m_structs[instantiate(ts->name, args, nullptr, nullptr, ts->pos, true)]);
 				}
 				if (Type* t = m_types.builtin(ts->name))
@@ -719,6 +729,8 @@ namespace dscript
 					error(ts->pos, "invalid array size: " + std::to_string(count));
 				return m_types.array(base, (uint32_t)count);
 			}
+			case TypeSyntax::Kind::Value:
+				error(ts->pos, "a value where a type is needed");
 			case TypeSyntax::Kind::Function:
 			{
 				std::vector<Type*> params;
@@ -745,9 +757,16 @@ namespace dscript
 		if (info->resolving)
 			error(usePos, (info->anonymous ? info->displayName() : "struct '" + info->name + "'") + " contains itself (use a pointer)");
 		info->resolving = true;
+		filterMembers(info->decl);
 		uint32_t offset = 0;
+		std::vector<Node*> asserts;
 		for (Node* f : info->decl->list)
 		{
+			if (f->kind == NodeKind::StaticAssert)
+			{
+				asserts.push_back(f);
+				continue;
+			}
 			if (info->field(f->name) != nullptr)
 				error(f->pos, "duplicate field '" + f->name + "' in " + (info->anonymous ? info->displayName() : "struct " + info->name));
 			if (m_funcs.count(info->name + "::" + f->name) > 0)
@@ -772,6 +791,8 @@ namespace dscript
 		info->size = offset;
 		info->complete = true;
 		info->resolving = false;
+		for (Node* sa : asserts)
+			checkStaticAssert(sa, nullptr);		// (sizeof the struct works here)
 		// Default values: constants of the field's type.
 		for (auto& field : info->fields)
 		{
@@ -1621,6 +1642,8 @@ namespace dscript
 			case NodeKind::SizeofExpr:
 			{
 				uint32_t size = 0;
+				if (e->a->kind == NodeKind::Ident && !e->a->templateArgs.empty() && lookupVar(e->a->name) == nullptr)
+					resolveTemplateIdent(e->a);		// sizeof(Box<u32>)
 				if (e->a->kind == NodeKind::Ident && lookupVar(e->a->name) == nullptr && isTypeName(e->a->name))
 				{
 					TypeSyntax ts;
@@ -2113,7 +2136,7 @@ namespace dscript
 				for (TypeSyntax* ta : callee->templateArgs)
 				{
 					resolveTypeNames(ta, m_func != nullptr ? m_func->decl->scope : std::string());
-					explicitArgs.push_back(resolveType(ta));
+					explicitArgs.push_back(templateArgument(ta));
 				}
 				const std::string inst = instantiate(obj->name + "::" + callee->name, explicitArgs, &e->list, info, callee->namePos, false);
 				callee->name = inst.substr(obj->name.size() + 2);
@@ -2161,7 +2184,7 @@ namespace dscript
 			for (TypeSyntax* ta : callee->templateArgs)
 			{
 				resolveTypeNames(ta, m_func != nullptr ? m_func->decl->scope : std::string());
-				explicitArgs.push_back(resolveType(ta));
+				explicitArgs.push_back(templateArgument(ta));
 			}
 			const std::string inst = instantiate(info->name + "::" + callee->name, explicitArgs, &e->list, info, callee->namePos, false);
 			callee->name = inst.substr(info->name.size() + 2);
@@ -2224,7 +2247,7 @@ namespace dscript
 			for (TypeSyntax* t : callee->templateArgs)
 			{
 				resolveTypeNames(t, m_func != nullptr ? m_func->decl->scope : std::string());
-				explicitArgs.push_back(resolveType(t));
+				explicitArgs.push_back(templateArgument(t));
 			}
 			callee->name = instantiate(callee->name, explicitArgs, &e->list, nullptr, callee->pos, false);
 			callee->templateArgs.clear();
@@ -2847,6 +2870,23 @@ namespace dscript
 		TemplateDef* def = d->tmpl;
 		if (def->where != nullptr)
 			resolveNames(def->where, def->scope);
+		for (size_t i = 0; i < def->params.size(); i++)
+		{
+			resolveTypeNames(def->paramTypes[i], def->scope);
+			resolveTypeNames(def->defaultTypes[i], def->scope);
+			resolveNames(def->defaultValues[i], def->scope);
+		}
+		for (TemplateEntity& e : def->entities)
+		{
+			for (Guard& g : e.guards)
+				resolveNames(g.condition, def->scope);
+		}
+		for (TemplateAssert& a : def->asserts)
+		{
+			resolveNames(a.condition, def->scope);
+			for (Guard& g : a.guards)
+				resolveNames(g.condition, def->scope);
+		}
 		for (size_t i = 0; i < def->entities.size(); i++)
 		{
 			const TemplateEntity& e = def->entities[i];
@@ -2859,6 +2899,211 @@ namespace dscript
 			list.push_back({ def, i });
 			m_templateShortNames.insert(e.name);
 		}
+	}
+
+	// ===== Value arguments =====
+	// A value argument is a compile-time constant of its own (__tv_<n>, declared nowhere in the
+	// source): in an instance, the parameter's name is replaced by it, so the parameter is used like
+	// any constant (N in array sizes, C.field, C as a value...). The same value is the same argument.
+	Type* CodeGen::makeValueArg(Type* t, int64_t value, const std::vector<uint8_t>* bytes, const SourcePos& pos)
+	{
+		ConstInfo c;
+		std::string text;
+		if (t->kind == Type::Kind::Struct)
+		{
+			// Its fields (by path) and its text: Name{1, 2, {3}}.
+			std::function<std::string(StructInfo*, uint32_t, const std::string&)> l_text = [&](StructInfo* info, uint32_t offset, const std::string& prefix) {
+				std::string s = "{";
+				for (size_t i = 0; i < info->fields.size(); i++)
+				{
+					const StructField& f = info->fields[i];
+					s += i > 0 ? ", " : "";
+					if (f.type->kind == Type::Kind::Struct)
+					{
+						s += l_text(f.type->structInfo, offset + f.offset, prefix + f.name + ".");
+						continue;
+					}
+					if (!f.type->isScalar())
+						error(pos, "a template's struct value cannot have a field of type " + f.type->name() + " ('" + prefix + f.name + "')");
+					uint32_t v = 0;
+					for (uint32_t k = 0; k < f.type->size(); k++)
+						v = (v << 8) | (*bytes)[offset + f.offset + k];
+					const int64_t n = wrapTo(f.type->isSigned() ? (int64_t)(f.type->size() == 1 ? (int8_t)v : f.type->size() == 2 ? (int16_t)v : (int32_t)v) : (int64_t)v, f.type);
+					c.fields[prefix + f.name] = n;
+					s += f.type->isFloat() ? floatText(n) : f.type->kind == Type::Kind::Bool ? std::string(n ? "true" : "false") : std::to_string(n);
+				}
+				return s + "}";
+			};
+			text = (t->structInfo->anonymous ? "struct" : shownName(t->structInfo->name)) + l_text(t->structInfo, 0, "");
+		}
+		else
+		{
+			value = wrapTo(value, t);
+			c.value = value;
+			text = t->isFloat() ? floatText(value) : t->kind == Type::Kind::Bool ? std::string(value ? "true" : "false") : std::to_string(value);
+		}
+		if (Type* known = m_types.findValueArg(t, text))
+			return known;
+		const std::string name = "__tv_" + std::to_string(++m_valueArgCount);
+		Node* decl = new Node();
+		decl->kind = NodeKind::ConstDecl;
+		decl->name = decl->shortName = name;
+		decl->text = text;
+		decl->pos = decl->namePos = pos;
+		decl->constKind = 2;
+		c.decl = decl;
+		c.type = t;
+		c.resolved = true;
+		m_consts[name] = c;
+		m_names[name] = "a constant";
+		return m_types.valueArg(t, text, name);
+	}
+
+	Type* CodeGen::valueArgument(Node* e, Type* paramType, const Bindings* bindings)
+	{
+		// A struct: a struct constant, or a struct value computed when compiling.
+		const bool wantStruct = paramType != nullptr && paramType->kind == Type::Kind::Struct;
+		if (e->kind == NodeKind::Ident && lookupVar(e->name) == nullptr && m_consts.count(e->name) > 0)
+		{
+			decideConst(e->name);
+			const ConstInfo& c = m_consts[e->name];
+			if (!c.runtime && c.type != nullptr && c.type->kind == Type::Kind::Struct)
+			{
+				VarInfo* v = constStorage(e->name);
+				if (paramType != nullptr && paramType != c.type)
+					error(e->pos, "this template's parameter is " + paramType->name() + ", not " + c.type->name());
+				return makeValueArg(c.type, 0, &m_ctBlobs[v], e->pos);
+			}
+		}
+		if (wantStruct || (bindings == nullptr && e->kind != NodeKind::IntLit))
+		{
+			check(e, paramType);
+			if (e->type != nullptr && e->type->kind == Type::Kind::Struct)
+			{
+				if (e->kind != NodeKind::Ident || e->var == nullptr || m_ctBlobs.count(e->var) == 0)
+					error(e->pos, "a template's value argument must be known when compiling (a constant, or a constexpr sub's value)");
+				if (paramType != nullptr && paramType != e->type)
+					error(e->pos, "this template's parameter is " + paramType->name() + ", not " + e->type->name());
+				return makeValueArg(e->type, 0, &m_ctBlobs[e->var], e->pos);
+			}
+			if (wantStruct)
+				error(e->pos, "this template's parameter is " + paramType->name() + ": give a struct value");
+		}
+		// A number (bindings: it may use the template's parameters: sizeof(T), N + 1).
+		Type* t = paramType;
+		int64_t value = 0;
+		if (bindings != nullptr && (paramType == nullptr || paramType->isInteger()))
+			value = evalCondition(e, bindings);
+		else
+		{
+			check(e, paramType);
+			if (!e->isConst || e->type == nullptr || !(e->type->isArithmetic() || e->type->kind == Type::Kind::Bool))
+				error(e->pos, "a template's value argument must be a compile-time constant (a number, a bool, an f32, a struct constant)");
+			if (t == nullptr)
+				t = e->type;
+			value = constConvert(e->constValue, decay(e->type), t);
+		}
+		if (t == nullptr)
+			t = m_types.i32();
+		if (!t->isArithmetic())
+			error(e->pos, "a template's value parameter is a number, a bool, an f32 or a struct (not " + t->name() + ")");
+		return makeValueArg(t, value, nullptr, e->pos);
+	}
+
+	Type* CodeGen::templateArgument(TypeSyntax* a, const Bindings* bindings)
+	{
+		if (a->kind == TypeSyntax::Kind::Value)
+			return valueArgument(a->value, nullptr, bindings);
+		// A name alone: a constant's (a value), or a type's.
+		if (a->kind == TypeSyntax::Kind::Named && a->fixed == nullptr && a->args.empty() && m_consts.count(a->name) > 0 && !isTypeName(a->name)
+			&& (bindings == nullptr || bindings->count(a->written.empty() ? a->name : a->written) == 0))
+		{
+			Node* id = new Node();
+			id->kind = NodeKind::Ident;
+			id->name = a->name;
+			id->text = a->written;
+			id->pos = a->pos;
+			id->resolved = true;
+			return valueArgument(id, nullptr, nullptr);
+		}
+		if (a->kind == TypeSyntax::Kind::Named && a->fixed == nullptr && a->args.empty() && !isTypeName(a->name) && m_globals.count(a->name) > 0)
+			error(a->pos, "'" + (a->written.empty() ? a->name : a->written) + "' is a variable: a template's value argument must be a compile-time constant");
+		return bindings != nullptr ? conditionType(a, bindings) : resolveType(a);
+	}
+
+	// ===== if constexpr around declarations, static_assert =====
+	bool CodeGen::guardHolds(Node* d)
+	{
+		Node* g = d->guard;
+		if (g == nullptr)
+			return true;
+		if (!guardHolds(g))
+			return false;
+		if (g->value < 0)
+		{
+			const bool outer = m_inDeclarations;
+			m_inDeclarations = true;		// (constants only: as in the declarations)
+			resolveNames(g->a, g->scope);
+			try
+			{
+				g->value = evalCondition(g->a, nullptr) != 0 ? 1 : 0;
+			}
+			catch (CompileError&)
+			{
+				m_inDeclarations = outer;
+				throw;
+			}
+			m_inDeclarations = outer;
+		}
+		return g->value == (d->guardElse ? 0 : 1);
+	}
+
+	// The program's declarations in if constexpr: those whose conditions are true are collected
+	// (in the order of the source: one can use what an earlier one declared); the others are gone.
+	void CodeGen::applyGuards(Node* program)
+	{
+		std::vector<Node*> kept;
+		for (Node* d : program->list)
+		{
+			if (d->guard == nullptr)
+			{
+				kept.push_back(d);
+				continue;
+			}
+			bool holds = false;
+			attempt([&] { holds = guardHolds(d); });
+			if (!holds)
+				continue;
+			d->guard = nullptr;		// (decided: a declaration like the others)
+			Node one;
+			one.kind = NodeKind::Program;
+			one.list.push_back(d);
+			collect(&one);
+			resolveNames(&one);
+			kept.push_back(d);
+		}
+		program->list = kept;
+	}
+
+	// A struct's members in if constexpr: the fields and static_asserts whose conditions say so.
+	void CodeGen::filterMembers(Node* structDecl)
+	{
+		std::vector<Node*> kept;
+		for (Node* f : structDecl->list)
+		{
+			if (f->guard == nullptr || guardHolds(f))
+			{
+				f->guard = nullptr;
+				kept.push_back(f);
+			}
+		}
+		structDecl->list = kept;
+	}
+
+	void CodeGen::checkStaticAssert(Node* s, const Bindings* bindings)
+	{
+		if (evalCondition(s->a, bindings) == 0)
+			error(s->pos, "static_assert failed: " + (s->name.empty() ? s->text : s->name));
 	}
 
 	void CodeGen::markUsed(FuncInfo* f)
@@ -2886,7 +3131,7 @@ namespace dscript
 			error(e->pos, (e->text.empty() ? e->name : e->text) + " is not a template");
 		std::vector<Type*> args;
 		for (TypeSyntax* t : e->templateArgs)
-			args.push_back(resolveType(t));
+			args.push_back(templateArgument(t));
 		const bool isStruct = it->second[0].def->entities[it->second[0].entity].isStruct;
 		e->name = instantiate(e->name, args, nullptr, nullptr, e->pos, isStruct);
 		e->templateArgs.clear();
@@ -2967,7 +3212,27 @@ namespace dscript
 				return true;
 			case TypeSyntax::Kind::Array:
 				if (actual->kind == Type::Kind::Array)
+				{
+					// T[N] with N a value parameter: N is the array's size.
+					if (p->count != nullptr && p->count->kind == NodeKind::Ident)
+					{
+						const std::string& n = p->count->text.empty() ? p->count->name : p->count->text;
+						for (size_t i = 0; i < def->params.size(); i++)
+						{
+							if (def->params[i] != n || def->paramTypes[i] == nullptr)
+								continue;
+							Type* count = makeValueArg(m_types.u32(), actual->count, nullptr, p->pos);
+							if (args[i] == nullptr)
+								args[i] = count;
+							else if (args[i] != count && !(args[i]->valueArg && m_consts[args[i]->valueConst].value == actual->count))
+							{
+								why = n + " is " + args[i]->name() + " from one argument and " + std::to_string(actual->count) + " from another";
+								return false;
+							}
+						}
+					}
 					return unify(p->base, actual->base, def, args, fromLiteral, why);
+				}
 				return true;
 			case TypeSyntax::Kind::Function:
 				if (actual->kind == Type::Kind::Pointer && actual->base != nullptr && actual->base->kind == Type::Kind::Function)
@@ -3053,7 +3318,54 @@ namespace dscript
 				reasons.push_back(l_display(a.empty() ? args : a) + ": " + why + where);
 				continue;
 			}
+			// Types and values where the parameters want them (a value: in the parameter's type);
+			// the defaults of those not given (they may use the parameters before them).
 			bool ok = true;
+			Bindings known;
+			std::vector<bool> defaulted(a.size(), false);
+			for (size_t i = 0; i < a.size() && ok; i++)
+			{
+				const bool valueParam = def->paramTypes[i] != nullptr;
+				Type* paramType = nullptr;
+				if (valueParam)
+				{
+					paramType = conditionType(def->paramTypes[i], &known);
+					if (paramType == nullptr || paramType->valueArg)
+						error(def->paramTypes[i]->pos, "the type of " + def->params[i] + " uses a parameter that is not a type");
+				}
+				if (a[i] == nullptr && (def->defaultTypes[i] != nullptr || def->defaultValues[i] != nullptr))
+				{
+					a[i] = def->defaultTypes[i] != nullptr ? conditionType(def->defaultTypes[i], &known) : valueArgument(def->defaultValues[i], paramType, &known);
+					defaulted[i] = true;
+				}
+				if (a[i] != nullptr && valueParam && !a[i]->valueArg)
+				{
+					reasons.push_back(l_display(a) + ": " + def->params[i] + " is a value (" + def->params[i] + ": " + paramType->name() + "), not the type " + a[i]->name() + where);
+					ok = false;
+				}
+				else if (a[i] != nullptr && !valueParam && a[i]->valueArg)
+				{
+					reasons.push_back(l_display(a) + ": " + def->params[i] + " is a type, not the value " + a[i]->name() + where);
+					ok = false;
+				}
+				else if (a[i] != nullptr && valueParam && a[i]->base != paramType)
+				{
+					// (a number in the parameter's type: Array<u32, 16> and Array<u32, 16u> are one)
+					Type* from = a[i]->base;
+					const ConstInfo& c = m_consts[a[i]->valueConst];
+					if (from->kind == Type::Kind::Struct || paramType->kind == Type::Kind::Struct || !paramType->isArithmetic())
+					{
+						reasons.push_back(l_display(a) + ": " + def->params[i] + " is " + paramType->name() + ", not " + from->name() + where);
+						ok = false;
+					}
+					else
+						a[i] = makeValueArg(paramType, constConvert(c.value, from, paramType), nullptr, pos);
+				}
+				if (a[i] != nullptr)
+					known[def->params[i]] = a[i];
+			}
+			if (!ok)
+				continue;
 			for (size_t i = 0; i < def->required && ok; i++)
 			{
 				if (a[i] == nullptr)
@@ -3065,7 +3377,7 @@ namespace dscript
 			}
 			for (size_t i = def->required; i < a.size() && ok; i++)
 			{
-				if (a[i] == nullptr)
+				if (a[i] == nullptr || defaulted[i])
 					continue;
 				bool mentioned = false;
 				for (size_t k = ent.first; k < ent.last && !mentioned; k++)
@@ -3110,6 +3422,27 @@ namespace dscript
 					continue;
 				}
 			}
+			// The template body's if constexpr around it.
+			if (!ent.guards.empty())
+			{
+				Bindings b;
+				for (size_t i = 0; i < a.size(); i++)
+					b[def->params[i]] = a[i];
+				bool in = true;
+				for (const Guard& g : ent.guards)
+				{
+					if ((evalCondition(g.condition, &b) != 0) != g.expected)
+					{
+						in = false;
+						break;
+					}
+				}
+				if (!in)
+				{
+					reasons.push_back(l_display(a.empty() ? args : a) + ": " + "not there for these arguments (an if constexpr around it)" + where);
+					continue;
+				}
+			}
 			matches.push_back({ c, a });
 		}
 		if (matches.empty())
@@ -3147,6 +3480,21 @@ namespace dscript
 		if (m_instances.count(full) > 0)
 			return full;
 		m_instances[full] = full;
+		// The template body's static_asserts (those its if constexpr keep), for these arguments.
+		if (!def->asserts.empty())
+		{
+			Bindings b;
+			for (size_t i = 0; i < m.args.size(); i++)
+				b[def->params[i]] = m.args[i];
+			for (const TemplateAssert& as : def->asserts)
+			{
+				bool in = true;
+				for (const Guard& g : as.guards)
+					in = in && (evalCondition(g.condition, &b) != 0) == g.expected;
+				if (in && evalCondition(as.condition, &b) == 0)
+					error(as.pos, "static_assert failed: " + (as.message.empty() ? as.text : as.message) + " (in " + full + ", instantiated at " + posString(pos) + ")");
+			}
+		}
 		// Its tokens: the parameters standing for their types, its name the instance's.
 		std::vector<Token> tokens(def->tokens.begin() + (std::ptrdiff_t)ent.first, def->tokens.begin() + (std::ptrdiff_t)ent.last);
 		for (Token& t : tokens)
@@ -3155,12 +3503,26 @@ namespace dscript
 				continue;
 			for (size_t i = 0; i < def->params.size(); i++)
 			{
-				if (t.text == def->params[i])
+				if (t.text != def->params[i])
+					continue;
+				if (m.args[i] != nullptr && m.args[i]->valueArg)
+					t.text = m.args[i]->valueConst;		// a value: its constant
+				else
 					t.fixedType = m.args[i] != nullptr ? m.args[i] : m_notGiven;
+				break;
 			}
 		}
 		tokens[ent.nameToken - ent.first].text = shortName;
 		tokens[ent.nameToken - ent.first].fixedType = nullptr;
+		// Its own name alone (not Name<...>) in it: this instance (sizeof(Buffer), Node* next, a
+		// recursive call).
+		for (size_t k = 0; k + 1 < tokens.size(); k++)
+		{
+			const bool member = k > 0 && tokens[k - 1].kind == TokenKind::Punct && (tokens[k - 1].text == "." || tokens[k - 1].text == "->" || tokens[k - 1].text == "::");
+			if (tokens[k].kind == TokenKind::Identifier && tokens[k].text == ent.name && tokens[k].fixedType == nullptr && !member
+				&& !(tokens[k + 1].kind == TokenKind::Punct && tokens[k + 1].text == "<"))
+				tokens[k].text = shortName;
+		}
 		Token end;
 		end.kind = TokenKind::End;
 		end.pos = tokens.back().pos;
@@ -3190,6 +3552,7 @@ namespace dscript
 		l_withNote([&] {
 			collect(program);
 			resolveNames(program);
+			applyGuards(program);		// (if constexpr around its methods, in its struct)
 		});
 		for (size_t i = funcsBefore; i < m_funcList.size(); i++)
 		{
@@ -3245,7 +3608,7 @@ namespace dscript
 					std::vector<Type*> args;
 					for (TypeSyntax* a : ts->args)
 					{
-						Type* t = conditionType(a, bindings);
+						Type* t = templateArgument(a, bindings);
 						if (t == nullptr)
 							error(a->pos, "an optional template parameter that is not given");
 						args.push_back(t);
@@ -3258,7 +3621,7 @@ namespace dscript
 				Type* base = conditionType(ts->base, bindings);
 				if (base == nullptr)
 					error(ts->pos, "an optional template parameter that is not given");
-				return m_types.pointer(base);
+				return m_types.pointer(base, ts->constTarget);
 			}
 			case TypeSyntax::Kind::Array:
 			{
@@ -3309,16 +3672,38 @@ namespace dscript
 					value.kind = NodeKind::TypeArg;
 					value.type = t[0];
 					return cg.conversionCost(&value, t[1]) >= 0; } },
-				{ { "has_method", "TN", "a struct type and a method name" }, [](CodeGen& cg, const auto& t, const auto& n, const auto&) -> int64_t {
+				// (with a sub type: a method with those parameters, this not counted, and that return type)
+				{ { "has_method", "TNT?", "a struct type, a method name, and optionally its sub type (has_method(T, find, sub(u32) -> i32*))" },
+					[](CodeGen& cg, const auto& t, const auto& n, const auto& pos) -> int64_t {
 					Type* st = structOf(t[0]);
 					if (st->kind != Type::Kind::Struct) return 0;
 					const std::string m = st->structInfo->name + "::" + n[0];
-					return cg.m_funcs.count(m) > 0 || cg.m_templates.count(m) > 0; } },
-				{ { "has_field", "TN", "a struct type and a field name" }, [](CodeGen& cg, const auto& t, const auto& n, const auto& pos) -> int64_t {
+					if (t.size() < 2)
+						return cg.m_funcs.count(m) > 0 || cg.m_templates.count(m) > 0;
+					Type* sig = t[1]->kind == Type::Kind::Pointer && t[1]->base->isFunction() ? t[1]->base : t[1];
+					if (!sig->isFunction())
+						error(pos, "has_method's third argument is a sub type (sub(u32, f32) -> i32*), not " + t[1]->name());
+					if (cg.m_funcs.count(m) == 0)
+						return 0;		// (a method template has no type until it is instantiated)
+					for (FuncInfo* f : cg.m_funcs[m])
+					{
+						if (f->type == nullptr)
+							error(pos, "has_method: the type of " + m + " is not known yet here (in a declaration's condition)");
+						const size_t skip = (f->decl->value & 8) != 0 ? 0 : 1;		// (this)
+						const auto& params = f->type->params;
+						if (params.size() < skip || params.size() - skip != sig->params.size() || f->type->base != sig->base || f->type->variadic != sig->variadic)
+							continue;
+						if (std::equal(sig->params.begin(), sig->params.end(), params.begin() + (std::ptrdiff_t)skip))
+							return 1;
+					}
+					return 0; } },
+				{ { "has_field", "TNT?", "a struct type, a field name, and optionally its type (has_field(T, count, u32))" },
+					[](CodeGen& cg, const auto& t, const auto& n, const auto& pos) -> int64_t {
 					Type* st = structOf(t[0]);
 					if (st->kind != Type::Kind::Struct) return 0;
 					cg.resolveStruct(st->structInfo, pos);
-					return st->structInfo->field(n[0]) != nullptr; } },
+					const StructField* f = st->structInfo->field(n[0]);
+					return f != nullptr && (t.size() < 2 || f->type == t[1]); } },
 				{ { "is_range", "T", "one type (a for-in can loop over it: an array, or a struct with begin() and end())" }, [](CodeGen& cg, const auto& t, const auto&, const auto&) -> int64_t {
 					if (t[0]->kind == Type::Kind::Array) return 1;
 					Type* st = structOf(t[0]);
@@ -3412,8 +3797,9 @@ namespace dscript
 				std::vector<std::string> names;
 				const std::string spec = entry->spec.args;
 				const bool variadic = !spec.empty() && spec.back() == '*';
-				const size_t fixed = variadic ? spec.size() - 1 : spec.size();
-				if (variadic ? e->list.size() < fixed : e->list.size() != fixed)
+				const bool lastOptional = !spec.empty() && spec.back() == '?';
+				const size_t fixed = (variadic || lastOptional) ? spec.size() - 1 : spec.size();
+				if (variadic ? e->list.size() < fixed : lastOptional ? (e->list.size() + 1 < fixed || e->list.size() > fixed) : e->list.size() != fixed)
 					error(e->pos, std::string(entry->spec.name) + " takes " + entry->spec.help);
 				for (Node* arg : e->list)
 				{
@@ -3454,9 +3840,40 @@ namespace dscript
 				}
 				break;
 			case NodeKind::Ident:
-				if (l_bound(e->text.empty() ? e->name : e->text) != nullptr)
-					error(e->pos, "'" + (e->text.empty() ? e->name : e->text) + "' is a type: use it in a built-in (is_integer(T), is_type(T, u32), sizeof(T), ...)");
+				if (const Type* const* t = l_bound(e->text.empty() ? e->name : e->text))
+				{
+					if (*t != nullptr && (*t)->valueArg && (*t)->base->kind != Type::Kind::Struct)
+						return m_consts[(*t)->valueConst].value;		// a value parameter
+					if (*t == nullptr || !(*t)->valueArg)
+						error(e->pos, "'" + (e->text.empty() ? e->name : e->text) + "' is a type: use it in a built-in (is_integer(T), is_type(T, u32), sizeof(T), ...)");
+					error(e->pos, "'" + (e->text.empty() ? e->name : e->text) + "' is a struct value: use its fields (" + (e->text.empty() ? e->name : e->text) + ".field)");
+				}
 				break;
+			case NodeKind::Member:
+			{
+				// C.field (C a struct value parameter).
+				std::string path = e->name;
+				Node* root = e->a;
+				while (root->kind == NodeKind::Member && root->value == 0)
+				{
+					path = root->name + "." + path;
+					root = root->a;
+				}
+				if (root->kind == NodeKind::Ident && e->value == 0)
+				{
+					if (const Type* const* t = l_bound(root->text.empty() ? root->name : root->text))
+					{
+						if (*t == nullptr || !(*t)->valueArg || (*t)->base->kind != Type::Kind::Struct)
+							error(e->pos, "'" + (root->text.empty() ? root->name : root->text) + "' is not a struct value");
+						const ConstInfo& c = m_consts[(*t)->valueConst];
+						auto it = c.fields.find(path);
+						if (it == c.fields.end())
+							error(e->pos, (*t)->base->name() + " has no (number) field '" + path + "'");
+						return it->second;
+					}
+				}
+				break;
+			}
 			default:
 				break;
 		}
@@ -4970,6 +5387,9 @@ namespace dscript
 				if (m_defers.empty())
 					error(s->pos, "internal error: defer outside of a block");
 				m_defers.back().push_back({ s->a, m_scopes, m_atomic });
+			break;
+			case NodeKind::StaticAssert:
+				checkStaticAssert(s, nullptr);
 			break;
 			case NodeKind::VarDecl:
 				if (s->hoisted != nullptr)
@@ -6764,6 +7184,9 @@ namespace dscript
 				check(s->a);
 				ctEval(s->a);
 				return CtFlow::Normal;
+			case NodeKind::StaticAssert:
+				checkStaticAssert(s, nullptr);
+				return CtFlow::Normal;
 			case NodeKind::Assert:
 			{
 				check(s->a);
@@ -8013,6 +8436,7 @@ namespace dscript
 	{
 		collect(program);
 		resolveNames(program);
+		applyGuards(program);
 		// Resolve the declarations (in any order: they can refer to each other). In analysis
 		// mode, what fails gets a placeholder so the rest can still be checked.
 		m_inDeclarations = true;
@@ -8081,6 +8505,8 @@ namespace dscript
 			}
 		}
 		m_inDeclarations = false;
+		for (Node* sa : m_staticAsserts)
+			attempt([&] { checkStaticAssert(sa, nullptr); });
 		// Overloads: merge declarations with their definition; labels.
 		for (auto& entry : m_funcs)
 		{

@@ -2,6 +2,7 @@
 #include "ConditionBuiltins.hpp"
 #include <cstdio>
 #include <set>
+#include <functional>
 
 // Node fields by kind (see AST.hpp):
 //   Program:     list = declarations
@@ -95,12 +96,38 @@ namespace dscript
 		expectPunct(">", "after the template's arguments");
 	}
 
+	// <type or value, ...>: a value is an expression that cannot be a type (a number, a literal,
+	// -x, Name.field, f(x), N + 1...: + - * / % at most, a comparison needs parentheses); a name
+	// alone is parsed as a type (the code generator tells a constant's name from a type's).
 	void Parser::parseTemplateArgs(std::vector<TypeSyntax*>& out)
 	{
 		expectPunct("<", "");
 		while (true)
 		{
-			out.push_back(parseType());
+			const Token& t = peek();
+			bool value = t.kind == TokenKind::Integer || t.kind == TokenKind::Float || t.kind == TokenKind::String
+				|| (t.kind == TokenKind::Punct && (t.text == "-" || t.text == "!" || t.text == "~" || t.text == "+"))
+				|| (t.kind == TokenKind::Keyword && (t.text == "true" || t.text == "false" || t.text == "null" || t.text == "sizeof" || t.text == "cast" || t.text == "not"));
+			if (t.kind == TokenKind::Identifier && t.fixedType == nullptr)
+			{
+				// Name.field / f(...) / N + 1: a value (after a qualified name)
+				int i = 1;
+				while (peek(i).kind == TokenKind::Punct && peek(i).text == "::" && peek(i + 1).kind == TokenKind::Identifier)
+					i += 2;
+				const Token& after = peek(i);
+				value = after.kind == TokenKind::Punct && (after.text == "." || after.text == "(" || after.text == "+" || after.text == "-" ||
+					after.text == "/" || after.text == "%");
+			}
+			if (value)
+			{
+				TypeSyntax* v = new TypeSyntax();
+				v->kind = TypeSyntax::Kind::Value;
+				v->pos = t.pos;
+				v->value = parseBinary(9);
+				out.push_back(v);
+			}
+			else
+				out.push_back(parseType());
 			if (!acceptPunct(","))
 				break;
 		}
@@ -150,8 +177,20 @@ namespace dscript
 					error(lastPos(), "template parameter '" + param + "' is there twice");
 			}
 			def->params.push_back(param);
+			// N: type (a value parameter); = default (a type, or a value): optional.
+			def->paramTypes.push_back(acceptPunct(":") ? parseType() : nullptr);
+			def->defaultTypes.push_back(nullptr);
+			def->defaultValues.push_back(nullptr);
+			if (acceptPunct("="))
+			{
+				if (def->paramTypes.back() != nullptr)
+					def->defaultValues.back() = parseTernary();
+				else
+					def->defaultTypes.back() = parseType();
+				optional = true;
+			}
 			if (!optional)
-				def->required = def->params.size();
+				def->required = def->params.size();		// (after a default, the others are optional too)
 			if (!acceptPunct(","))
 				break;
 		}
@@ -200,46 +239,134 @@ namespace dscript
 		next();		// }
 		acceptPunct(";");
 		def->source.assign(m_tokens.begin() + (std::ptrdiff_t)start, m_tokens.begin() + (std::ptrdiff_t)m_pos);
-		// The entities: [priv | inline | static | atomic ...] sub name ... / struct name { ... }.
+		// The entities: [priv | inline | static | atomic | readonly | constexpr | consteval ...] sub
+		// name ... / struct name { ... }; around them, if constexpr (condition) { ... } else { ... }
+		// (their guards: conditions on the parameters); static_assert(condition, "message").
 		const auto& tk = def->tokens;
 		auto l_is = [&](size_t i, TokenKind kind, const char* text) { return i < tk.size() && tk[i].kind == kind && tk[i].text == text; };
-		size_t i = 0;
-		while (i < tk.size())
-		{
+		// The token after the one that closes tk[i] ('(' / '{').
+		auto l_close = [&](size_t i) -> size_t {
+			const std::string open = tk[i].text, close = open == "(" ? ")" : "}";
+			int d = 0;
+			for (; i < tk.size(); i++)
+			{
+				if (tk[i].kind == TokenKind::Punct && tk[i].text == open) d++;
+				else if (tk[i].kind == TokenKind::Punct && tk[i].text == close && --d == 0) return i + 1;
+			}
+			error(open == "(" ? tk.back().pos : tk.back().pos, "'" + close + "' missing in the template");
+		};
+		// An expression of the tokens [from, to) (a condition: its built-ins take types).
+		auto l_condition = [&](size_t from, size_t to) -> Node* {
+			std::vector<Token> part(tk.begin() + (std::ptrdiff_t)from, tk.begin() + (std::ptrdiff_t)to);
+			Token end;
+			end.kind = TokenKind::End;
+			end.pos = to < tk.size() ? tk[to].pos : tk.back().pos;
+			part.push_back(end);
+			Parser sub(part);
+			sub.addTemplateNames(m_templateNames);
+			Node* e = sub.parseCondition();
+			if (sub.peek().kind != TokenKind::End)
+				error(sub.peek().pos, "unexpected " + describe(sub.peek()) + " in the condition");
+			return e;
+		};
+		std::function<void(size_t&, size_t, const std::vector<Guard>&)> l_item;
+		auto l_scan = [&](size_t i, size_t end, const std::vector<Guard>& guards) {
+			while (i < end)
+				l_item(i, end, guards);
+		};
+		l_item = [&](size_t& i, size_t end, const std::vector<Guard>& guards) {
+			if (l_is(i, TokenKind::Keyword, "if") && l_is(i + 1, TokenKind::Keyword, "constexpr") && l_is(i + 2, TokenKind::Punct, "("))
+			{
+				const size_t afterCond = l_close(i + 2);
+				Node* cond = l_condition(i + 3, afterCond - 1);
+				if (!l_is(afterCond, TokenKind::Punct, "{"))
+					error(afterCond < tk.size() ? tk[afterCond].pos : open, "'{' expected after the if constexpr's condition (around structs and subs)");
+				const size_t afterBody = l_close(afterCond);
+				std::vector<Guard> inner = guards;
+				inner.push_back({ cond, true });
+				l_scan(afterCond + 1, afterBody - 1, inner);
+				i = afterBody;
+				if (l_is(i, TokenKind::Keyword, "else"))
+				{
+					inner.back().expected = false;
+					i++;
+					if (l_is(i, TokenKind::Keyword, "if"))
+						l_item(i, end, inner);		// else if constexpr (...)
+					else if (l_is(i, TokenKind::Punct, "{"))
+					{
+						const size_t afterElse = l_close(i);
+						l_scan(i + 1, afterElse - 1, inner);
+						i = afterElse;
+					}
+					else
+						error(i < tk.size() ? tk[i].pos : open, "'{' or 'if constexpr' expected after else");
+				}
+				return;
+			}
+			if (l_is(i, TokenKind::Keyword, "static_assert"))
+			{
+				TemplateAssert as;
+				as.pos = tk[i].pos;
+				as.guards = guards;
+				if (!l_is(i + 1, TokenKind::Punct, "("))
+					error(tk[i].pos, "'(' expected after static_assert");
+				const size_t after = l_close(i + 1);
+				// condition [, "message"]
+				size_t comma = after - 1;
+				int d = 0;
+				for (size_t k = i + 2; k < after - 1; k++)
+				{
+					if (tk[k].kind == TokenKind::Punct && (tk[k].text == "(" || tk[k].text == "[")) d++;
+					if (tk[k].kind == TokenKind::Punct && (tk[k].text == ")" || tk[k].text == "]")) d--;
+					if (d == 0 && tk[k].kind == TokenKind::Punct && tk[k].text == ",") { comma = k; break; }
+				}
+				as.condition = l_condition(i + 2, comma);
+				for (size_t k = i + 2; k < comma; k++)
+					as.text += (k > i + 2 ? " " : "") + (tk[k].kind == TokenKind::String ? "\"" + tk[k].text + "\"" : tk[k].text);
+				if (comma < after - 1)
+				{
+					if (comma + 2 != after - 1 || tk[comma + 1].kind != TokenKind::String)
+						error(tk[comma].pos, "static_assert's message is a string (static_assert(condition, \"message\"))");
+					as.message = tk[comma + 1].text;
+				}
+				def->asserts.push_back(as);
+				i = after;
+				if (!l_is(i, TokenKind::Punct, ";"))
+					error(i < tk.size() ? tk[i].pos : open, "';' expected after static_assert(...)");
+				i++;
+				return;
+			}
 			TemplateEntity e;
 			e.first = i;
-			while (i < tk.size() && tk[i].kind == TokenKind::Keyword && (tk[i].text == "priv" || tk[i].text == "inline" || tk[i].text == "static" || tk[i].text == "atomic"))
+			e.guards = guards;
+			while (i < tk.size() && tk[i].kind == TokenKind::Keyword && (tk[i].text == "priv" || tk[i].text == "inline" || tk[i].text == "static" || tk[i].text == "atomic"
+				|| tk[i].text == "readonly" || tk[i].text == "constexpr" || tk[i].text == "consteval"))
 				i++;
 			if (!(l_is(i, TokenKind::Keyword, "sub") || (l_is(i, TokenKind::Keyword, "struct") && owner == nullptr)) || i + 1 >= tk.size() || tk[i + 1].kind != TokenKind::Identifier)
-				error(i < tk.size() ? tk[i].pos : open, owner != nullptr ? "a template in a struct holds methods (sub ...)" : "a template holds structs and subs (struct ... / sub ...), found " + describe(i < tk.size() ? tk[i] : peek()));
+				error(i < tk.size() ? tk[i].pos : open, owner != nullptr ? "a template in a struct holds methods (sub ...)" :
+					"a template holds structs and subs (struct ... / sub ...; around them, if constexpr (...) { ... }; static_assert(...)), found " + describe(i < tk.size() ? tk[i] : peek()));
 			e.isStruct = tk[i].text == "struct";
 			e.nameToken = i + 1;
 			e.name = tk[i + 1].text;
 			i += 2;
 			// To its end: a struct's '}' (and ';'), a sub's ';' (a declaration) or the '}' of its body.
 			int parens = 0;
-			while (i < tk.size() && !(parens == 0 && tk[i].kind == TokenKind::Punct && (tk[i].text == "{" || tk[i].text == ";")))
+			while (i < end && !(parens == 0 && tk[i].kind == TokenKind::Punct && (tk[i].text == "{" || tk[i].text == ";")))
 			{
 				if (tk[i].kind == TokenKind::Punct && tk[i].text == "(") parens++;
 				else if (tk[i].kind == TokenKind::Punct && tk[i].text == ")") parens--;
 				i++;
 			}
 			if (l_is(i, TokenKind::Punct, "{"))
-			{
-				int d = 0;
-				for (; i < tk.size(); i++)
-				{
-					if (tk[i].kind == TokenKind::Punct && tk[i].text == "{") d++;
-					else if (tk[i].kind == TokenKind::Punct && tk[i].text == "}" && --d == 0) break;
-				}
-			}
+				i = l_close(i) - 1;
 			i++;
 			if (e.isStruct && l_is(i, TokenKind::Punct, ";"))
 				i++;
 			e.last = std::min(i, tk.size());
 			def->entities.push_back(e);
 			m_templateNames.insert(e.name);
-		}
+		};
+		l_scan(0, tk.size(), {});
 		if (def->entities.empty())
 			error(open, "an empty template");
 		return n;
@@ -261,6 +388,9 @@ namespace dscript
 				else if ((flags & 2) == 0 && acceptKeyword("inline")) flags |= 2;
 				else if ((flags & 16) == 0 && acceptKeyword("priv")) flags |= 16;
 				else if ((flags & 32) == 0 && acceptKeyword("atomic")) flags |= 32;
+				else if ((flags & 64) == 0 && acceptKeyword("readonly")) flags |= 64;
+				else if ((flags & 384) == 0 && acceptKeyword("constexpr")) flags |= 128;
+				else if ((flags & 384) == 0 && acceptKeyword("consteval")) flags |= 256;
 				else break;
 			}
 			m_scope = owner->name;
@@ -373,6 +503,9 @@ namespace dscript
 		n->kind = kind;
 		n->pos = pos;
 		n->external = m_external;
+		// (in an if constexpr around declarations: they exist only if its condition says so)
+		n->guard = m_guard;
+		n->guardElse = m_guardElse;
 		return n;
 	}
 
@@ -414,6 +547,16 @@ namespace dscript
 		if (isKeyword("namespace"))
 		{
 			parseNamespace(out);
+			return;
+		}
+		if (isKeyword("if") && isKeyword("constexpr", 1))
+		{
+			parseDeclIf(out, nullptr);
+			return;
+		}
+		if (isKeyword("static_assert"))
+		{
+			out.push_back(parseStaticAssert());
 			return;
 		}
 		Node* d = parseDeclaration();
@@ -466,6 +609,68 @@ namespace dscript
 		acceptPunct(";");
 		m_namespace = outerNamespace;
 		m_scope = outerScope;
+	}
+
+	// if constexpr (condition) { declarations } [else { ... } | else if constexpr ...] at the top
+	// level, in a namespace, or in a struct's body (structDecl): the declarations get it as their
+	// guard (the code generator keeps those whose conditions say so).
+	void Parser::parseDeclIf(std::vector<Node*>& out, Node* structDecl)
+	{
+		Node* n = make(NodeKind::DeclIf, next().pos);
+		next();		// constexpr
+		n->value = -1;
+		n->scope = m_scope;
+		expectPunct("(", "after 'if constexpr'");
+		n->a = parseCondition();
+		expectPunct(")", "after the condition");
+		Node* const outerGuard = m_guard;
+		const bool outerElse = m_guardElse;
+		m_guard = n;
+		m_guardElse = false;
+		auto l_body = [&] {
+			const SourcePos open = peek().pos;
+			expectPunct("{", "after the if constexpr's condition (around declarations)");
+			while (!acceptPunct("}"))
+			{
+				if (peek().kind == TokenKind::End)
+					error(open, "'}' missing at the end of the if constexpr");
+				if (structDecl != nullptr)
+					parseStructMember(structDecl);
+				else
+					parseTopLevel(out);
+			}
+		};
+		l_body();
+		if (acceptKeyword("else"))
+		{
+			m_guardElse = true;
+			if (isKeyword("if") && isKeyword("constexpr", 1))
+				parseDeclIf(out, structDecl);
+			else
+				l_body();
+		}
+		m_guard = outerGuard;
+		m_guardElse = outerElse;
+	}
+
+	// static_assert(condition[, "message"]);: checked when compiling (no code).
+	Node* Parser::parseStaticAssert(void)
+	{
+		Node* n = make(NodeKind::StaticAssert, next().pos);
+		n->scope = m_scope;
+		expectPunct("(", "after 'static_assert'");
+		const size_t from = m_pos;
+		n->a = parseCondition();
+		n->text = tokenText(from, m_pos);
+		if (acceptPunct(","))
+		{
+			if (peek().kind != TokenKind::String)
+				error(peek().pos, "static_assert's message is a string (static_assert(condition, \"message\"))");
+			n->name = next().text;
+		}
+		expectPunct(")", "after static_assert(condition[, message])");
+		expectPunct(";", "after static_assert(...)");
+		return n;
 	}
 
 	std::string Parser::parseQualifiedName(const std::string& context, bool& global)
@@ -598,6 +803,152 @@ namespace dscript
 		return n;
 	}
 
+	// One member of a struct's body (fields, methods, nested types, constants, method templates, if
+	// constexpr around members, static_assert).
+	void Parser::parseStructMember(Node* decl)
+	{
+		if (isKeyword("if") && isKeyword("constexpr", 1))
+		{
+			std::vector<Node*> unused;
+			parseDeclIf(unused, decl);
+			return;
+		}
+		if (isKeyword("static_assert"))
+		{
+			decl->list.push_back(parseStaticAssert());		// (checked with the struct's layout)
+			return;
+		}
+		// priv var / priv sub: only the struct's own subs can use it. readonly var: everyone
+		// can read it, only the struct's own subs can change it.
+		const bool priv = acceptKeyword("priv");
+		if (isKeyword("const"))
+		{
+			// const name: T [= default];: set when the struct is built (its default value,
+			// { ... }, or the constructor), then never changed.
+			if (isKeyword("var", 1) || isKeyword("auto", 1))
+				error(peek(1).pos, "'const " + peek(1).text + "': const takes the place of var (const name: type)");
+			Node* field = parseVarDecl(false);
+			field->isPrivate = priv;
+			field->shortName = field->name;
+			field->scope = m_scope;
+			expectPunct(";", "after the struct field");
+			decl->list.push_back(field);
+			return;
+		}
+		if (isKeyword("constexpr") && peek(1).kind == TokenKind::Identifier)
+		{
+			// constexpr NAME = value;: a constant of the struct (Struct::NAME, Struct.NAME,
+			// x.NAME, NAME in its subs): no memory, the same for every instance.
+			if (decl->value != 0)
+				error(peek().pos, "constants in a struct need a named struct (struct Name { ... })");
+			Node* c = parseConst();
+			nameDeclaration(c);
+			c->owner = decl;
+			c->isPrivate = priv;
+			m_nested.push_back(c);
+			return;
+		}
+		if (isKeyword("constinit"))
+			error(peek().pos, "constinit is for globals (a field gets its value when its struct is built: a default value, or const for one that never changes)");
+		if (isKeyword("readonly") && !isKeyword("var", 1) && !isKeyword("const", 1))
+			;	// readonly sub: a method (below)
+		else if (isKeyword("readonly"))
+		{
+			const Token& ro = next();
+			if (priv || isKeyword("priv"))
+				error(ro.pos, "a field is either priv or readonly: priv already keeps others from changing it (and from reading it)");
+			if (decl->value != 0)
+				error(ro.pos, "readonly fields need a named struct (struct Name { ... }): only its subs can change them");
+			if (isKeyword("const"))
+				error(peek().pos, "a field is either readonly or const: const already keeps everyone (also the struct's subs) from changing it");
+			Node* field = parseVarDecl(false);
+			field->isReadonly = true;
+			field->shortName = field->name;
+			field->scope = m_scope;
+			expectPunct(";", "after the struct field");
+			decl->list.push_back(field);
+			return;
+		}
+		if (isKeyword("struct") || isKeyword("enum"))
+		{
+			// A nested struct / enum: <Struct>::<name> (priv: only usable in the struct).
+			if (decl->value != 0)
+				error(peek().pos, "nested types need a named struct (struct Name { ... }), not a nameless one");
+			if (isKeyword("struct") && !(peek(1).kind == TokenKind::Identifier))
+				error(peek(1).pos, "a nested struct needs a name (struct Name { ... }); use struct { ... } as the type of a field for a nameless one");
+			Node* nested = isKeyword("struct") ? parseStruct(decl) : parseEnum(decl);
+			nested->isPrivate = priv;
+			m_nested.push_back(nested);
+			return;
+		}
+		if (isKeyword("static") && isKeyword("var", 1))
+			error(peek(1).pos, "structs have no static fields: use a global (or a constant) next to the struct");
+		if (isKeyword("template"))
+		{
+			// Method templates: hidden top-level template declarations, owned by the struct.
+			if (priv)
+				error(peek().pos, "priv goes on the template's subs (template(T) { priv sub ... })");
+			if (decl->value != 0)
+				error(peek().pos, "method templates need a named struct (struct Name { ... })");
+			m_lambdas.push_back(parseTemplate(decl));
+			return;
+		}
+		if (isKeyword("sub") || isKeyword("inline") || isKeyword("static") || isKeyword("priv") || isKeyword("atomic") || isKeyword("readonly")
+			|| isKeyword("constexpr") || isKeyword("consteval"))
+		{
+			// A method: a hidden top-level sub (added at the end of the program). static: no
+			// this, called as Struct::name(...) / Struct.name(...).
+			if (decl->value != 0)
+				error(peek().pos, "methods need a named struct (struct Name { ... }), not a nameless one");
+			// priv, static and inline, in any order
+			int flags = priv ? 16 : 0;
+			while (true)
+			{
+				if ((flags & 8) == 0 && acceptKeyword("static"))
+					flags |= 8;
+				else if ((flags & 2) == 0 && acceptKeyword("inline"))
+					flags |= 2;
+				else if ((flags & 16) == 0 && acceptKeyword("priv"))
+					flags |= 16;
+				else if ((flags & 32) == 0 && acceptKeyword("atomic"))
+					flags |= 32;
+				else if ((flags & 64) == 0 && acceptKeyword("readonly"))
+					flags |= 64;
+				else if ((flags & 384) == 0 && acceptKeyword("constexpr"))
+					flags |= 128;
+				else if ((flags & 384) == 0 && acceptKeyword("consteval"))
+					flags |= 256;
+				else
+					break;
+			}
+			if ((flags & 34) == 34)
+				error(peek().pos, "inline subs cannot be atomic (they are copied into their callers: use a normal sub)");
+			if ((flags & 72) == 72)
+				error(peek().pos, "a static sub has no this: readonly is for the subs that work on the struct (it makes this a const pointer)");
+			if (!isKeyword("sub"))
+				error(peek().pos, "'sub' expected after '" + m_tokens[m_pos - 1].text + "', found " + describe(peek()));
+			Node* outerFunc = m_currentFunc;
+			auto outerScopes = std::move(m_scopes);
+			m_scopes.clear();
+			m_lambdas.push_back(parseFunction(flags, decl));
+			m_scopes = std::move(outerScopes);
+			m_currentFunc = outerFunc;
+			return;
+		}
+		if (isKeyword("interrupt"))
+			error(peek().pos, "interrupt subs cannot be methods (they take no parameters)");
+		if (isKeyword("auto"))
+			error(peek().pos, "struct fields need a type: declare them with 'var' (auto is for variables with a value)");
+		if (!isKeyword("var"))
+			error(peek().pos, "struct fields are declared with 'var' (methods with 'sub'), found " + describe(peek()));
+		Node* field = parseVarDecl(false);
+		field->isPrivate = priv;
+		field->shortName = field->name;
+		field->scope = m_scope;
+		expectPunct(";", "after the struct field");
+		decl->list.push_back(field);
+	}
+
 	void Parser::parseStructFields(Node* decl)
 	{
 		expectPunct("{", "to start the struct");
@@ -606,137 +957,7 @@ namespace dscript
 		if (decl->value == 0)
 			m_scope = decl->name;
 		while (!acceptPunct("}"))
-		{
-			// priv var / priv sub: only the struct's own subs can use it. readonly var: everyone
-			// can read it, only the struct's own subs can change it.
-			const bool priv = acceptKeyword("priv");
-			if (isKeyword("const"))
-			{
-				// const name: T [= default];: set when the struct is built (its default value,
-				// { ... }, or the constructor), then never changed.
-				if (isKeyword("var", 1) || isKeyword("auto", 1))
-					error(peek(1).pos, "'const " + peek(1).text + "': const takes the place of var (const name: type)");
-				Node* field = parseVarDecl(false);
-				field->isPrivate = priv;
-				field->shortName = field->name;
-				field->scope = m_scope;
-				expectPunct(";", "after the struct field");
-				decl->list.push_back(field);
-				continue;
-			}
-			if (isKeyword("constexpr") && peek(1).kind == TokenKind::Identifier)
-			{
-				// constexpr NAME = value;: a constant of the struct (Struct::NAME, Struct.NAME,
-				// x.NAME, NAME in its subs): no memory, the same for every instance.
-				if (decl->value != 0)
-					error(peek().pos, "constants in a struct need a named struct (struct Name { ... })");
-				Node* c = parseConst();
-				nameDeclaration(c);
-				c->owner = decl;
-				c->isPrivate = priv;
-				m_nested.push_back(c);
-				continue;
-			}
-			if (isKeyword("constinit"))
-				error(peek().pos, "constinit is for globals (a field gets its value when its struct is built: a default value, or const for one that never changes)");
-			if (isKeyword("readonly") && !isKeyword("var", 1) && !isKeyword("const", 1))
-				;	// readonly sub: a method (below)
-			else if (isKeyword("readonly"))
-			{
-				const Token& ro = next();
-				if (priv || isKeyword("priv"))
-					error(ro.pos, "a field is either priv or readonly: priv already keeps others from changing it (and from reading it)");
-				if (decl->value != 0)
-					error(ro.pos, "readonly fields need a named struct (struct Name { ... }): only its subs can change them");
-				if (isKeyword("const"))
-					error(peek().pos, "a field is either readonly or const: const already keeps everyone (also the struct's subs) from changing it");
-				Node* field = parseVarDecl(false);
-				field->isReadonly = true;
-				field->shortName = field->name;
-				field->scope = m_scope;
-				expectPunct(";", "after the struct field");
-				decl->list.push_back(field);
-				continue;
-			}
-			if (isKeyword("struct") || isKeyword("enum"))
-			{
-				// A nested struct / enum: <Struct>::<name> (priv: only usable in the struct).
-				if (decl->value != 0)
-					error(peek().pos, "nested types need a named struct (struct Name { ... }), not a nameless one");
-				if (isKeyword("struct") && !(peek(1).kind == TokenKind::Identifier))
-					error(peek(1).pos, "a nested struct needs a name (struct Name { ... }); use struct { ... } as the type of a field for a nameless one");
-				Node* nested = isKeyword("struct") ? parseStruct(decl) : parseEnum(decl);
-				nested->isPrivate = priv;
-				m_nested.push_back(nested);
-				continue;
-			}
-			if (isKeyword("static") && isKeyword("var", 1))
-				error(peek(1).pos, "structs have no static fields: use a global (or a constant) next to the struct");
-			if (isKeyword("template"))
-			{
-				// Method templates: hidden top-level template declarations, owned by the struct.
-				if (priv)
-					error(peek().pos, "priv goes on the template's subs (template(T) { priv sub ... })");
-				if (decl->value != 0)
-					error(peek().pos, "method templates need a named struct (struct Name { ... })");
-				m_lambdas.push_back(parseTemplate(decl));
-				continue;
-			}
-			if (isKeyword("sub") || isKeyword("inline") || isKeyword("static") || isKeyword("priv") || isKeyword("atomic") || isKeyword("readonly")
-				|| isKeyword("constexpr") || isKeyword("consteval"))
-			{
-				// A method: a hidden top-level sub (added at the end of the program). static: no
-				// this, called as Struct::name(...) / Struct.name(...).
-				if (decl->value != 0)
-					error(peek().pos, "methods need a named struct (struct Name { ... }), not a nameless one");
-				// priv, static and inline, in any order
-				int flags = priv ? 16 : 0;
-				while (true)
-				{
-					if ((flags & 8) == 0 && acceptKeyword("static"))
-						flags |= 8;
-					else if ((flags & 2) == 0 && acceptKeyword("inline"))
-						flags |= 2;
-					else if ((flags & 16) == 0 && acceptKeyword("priv"))
-						flags |= 16;
-					else if ((flags & 32) == 0 && acceptKeyword("atomic"))
-						flags |= 32;
-					else if ((flags & 64) == 0 && acceptKeyword("readonly"))
-						flags |= 64;
-					else if ((flags & 384) == 0 && acceptKeyword("constexpr"))
-						flags |= 128;
-					else if ((flags & 384) == 0 && acceptKeyword("consteval"))
-						flags |= 256;
-					else
-						break;
-				}
-				if ((flags & 34) == 34)
-					error(peek().pos, "inline subs cannot be atomic (they are copied into their callers: use a normal sub)");
-				if ((flags & 72) == 72)
-					error(peek().pos, "a static sub has no this: readonly is for the subs that work on the struct (it makes this a const pointer)");
-				if (!isKeyword("sub"))
-					error(peek().pos, "'sub' expected after '" + m_tokens[m_pos - 1].text + "', found " + describe(peek()));
-				Node* outerFunc = m_currentFunc;
-				auto outerScopes = std::move(m_scopes);
-				m_scopes.clear();
-				m_lambdas.push_back(parseFunction(flags, decl));
-				m_scopes = std::move(outerScopes);
-				m_currentFunc = outerFunc;
-				continue;
-			}
-			if (isKeyword("interrupt"))
-				error(peek().pos, "interrupt subs cannot be methods (they take no parameters)");
-			if (isKeyword("auto"))
-				error(peek().pos, "struct fields need a type: declare them with 'var' (auto is for variables with a value)");
-			if (!isKeyword("var"))
-				error(peek().pos, "struct fields are declared with 'var' (methods with 'sub'), found " + describe(peek()));
-			Node* field = parseVarDecl(false);
-			field->isPrivate = priv;
-			field->shortName = field->name;
-			field->scope = m_scope;
-			expectPunct(";", "after the struct field");
-			decl->list.push_back(field);
-		}
+			parseStructMember(decl);
 		m_scope = outerScope;
 	}
 
@@ -1561,6 +1782,8 @@ namespace dscript
 		}
 		if (isKeyword("low"))
 			return parseLow();
+		if (isKeyword("static_assert"))
+			return parseStaticAssert();
 		if (acceptKeyword("assert"))
 		{
 			Node* n = make(NodeKind::Assert, pos);
@@ -1955,7 +2178,7 @@ namespace dscript
 				size_t k = 0;
 				while (!isPunct(")"))
 				{
-					if (k >= spec.size() || spec[k] == '*')
+					if (k >= spec.size() || spec[k] == '*' || spec[k] == '?')
 						error(peek().pos, std::string(b->name) + " takes " + b->help);
 					const char kind = (k + 1 < spec.size() && spec[k + 1] == '*') ? spec[k] : spec[k];
 					if (kind == 'T')
@@ -1977,7 +2200,7 @@ namespace dscript
 						n->list.push_back(arg);
 					}
 					if (!(k + 1 < spec.size() && spec[k + 1] == '*'))
-						k++;
+						k += (k + 1 < spec.size() && spec[k + 1] == '?') ? 2 : 1;
 					if (!acceptPunct(","))
 						break;
 				}

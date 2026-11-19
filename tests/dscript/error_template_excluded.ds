@@ -1,0 +1,3 @@
+// expect-error: f<f32>: not there for these arguments (an if constexpr around it)
+template(T) { if constexpr (is_integer(T)) { sub f() -> u32 { return 1; } } }
+sub main() -> u32 { return f<f32>(); }

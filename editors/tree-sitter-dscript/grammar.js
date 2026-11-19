@@ -23,6 +23,12 @@ const PREC = {
 
 const commaSep = (rule) => optional(commaSep1(rule));
 const commaSep1 = (rule) => seq(rule, repeat(seq(',', rule)));
+// if constexpr (condition) { items } [else { items } | else if constexpr ...] around declarations.
+const conditional = ($, self, item) => seq(
+	'if', 'constexpr', '(', field('condition', $._expression), ')',
+	'{', repeat(item), '}',
+	optional(seq('else', choice(self, seq('{', repeat(item), '}')))),
+);
 
 module.exports = grammar({
 	name: 'dscript',
@@ -42,6 +48,8 @@ module.exports = grammar({
 		[$.generic_type, $._expression, $.generic_expression],
 		// (priv constexpr NAME = ... / priv constexpr sub: told by what follows)
 		[$.struct_constant, $.function_declaration],
+		// (Name<16>: a template's value argument or comparisons: the parse that works wins)
+		[$.template_arguments, $._expression],
 	],
 
 	rules: {
@@ -57,7 +65,12 @@ module.exports = grammar({
 			seq($.variable_declaration, ';'),
 			$.function_declaration,
 			$.low_block,
+			$.conditional_declaration,
+			$.static_assert,
 		),
+		conditional_declaration: $ => conditional($, $.conditional_declaration, $._top_level),
+		// static_assert(condition[, "message"]): checked when compiling (no code)
+		static_assert: $ => seq('static_assert', '(', field('condition', $._expression), optional(seq(',', field('message', $.string_literal))), ')', ';'),
 
 		// ===== Comments and directives =====
 		line_comment: _ => token(seq('//', /[^\n]*/)),
@@ -106,8 +119,10 @@ module.exports = grammar({
 		// Fields and methods (subs in a struct, called as x.m() / p->m(), with this).
 		// Nested structs / enums (Outer::Inner; priv: only usable in the struct).
 		// constexpr NAME = value;: a constant of the struct.
-		field_list: $ => seq('{', repeat(choice($.field_declaration, $.function_declaration, $.nested_type_declaration, $.template_declaration,
-			$.struct_constant)), '}'),
+		field_list: $ => seq('{', repeat($._member), '}'),
+		_member: $ => choice($.field_declaration, $.function_declaration, $.nested_type_declaration, $.template_declaration,
+			$.struct_constant, $.conditional_member, $.static_assert),
+		conditional_member: $ => conditional($, $.conditional_member, $._member),
 		struct_constant: $ => seq(
 			optional($.priv_modifier),
 			'constexpr',
@@ -124,10 +139,19 @@ module.exports = grammar({
 			field('body', $.template_body),
 			optional(';'),
 		),
-		template_parameter: $ => seq(optional('optional'), field('name', alias($.identifier, $.type_identifier))),
-		template_body: $ => seq('{', repeat(choice($.struct_declaration, $.function_declaration)), '}'),
-		// <u32, Point*> after a template's name (in a type or an expression)
-		template_arguments: $ => prec.dynamic(1, seq('<', commaSep1($._type), '>')),
+		// T (a type), N: u32 (a value), = default (a type, or a value)
+		template_parameter: $ => seq(
+			optional('optional'),
+			field('name', alias($.identifier, $.type_identifier)),
+			optional(seq(':', field('type', $._type))),
+			optional(seq('=', field('default', choice($._type, $._expression)))),
+		),
+		template_body: $ => seq('{', repeat($._template_item), '}'),
+		_template_item: $ => choice($.struct_declaration, $.function_declaration, $.conditional_template_item, $.static_assert),
+		conditional_template_item: $ => conditional($, $.conditional_template_item, $._template_item),
+		// <u32, Point*, 16, CONFIG> after a template's name (in a type or an expression)
+		template_arguments: $ => prec.dynamic(1, seq('<', commaSep1(choice($._type, $.number_literal, $.member_expression, $.call_expression,
+			$.parenthesized_expression, $.unary_expression, $.boolean_literal, $.binary_expression)), '>')),
 		nested_type_declaration: $ => seq(
 			optional($.priv_modifier),
 			choice($.struct_declaration, $.enum_declaration),
@@ -321,6 +345,7 @@ module.exports = grammar({
 			$.low_block,
 			$.assert_statement,
 			$.debug_print_statement,
+			$.static_assert,
 			$.defer_statement,
 			$.atomic_statement,
 			$.expression_statement,
@@ -467,7 +492,7 @@ module.exports = grammar({
 
 		call_expression: $ => prec(PREC.POSTFIX, seq(field('function', $._expression), field('arguments', $.argument_list))),
 		// (the built-ins of compile-time conditions take types: is_type(T, u32), is_pointer_to(T, u8*))
-		argument_list: $ => seq('(', commaSep(choice($._expression, $.primitive_type, $.pointer_type, $.generic_type)), ')'),
+		argument_list: $ => seq('(', commaSep(choice($._expression, $.primitive_type, $.pointer_type, $.generic_type, $.function_type, $.const_type)), ')'),
 
 		// max<u32>, Array<u32> (before (...) or .name): a template's instance
 		generic_expression: $ => seq(
