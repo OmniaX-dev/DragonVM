@@ -348,7 +348,13 @@ namespace dscript
 			int m_atomic { 0 };			// in an atomic block (interrupts disabled: an int would be ignored)
 			int m_inDefer { 0 };		// generating a defer's statement (return / break / continue cannot leave it)
 			// Inline subs being expanded (innermost last): return jumps to endLabel.
-			struct InlineCall { FuncInfo* func; std::string endLabel; };
+			// resultOffset: a struct result's place in the caller's frame (FP + offset).
+			struct InlineCall { FuncInfo* func; std::string endLabel; int32_t resultOffset { 0 }; };
+			// Structs by value: a sub returning a struct gets the address of its caller's result
+			// (a hidden first argument: the parameters' slots are one further); a struct argument is
+			// a copy in the caller's frame, passed by its address. temporary: room in the frame.
+			static bool returnsStruct(const Type* fn) { return fn != nullptr && fn->base != nullptr && fn->base->kind == Type::Kind::Struct; }
+			int32_t temporary(uint32_t size);
 			std::vector<InlineCall> m_inline;
 			bool m_discarding { false };	// checking an inline sub whose code is not kept
 			// --no-inline: the calls between subs declared inline (caller -> callee, at), so that

@@ -1,0 +1,8 @@
+// A library with structs by value (struct_by_value_library.ds, struct_by_value_dynamic.ds).
+namespace geo {
+	struct Vec { var x: i32; var y: i32; };
+	sub add(var a: Vec, var b: Vec) -> Vec { var r: Vec = { a.x + b.x, a.y + b.y }; return r; }
+	inline sub neg(var v: Vec) -> Vec { v.x = -v.x; v.y = -v.y; return v; }
+	var last: Vec;
+	sub remember(var v: Vec) -> Vec { var old: Vec = last; last = v; return old; }
+}

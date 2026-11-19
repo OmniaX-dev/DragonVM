@@ -15,9 +15,9 @@ template(T) {
 	sub max(var a: T, var b: T) -> T { if (a > b) return a; return b; }
 }
 struct Pt { var x: i32; var y: i32; };
-// A method whose signature doesn't work for Pt (structs are passed by pointer): fine while unused.
+// A method whose signature doesn't work for u8[4] (arrays are passed by pointer): fine while unused.
 template(T) { struct Holder { var item: T*; sub take(var v: T) { } }; }
-sub struct_check() { var h: Holder<Pt>; var p: Pt; h.item = &p; }
+sub struct_check() { var h: Holder<u8[4]>; var a: u8[4]; h.item = &a; }
 
 sub main() -> i32 {
 	var a: Array<u32>;

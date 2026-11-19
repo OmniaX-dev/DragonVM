@@ -1,5 +1,5 @@
-// A method whose signature doesn't work for the types: an error only if it is used (Holder<Point> without take() is fine).
-// expect-error: structs are passed by pointer
+// A method whose signature doesn't work for the types: an error only if it is used (Holder<u8[4]> without take() is fine).
+// expect-error: arrays are passed by pointer
 template(K, optional V) { struct Entry { var key: K; var value: V; }; struct Key { var key: K; }; }
 template(T) where is_integer(T) and sizeof(T) == 4 { sub four(var v: T) -> T { return v; } }
 template(T) where is_numeric(T) { sub pick(var v: T) -> u32 { return 1; } }
@@ -7,4 +7,4 @@ template(T) where is_integer(T) { sub pick(var v: T) -> u32 { return 2; } }
 template(T) { sub make() -> T { return cast<T>(0); } }
 struct Point { var x: i32; };
 template(T) { struct Holder { var item: T*; sub take(var v: T) { } }; }
-sub main() -> i32 { var h: Holder<Point>; var p: Point; h.take(p); return 0; }
+sub main() -> i32 { var h: Holder<u8[4]>; var a: u8[4]; h.take(a); return 0; }

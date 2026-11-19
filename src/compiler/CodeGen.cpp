@@ -719,13 +719,13 @@ namespace dscript
 				for (TypeSyntax* p : ts->params)
 				{
 					Type* t = resolveType(p);
-					if (!t->isScalar())
-						error(p->pos, "sub parameters must be integers or pointers (not " + t->name() + ")");
+					if (!t->isScalar() && t->kind != Type::Kind::Struct)
+						error(p->pos, "sub parameters must be integers, pointers or structs (not " + t->name() + ")");
 					params.push_back(t);
 				}
 				Type* ret = ts->base ? resolveType(ts->base) : m_types.voidType();
-				if (ret->kind != Type::Kind::Void && !ret->isScalar())
-					error(ts->pos, "subs return integers, pointers or void (not " + ret->name() + ")");
+				if (ret->kind != Type::Kind::Void && !ret->isScalar() && ret->kind != Type::Kind::Struct)
+					error(ts->pos, "subs return integers, pointers, structs or void (not " + ret->name() + ")");
 				return m_types.function(params, ret, ts->variadic);
 			}
 		}
@@ -1058,10 +1058,10 @@ namespace dscript
 		for (Node* p : d->list)
 		{
 			Type* t = resolveType(p->typeSyntax);
-			if (!t->isScalar())
+			if (t->kind == Type::Kind::Struct)
+				resolveStruct(t->structInfo, p->pos);		// (by value: a copy)
+			else if (!t->isScalar())
 			{
-				if (t->kind == Type::Kind::Struct)
-					error(p->pos, "structs are passed by pointer: " + p->name + ": " + t->name() + "*");
 				if (t->kind == Type::Kind::Array)
 					error(p->pos, "arrays are passed by pointer: " + p->name + ": " + t->base->name() + "*");
 				error(p->pos, "invalid parameter type: " + t->name());
@@ -1082,8 +1082,10 @@ namespace dscript
 				f->requiredParams++;
 		}
 		Type* ret = d->typeSyntax ? resolveType(d->typeSyntax) : m_types.voidType();
-		if (ret->kind != Type::Kind::Void && !ret->isScalar())
-			error(d->pos, "subs return integers, pointers or void (return structs through a pointer parameter)");
+		if (ret->kind == Type::Kind::Struct)
+			resolveStruct(ret->structInfo, d->pos);
+		else if (ret->kind != Type::Kind::Void && !ret->isScalar())
+			error(d->pos, "subs return integers, pointers, structs or void (not " + ret->name() + ")");
 		f->type = m_types.function(params, ret, d->variadic);
 		if (d->variadic != 0)
 		{
@@ -1577,7 +1579,10 @@ namespace dscript
 				return;
 			}
 			check(e->a);
-			if (!e->a->lvalue)
+			// A struct returned by a call is in the caller's frame (its result temporary): a method
+			// may be called on it (a.copy().add(1)), its address taken.
+			const bool structResult = e->a->kind == NodeKind::Call && e->a->type != nullptr && e->a->type->kind == Type::Kind::Struct;
+			if (!e->a->lvalue && !structResult)
 				error(e->pos, "& needs a variable (or something stored in memory)");
 			if (e->a->readOnly && !e->a->readOnlyWhy.empty())
 				error(e->pos, e->a->readOnlyWhy + " (a pointer to it could change it)");
@@ -3150,6 +3155,13 @@ namespace dscript
 		return constExpr(e, "a compile-time condition (constants, sizeof, comparisons, and / or / not, the built-ins: is_integer(T), ...)");
 	}
 
+	int32_t CodeGen::temporary(uint32_t size)
+	{
+		m_localCursor -= (int32_t)alignUp(size == 0 ? 4 : size, 4);
+		m_localMin = std::min(m_localMin, m_localCursor);
+		return m_localCursor;
+	}
+
 	bool CodeGen::isSharedData(const VarInfo* v) const
 	{
 		return m_options.shared && v->storage == VarInfo::Storage::Global && !v->readOnly;
@@ -3187,6 +3199,12 @@ namespace dscript
 				addImmediate(dst, v->offset);
 			break;
 			case VarInfo::Storage::Param:
+				if (v->type->kind == Type::Kind::Struct)
+				{
+					// A struct (by value): its slot holds the address of the caller's copy.
+					emit("movo " + dst + ", *PP, dword " + imm(-4 * v->offset));
+					break;
+				}
 				// Arguments are 32-bit slots (big endian): a smaller value is in the slot's last bytes.
 				emit("mov " + dst + ", PP");
 				addImmediate(dst, -4 * v->offset + (4 - (int64_t)v->type->size()));
@@ -3463,6 +3481,10 @@ namespace dscript
 				addImmediate(r, st->structInfo->field(e->name)->offset);
 				return r;
 			}
+			case NodeKind::Call:
+				if (e->type != nullptr && e->type->kind == Type::Kind::Struct)
+					return gen(e);		// a struct result: its place in this frame
+			break;
 			default: break;
 		}
 		error(e->pos, "this has no address");
@@ -4096,9 +4118,7 @@ namespace dscript
 			slot.ownBase = false;
 			if (v->reg.empty())
 			{
-				m_localCursor -= 4;
-				v->offset = m_localCursor;
-				m_localMin = std::min(m_localMin, m_localCursor);
+				v->offset = temporary(params[i]->kind == Type::Kind::Struct ? params[i]->size() : 4);	// (a struct: its copy)
 				slot.base = "FP";
 				slot.offset = "dword " + imm(v->offset);
 			}
@@ -4147,7 +4167,8 @@ namespace dscript
 		m_defers.clear();
 		m_defers.emplace_back();
 		m_inDefer = 0;
-		m_inline.push_back({ f, newLabel() });
+		const int32_t result = returnsStruct(f->type) ? temporary(f->type->base->size()) : 0;	// (a struct result: here)
+		m_inline.push_back({ f, newLabel(), result });
 		const int stmtDepth = m_stmtDepth;
 		m_stmtDepth = m_regDepth;	// the caller's temporaries stay in their registers
 		const Loc callerLoc = m_loc;
@@ -4159,7 +4180,7 @@ namespace dscript
 		{
 			loc(body->endPos);
 			genDefers(0);
-			if (f->type->base->kind != Type::Kind::Void)
+			if (f->type->base->kind != Type::Kind::Void && !returnsStruct(f->type))
 				emit("mov RV, 0");
 		}
 		label(m_inline.back().endLabel);
@@ -4178,6 +4199,12 @@ namespace dscript
 		if (f->type->base->kind == Type::Kind::Void)
 			return "";
 		Reg r = alloc(e->pos);
+		if (returnsStruct(f->type))
+		{
+			emit("mov " + r + ", FP");
+			addImmediate(r, result);
+			return r;
+		}
 		emit("mov " + r + ", RV");
 		return r;
 	}
@@ -4189,7 +4216,7 @@ namespace dscript
 			// The count the caller pushed is in the CPU's frame (FP + 104: after the 26 words of
 			// the frame); the arguments are at PP - 4 * i, the extra ones after the parameters,
 			// then (...typed) their types.
-			const int64_t fixed = (int64_t)m_func->type->params.size();
+			const int64_t fixed = (int64_t)m_func->type->params.size() + (returnsStruct(m_func->type) ? 1 : 0);
 			const bool typed = m_func->type->variadic == 2;
 			Reg r = alloc(e->pos);
 			if (e->vaBuiltin == 2)
@@ -4234,6 +4261,17 @@ namespace dscript
 		else
 			fnType = f->type;
 		const auto& params = fnType->params;
+		// A struct result: the address of the caller's room for it, first.
+		int32_t result = 0;
+		if (returnsStruct(fnType))
+		{
+			result = temporary(fnType->base->size());
+			Reg r = alloc(e->pos);
+			emit("mov " + r + ", FP");
+			addImmediate(r, result);
+			emit("push " + r);
+			release(r);
+		}
 		for (size_t i = 0; i < e->list.size(); i++)
 		{
 			if (i >= params.size())
@@ -4250,6 +4288,19 @@ namespace dscript
 				convert(r, decay(e->list[i]->type), slot);
 				emit("push " + r);
 				release(r);
+				continue;
+			}
+			if (params[i]->kind == Type::Kind::Struct)
+			{
+				// By value: a copy in this frame, passed by its address.
+				Reg src = gen(e->list[i]);
+				Reg dst = alloc(e->pos);
+				emit("mov " + dst + ", FP");
+				addImmediate(dst, temporary(params[i]->size()));
+				copyMemory(dst, src, params[i]->size());
+				emit("push " + dst);
+				release(dst);
+				release(src);
 				continue;
 			}
 			const std::string value = argImmediate(e->list[i], params[i]);
@@ -4271,7 +4322,7 @@ namespace dscript
 			else
 				emit("push " + imm(constConvert(def->constValue, decay(def->type), params[i])));
 		}
-		size_t slots = params.size();
+		size_t slots = params.size() + (returnsStruct(fnType) ? 1 : 0);
 		if (fnType->variadic != 0 && e->list.size() > params.size())
 		{
 			const size_t extra = e->list.size() - params.size();
@@ -4295,6 +4346,13 @@ namespace dscript
 		}
 		if (fr.empty())
 			fr = alloc(e->pos);
+		if (returnsStruct(fnType))
+		{
+			// The value: the caller's copy (a struct value is its address).
+			emit("mov " + fr + ", FP");
+			addImmediate(fr, result);
+			return fr;
+		}
 		emit("mov " + fr + ", RV");
 		return fr;
 	}
@@ -4752,7 +4810,27 @@ namespace dscript
 				if (m_inDefer > 0)
 					error(s->pos, "return cannot leave a defer");
 				Reg r;
-				if (s->a)
+				if (s->a && ret->kind == Type::Kind::Struct)
+				{
+					// A struct: copied to the caller's room for it (inline: in the frame; otherwise its
+					// address is the hidden first argument), before the defers run. RV: that address.
+					check(s->a, ret);
+					requireConvertible(s->a, ret, "in the return value");
+					Reg src = gen(s->a);
+					r = alloc(s->pos);
+					if (!m_inline.empty())
+					{
+						emit("mov " + r + ", FP");
+						addImmediate(r, m_inline.back().resultOffset);
+					}
+					else
+						emit("movo " + r + ", *PP, dword " + imm(0));
+					copyMemory(r, src, ret->size());
+					emit("mov " + src + ", " + r);		// (registers are released in order: the address in src)
+					release(r);
+					r = src;
+				}
+				else if (s->a)
 				{
 					if (ret->kind == Type::Kind::Void)
 						error(s->pos, fn->name + " returns void");
@@ -5106,7 +5184,7 @@ namespace dscript
 				v->name = f->paramNames[i];
 				v->type = f->type->params[i];
 				v->storage = VarInfo::Storage::Param;
-				v->offset = (int32_t)i;
+				v->offset = (int32_t)i + (returnsStruct(f->type) ? 1 : 0);	// (slot 0: the result's address)
 				v->pos = f->decl->list[i]->pos;
 				v->defPos = f->decl->list[i]->namePos;
 				v->param = true;
@@ -5143,7 +5221,7 @@ namespace dscript
 			{
 				loc(bodyNode->endPos);
 				genDefers(0);
-				if (f->type->base->kind != Type::Kind::Void)
+				if (f->type->base->kind != Type::Kind::Void && !returnsStruct(f->type))
 					emit("mov RV, 0");
 				emit(f->interrupt ? "rti" : "ret");
 			}
@@ -5857,6 +5935,11 @@ namespace dscript
 					}
 					check(init, p.type);
 					requireConvertible(init, p.type, "in the initialization of '" + d->name + "'");
+					if (p.type->kind == Type::Kind::Struct && decay(init->type) == p.type && !v->readOnly)
+					{
+						pending.push_back(p);		// a struct value (a call's result, another struct): copied by __ds_init
+						continue;
+					}
 					if (p.type->kind == Type::Kind::Struct || p.type->kind == Type::Kind::Array)
 						error(init->pos, "global structs and arrays are initialized with { ... }");
 					if (init->kind == NodeKind::StrLit)

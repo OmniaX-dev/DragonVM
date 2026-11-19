@@ -132,18 +132,25 @@ a `u32` (its 32 bits), so it is passed, returned, stored and copied like one.
 There is no 64-bit type in the language: libcore's `int64.ds` has two structs, `std::U64` and
 `std::I64` (two's complement), with the words as fields (`hi`, then `lo`: the bytes of a big endian
 64-bit value, so a pointer to one in memory can be cast to `U64*` / `I64*`). The operations
-change the struct and return it, so they chain:
+change the struct and return it (a pointer), so they chain; each one also has a `new_` form that
+leaves the struct as it is and returns the result as a new value:
 ```
-var a: std::U64(5);                     // constructors: (), (u32), (i32), (hi, lo), (U64*), (I64*)
-a.mul(3)->add(&b)->shl(4);              // a = ((a * 3) + b) << 4
+var a: std::U64(5);                     // constructors: (), (u32), (i32), (hi, lo), (U64), (I64)
+a.mul(3)->add(b)->shl(4);               // a = ((a * 3) + b) << 4
+var c = a.new_add(1).new_shl(2);        // c = (a + 1) << 2, a unchanged
+a.band(mask.new_bnot());                // clears mask's bits (mask unchanged)
 if (a.gt(1000)) ...                     // eq ne lt le gt ge (bool), cmp (-1 / 0 / 1)
 var text: u8[24]; a.str(text);           // str(buffer, base = 10), parse(text, base = 10) -> bool
 console.print(&a);                      // TextSingle / Text16 / Text16Console print them
 ```
-- Every operation takes a `u32`, an `i32` or a `U64*` (`I64*` for `I64`); the smaller types use
-  the `u32` / `i32` one (zero / sign extended), and so does an integer literal (`i32`).
-- Arithmetic: `add`, `subt` (`sub` is a keyword), `mul`, `div`, `mod`, `divmod(d, &rem)`, `neg`,
-  `inc`, `dec`, `min`, `max`; `I64` also `abs`. Signed division truncates toward zero, the
+- Every operation takes a `u32`, an `i32` or a `U64` (`I64` for `I64`), by value; the smaller
+  types use the `u32` / `i32` one (zero / sign extended), and so does an integer literal (`i32`).
+- `new_<operation>` (`new_add`, `new_band`, `new_shl`, `new_abs`, ...): every operation that
+  changes the struct, except `set`.
+- The limits: `std::UINT64_MAX`, `std::INT64_MAX` (struct constants: `std::UINT64_MAX.hi`; a
+  copy is `std::U64(std::UINT64_MAX.hi, std::UINT64_MAX.lo)`).
+- Arithmetic: `add`, `subt` (`sub` is a keyword), `mul`, `div`, `mod`, `divmod(d, &rem)` (`rem`
+  a pointer: it gets the remainder), `neg`, `inc`, `dec`, `min`, `max`; `I64` also `abs`. Signed division truncates toward zero, the
   remainder has the dividend's sign (as for `i32`); division by zero is the CPU's.
 - Bits: `band`, `bor`, `bxor`, `bnot` (`and` / `or` / `not` are keywords), `shl`, `shr` (`I64`:
   arithmetic), `rol`, `ror`, `bit(n)`, `setb(n)`, `clrb(n)`, `clz`, `ctz`, `popc`.
@@ -473,6 +480,27 @@ install(0x41, interrupt sub() { ticks++; });               // an interrupt sub (
 Parameters, default values and the return type work as in a named sub (no `-> type`: void).
 Lambdas capture nothing: the body can use globals, constants, subs and its own parameters,
 not the local variables or parameters of the sub around it (an error; pass them as parameters).
+
+### Structs by value
+Structs can be parameters and results like any other value: the sub gets its own copy (changing
+it doesn't change the caller's), and a result is a new value.
+```
+struct Point { var x: i32; var y: i32; };
+sub add(var a: Point, var b: Point) -> Point { var r: Point = { a.x + b.x, a.y + b.y }; return r; }
+sub scale(var p: Point, var k: i32) -> Point { p.x *= k; p.y *= k; return p; }    // its own copy
+
+var c = add(a, b);                  // a Point
+var d = scale(a, 3).x;              // a result's field
+g_origin = add(mk(1, 2), mk(3, 4)); // also in a global's value (computed before main)
+```
+- Also for inline subs, methods, sub pointers (`sub(Point, Point) -> Point`), variadic subs (the
+  fixed parameters; the extra arguments (`...`) still take structs only by pointer), templates
+  (`T` a struct) and libraries.
+- How: the caller copies a struct argument into its own frame and passes the copy's address (one
+  32-bit slot, as for any parameter); a sub returning a struct gets the address of the caller's
+  room for the result as a hidden first argument (`return s;` copies `s` there, before the defers
+  run). So each struct argument and result is a copy: a big struct is cheaper by pointer (`T*`),
+  as in C.
 
 ### Variadic subs
 A sub whose parameters end with `...` takes more arguments, of any scalar type; with
@@ -1080,11 +1108,10 @@ optimized).
 
 ## Limitations (for now)
 
-- One source file (plus includes) per program or library; libraries are linked statically
-  (into the program, by dsc), not loaded at run time.
+- One source file (plus includes) per program (a library: several, compiled as one).
 - `#define` has no stringizing or token pasting.
-- No `switch`, `goto`, unions, 64-bit floats, variadic subs.
-- Structs are passed and returned through pointers.
+- No `switch`, `goto`, unions, 64-bit floats.
+- Templates take types only (no values: `Array<T, 16>`); arrays are passed by pointer.
 - Lambdas do not capture the variables of the sub around them.
 - Uninitialized global arrays are stored in the program (zeroes).
 - The assembler replaces data symbols line by line: very big programs assemble slowly.

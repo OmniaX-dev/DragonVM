@@ -1,0 +1,14 @@
+// Structs by value through a library (parameters, results, an inline sub of its interface, a
+// global struct of the library).
+// dsc-lib: libs/geo_values.ds
+// expect-rv: 0
+#import("geo_values")
+sub main() -> i32 {
+	var a: geo::Vec = { 1, 2 };
+	var b: geo::Vec = { 10, 20 };
+	var c = geo::add(a, geo::neg(b));
+	if (c.x != -9 or c.y != -18) return 1;
+	geo::remember(a);
+	if (geo::remember(b).y != 2 or geo::last.x != 10) return 2;
+	return 0;
+}
