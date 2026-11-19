@@ -1,46 +1,46 @@
+#include(int64.ds)
+
 namespace std {
-	struct BitField32 {
-		priv var m_value: u32 = 0;
 
-		inline sub set(var mask: u32) {
-			this->m_value |= mask;
-		}
-		inline sub clr(var mask: u32) {
-			this->m_value &= ~mask;
-		}
-		inline sub val(var mask: u32, var value: bool) {
-			if (value) this->set(mask);
-			else this->clr(mask);
-		}
-		inline sub tgl(var mask: u32) {
-			if (this->get(mask)) this->clr(mask);
-			else this->set(mask);
-		}
-		inline sub get(var mask: u32) -> bool {
-			return (this->m_value & mask) == mask;
-		}
-	};
-	struct BitField16 {
-		priv var m_value: u16 = 0;
+	template(T) where is_unsigned(T) or is_type(T, U64) {
+		struct BitField {
+			priv var m_value: T;
 
-		inline sub set(var mask: u16) {
-			this->m_value |= mask;
-		}
-		inline sub clr(var mask: u16) {
-			this->m_value &= ~mask;
-		}
-		inline sub val(var mask: u16, var value: bool) {
-			if (value) this->set(mask);
-			else this->clr(mask);
-		}
-		inline sub tgl(var mask: u16) {
-			if (this->get(mask)) this->clr(mask);
-			else this->set(mask);
-		}
-		inline sub get(var mask: u16) -> bool {
-			return (this->m_value & mask) == mask;
-		}
-	};
+			inline sub set(var mask: T) {
+				if constexpr (is_type(T, U64))
+					this->m_value.bor(mask);
+				else
+					this->m_value |= mask;
+			}
+			inline sub clr(var mask: T) {
+				if constexpr (is_type(T, U64))
+					this->m_value.band(mask.new_bnot());
+				else
+					this->m_value &= ~mask;
+			}
+			inline sub val(var mask: T, var value: bool) {
+				if (value) this->set(mask);
+				else this->clr(mask);
+			}
+			inline sub tgl(var mask: T) {
+				if constexpr (is_type(T, U64))
+					this->m_value.bxor(mask);
+				else
+					this->m_value ^= mask;
+			}
+			inline sub get(var mask: T) -> bool {
+				if constexpr (is_type(T, U64))
+					return this->m_value.new_band(mask).eq(mask);
+				else
+					return (this->m_value & mask) == mask;
+			}
+		};
+	}
+
+	alias BitField8 = BitField<u8>;
+	alias BitField16 = BitField<u16>;
+	alias BitField32 = BitField<u32>;
+	alias BitField64 = BitField<U64>;
 
 	// value as text, with `decimals` digits after the point (0..9, rounded): -12.500000. From
 	// 1e9 on, in scientific notation: 1.234568e+12. Also "inf", "-inf", "nan" (and -0.000000).

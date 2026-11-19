@@ -1,6 +1,6 @@
 // std::U64 / std::I64 (int64.ds) against values computed on the host: edge cases and random values
 // for every operation, the u32 / i32 overloads (sign / zero extension, the smaller types), text,
-// parse errors, chaining, aliasing, constructors. Generated (the cases are tables: one call of
+// parse errors, chaining, aliasing, constructors, the new_ copies. Generated (the cases are tables: one call of
 // each method, in the dispatchers). Signed division truncates toward zero, as for i32.
 // expect-rv: 0
 #import("dragon-sdk")
@@ -18,6 +18,7 @@ sub expect(var id: i32, var ok: bool) {
 }
 
 sub same(var a: std::U64*, var hi: u32, var lo: u32) -> bool { return a->hi == hi and a->lo == lo; }
+sub same_value(var a: std::U64, var hi: u32, var lo: u32) -> bool { return a.hi == hi and a.lo == lo; }
 const BinU: u32[] = {
 	0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1, 0x0, 0x0, 0x0, 0x0,
 	0x0, 0x0, 0x2, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x5, 0x0, 0x0,
@@ -2940,7 +2941,7 @@ const TxS: string[] = {
 };
 
 // BinU / BinI: op, a, b, expected (7 words).
-sub bin_u(var op: u32, var x: std::U64*, var o: std::U64*) -> u32 {
+sub bin_u(var op: u32, var x: std::U64*, var o: std::U64) -> u32 {
 	if (op == 0) x->add(o); else if (op == 1) x->subt(o); else if (op == 2) x->mul(o); else if (op == 3) x->div(o);
 	else if (op == 4) x->mod(o); else if (op == 5) x->band(o); else if (op == 6) x->bor(o); else if (op == 7) x->bxor(o);
 	else if (op == 8) x->min(o); else if (op == 9) x->max(o);
@@ -2950,7 +2951,7 @@ sub bin_u(var op: u32, var x: std::U64*, var o: std::U64*) -> u32 {
 	else if (op == 15) return (x->eq(o) ? 1 : 0); else if (op == 16) return (x->ne(o) ? 1 : 0);
 	return 0xDEAD;
 }
-sub bin_i(var op: u32, var x: std::I64*, var o: std::I64*) -> u32 {
+sub bin_i(var op: u32, var x: std::I64*, var o: std::I64) -> u32 {
 	if (op == 0) x->add(o); else if (op == 1) x->subt(o); else if (op == 2) x->mul(o); else if (op == 3) x->div(o);
 	else if (op == 4) x->mod(o); else if (op == 5) x->min(o); else if (op == 6) x->max(o);
 	else if (op == 7) return cast<u32>(x->cmp(o));
@@ -2981,13 +2982,13 @@ sub main() -> i32 {
 	for (var i: u32 = 0; i < sizeof(BinU) / 4; i += 7) {
 		x.set(BinU[i + 1], BinU[i + 2]);
 		o.set(BinU[i + 3], BinU[i + 4]);
-		r = bin_u(BinU[i], &x, &o);
+		r = bin_u(BinU[i], &x, o);
 		expect(100000 + cast<i32>(i / 7), (r == 0xDEAD ? same(&x, BinU[i + 5], BinU[i + 6]) : r == BinU[i + 6]));
 	}
 	for (var i: u32 = 0; i < sizeof(BinI) / 4; i += 7) {
 		y.set(BinI[i + 1], BinI[i + 2]);
 		p.set(BinI[i + 3], BinI[i + 4]);
-		r = bin_i(BinI[i], &y, &p);
+		r = bin_i(BinI[i], &y, p);
 		expect(200000 + cast<i32>(i / 7), (r == 0xDEAD ? same(y.u(), BinI[i + 5], BinI[i + 6]) : r == BinI[i + 6]));
 	}
 	for (var i: u32 = 0; i < sizeof(Un) / 4; i += 6) {
@@ -3017,11 +3018,11 @@ sub main() -> i32 {
 		id = 500000 + cast<i32>(n) * 2;
 		if (Tx[i] == 0) {
 			expect(id, std::strcmp(x.set(Tx[i + 2], Tx[i + 3])->str(buf, Tx[i + 1]), TxS[n]) == 0);
-			expect(id + 1, o.parse(TxS[n], Tx[i + 1]) and o.eq(&x));
+			expect(id + 1, o.parse(TxS[n], Tx[i + 1]) and o.eq(x));
 		}
 		else {
 			expect(id, std::strcmp(y.set(Tx[i + 2], Tx[i + 3])->str(buf, Tx[i + 1]), TxS[n]) == 0);
-			expect(id + 1, p.parse(TxS[n], Tx[i + 1]) and p.eq(&y));
+			expect(id + 1, p.parse(TxS[n], Tx[i + 1]) and p.eq(y));
 		}
 	}
 
@@ -3047,16 +3048,16 @@ sub main() -> i32 {
 	expect(15, same(x.set(0, 10)->min(u8v), 0, 10) and same(x.set(0, 10)->max(u8v), 0, 200) and same(y.set(10)->min(i8v)->u(), 0xFFFFFFFF, 0xFFFFFFFD));
 	// Aliasing: an operand that is the struct itself.
 	x.set(3, 5);
-	expect(16, same(x.mul(&x), 0x1E, 0x19));
+	expect(16, same(x.mul(x), 0x1E, 0x19));
 	x.set(0x12345678, 0x9ABCDEF0);
 	o.set(0, 7);
-	x.divmod(&o, &o);
+	x.divmod(o, &o);
 	expect(17, same(&x, 0x0299C335, 0xCCF668FD) and same(&o, 0, 5));		// 0x123456789ABCDEF0 / 7, % 7
 	// Constructors and conversions.
 	var c1: std::U64(-2);
 	var c2: std::I64(7, 8);
-	var c3: std::U64(&c2);
-	var c4: std::I64(&c1);
+	var c3: std::U64(c2);
+	var c4: std::I64(c1);
 	var c5: std::U64(cast<u32>(0x80000000));
 	expect(18, same(&c1, 0xFFFFFFFF, 0xFFFFFFFE) and same(c2.u(), 7, 8) and same(&c3, 7, 8) and c4.to_i32() == -2 and c4.is_neg());
 	expect(19, same(&c5, 0, 0x80000000) and c5.to_u32() == 0x80000000);
@@ -3067,5 +3068,24 @@ sub main() -> i32 {
 	expect(21, not p.parse("9223372036854775808") and not p.parse("-9223372036854775809") and not p.parse("--1") and not p.parse("+") and p.eq(1));
 	expect(22, p.parse("-9223372036854775808") and same(p.u(), 0x80000000, 0) and p.parse("+42") and p.eq(42));
 	expect(23, o.parse("0xFFFFffffFFFFFFFF", 16) and o.eq(-1) and o.parse("18446744073709551615") and o.eq(-1));
+	// The copies (new_...): the result is a new value, the struct does not change; they chain.
+	x.set(3, 5);
+	var n1 = x.new_add(1).new_mul(2).new_shl(4);
+	expect(24, same_value(n1, 0x60, 0xC0) and same(&x, 3, 5));
+	y.set(-7);
+	expect(25, y.new_abs().to_i32() == 7 and y.new_div(2).to_i32() == -3 and y.new_mod(2).to_i32() == -1 and y.new_neg().new_shr(1).to_i32() == 3 and y.to_i32() == -7);
+	x.set(0, 17);
+	var rem2: u32 = 0;
+	expect(26, x.new_divmod(5, &rem2).eq(3) and rem2 == 2 and x.eq(17));
+	// A mask's complement as an operand (a value), then changing the struct with it.
+	x.set(0xFF, 0xFF);
+	var mask: std::U64(0x0F, 0x0F);
+	expect(27, same_value(x.new_band(mask.new_bnot()), 0xF0, 0xF0) and same(&x, 0xFF, 0xFF) and same(x.band(mask.new_bnot()), 0xF0, 0xF0) and same(&mask, 0x0F, 0x0F));
+	o.set(9);
+	expect(28, same(x.set(1)->add(o.new_inc())->mul(o), 0, 99) and o.eq(9) and x.new_setb(40).new_clrb(0).new_bxor(1).eq(x.new_bor(cast<u32>(0)).new_add(x.new_band(0).new_setb(40))));
+	// The limits (struct constants: through their fields).
+	var umax: std::U64(std::UINT64_MAX.hi, std::UINT64_MAX.lo);
+	var imax: std::I64(std::INT64_MAX.hi, std::INT64_MAX.lo);
+	expect(29, umax.new_inc().is_zero() and umax.eq(-1) and imax.new_inc().is_neg() and imax.new_inc().new_dec().eq(imax) and not imax.is_neg());
 	return g_failures;
 }

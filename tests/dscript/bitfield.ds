@@ -1,0 +1,28 @@
+// std::BitField (libcore's utils.ds, a template): u8 / u32 / U64 masks; set, clr, val, tgl (each
+// bit of the mask flips), get (all the mask's bits set).
+// expect-rv: 0
+#import("libcore")
+sub main() -> i32 {
+	var f8: std::BitField8;
+	f8.set(0x81); f8.clr(0x01); f8.tgl(0x10); f8.val(0x02, true);
+	if (not f8.get(0x80) or f8.get(0x01) or not f8.get(0x10) or not f8.get(0x02)) return 1;
+	f8.tgl(0x03);		// 0x01 clear -> set, 0x02 set -> clear
+	if (not f8.get(0x01) or f8.get(0x02) or not f8.get(0x80)) return 5;
+	var f32v: std::BitField32;
+	f32v.set(0x80000001); f32v.clr(1);
+	if (not f32v.get(0x80000000) or f32v.get(1)) return 2;
+	var f64: std::BitField64;
+	var hi: std::U64(0x80000000, 0);
+	var lo: std::U64(0, 3);
+	var b0: std::U64(0, 1);
+	var b1: std::U64(0, 2);
+	var b32: std::U64(1, 0);
+	var b33: std::U64(1, 2);
+	f64.set(hi); f64.set(lo); f64.clr(b0);
+	if (not f64.get(hi) or f64.get(lo) or not f64.get(b1)) return 3;
+	f64.tgl(hi); f64.val(b32, true);
+	if (f64.get(hi) or not f64.get(b33)) return 4;
+	f64.tgl(b33);		// bits 32 and 1, both set: both clear
+	if (f64.get(b32) or f64.get(b1)) return 6;
+	return 0;
+}
