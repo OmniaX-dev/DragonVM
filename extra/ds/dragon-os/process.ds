@@ -63,6 +63,9 @@ namespace proc {
 	var g_current: Process* = null;
 	var g_next_pid: u32 = 1;
 	var g_trampoline: u32 = 0;
+	var g_idle: Process* = null;           // runs when nothing else is Ready (init_idle)
+	var g_idle_entry: u32 = 0;
+	var g_idle_proc: Process;              // not in g_processes: never Ready, never found, never reaped
 
 	// false: no memory for the map
 	sub as_create(var as: AddressSpace*) -> bool {
@@ -147,6 +150,32 @@ namespace proc {
 		kernel_assert(g_trampoline != 0, "No page for the trampoline.");
 		std::memset(cast<void*>(g_trampoline), 0, PAGE_SIZE);
 		std::memcpy(cast<void*>(g_trampoline), cast<void*>(start), end - start);
+
+		// The idle loop: one instruction at the end of the page, "jmp <its own address>"
+		// (opcode 0x7C, then the address, big endian).
+		g_idle_entry = g_trampoline + PAGE_SIZE - 8;
+		var code: u8* = cast<u8*>(g_idle_entry);
+		code[0] = 0x7C;
+		code[1] = cast<u8>(g_idle_entry >> 24);
+		code[2] = cast<u8>(g_idle_entry >> 16);
+		code[3] = cast<u8>(g_idle_entry >> 8);
+		code[4] = cast<u8>(g_idle_entry);
+	}
+
+	// The process that runs when no other can: the idle loop, in user mode (the timer preempts
+	// it as any process). Its own kernel stack (its traps land there), no user stack.
+	sub init_idle() {
+	    var p: Process* = &g_idle_proc;
+	    std::memset(p, 0, sizeof(Process));
+	    std::strcpy(p->name, "idle");
+	    kernel_assert(as_create(&p->as), "No memory for the idle process.");
+	    kernel_assert(as_map(&p->as, g_trampoline, 1, dr::cpu::Permissions.Read, RegionKind.Shared, false), "Idle: map");
+	    p->kernel_stack = g_pages.alloc(KSTACK_PAGES);
+	    kernel_assert(p->kernel_stack != 0, "No memory for the idle process.");
+	    p->kernel_top = p->kernel_stack + KSTACK_PAGES * PAGE_SIZE - 4;
+	    build_start_frame(p, 0, 0, 0);
+	    cast<u32*>(p->frame)[3] = g_idle_entry;    // IP: the loop, not the trampoline
+	    g_idle = p;
 	}
 
 	// The frame process p starts from: rti "returns" to the trampoline, in user mode, on its stack.

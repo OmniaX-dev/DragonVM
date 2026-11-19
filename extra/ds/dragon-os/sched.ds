@@ -7,7 +7,6 @@ namespace proc {
 	const MAX_ARGS: u32 = 16;
 	const ARGS_BYTES: u32 = 1024;
 
-	var g_idle: Process* = null;
     var g_slice_left: u32 = SLICE_TICKS;
     var g_spawn_path: u8[MAX_PATH];
 	var g_spawn_strings: u8[ARGS_BYTES];
@@ -54,7 +53,7 @@ namespace proc {
         wake_sleepers();
         g_slice_left = SLICE_TICKS;
         var next: Process* = pick_next();
-        kernel_assert(next != null, "Nothing to run (no idle process yet).");
+        kernel_assert(next != null, "Nothing to run (Idle process missing?).");
         switch_to(next);
     }
 

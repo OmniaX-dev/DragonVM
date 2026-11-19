@@ -97,7 +97,7 @@ namespace __internal {
 	interrupt sub on_timer() {
         var frame: u32 = dr::cpu::trap_frame();
         if (proc::g_slice_left > 0) proc::g_slice_left--;        // every tick counts, in user mode or not
-        if (proc::g_slice_left > 0) return;
+        if (proc::g_slice_left > 0 and proc::g_current != proc::g_idle) return;    // idle: look every tick
         if (not dr::cpu::trap_from_user(frame)) return;       // the kernel isn't preempted
         proc::g_current->frame = frame;
         if (proc::g_current != proc::g_idle)
