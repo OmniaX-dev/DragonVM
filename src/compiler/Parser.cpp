@@ -493,11 +493,28 @@ namespace dscript
 		if (isKeyword("template")) return parseTemplate(nullptr);
 		if (isKeyword("struct")) return parseStruct();
 		if (isKeyword("enum")) return parseEnum();
-		if (isKeyword("const"))
+		if (isKeyword("const") || (isKeyword("constexpr") && peek(1).kind == TokenKind::Identifier))
 		{
 			Node* c = parseConst();
 			nameDeclaration(c);
 			return c;
+		}
+		if (isKeyword("constinit"))
+		{
+			Node* v = parseVarDecl();
+			expectPunct(";", "after the variable declaration");
+			nameDeclaration(v);
+			return v;
+		}
+		if (m_external != 0 && isKeyword("readonly") && isKeyword("var", 1))
+		{
+			// (A library's interface: a constant variable of the library, set when it starts.)
+			next();
+			Node* v = parseVarDecl();
+			v->constKind = 1;
+			expectPunct(";", "after the variable declaration");
+			nameDeclaration(v);
+			return v;
 		}
 		if (isKeyword("alias"))
 		{
@@ -519,6 +536,17 @@ namespace dscript
 			return v;
 		}
 		if (isKeyword("sub")) return parseFunction(0);
+		if (isKeyword("constexpr") || isKeyword("consteval"))
+		{
+			// constexpr / consteval [inline] sub
+			const int ck = next().text == "constexpr" ? 128 : 256;
+			const int inl = acceptKeyword("inline") ? 2 : 0;
+			if (!isKeyword("sub"))
+				error(peek().pos, "'sub' expected after '" + m_tokens[m_pos - 1].text + "', found " + describe(peek()));
+			return parseFunction(ck | inl);
+		}
+		if (isKeyword("readonly"))
+			error(peek().pos, "'readonly' is for the fields and subs of a struct");
 		if (isKeyword("static"))
 			error(peek().pos, "'static' is for the local variables and constants of a sub (a global already exists for the whole program)");
 		if (isKeyword("priv"))
@@ -546,9 +574,14 @@ namespace dscript
 				error(peek().pos, "inline subs cannot be atomic (they are copied into their callers: use a normal sub)");
 			if (isKeyword("interrupt"))
 				error(peek().pos, "interrupt subs cannot be inline (they are entered by an interrupt, not called)");
+			int ck = 0;
+			if (acceptKeyword("constexpr"))
+				ck = 128;
+			else if (acceptKeyword("consteval"))
+				ck = 256;
 			if (!isKeyword("sub"))
-				error(peek().pos, "'sub' expected after 'inline'");
-			return parseFunction(2);
+				error(peek().pos, "'sub' expected after '" + m_tokens[m_pos - 1].text + "'");
+			return parseFunction(2 | ck);
 		}
 		error(peek().pos, "declaration expected (var, sub, inline sub, struct, enum, const, alias, namespace or low), found " + describe(peek()));
 	}
@@ -577,15 +610,46 @@ namespace dscript
 			// priv var / priv sub: only the struct's own subs can use it. readonly var: everyone
 			// can read it, only the struct's own subs can change it.
 			const bool priv = acceptKeyword("priv");
-			if (isKeyword("readonly"))
+			if (isKeyword("const"))
+			{
+				// const name: T [= default];: set when the struct is built (its default value,
+				// { ... }, or the constructor), then never changed.
+				if (isKeyword("var", 1) || isKeyword("auto", 1))
+					error(peek(1).pos, "'const " + peek(1).text + "': const takes the place of var (const name: type)");
+				Node* field = parseVarDecl(false);
+				field->isPrivate = priv;
+				field->shortName = field->name;
+				field->scope = m_scope;
+				expectPunct(";", "after the struct field");
+				decl->list.push_back(field);
+				continue;
+			}
+			if (isKeyword("constexpr") && peek(1).kind == TokenKind::Identifier)
+			{
+				// constexpr NAME = value;: a constant of the struct (Struct::NAME, Struct.NAME,
+				// x.NAME, NAME in its subs): no memory, the same for every instance.
+				if (decl->value != 0)
+					error(peek().pos, "constants in a struct need a named struct (struct Name { ... })");
+				Node* c = parseConst();
+				nameDeclaration(c);
+				c->owner = decl;
+				c->isPrivate = priv;
+				m_nested.push_back(c);
+				continue;
+			}
+			if (isKeyword("constinit"))
+				error(peek().pos, "constinit is for globals (a field gets its value when its struct is built: a default value, or const for one that never changes)");
+			if (isKeyword("readonly") && !isKeyword("var", 1) && !isKeyword("const", 1))
+				;	// readonly sub: a method (below)
+			else if (isKeyword("readonly"))
 			{
 				const Token& ro = next();
 				if (priv || isKeyword("priv"))
 					error(ro.pos, "a field is either priv or readonly: priv already keeps others from changing it (and from reading it)");
 				if (decl->value != 0)
 					error(ro.pos, "readonly fields need a named struct (struct Name { ... }): only its subs can change them");
-				if (!isKeyword("var"))
-					error(peek().pos, "readonly is for struct fields: 'var' expected after it, found " + describe(peek()));
+				if (isKeyword("const"))
+					error(peek().pos, "a field is either readonly or const: const already keeps everyone (also the struct's subs) from changing it");
 				Node* field = parseVarDecl(false);
 				field->isReadonly = true;
 				field->shortName = field->name;
@@ -618,7 +682,8 @@ namespace dscript
 				m_lambdas.push_back(parseTemplate(decl));
 				continue;
 			}
-			if (isKeyword("sub") || isKeyword("inline") || isKeyword("static") || isKeyword("priv") || isKeyword("atomic"))
+			if (isKeyword("sub") || isKeyword("inline") || isKeyword("static") || isKeyword("priv") || isKeyword("atomic") || isKeyword("readonly")
+				|| isKeyword("constexpr") || isKeyword("consteval"))
 			{
 				// A method: a hidden top-level sub (added at the end of the program). static: no
 				// this, called as Struct::name(...) / Struct.name(...).
@@ -636,11 +701,19 @@ namespace dscript
 						flags |= 16;
 					else if ((flags & 32) == 0 && acceptKeyword("atomic"))
 						flags |= 32;
+					else if ((flags & 64) == 0 && acceptKeyword("readonly"))
+						flags |= 64;
+					else if ((flags & 384) == 0 && acceptKeyword("constexpr"))
+						flags |= 128;
+					else if ((flags & 384) == 0 && acceptKeyword("consteval"))
+						flags |= 256;
 					else
 						break;
 				}
 				if ((flags & 34) == 34)
 					error(peek().pos, "inline subs cannot be atomic (they are copied into their callers: use a normal sub)");
+				if ((flags & 72) == 72)
+					error(peek().pos, "a static sub has no this: readonly is for the subs that work on the struct (it makes this a const pointer)");
 				if (!isKeyword("sub"))
 					error(peek().pos, "'sub' expected after '" + m_tokens[m_pos - 1].text + "', found " + describe(peek()));
 				Node* outerFunc = m_currentFunc;
@@ -695,13 +768,32 @@ namespace dscript
 		return n;
 	}
 
+	// const NAME[: T] = value; / constexpr NAME[: T] = value;: a ConstDecl (constKind 1: a
+	// compile-time constant if the value is one, otherwise a constant variable; 2: it must be a
+	// compile-time constant). const p: T(args);: a constant variable built by its constructor (a
+	// VarDecl, constKind 1).
 	Node* Parser::parseConst(void)
 	{
-		Node* n = make(NodeKind::ConstDecl, next().pos);
-		n->name = expectIdentifier("after 'const'");
+		const size_t start = m_pos;
+		const Token& keyword = next();
+		const bool isConstexpr = keyword.text == "constexpr";
+		if (isKeyword("var") || isKeyword("auto"))
+			error(peek().pos, "'" + keyword.text + " " + peek().text + "': " + keyword.text + " takes the place of var (" + keyword.text + " name = ...)");
+		Node* n = make(NodeKind::ConstDecl, keyword.pos);
+		n->constKind = isConstexpr ? 2 : 1;
+		n->name = expectIdentifier("after '" + keyword.text + "'");
 		n->namePos = lastPos();
 		if (acceptPunct(":"))
 			n->typeSyntax = parseType();
+		if (n->typeSyntax != nullptr && isPunct("("))
+		{
+			if (isConstexpr)
+				error(peek().pos, "a constexpr value is computed when compiling: a constructor runs when the program does (use const)");
+			m_pos = start;
+			Node* v = parseVarDecl(true);
+			expectPunct(";", "after the constant");
+			return v;
+		}
 		// Struct constants can omit the value (the fields' defaults) or use { ... }.
 		if (n->typeSyntax != nullptr && isPunct(";"))
 		{
@@ -786,10 +878,20 @@ namespace dscript
 	{
 		Node* n = make(NodeKind::VarDecl, peek().pos);
 		// auto: the type comes from the value (as var without a type), and saying it is an error.
+		// const (a variable that never changes after its value), constinit (a global whose value
+		// is known when compiling): like var.
 		const bool isAuto = acceptKeyword("auto");
+		std::string keyword = "auto";
 		if (!isAuto)
-			expectKeyword("var", "");
-		n->name = expectIdentifier(isAuto ? "after 'auto'" : "after 'var'");
+		{
+			if (acceptKeyword("const"))
+				n->constKind = 1, keyword = "const";
+			else if (acceptKeyword("constinit"))
+				n->constKind = 3, keyword = "constinit";
+			else
+				expectKeyword("var", ""), keyword = "var";
+		}
+		n->name = expectIdentifier("after '" + keyword + "'");
 		n->namePos = lastPos();
 		if (isAuto && isPunct(":"))
 			error(peek().pos, "'auto' takes its type from the value: remove ': <type>' (or declare '" + n->name + "' with var)");
@@ -830,7 +932,7 @@ namespace dscript
 		if (isAuto && n->a->kind == NodeKind::InitList)
 			error(n->a->pos, "'auto' can't take a type from { ... }: declare '" + n->name + "' with var and its type");
 		if (n->typeSyntax == nullptr && (n->a == nullptr || !allowNoType || n->a->kind == NodeKind::InitList))
-			error(n->pos, "the type of '" + n->name + "' is needed (var " + n->name + ": <type>)");
+			error(n->pos, "the type of '" + n->name + "' is needed (" + keyword + " " + n->name + ": <type>)");
 		return n;
 	}
 
@@ -858,6 +960,12 @@ namespace dscript
 	{
 		Node* n = make(NodeKind::FuncDecl, next().pos);
 		n->value = flags | (owner != nullptr ? 4 : 0);
+		n->constKind = (flags & 128) != 0 ? 2 : (flags & 256) != 0 ? 3 : 0;
+		if ((flags & 64) != 0 && owner == nullptr)
+			error(n->pos, "readonly is for the subs of a struct (this becomes a const pointer)");
+		if (n->constKind != 0 && (flags & 33) != 0)
+			error(n->pos, std::string((flags & 1) != 0 ? "interrupt" : "atomic") + " subs cannot be " + (n->constKind == 2 ? "constexpr" : "consteval") +
+				" (they are never evaluated when compiling)");
 		n->name = expectIdentifier("after 'sub'");
 		n->namePos = lastPos();
 		// Methods: <Struct>::<name> (the scope is the struct's); the others: in the namespace.
@@ -880,6 +988,7 @@ namespace dscript
 			self->typeSyntax->kind = TypeSyntax::Kind::Pointer;
 			self->typeSyntax->pos = n->namePos;
 			self->typeSyntax->base = named;
+			self->typeSyntax->constTarget = (flags & 64) != 0;	// readonly sub: this is a const pointer
 			n->list.insert(n->list.begin(), self);
 		}
 		if (acceptPunct("->"))
@@ -897,7 +1006,7 @@ namespace dscript
 		n->a = parseBlock();
 		if ((flags & 32) != 0)
 			n->a = atomicBlock(n->a, n->pos);
-		if ((flags & 2) != 0)
+		if ((flags & (2 | 128 | 256)) != 0)		// (inline, constexpr, consteval: the body is in a library's interface)
 			n->bodyTokens.assign(m_tokens.begin() + (std::ptrdiff_t)bodyStart, m_tokens.begin() + (std::ptrdiff_t)m_pos);
 		popScope();
 		m_currentFunc = outer;
@@ -930,7 +1039,12 @@ namespace dscript
 			Node* p = make(NodeKind::VarDecl, peek().pos);
 			if (isKeyword("auto"))
 				error(peek().pos, "parameters need a type (auto is for variables with a value): var name: type");
-			acceptKeyword("var");
+			if (isKeyword("constexpr") || isKeyword("constinit") || isKeyword("consteval"))
+				error(peek().pos, "parameters are var or const (" + peek().text + " is for constants and subs)");
+			if (acceptKeyword("const"))
+				p->constKind = 1;		// the sub cannot change it
+			else
+				acceptKeyword("var");
 			p->pos = peek().pos;
 			p->name = expectIdentifier("(parameter name)");
 			p->namePos = lastPos();
@@ -1018,7 +1132,7 @@ namespace dscript
 		if (t.fixedType != nullptr)
 			return true;
 		if (t.kind == TokenKind::Keyword)
-			return t.text == "void" || t.text == "sub" || t.text == "struct";
+			return t.text == "void" || t.text == "sub" || t.text == "struct" || t.text == "const";
 		if (t.kind != TokenKind::Identifier)
 			return false;
 		static const char* names[] = { "i8", "u8", "i16", "u16", "i32", "u32", "f32", "bool", "char", "string", "int", "uint", "float", nullptr };
@@ -1032,6 +1146,12 @@ namespace dscript
 
 	TypeSyntax* Parser::parseType(void)
 	{
+		// const T*: what the (first) pointer points at is constant. A constant variable is
+		// declared with const (const p: T* = ...): in a type, const is only about the target.
+		const SourcePos constPos = peek().pos;
+		const bool constTarget = acceptKeyword("const");
+		if (constTarget && isKeyword("const"))
+			error(peek().pos, "const twice");
 		TypeSyntax* t = new TypeSyntax();
 		t->pos = peek().pos;
 		if (acceptPunct("("))
@@ -1098,6 +1218,10 @@ namespace dscript
 			if (isPunct("<") && isTemplateName(t->name))
 				parseTemplateArgs(t->args);
 		}
+		if (constTarget && !isPunct("*"))
+			error(constPos, "const in a type is for what a pointer points at (const " + std::string(t->kind == TypeSyntax::Kind::Named ? t->name : "T") +
+				"*): a variable, parameter or field that never changes is declared with const (const name: type)");
+		bool firstPointer = true;
 		while (true)
 		{
 			if (isPunct("*"))
@@ -1106,6 +1230,8 @@ namespace dscript
 				p->kind = TypeSyntax::Kind::Pointer;
 				p->pos = next().pos;
 				p->base = t;
+				p->constTarget = constTarget && firstPointer;
+				firstPointer = false;
 				t = p;
 			}
 			else if (isPunct("["))
@@ -1228,6 +1354,11 @@ namespace dscript
 				*found = true;
 			if (!it->second.empty())
 				return it->second;
+			if (i < m_hoistScope && m_probeLocals)
+			{
+				m_usedLocal = true;		// (a constant variable of the sub)
+				return name;
+			}
 			if (i < m_hoistScope)
 				error(pos, "'" + name + "' is a local variable: the value of a local constant or static variable is set once "
 					"(not at every call), so it cannot use the sub's locals or parameters");
@@ -1273,19 +1404,41 @@ namespace dscript
 
 	// const NAME ... ; / static var NAME ... ; / static const NAME ... ; in a sub: a hidden
 	// top-level declaration, and an empty statement in its place.
-	Node* Parser::parseLocalStatic(const SourcePos& pos)
+	// A const in a sub (not static) whose value uses the sub's variables or parameters (or is built
+	// by a constructor): a constant variable of the sub, in its place. The others are hidden at the
+	// top level too, with a placeholder in their place: if the value is not a compile-time
+	// constant, it is computed there, every time (the code generator decides).
+	Node* Parser::parseLocalStatic(const SourcePos& pos, bool isStatic)
 	{
 		const int outerHoist = m_hoistScope;
 		m_hoistScope = (int)m_scopes.size();
+		const bool localConst = !isStatic && isKeyword("const");
 		Node* d = nullptr;
-		if (isKeyword("const"))
+		if (isKeyword("const") || isKeyword("constexpr"))
+		{
+			const bool outerProbe = m_probeLocals, outerUsed = m_usedLocal;
+			m_probeLocals = localConst;
+			m_usedLocal = false;
 			d = parseConst();
+			const bool used = m_usedLocal;
+			m_probeLocals = outerProbe;
+			m_usedLocal = outerUsed;
+			if (localConst && (used || d->kind == NodeKind::VarDecl))
+			{
+				m_hoistScope = outerHoist;
+				d->kind = NodeKind::VarDecl;
+				d->constKind = 1;
+				declareLocal(d->name);
+				return d;
+			}
+		}
 		else
 		{
 			d = parseVarDecl();
 			expectPunct(";", "after the variable declaration");
 		}
 		m_hoistScope = outerHoist;
+		d->hoistKind = localConst ? 1 : 2;
 		const std::string base = m_currentFunc->name + "::" + d->name;
 		const int n = ++m_hoistedCount[base];
 		d->text = d->name;
@@ -1296,7 +1449,16 @@ namespace dscript
 		declareLocal(d->name, hidden);
 		d->name = hidden;
 		m_hoisted.push_back(d);
-		return make(NodeKind::Block, pos);
+		if (!localConst)
+			return make(NodeKind::Block, pos);
+		Node* place = make(NodeKind::VarDecl, pos);
+		place->name = hidden;
+		place->namePos = d->namePos;
+		place->typeSyntax = d->typeSyntax;
+		place->a = d->a;
+		place->constKind = 1;
+		place->hoisted = d;
+		return place;
 	}
 
 	void Parser::requireBlockFor(const Node* body, const std::string& what)
@@ -1387,13 +1549,15 @@ namespace dscript
 			declareLocal(v->name);
 			return v;
 		}
-		if (isKeyword("const"))
-			return parseLocalStatic(pos);
+		if (isKeyword("const") || isKeyword("constexpr"))
+			return parseLocalStatic(pos, false);
+		if (isKeyword("constinit"))
+			error(peek().pos, "constinit is for globals (a local gets its value every time its declaration runs)");
 		if (acceptKeyword("static"))
 		{
-			if (!isKeyword("var") && !isKeyword("auto") && !isKeyword("const"))
-				error(peek().pos, "'var', 'auto' or 'const' expected after 'static', found " + describe(peek()));
-			return parseLocalStatic(pos);
+			if (!isKeyword("var") && !isKeyword("auto") && !isKeyword("const") && !isKeyword("constexpr"))
+				error(peek().pos, "'var', 'auto', 'const' or 'constexpr' expected after 'static', found " + describe(peek()));
+			return parseLocalStatic(pos, true);
 		}
 		if (isKeyword("low"))
 			return parseLow();
@@ -1440,7 +1604,7 @@ namespace dscript
 			Node* n = make(NodeKind::If, pos);
 			// if constexpr (condition): decided while compiling (only the branch it chooses is
 			// generated; its built-ins: see ConditionBuiltins.hpp).
-			if (peek().kind == TokenKind::Identifier && peek().text == "constexpr" && isPunct("(", 1))
+			if (isKeyword("constexpr") && isPunct("(", 1))
 			{
 				next();
 				n->isConstexpr = true;

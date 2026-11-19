@@ -18,6 +18,7 @@
 	"var"
 	"auto"
 	"const"
+	"constinit"
 	"sub"
 	"struct"
 	"enum"
@@ -61,6 +62,8 @@
 (static_modifier) @keyword
 (priv_modifier) @keyword
 (readonly_modifier) @keyword
+(constexpr_modifier) @keyword
+(consteval_modifier) @keyword
 
 ; Types
 (primitive_type) @type.builtin
@@ -110,6 +113,8 @@
 	name: (identifier) @constant)
 
 (const_declaration
+	name: (identifier) @constant)
+(struct_constant
 	name: (identifier) @constant)
 
 ; Literals

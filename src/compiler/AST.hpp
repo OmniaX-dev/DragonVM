@@ -20,6 +20,7 @@ namespace dscript
 		std::string written;				// Named: the name as written (empty: name)
 		bool resolved { false };			// Named: name is already the full name
 		TypeSyntax* base { nullptr };		// Pointer / Array; Function: the return type (nullptr: void)
+		bool constTarget { false };			// Pointer: const T* (what it points at is constant)
 		struct Node* count { nullptr };		// Array (a constant expression; nullptr: [], the size of the value)
 		std::vector<TypeSyntax*> params;	// Function
 		int variadic { 0 };					// Function: 1 ... (more arguments), 2 ...typed (with their types)
@@ -81,6 +82,17 @@ namespace dscript
 		bool isPrivate { false };		// a struct field declared priv (methods: FuncDecl flag 16); a priv nested struct / enum;
 										// Member / Ident of a for-in's own call (begin, end, next, get): it may call a priv method
 		bool isReadonly { false };		// a struct field declared readonly
+		// VarDecl (variables, parameters, fields): 1 const (never changed after its initialization),
+		// 3 constinit (a global whose value is known when compiling: no code sets it). ConstDecl: 1
+		// const (a compile-time constant if its value is one, otherwise a constant variable), 2
+		// constexpr (must be a compile-time constant). FuncDecl: 2 constexpr (evaluated when
+		// compiling when its arguments are constants), 3 consteval (always evaluated when compiling).
+		int constKind { 0 };
+		// ConstDecl / VarDecl hidden at the top level from a sub (text: the name as written): 1 a
+		// local constant (const in a sub: per call if it is not a compile-time constant), 2 static.
+		// VarDecl in a block with hoisted set: the place of that local constant (hoisted points at it).
+		int hoistKind { 0 };
+		Node* hoisted { nullptr };
 		int variadic { 0 };				// FuncDecl: 1 if the parameters end with ..., 2 with ...typed
 		// Call of a variadic sub's built-in (va_count, va_start, va_types): 1, 2, 3 (0: a normal call).
 		int vaBuiltin { 0 };

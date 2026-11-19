@@ -1,0 +1,4 @@
+// expect-error: 'G_ID' is a constant (const): it cannot change
+sub next() -> u32 { return 3; }
+const G_ID = next();
+sub main() { G_ID = 4; }

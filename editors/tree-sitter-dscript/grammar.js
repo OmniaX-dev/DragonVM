@@ -40,6 +40,8 @@ module.exports = grammar({
 		[$._expression, $.generic_expression],
 		[$.generic_type, $.generic_expression],
 		[$.generic_type, $._expression, $.generic_expression],
+		// (priv constexpr NAME = ... / priv constexpr sub: told by what follows)
+		[$.struct_constant, $.function_declaration],
 	],
 
 	rules: {
@@ -103,7 +105,17 @@ module.exports = grammar({
 		),
 		// Fields and methods (subs in a struct, called as x.m() / p->m(), with this).
 		// Nested structs / enums (Outer::Inner; priv: only usable in the struct).
-		field_list: $ => seq('{', repeat(choice($.field_declaration, $.function_declaration, $.nested_type_declaration, $.template_declaration)), '}'),
+		// constexpr NAME = value;: a constant of the struct.
+		field_list: $ => seq('{', repeat(choice($.field_declaration, $.function_declaration, $.nested_type_declaration, $.template_declaration,
+			$.struct_constant)), '}'),
+		struct_constant: $ => seq(
+			optional($.priv_modifier),
+			'constexpr',
+			field('name', $.identifier),
+			optional(seq(':', field('type', $._type))),
+			'=', field('value', choice($._expression, $.initializer_list)),
+			';',
+		),
 
 		// template(T1, optional T2) where <condition> { structs and subs }
 		template_declaration: $ => seq(
@@ -120,9 +132,10 @@ module.exports = grammar({
 			optional($.priv_modifier),
 			choice($.struct_declaration, $.enum_declaration),
 		),
+		// const: set when the struct is built (its default, { ... }, in new), then never changed
 		field_declaration: $ => seq(
 			optional(choice($.priv_modifier, $.readonly_modifier)),
-			'var',
+			choice('var', 'const'),
 			field('name', alias($.identifier, $.field_identifier)),
 			':',
 			field('type', $._type),
@@ -144,10 +157,14 @@ module.exports = grammar({
 			optional(seq('=', field('value', $._expression))),
 		),
 
+		// const: a compile-time constant if the value is one, otherwise a variable that never changes;
+		// constexpr: a compile-time constant.
 		const_declaration: $ => seq(
-			'const',
+			choice('const', 'constexpr'),
 			field('name', $.identifier),
-			optional(seq(':', field('type', $._type))),
+			optional(seq(':', field('type', $._type),
+				// const p: Point(1, 2): built by the struct's constructor
+				optional(field('arguments', $.argument_list)))),
 			// Struct constants: { ... }, or no value (the fields' defaults).
 			optional(seq('=', field('value', choice($._expression, $.initializer_list)))),
 			';',
@@ -172,6 +189,13 @@ module.exports = grammar({
 			),
 			// auto x = value: the type comes from the value (no ': type')
 			seq('auto', field('name', $.identifier), '=', field('value', $._expression)),
+			// constinit x: T = value: a global whose value is known when compiling
+			seq(
+				'constinit',
+				field('name', $.identifier),
+				optional(seq(':', field('type', $._type))),
+				optional(seq('=', field('value', choice($._expression, $.initializer_list)))),
+			),
 		),
 
 		initializer_list: $ => seq(
@@ -183,7 +207,9 @@ module.exports = grammar({
 
 		function_declaration: $ => seq(
 			// static: in a struct, a sub without this (static inline / inline static)
-			repeat(choice($.atomic_modifier, $.interrupt_modifier, $.inline_modifier, $.static_modifier, $.priv_modifier)),
+			// readonly: this is a const pointer; constexpr / consteval: evaluated when compiling
+			repeat(choice($.atomic_modifier, $.interrupt_modifier, $.inline_modifier, $.static_modifier, $.priv_modifier, $.readonly_modifier,
+				$.constexpr_modifier, $.consteval_modifier)),
 			'sub',
 			field('name', $.identifier),
 			field('parameters', $.parameter_list),
@@ -191,6 +217,8 @@ module.exports = grammar({
 			choice(field('body', $.block), ';'),
 		),
 		interrupt_modifier: _ => 'interrupt',
+		constexpr_modifier: _ => 'constexpr',
+		consteval_modifier: _ => 'consteval',
 		// atomic sub: its body runs with interrupts disabled (like atomic { ... })
 		atomic_modifier: _ => 'atomic',
 		static_modifier: _ => 'static',
@@ -213,7 +241,7 @@ module.exports = grammar({
 		), ')'),
 		variadic_parameter: _ => seq('...', optional('typed')),
 		parameter: $ => seq(
-			optional('var'),
+			optional(choice('var', 'const')),
 			field('name', $.identifier),
 			':',
 			field('type', $._type),
@@ -238,6 +266,7 @@ module.exports = grammar({
 			$.function_type,
 			$.parenthesized_type,
 			$.struct_type,
+			$.const_type,
 		),
 		// A::B::Type, ::Type (the global one)
 		scoped_type_identifier: $ => seq(
@@ -267,6 +296,8 @@ module.exports = grammar({
 			optional(seq('->', field('return_type', $._type))),
 		)),
 		parenthesized_type: $ => seq('(', $._type, ')'),
+		// const T*: what the pointer points at is constant (const u8* groups as const (u8*))
+		const_type: $ => prec(1, seq('const', field('type', $._type))),
 		// A nameless struct used as a type: var p: struct { var x: i32; };
 		struct_type: $ => seq('struct', field('body', $.field_list)),
 

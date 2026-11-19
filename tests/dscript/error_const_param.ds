@@ -1,0 +1,3 @@
+// expect-error: 'x' is a constant (const): it cannot change
+sub f(const x: i32) { x++; }
+sub main() { }

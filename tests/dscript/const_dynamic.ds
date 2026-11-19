@@ -1,0 +1,22 @@
+// The const forms through a shared library (dsc --dynamic) (libs/consts.ds): its constant variable, compile-time
+// constants, constexpr subs evaluated here (and called), consteval subs, const fields, readonly
+// subs, a struct constant used as a value.
+// dsc-shared: libs/consts.ds
+// dsc-flags: --dynamic
+// expect-rv: 0
+#import("consts")
+var g_side: i32 = 5;
+var g_table: u8[kc::square(4)];
+sub main() -> i32 {
+	if (kc::STARTED != 1001 or kc::starts != 1) return 1;
+	if (sizeof(g_table) != 16 or kc::LIMIT != 64) return 2;
+	if (kc::square(g_side) != 25 or kc::cube(3) != 27) return 3;
+	var b: kc::Box(5, 2, 3);
+	if (b.id != 5 or b.area() != 6 or kc::Box.SIDES != 4 or b.SIDES != 4) return 4;
+	b.grow(1);
+	if (kc::area_of(&b) != 12) return 5;
+	if (kc::Unit.area() != 1 or kc::area_of(&kc::Unit) != 1 or kc::Unit.id != 2 or kc::unit_area() != 2) return 6;
+	const m = kc::make(2, 5);
+	if (m.area() != 10 or m.id != 9 or kc::make(3, 3).area() != 9) return 7;
+	return 0;
+}

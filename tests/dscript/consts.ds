@@ -1,0 +1,80 @@
+// const as a variable that never changes: a global computed when the program starts, local
+// constants (compile-time ones, ones computed at every call, ones using the sub's variables),
+// constinit, const parameters and fields (set in new), struct constants used as values, const
+// pointers (const T*), readonly subs, a struct's constexpr constants.
+// expect-rv: 0
+var g_calls: u32 = 0;
+sub next_id() -> u32 { g_calls++; return 40 + g_calls; }
+const G_ID = next_id();				// computed when the program starts (once)
+const LIMIT = 10;					// a compile-time constant (as always)
+var g_buffer: u8[LIMIT];
+constinit g_count: u32 = LIMIT * 2;
+const Names: string[] = { "a", "bc" };
+var g_seed: u32 = 7;
+const Derived: u32[] = { g_seed, g_seed * 2 };	// a constant array computed when the program starts
+
+struct Point {
+	var x: i32 = 0;
+	var y: i32 = 0;
+	constexpr ORIGIN_X = 0;
+	readonly sub sum() -> i32 { return this->x + this->y + ORIGIN_X; }
+	sub move(var dx: i32) { this->x += dx; }
+	// readonly and not: the one for a constant, the other for a variable
+	readonly sub get() -> const i32* { return &this->x; }
+	sub get() -> i32* { return &this->x; }
+};
+const Unit: Point = { 1, 1 };
+
+struct Account {
+	const id: u32 = 7;
+	var balance: i32 = 0;
+	sub new(var id: u32) { this->id = id; }
+};
+struct Wallet { var main: Account; var count: u32; };
+
+sub twice(const x: i32) -> i32 { return x * 2; }
+sub by_value(var p: Point) -> i32 { p.move(5); return p.sum(); }
+sub read_only(var p: const Point*) -> i32 { return p->sum(); }
+sub length(var s: const u8*) -> u32 { var n: u32 = 0; while (s[n] != 0) n++; return n; }
+
+sub main() -> i32 {
+	if (G_ID != 41 or g_calls != 1) return 1;
+	if (sizeof(g_buffer) != 10 or g_count != 20) return 2;
+	g_count++;						// (constinit: a variable)
+	var total: i32 = 0;
+	for (var i: i32 = 0; i < 3; i++) {
+		const square = i * i;		// uses i: a constant of each iteration
+		const now = next_id();		// a call: computed every time
+		const fixed = LIMIT + 1;	// a compile-time constant
+		total += square + fixed;
+		if (now != 42 + cast<u32>(i)) return 3;
+	}
+	if (total != 5 + 33) return 4;
+	if (twice(21) != 42) return 5;
+	if (Unit.sum() != 2 or by_value(Unit) != 7 or Unit.x != 1) return 6;
+	if (read_only(&Unit) != 2 or *Unit.get() != 1) return 7;
+	var copy = Unit;				// a copy is a variable
+	copy.move(1);
+	*copy.get() += 1;
+	if (copy.x != 3) return 8;
+	var a: Account(99);
+	var b: Account;
+	const c: Account(5);			// a constant built by its constructor
+	if (a.id != 99 or b.id != 7 or c.id != 5) return 9;
+	var w: Wallet = { { 3, 10 }, 1 };
+	w.count = 2;
+	w.main.balance += 5;
+	if (w.main.id != 3 or w.main.balance != 15) return 10;
+	if (Point.ORIGIN_X != 0 or Point::ORIGIN_X != 0 or copy.ORIGIN_X != 0) return 11;
+	var p: const u8* = "hi";
+	var q: u8* = g_buffer;
+	var r: const u8* = q;			// adding const
+	if (p[1] != 'i' or r != q or length(Names[1]) != 2 or length(q) != 0) return 12;
+	if (Derived[1] != 14) return 13;
+	const ptr: u8* = g_buffer;		// a constant pointer to changing data
+	ptr[0] = 'x';
+	if (g_buffer[0] != 'x') return 14;
+	var px: const i32* = &Unit.x;	// a field of a struct constant: in its read-only copy
+	if (*px != 1) return 15;
+	return 0;
+}

@@ -28,7 +28,7 @@ namespace std {
 				else
 					this->m_value ^= mask;
 			}
-			inline sub get(var mask: T) -> bool {
+			readonly inline sub get(var mask: T) -> bool {
 				if constexpr (is_type(T, U64))
 					return this->m_value.new_band(mask).eq(mask);
 				else

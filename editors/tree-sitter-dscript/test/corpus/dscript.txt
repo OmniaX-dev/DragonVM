@@ -1158,3 +1158,103 @@ sub f() {
             (pointer_type
               (primitive_type))))
         (block)))))
+
+================================================================================
+Const forms
+================================================================================
+
+const G = next();
+constexpr N: u32 = 4;
+constinit g: u32 = N;
+struct S {
+	const id: u32 = 1;
+	priv constexpr K = 2;
+	readonly constexpr sub get(const x: i32) -> const u8* { return null; }
+	priv consteval sub c() -> i32 { return 1; }
+}
+consteval inline sub sq(var x: i32) -> i32 { return x * x; }
+sub f() {
+	const p: S(1);
+	var q: const u8** = null;
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (const_declaration
+    (identifier)
+    (call_expression
+      (identifier)
+      (argument_list)))
+  (const_declaration
+    (identifier)
+    (primitive_type)
+    (number_literal))
+  (variable_declaration
+    (identifier)
+    (primitive_type)
+    (identifier))
+  (struct_declaration
+    (type_identifier)
+    (field_list
+      (field_declaration
+        (field_identifier)
+        (primitive_type)
+        (number_literal))
+      (struct_constant
+        (priv_modifier)
+        (identifier)
+        (number_literal))
+      (function_declaration
+        (readonly_modifier)
+        (constexpr_modifier)
+        (identifier)
+        (parameter_list
+          (parameter
+            (identifier)
+            (primitive_type)))
+        (const_type
+          (pointer_type
+            (primitive_type)))
+        (block
+          (return_statement
+            (null_literal))))
+      (function_declaration
+        (priv_modifier)
+        (consteval_modifier)
+        (identifier)
+        (parameter_list)
+        (primitive_type)
+        (block
+          (return_statement
+            (number_literal))))))
+  (function_declaration
+    (consteval_modifier)
+    (inline_modifier)
+    (identifier)
+    (parameter_list
+      (parameter
+        (identifier)
+        (primitive_type)))
+    (primitive_type)
+    (block
+      (return_statement
+        (binary_expression
+          (identifier)
+          (identifier)))))
+  (function_declaration
+    (identifier)
+    (parameter_list)
+    (block
+      (const_declaration
+        (identifier)
+        (type_identifier)
+        (argument_list
+          (number_literal)))
+      (variable_declaration
+        (identifier)
+        (const_type
+          (pointer_type
+            (pointer_type
+              (primitive_type))))
+        (null_literal)))))

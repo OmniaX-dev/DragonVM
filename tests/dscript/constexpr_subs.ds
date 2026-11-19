@@ -1,0 +1,58 @@
+// constexpr subs (evaluated when compiling when their arguments are constants, normal calls
+// otherwise) and consteval subs (always evaluated when compiling): recursion, loops, locals,
+// structs (values, methods, a struct constant's value), strings, f32, constant arrays, for-in.
+// expect-rv: 0
+constexpr sub fact(var n: u32) -> u32 { return n <= 1 ? 1 : n * fact(n - 1); }
+constexpr sub fib(var n: i32) -> i32 {
+	var a: i32 = 0;
+	var b: i32 = 1;
+	for (var i: i32 = 0; i < n; i++) { const t = a + b; a = b; b = t; }
+	return a;
+}
+consteval sub mask(var bits: u32) -> u32 { return bits >= 32 ? 0xFFFFFFFF : (1u << bits) - 1; }
+consteval sub mask2(var bits: u32) -> u32 { return mask(bits) << 1; }	// (a consteval sub's own calls)
+struct Point {
+	var x: i32;
+	var y: i32;
+	constexpr sub plus(var o: Point) -> Point { var r: Point = { this->x + o.x, this->y + o.y }; return r; }
+	readonly constexpr sub len2() -> i32 { return this->x * this->x + this->y * this->y; }
+};
+constexpr sub make(var x: i32, var y: i32) -> Point { var p: Point; p.x = x; p.y = y; return p; }
+constexpr sub sum(var p: const u8*) -> u32 { var s: u32 = 0; while (*p != 0) { s += *p; p++; } return s; }
+constexpr sub avg(var a: f32, var b: f32) -> f32 { return (a + b) / 2.0; }
+const Squares: u32[] = { 0, 1, 4, 9, 16 };
+constexpr sub table_sum() -> u32 { var s: u32 = 0; for (auto x in Squares) s += x; return s; }
+constexpr sub clamp(var v: i8) -> i8 { var w: i16 = v; w = w * 3; return w > 100 ? 100 : cast<i8>(w); }
+constexpr sub fill(var n: u32) -> u32 {
+	var buffer: u8[16];
+	for (var i: u32 = 0; i < n; i++)
+		buffer[i] = cast<u8>(i + 1);
+	var p: u8* = &buffer[0];
+	var s: u32 = 0;
+	do { s += *p++; } while (*p != 0);
+	return s;
+}
+
+constexpr F5 = fact(5);
+var g_table: u8[fact(4)];			// an array size
+constexpr ORIGIN: Point = make(3, 4);	// a struct constant from a constexpr sub
+var g_runtime: u32 = 6;
+var g_folded: u32 = fib(12);		// a global's value (in the program's data)
+
+sub main() -> i32 {
+	if (F5 != 120 or sizeof(g_table) != 24) return 1;
+	if (fib(10) != 55 or g_folded != 144) return 2;
+	if (mask(4) != 15 or mask(32) != 0xFFFFFFFF or mask2(3) != 14) return 3;
+	if (ORIGIN.x != 3 or ORIGIN.len2() != 25) return 4;
+	const p = make(1, 2).plus(make(10, 20));
+	if (p.x != 11 or p.y != 22) return 5;
+	if (sum("AB") != 131) return 6;
+	if (fact(g_runtime) != 720) return 7;	// a normal call (at run time)
+	if (avg(1.0, 2.0) != 1.5) return 8;
+	if (table_sum() != 30) return 9;
+	if (clamp(20) != 60 or clamp(50) != 100 or clamp(-10) != -30) return 10;
+	if (fill(5) != 15) return 11;
+	var q = make(cast<i32>(g_runtime), 1);	// (at run time)
+	if (q.plus(ORIGIN).len2() != 106) return 12;
+	return 0;
+}

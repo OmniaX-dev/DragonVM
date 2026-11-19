@@ -28,11 +28,11 @@ namespace dr {
 			}
 			TextSingle::print(cast<u32>(n));
 		}
-		inline static sub print(var n: std::U64*) {
+		inline static sub print(var n: const std::U64*) {
 			var buff: u8[24];
 			TextSingle::print(n->str(buff));
 		}
-		inline static sub print(var n: std::I64*) {
+		inline static sub print(var n: const std::I64*) {
 			var buff: u8[24];
 			TextSingle::print(n->str(buff));
 		}
@@ -117,11 +117,11 @@ namespace dr {
 			std::itoa(n, buff);
 			Text16::print(buff, x, y, fg, bg);
 		}
-		inline static sub print(var n: std::U64*, var x: u8, var y: u8, var fg: u8, var bg: u8) {
+		inline static sub print(var n: const std::U64*, var x: u8, var y: u8, var fg: u8, var bg: u8) {
 			var buff: u8[24];
 			Text16::print(n->str(buff), x, y, fg, bg);
 		}
-		inline static sub print(var n: std::I64*, var x: u8, var y: u8, var fg: u8, var bg: u8) {
+		inline static sub print(var n: const std::I64*, var x: u8, var y: u8, var fg: u8, var bg: u8) {
 			var buff: u8[24];
 			Text16::print(n->str(buff), x, y, fg, bg);
 		}
@@ -259,11 +259,11 @@ namespace dr {
 			std::itoa(n, buff);
 			return this->print(buff);
 		}
-		inline sub print(var n: std::U64*) -> Text16Console* {
+		inline sub print(var n: const std::U64*) -> Text16Console* {
 			var buff: u8[24];
 			return this->print(n->str(buff));
 		}
-		inline sub print(var n: std::I64*) -> Text16Console* {
+		inline sub print(var n: const std::I64*) -> Text16Console* {
 			var buff: u8[24];
 			return this->print(n->str(buff));
 		}

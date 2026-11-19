@@ -1,0 +1,5 @@
+// expect-error: an array size must be a compile-time constant: count(...) could not be evaluated when compiling (it uses 'g_n', a variable that exists only when the program runs
+var g_n: u32 = 3;
+constexpr sub count() -> u32 { return g_n; }
+var g_table: u8[count()];
+sub main() { }

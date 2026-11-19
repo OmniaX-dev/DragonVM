@@ -1,3 +1,3 @@
-// expect-error: the values of a constant array must be constants or strings
+// expect-error: the values of a constexpr array must be constants or strings
 sub main() -> void { }
-const Handlers: (sub() -> void)[] = { main };
+constexpr Handlers: (sub() -> void)[] = { main };

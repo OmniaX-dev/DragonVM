@@ -1,0 +1,3 @@
+// expect-error: 'spin' is consteval (it must be evaluated when compiling), but it takes too long
+consteval sub spin() -> i32 { var i: i32 = 0; while (true) i++; return i; }
+sub main() -> i32 { return spin(); }

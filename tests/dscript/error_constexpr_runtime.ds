@@ -1,0 +1,5 @@
+// expect-error: an array size must be a compile-time constant: 'N' is computed when the program runs
+sub next() -> u32 { return 3; }
+const N = next();
+var g_table: u8[N];
+sub main() { }

@@ -1,3 +1,3 @@
-// expect-error: 'length' is readonly: only the subs of Snake can change it (a pointer to it could change it)
+// expect-error: cannot convert const u32* to u32* in the initialization (it points at a constant
 struct Snake { readonly var length: u32 = 3; };
 sub main() -> void { var s: Snake; var p: u32* = &s.length; }

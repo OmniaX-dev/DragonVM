@@ -1,0 +1,4 @@
+// expect-error: cannot assign a whole Wallet: it has a const field (main.id)
+struct Account { const id: u32 = 1; };
+struct Wallet { var main: Account; };
+sub main() { var a: Wallet; var b: Wallet; a = b; }

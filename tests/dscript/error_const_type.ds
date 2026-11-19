@@ -1,0 +1,2 @@
+// expect-error: const in a type is for what a pointer points at (const u32*)
+sub main() { var x: const u32 = 3; }

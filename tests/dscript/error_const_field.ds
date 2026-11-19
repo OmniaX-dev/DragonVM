@@ -1,0 +1,3 @@
+// expect-error: 'id' is a const field of Account: it gets its value when the struct is built
+struct Account { const id: u32 = 1; sub rename(var id: u32) { this->id = id; } };
+sub main() { }

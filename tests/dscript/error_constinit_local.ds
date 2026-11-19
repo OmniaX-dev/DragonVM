@@ -1,0 +1,2 @@
+// expect-error: constinit is for globals
+sub main() { constinit x = 3; }

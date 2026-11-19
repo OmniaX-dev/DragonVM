@@ -18,7 +18,15 @@ namespace dscript
 		Storage storage { Storage::Global };
 		int32_t offset { 0 };		// Local: from FP; Param: argument index
 		std::string symbol;			// Global: the dasm data symbol (without '$')
-		bool readOnly { false };	// a constant array (const Name: T[N] = ...)
+		bool readOnly { false };	// a constant array (const Name: T[N] = ...): in the program's read-only data
+		// const (a constant variable: changing it, or through a pointer to it, is an error); 3:
+		// constinit (a global whose value must be known when compiling).
+		bool isConst { false };
+		int constKind { 0 };
+		bool localRuntime { false };	// a local constant array whose values are not constants: in its sub, per call
+		bool ct { false };			// a variable of a sub being evaluated when compiling (offset: its address there)
+		bool ctValue { false };		// a struct value computed when compiling (read-only data used as a call's result: a value, not a variable)
+		bool addressUsed { false };	// the generated code uses its address (read-only data made when needed: only then in the program)
 		SourcePos pos;
 		SourcePos defPos;			// where the name is declared
 		bool param { false };		// a parameter (also those of an expanded inline sub)
@@ -48,6 +56,7 @@ namespace dscript
 		bool instance { false };
 		bool used { false };
 		bool generated { false };
+		bool resolving { false };		// (a constexpr sub resolved early, for a constant)
 		std::string instanceNote;		// " (in Array<u32>, instantiated at file:line)": added to its errors
 		// An instance's signature that doesn't work for these types (a method nothing calls must not
 		// make the struct unusable): the error, raised if something uses it.
@@ -121,7 +130,11 @@ namespace dscript
 			// Struct constants: type is the struct, fields holds every scalar field's value by its
 			// path ("pos.x"); they have no memory (only their fields are used).
 			// String constants: isString, text (they are used as that string literal).
-			struct ConstInfo { Node* decl { nullptr }; bool resolving { false }; bool resolved { false }; int64_t value { 0 }; Type* type { nullptr }; std::map<std::string, int64_t> fields; bool isString { false }; std::string text; };
+			// runtime: a const whose value is not a compile-time constant: a constant variable (a global
+			// in storage; a local constant: per call, in its sub). storage: also the read-only copy of
+			// a struct constant used as a value (its address taken, passed, a method called on it).
+			struct ConstInfo { Node* decl { nullptr }; bool resolving { false }; bool resolved { false }; int64_t value { 0 }; Type* type { nullptr }; std::map<std::string, int64_t> fields; bool isString { false }; std::string text;
+				bool runtime { false }; VarInfo* storage { nullptr }; };
 			struct EnumInfo { Node* decl { nullptr }; bool resolving { false }; bool resolved { false }; std::map<std::string, int64_t> values;
 				Type* type { nullptr }; };	// type: the enum's integer type (i32 unless given: enum E: u8 { ... })
 			struct AliasInfo { Node* decl { nullptr }; bool resolving { false }; Type* type { nullptr }; };
@@ -170,6 +183,20 @@ namespace dscript
 			Type* resolveType(TypeSyntax* ts);
 			void resolveStruct(StructInfo* info, const SourcePos& usePos);
 			int64_t resolveConst(const std::string& name, const SourcePos& usePos);
+			// A const (not constexpr): a compile-time constant if its value is one, otherwise a constant
+			// variable (after the declarations: a global gets its storage and type here).
+			void decideConst(const std::string& name);
+			int64_t resolveConstValue(const std::string& name);
+			void typeGlobal(Node* d, VarInfo* v);
+			// A struct constant as a value: its read-only copy in the program's data.
+			VarInfo* constStorage(const std::string& name);
+			// const fields (in the struct, or in its struct fields / arrays of structs): a whole
+			// struct cannot be assigned. which: the first one's path.
+			bool hasConstFields(Type* t, std::string* which = nullptr);
+			// The code being checked is the constructor (new) of this struct.
+			bool constructing(const StructInfo* info);
+			// Two pointers to the same type (const or not).
+			static bool samePointee(const Type* a, const Type* b) { return a->kind == Type::Kind::Pointer && b->kind == Type::Kind::Pointer && a->base == b->base; }
 			void resolveEnum(EnumInfo& info);
 			Type* enumType(EnumInfo& info);
 			void resolveFunction(FuncInfo* f);
@@ -196,7 +223,8 @@ namespace dscript
 			void checkFieldAccess(const StructInfo* info, const StructField* f, const SourcePos& pos);
 			void checkSubAccess(FuncInfo* f, const SourcePos& pos);
 			void resolveSubDefaults(void);
-			void checkMember(Node* e);
+			void checkMember(Node* e, bool placeWanted = false);
+			bool m_placeWanted { false };	// the next check is of what & takes the address of
 			Type* decay(Type* t);
 			Type* promote(Type* t);
 			Type* arithmeticType(Type* a, Type* b);
@@ -401,6 +429,44 @@ namespace dscript
 			std::vector<CompileError> m_errors;
 			std::vector<const StructField*> m_subDefaults;	// struct fields with a sub as default value
 			Node* m_program { nullptr };
+
+			// ===== Compile-time evaluation (constexpr / consteval subs) =====
+			// A call whose arguments are constants runs here, in a memory of its own (big endian, like
+			// the machine; addresses from CtBase): its value replaces the call (a struct value: read-only
+			// data in the program). What it cannot do (memory outside, other subs, low blocks...) makes
+			// a constexpr call a normal one, and a consteval call an error.
+			struct CtFail { SourcePos pos; std::string why; };
+			enum class CtFlow { Normal, Break, Continue, Return };
+			std::vector<uint8_t> m_ct;
+			int m_ctDepth { 0 };
+			int64_t m_ctSteps { 0 };
+			std::string m_ctWhy;						// why the last constexpr call was not evaluated
+			std::map<VarInfo*, std::vector<uint8_t>> m_ctBlobs;	// read-only data known when compiling (struct constants' copies, values, constant arrays)
+			std::map<VarInfo*, uint32_t> m_ctGlobals;	// their copies in the memory (this evaluation)
+			std::vector<FuncInfo*> m_ctFuncs;			// the subs being evaluated (innermost last)
+			int m_ctBlobCount { 0 };
+			std::vector<VarInfo*> m_lazyData;			// read-only data (in m_ctBlobs) put in the program if its address is used
+			void ctFold(Node* call, FuncInfo* f);
+			bool ctArgument(Node* arg, Type* param, uint32_t& out);
+			[[noreturn]] void ctFail(const SourcePos& pos, const std::string& why);
+			uint32_t ctAlloc(uint32_t size);
+			uint32_t ctString(const std::string& text);
+			uint32_t ctBlobAddress(VarInfo* v);
+			uint8_t* ctBytes(uint32_t addr, uint32_t size, const SourcePos& pos);
+			uint32_t ctLoad(uint32_t addr, Type* t, const SourcePos& pos);
+			void ctStore(uint32_t addr, Type* t, uint32_t value, const SourcePos& pos);
+			uint32_t ctConvert(uint32_t value, Type* from, Type* to);
+			uint32_t ctCall(FuncInfo* f, const std::vector<uint32_t>& args, const SourcePos& pos);
+			CtFlow ctStatement(Node* s, uint32_t& result);
+			void ctLocal(Node* s);
+			void ctInit(uint32_t addr, Type* type, Node* init);
+			uint32_t ctEval(Node* e);
+			uint32_t ctAddr(Node* e);
+			uint32_t ctArith(const std::string& op, uint32_t a, Type* ta, uint32_t b, Type* tb, Type* result, const SourcePos& pos);
+			// Read-only data with these bytes (a struct value computed when compiling).
+			VarInfo* ctBlob(Type* t, const std::vector<uint8_t>& bytes);
+			// A struct constant's fields from its bytes (constexpr P: Point = make(...)).
+			void ctFields(StructInfo* info, const std::vector<uint8_t>& bytes, uint32_t offset, const std::string& prefix, ConstInfo& c);
 
 			// ===== library interfaces =====
 			std::string interfaceType(Type* t);

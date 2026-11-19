@@ -9,20 +9,20 @@ namespace std {
 	const UINT64_MAX: U64 = { 0xFFFFFFFFu, 0xFFFFFFFFu };// 18446744073709551615;
 	// The operations both types share, on the words (I64 casts itself to U64*).
 	namespace int64 {
-		sub add(var a: U64*, var h: u32, var l: u32) {
+		constexpr sub add(var a: U64*, var h: u32, var l: u32) {
 			var r: u32 = a->lo + l;
 			a->hi = a->hi + h + (r < l ? 1 : 0);
 			a->lo = r;
 		}
 
-		sub subt(var a: U64*, var h: u32, var l: u32) {
+		constexpr sub subt(var a: U64*, var h: u32, var l: u32) {
 			var borrow: u32 = (a->lo < l ? 1 : 0);
 			a->lo = a->lo - l;
 			a->hi = a->hi - h - borrow;
 		}
 
 		// a * b, the full 64 bits (the CPU's multiply keeps 32): with 16-bit halves.
-		sub mul32(var a: u32, var b: u32, var out: U64*) {
+		constexpr sub mul32(var a: u32, var b: u32, var out: U64*) {
 			var a0: u32 = a & 0xFFFF;
 			var a1: u32 = a >> 16;
 			var b0: u32 = b & 0xFFFF;
@@ -40,7 +40,7 @@ namespace std {
 		}
 
 		// The low 64 bits of the product (the same for signed and unsigned).
-		sub mul(var a: U64*, var h: u32, var l: u32) {
+		constexpr sub mul(var a: U64*, var h: u32, var l: u32) {
 			var r: U64;
 			mul32(a->lo, l, &r);
 			r.hi = r.hi + a->hi * l + a->lo * h;
@@ -48,7 +48,7 @@ namespace std {
 			a->lo = r.lo;
 		}
 
-		sub shl(var a: U64*, var n: u32) {
+		constexpr sub shl(var a: U64*, var n: u32) {
 			n = n & 63;
 			if (n == 0)
 				return;
@@ -62,7 +62,7 @@ namespace std {
 		}
 
 		// fill: the bits that come in at the top (0, or 0xFFFFFFFF: arithmetic shift).
-		sub shr(var a: U64*, var n: u32, var fill: u32) {
+		constexpr sub shr(var a: U64*, var n: u32, var fill: u32) {
 			n = n & 63;
 			if (n == 0)
 				return;
@@ -75,7 +75,7 @@ namespace std {
 			a->hi = (a->hi >> n) | (fill << (32 - n));
 		}
 
-		sub rol(var a: U64*, var n: u32) {
+		constexpr sub rol(var a: U64*, var n: u32) {
 			n = n & 63;
 			if (n == 0)
 				return;
@@ -88,7 +88,7 @@ namespace std {
 			a->lo = a->lo | right.lo;
 		}
 
-		sub clz32(var x: u32) -> u32 {
+		constexpr sub clz32(var x: u32) -> u32 {
 			if (x == 0)
 				return 32;
 			var n: u32 = 0;
@@ -100,7 +100,7 @@ namespace std {
 			return n;
 		}
 
-		sub ctz32(var x: u32) -> u32 {
+		constexpr sub ctz32(var x: u32) -> u32 {
 			if (x == 0)
 				return 32;
 			var n: u32 = 0;
@@ -112,14 +112,14 @@ namespace std {
 			return n;
 		}
 
-		sub popc32(var x: u32) -> u32 {
+		constexpr sub popc32(var x: u32) -> u32 {
 			x = x - ((x >> 1) & 0x55555555);
 			x = (x & 0x33333333) + ((x >> 2) & 0x33333333);
 			x = (x + (x >> 4)) & 0x0F0F0F0F;
 			return (x * 0x01010101) >> 24;
 		}
 
-		sub ucmp(var ah: u32, var al: u32, var bh: u32, var bl: u32) -> i32 {
+		constexpr sub ucmp(var ah: u32, var al: u32, var bh: u32, var bl: u32) -> i32 {
 			if (ah != bh)
 				return (ah < bh ? -1 : 1);
 			if (al != bl)
@@ -127,7 +127,7 @@ namespace std {
 			return 0;
 		}
 
-		sub scmp(var ah: u32, var al: u32, var bh: u32, var bl: u32) -> i32 {
+		constexpr sub scmp(var ah: u32, var al: u32, var bh: u32, var bl: u32) -> i32 {
 			if (ah != bh)
 				return (cast<i32>(ah) < cast<i32>(bh) ? -1 : 1);
 			if (al != bl)
@@ -136,7 +136,7 @@ namespace std {
 		}
 
 		// n / d and n % d, unsigned (q and r may be null; d == 0: the CPU's division by zero).
-		sub udivmod(var nh: u32, var nl: u32, var dh: u32, var dl: u32, var q: U64*, var r: U64*) {
+		constexpr sub udivmod(var nh: u32, var nl: u32, var dh: u32, var dl: u32, var q: U64*, var r: U64*) {
 			var qh: u32 = 0;
 			var ql: u32 = 0;
 			var rh: u32 = 0;
@@ -196,7 +196,7 @@ namespace std {
 
 		// n / d and n % d, signed: the quotient truncated toward zero, the remainder with the
 		// dividend's sign (as for i32).
-		sub sdivmod(var nh: u32, var nl: u32, var dh: u32, var dl: u32, var q: U64*, var r: U64*) {
+		constexpr sub sdivmod(var nh: u32, var nl: u32, var dh: u32, var dl: u32, var q: U64*, var r: U64*) {
 			var nneg: bool = (nh & 0x80000000) != 0;
 			var dneg: bool = (dh & 0x80000000) != 0;
 			var n: U64;
@@ -217,7 +217,7 @@ namespace std {
 		}
 
 		// The magnitude in text (base 2 - 36), after an optional '-': buffer gets at most 66 bytes.
-		sub to_text(var h: u32, var l: u32, var negative: bool, var buffer: u8*, var base: u32) -> string {
+		constexpr sub to_text(var h: u32, var l: u32, var negative: bool, var buffer: u8*, var base: u32) -> string {
 			if (base < 2 or base > 36) {
 				*buffer = 0;
 				return buffer;
@@ -243,7 +243,7 @@ namespace std {
 
 		// Digits (base 2 - 36; base 16 also takes a 0x) into out, unsigned: false on an empty or
 		// invalid text, or a value over max (hi, lo).
-		sub from_text(var text: string, var base: u32, var maxh: u32, var maxl: u32, var out: U64*) -> bool {
+		constexpr sub from_text(var text: string, var base: u32, var maxh: u32, var maxl: u32, var out: U64*) -> bool {
 			if (not text or base < 2 or base > 36)
 				return false;
 			var p: u8* = text;
@@ -299,144 +299,144 @@ namespace std {
 		sub new(var o: I64) { this->hi = o.hi; this->lo = o.lo; }
 
 		// ---- Setting ----
-		inline sub set(var v: u32) -> U64* { this->hi = 0; this->lo = v; return this; }
-		inline sub set(var v: i32) -> U64* { this->hi = (v < 0 ? 0xFFFFFFFF : 0); this->lo = cast<u32>(v); return this; }
-		inline sub set(var hi: u32, var lo: u32) -> U64* { this->hi = hi; this->lo = lo; return this; }
-		inline sub set(var o: U64) -> U64* { this->hi = o.hi; this->lo = o.lo; return this; }
-		inline sub set(var o: I64) -> U64* { this->hi = o.hi; this->lo = o.lo; return this; }
+		inline constexpr sub set(var v: u32) -> U64* { this->hi = 0; this->lo = v; return this; }
+		inline constexpr sub set(var v: i32) -> U64* { this->hi = (v < 0 ? 0xFFFFFFFF : 0); this->lo = cast<u32>(v); return this; }
+		inline constexpr sub set(var hi: u32, var lo: u32) -> U64* { this->hi = hi; this->lo = lo; return this; }
+		inline constexpr sub set(var o: U64) -> U64* { this->hi = o.hi; this->lo = o.lo; return this; }
+		inline constexpr sub set(var o: I64) -> U64* { this->hi = o.hi; this->lo = o.lo; return this; }
 
 		// ---- Arithmetic ----
-		inline sub add(var v: u32) -> U64* { int64::add(this, 0, v); return this; }
-		inline sub add(var v: i32) -> U64* { int64::add(this, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v)); return this; }
-		inline sub add(var o: U64) -> U64* { int64::add(this, o.hi, o.lo); return this; }
-		inline sub subt(var v: u32) -> U64* { int64::subt(this, 0, v); return this; }
-		inline sub subt(var v: i32) -> U64* { int64::subt(this, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v)); return this; }
-		inline sub subt(var o: U64) -> U64* { int64::subt(this, o.hi, o.lo); return this; }
-		inline sub mul(var v: u32) -> U64* { int64::mul(this, 0, v); return this; }
-		inline sub mul(var v: i32) -> U64* { int64::mul(this, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v)); return this; }
-		inline sub mul(var o: U64) -> U64* { int64::mul(this, o.hi, o.lo); return this; }
-		inline sub div(var v: u32) -> U64* { int64::udivmod(this->hi, this->lo, 0, v, this, null); return this; }
-		inline sub div(var v: i32) -> U64* { int64::udivmod(this->hi, this->lo, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v), this, null); return this; }
-		inline sub div(var o: U64) -> U64* { int64::udivmod(this->hi, this->lo, o.hi, o.lo, this, null); return this; }
-		inline sub mod(var v: u32) -> U64* { int64::udivmod(this->hi, this->lo, 0, v, null, this); return this; }
-		inline sub mod(var v: i32) -> U64* { int64::udivmod(this->hi, this->lo, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v), null, this); return this; }
-		inline sub mod(var o: U64) -> U64* { int64::udivmod(this->hi, this->lo, o.hi, o.lo, null, this); return this; }
+		inline constexpr sub add(var v: u32) -> U64* { int64::add(this, 0, v); return this; }
+		inline constexpr sub add(var v: i32) -> U64* { int64::add(this, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v)); return this; }
+		inline constexpr sub add(var o: U64) -> U64* { int64::add(this, o.hi, o.lo); return this; }
+		inline constexpr sub subt(var v: u32) -> U64* { int64::subt(this, 0, v); return this; }
+		inline constexpr sub subt(var v: i32) -> U64* { int64::subt(this, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v)); return this; }
+		inline constexpr sub subt(var o: U64) -> U64* { int64::subt(this, o.hi, o.lo); return this; }
+		inline constexpr sub mul(var v: u32) -> U64* { int64::mul(this, 0, v); return this; }
+		inline constexpr sub mul(var v: i32) -> U64* { int64::mul(this, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v)); return this; }
+		inline constexpr sub mul(var o: U64) -> U64* { int64::mul(this, o.hi, o.lo); return this; }
+		inline constexpr sub div(var v: u32) -> U64* { int64::udivmod(this->hi, this->lo, 0, v, this, null); return this; }
+		inline constexpr sub div(var v: i32) -> U64* { int64::udivmod(this->hi, this->lo, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v), this, null); return this; }
+		inline constexpr sub div(var o: U64) -> U64* { int64::udivmod(this->hi, this->lo, o.hi, o.lo, this, null); return this; }
+		inline constexpr sub mod(var v: u32) -> U64* { int64::udivmod(this->hi, this->lo, 0, v, null, this); return this; }
+		inline constexpr sub mod(var v: i32) -> U64* { int64::udivmod(this->hi, this->lo, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v), null, this); return this; }
+		inline constexpr sub mod(var o: U64) -> U64* { int64::udivmod(this->hi, this->lo, o.hi, o.lo, null, this); return this; }
 		// this / d, and the remainder in rem (rem may be this' own: then it gets the remainder).
-		inline sub divmod(var d: u32, var rem: u32*) -> U64* { var r: U64; int64::udivmod(this->hi, this->lo, 0, d, this, &r); if (rem) *rem = r.lo; return this; }
-		inline sub divmod(var d: U64, var rem: U64*) -> U64* { var r: U64; int64::udivmod(this->hi, this->lo, d.hi, d.lo, this, &r); if (rem) { rem->hi = r.hi; rem->lo = r.lo; } return this; }
-		inline sub neg() -> U64* { this->hi = ~this->hi; this->lo = ~this->lo; int64::add(this, 0, 1); return this; }
-		inline sub inc() -> U64* { int64::add(this, 0, 1); return this; }
-		inline sub dec() -> U64* { int64::subt(this, 0, 1); return this; }
-		inline sub min(var v: u32) -> U64* { if (this->gt(v)) this->set(v); return this; }
-		inline sub min(var v: i32) -> U64* { if (this->gt(v)) this->set(v); return this; }
-		inline sub min(var o: U64) -> U64* { if (this->gt(o)) this->set(o); return this; }
-		inline sub max(var v: u32) -> U64* { if (this->lt(v)) this->set(v); return this; }
-		inline sub max(var v: i32) -> U64* { if (this->lt(v)) this->set(v); return this; }
-		inline sub max(var o: U64) -> U64* { if (this->lt(o)) this->set(o); return this; }
+		inline constexpr sub divmod(var d: u32, var rem: u32*) -> U64* { var r: U64; int64::udivmod(this->hi, this->lo, 0, d, this, &r); if (rem) *rem = r.lo; return this; }
+		inline constexpr sub divmod(var d: U64, var rem: U64*) -> U64* { var r: U64; int64::udivmod(this->hi, this->lo, d.hi, d.lo, this, &r); if (rem) { rem->hi = r.hi; rem->lo = r.lo; } return this; }
+		inline constexpr sub neg() -> U64* { this->hi = ~this->hi; this->lo = ~this->lo; int64::add(this, 0, 1); return this; }
+		inline constexpr sub inc() -> U64* { int64::add(this, 0, 1); return this; }
+		inline constexpr sub dec() -> U64* { int64::subt(this, 0, 1); return this; }
+		inline constexpr sub min(var v: u32) -> U64* { if (this->gt(v)) this->set(v); return this; }
+		inline constexpr sub min(var v: i32) -> U64* { if (this->gt(v)) this->set(v); return this; }
+		inline constexpr sub min(var o: U64) -> U64* { if (this->gt(o)) this->set(o); return this; }
+		inline constexpr sub max(var v: u32) -> U64* { if (this->lt(v)) this->set(v); return this; }
+		inline constexpr sub max(var v: i32) -> U64* { if (this->lt(v)) this->set(v); return this; }
+		inline constexpr sub max(var o: U64) -> U64* { if (this->lt(o)) this->set(o); return this; }
 
 		// ---- Bits ----
-		inline sub band(var v: u32) -> U64* { this->hi = 0; this->lo = this->lo & v; return this; }
-		inline sub band(var v: i32) -> U64* { this->hi = this->hi & (v < 0 ? 0xFFFFFFFF : 0); this->lo = this->lo & cast<u32>(v); return this; }
-		inline sub band(var o: U64) -> U64* { this->hi = this->hi & o.hi; this->lo = this->lo & o.lo; return this; }
-		inline sub bor(var v: u32) -> U64* { this->lo = this->lo | v; return this; }
-		inline sub bor(var v: i32) -> U64* { this->hi = this->hi | (v < 0 ? 0xFFFFFFFF : 0); this->lo = this->lo | cast<u32>(v); return this; }
-		inline sub bor(var o: U64) -> U64* { this->hi = this->hi | o.hi; this->lo = this->lo | o.lo; return this; }
-		inline sub bxor(var v: u32) -> U64* { this->lo = this->lo ^ v; return this; }
-		inline sub bxor(var v: i32) -> U64* { this->hi = this->hi ^ (v < 0 ? 0xFFFFFFFF : 0); this->lo = this->lo ^ cast<u32>(v); return this; }
-		inline sub bxor(var o: U64) -> U64* { this->hi = this->hi ^ o.hi; this->lo = this->lo ^ o.lo; return this; }
-		inline sub bnot() -> U64* { this->hi = ~this->hi; this->lo = ~this->lo; return this; }
-		inline sub shl(var n: u32) -> U64* { int64::shl(this, n); return this; }
-		inline sub shr(var n: u32) -> U64* { int64::shr(this, n, 0); return this; }
-		inline sub rol(var n: u32) -> U64* { int64::rol(this, n); return this; }
-		inline sub ror(var n: u32) -> U64* { int64::rol(this, 64 - (n & 63)); return this; }
+		inline constexpr sub band(var v: u32) -> U64* { this->hi = 0; this->lo = this->lo & v; return this; }
+		inline constexpr sub band(var v: i32) -> U64* { this->hi = this->hi & (v < 0 ? 0xFFFFFFFF : 0); this->lo = this->lo & cast<u32>(v); return this; }
+		inline constexpr sub band(var o: U64) -> U64* { this->hi = this->hi & o.hi; this->lo = this->lo & o.lo; return this; }
+		inline constexpr sub bor(var v: u32) -> U64* { this->lo = this->lo | v; return this; }
+		inline constexpr sub bor(var v: i32) -> U64* { this->hi = this->hi | (v < 0 ? 0xFFFFFFFF : 0); this->lo = this->lo | cast<u32>(v); return this; }
+		inline constexpr sub bor(var o: U64) -> U64* { this->hi = this->hi | o.hi; this->lo = this->lo | o.lo; return this; }
+		inline constexpr sub bxor(var v: u32) -> U64* { this->lo = this->lo ^ v; return this; }
+		inline constexpr sub bxor(var v: i32) -> U64* { this->hi = this->hi ^ (v < 0 ? 0xFFFFFFFF : 0); this->lo = this->lo ^ cast<u32>(v); return this; }
+		inline constexpr sub bxor(var o: U64) -> U64* { this->hi = this->hi ^ o.hi; this->lo = this->lo ^ o.lo; return this; }
+		inline constexpr sub bnot() -> U64* { this->hi = ~this->hi; this->lo = ~this->lo; return this; }
+		inline constexpr sub shl(var n: u32) -> U64* { int64::shl(this, n); return this; }
+		inline constexpr sub shr(var n: u32) -> U64* { int64::shr(this, n, 0); return this; }
+		inline constexpr sub rol(var n: u32) -> U64* { int64::rol(this, n); return this; }
+		inline constexpr sub ror(var n: u32) -> U64* { int64::rol(this, 64 - (n & 63)); return this; }
 		// Bit n (0 = the lowest).
-		inline sub bit(var n: u32) -> bool { n = n & 63; return ((n >= 32 ? this->hi >> (n - 32) : this->lo >> n) & 1) != 0; }
-		inline sub setb(var n: u32) -> U64* { n = n & 63; if (n >= 32) this->hi = this->hi | (1 << (n - 32)); else this->lo = this->lo | (1 << n); return this; }
-		inline sub clrb(var n: u32) -> U64* { n = n & 63; if (n >= 32) this->hi = this->hi & ~(1 << (n - 32)); else this->lo = this->lo & ~(1 << n); return this; }
+		readonly inline constexpr sub bit(var n: u32) -> bool { n = n & 63; return ((n >= 32 ? this->hi >> (n - 32) : this->lo >> n) & 1) != 0; }
+		inline constexpr sub setb(var n: u32) -> U64* { n = n & 63; if (n >= 32) this->hi = this->hi | (1 << (n - 32)); else this->lo = this->lo | (1 << n); return this; }
+		inline constexpr sub clrb(var n: u32) -> U64* { n = n & 63; if (n >= 32) this->hi = this->hi & ~(1 << (n - 32)); else this->lo = this->lo & ~(1 << n); return this; }
 		// Leading / trailing zero bits (64 for 0), set bits.
-		inline sub clz() -> u32 { return (this->hi != 0 ? int64::clz32(this->hi) : 32 + int64::clz32(this->lo)); }
-		inline sub ctz() -> u32 { return (this->lo != 0 ? int64::ctz32(this->lo) : 32 + int64::ctz32(this->hi)); }
-		inline sub popc() -> u32 { return int64::popc32(this->hi) + int64::popc32(this->lo); }
+		readonly inline constexpr sub clz() -> u32 { return (this->hi != 0 ? int64::clz32(this->hi) : 32 + int64::clz32(this->lo)); }
+		readonly inline constexpr sub ctz() -> u32 { return (this->lo != 0 ? int64::ctz32(this->lo) : 32 + int64::ctz32(this->hi)); }
+		readonly inline constexpr sub popc() -> u32 { return int64::popc32(this->hi) + int64::popc32(this->lo); }
 
 		// ---- Comparisons ----
-		inline sub cmp(var v: u32) -> i32 { return int64::ucmp(this->hi, this->lo, 0, v); }
-		inline sub cmp(var v: i32) -> i32 { return int64::ucmp(this->hi, this->lo, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v)); }
-		inline sub cmp(var o: U64) -> i32 { return int64::ucmp(this->hi, this->lo, o.hi, o.lo); }
-		inline sub eq(var v: u32) -> bool { return this->hi == 0 and this->lo == v; }
-		inline sub eq(var v: i32) -> bool { return this->hi == (v < 0 ? 0xFFFFFFFF : 0) and this->lo == cast<u32>(v); }
-		inline sub eq(var o: U64) -> bool { return this->hi == o.hi and this->lo == o.lo; }
-		inline sub ne(var v: u32) -> bool { return not this->eq(v); }
-		inline sub ne(var v: i32) -> bool { return not this->eq(v); }
-		inline sub ne(var o: U64) -> bool { return not this->eq(o); }
-		inline sub lt(var v: u32) -> bool { return this->cmp(v) < 0; }
-		inline sub lt(var v: i32) -> bool { return this->cmp(v) < 0; }
-		inline sub lt(var o: U64) -> bool { return this->cmp(o) < 0; }
-		inline sub le(var v: u32) -> bool { return this->cmp(v) <= 0; }
-		inline sub le(var v: i32) -> bool { return this->cmp(v) <= 0; }
-		inline sub le(var o: U64) -> bool { return this->cmp(o) <= 0; }
-		inline sub gt(var v: u32) -> bool { return this->cmp(v) > 0; }
-		inline sub gt(var v: i32) -> bool { return this->cmp(v) > 0; }
-		inline sub gt(var o: U64) -> bool { return this->cmp(o) > 0; }
-		inline sub ge(var v: u32) -> bool { return this->cmp(v) >= 0; }
-		inline sub ge(var v: i32) -> bool { return this->cmp(v) >= 0; }
-		inline sub ge(var o: U64) -> bool { return this->cmp(o) >= 0; }
-		inline sub is_zero() -> bool { return this->hi == 0 and this->lo == 0; }
+		readonly inline constexpr sub cmp(var v: u32) -> i32 { return int64::ucmp(this->hi, this->lo, 0, v); }
+		readonly inline constexpr sub cmp(var v: i32) -> i32 { return int64::ucmp(this->hi, this->lo, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v)); }
+		readonly inline constexpr sub cmp(var o: U64) -> i32 { return int64::ucmp(this->hi, this->lo, o.hi, o.lo); }
+		readonly inline constexpr sub eq(var v: u32) -> bool { return this->hi == 0 and this->lo == v; }
+		readonly inline constexpr sub eq(var v: i32) -> bool { return this->hi == (v < 0 ? 0xFFFFFFFF : 0) and this->lo == cast<u32>(v); }
+		readonly inline constexpr sub eq(var o: U64) -> bool { return this->hi == o.hi and this->lo == o.lo; }
+		readonly inline constexpr sub ne(var v: u32) -> bool { return not this->eq(v); }
+		readonly inline constexpr sub ne(var v: i32) -> bool { return not this->eq(v); }
+		readonly inline constexpr sub ne(var o: U64) -> bool { return not this->eq(o); }
+		readonly inline constexpr sub lt(var v: u32) -> bool { return this->cmp(v) < 0; }
+		readonly inline constexpr sub lt(var v: i32) -> bool { return this->cmp(v) < 0; }
+		readonly inline constexpr sub lt(var o: U64) -> bool { return this->cmp(o) < 0; }
+		readonly inline constexpr sub le(var v: u32) -> bool { return this->cmp(v) <= 0; }
+		readonly inline constexpr sub le(var v: i32) -> bool { return this->cmp(v) <= 0; }
+		readonly inline constexpr sub le(var o: U64) -> bool { return this->cmp(o) <= 0; }
+		readonly inline constexpr sub gt(var v: u32) -> bool { return this->cmp(v) > 0; }
+		readonly inline constexpr sub gt(var v: i32) -> bool { return this->cmp(v) > 0; }
+		readonly inline constexpr sub gt(var o: U64) -> bool { return this->cmp(o) > 0; }
+		readonly inline constexpr sub ge(var v: u32) -> bool { return this->cmp(v) >= 0; }
+		readonly inline constexpr sub ge(var v: i32) -> bool { return this->cmp(v) >= 0; }
+		readonly inline constexpr sub ge(var o: U64) -> bool { return this->cmp(o) >= 0; }
+		readonly inline constexpr sub is_zero() -> bool { return this->hi == 0 and this->lo == 0; }
 		// The value fits in a u32 (to_u32 returns the low word either way).
-		inline sub fits32() -> bool { return this->hi == 0; }
-		inline sub to_u32() -> u32 { return this->lo; }
+		readonly inline constexpr sub fits32() -> bool { return this->hi == 0; }
+		readonly inline constexpr sub to_u32() -> u32 { return this->lo; }
 
 		// ---- Text ----
 		// The value in text (base 2 - 36, lowercase digits): buffer needs 21 bytes in base 10,
 		// 65 in base 2. Returns buffer.
-		inline sub str(var buffer: u8*, var base: u32 = 10) -> string { return int64::to_text(this->hi, this->lo, false, buffer, base); }
+		readonly inline constexpr sub str(var buffer: u8*, var base: u32 = 10) -> string { return int64::to_text(this->hi, this->lo, false, buffer, base); }
 		// The value of a text of digits (base 16 also takes 0x): false (and no change) on an empty
 		// or invalid text, or over 2^64 - 1.
-		inline sub parse(var text: string, var base: u32 = 10) -> bool { return int64::from_text(text, base, 0xFFFFFFFF, 0xFFFFFFFF, this); }
+		inline constexpr sub parse(var text: string, var base: u32 = 10) -> bool { return int64::from_text(text, base, 0xFFFFFFFF, 0xFFFFFFFF, this); }
 
 		// ---- Copies ----
 		// new_<operation>: the operation on a copy, returned (this does not change).
-		inline sub new_add(var v: u32) -> U64 { var r: U64 = *this; r.add(v); return r; }
-		inline sub new_add(var v: i32) -> U64 { var r: U64 = *this; r.add(v); return r; }
-		inline sub new_add(var o: U64) -> U64 { var r: U64 = *this; r.add(o); return r; }
-		inline sub new_subt(var v: u32) -> U64 { var r: U64 = *this; r.subt(v); return r; }
-		inline sub new_subt(var v: i32) -> U64 { var r: U64 = *this; r.subt(v); return r; }
-		inline sub new_subt(var o: U64) -> U64 { var r: U64 = *this; r.subt(o); return r; }
-		inline sub new_mul(var v: u32) -> U64 { var r: U64 = *this; r.mul(v); return r; }
-		inline sub new_mul(var v: i32) -> U64 { var r: U64 = *this; r.mul(v); return r; }
-		inline sub new_mul(var o: U64) -> U64 { var r: U64 = *this; r.mul(o); return r; }
-		inline sub new_div(var v: u32) -> U64 { var r: U64 = *this; r.div(v); return r; }
-		inline sub new_div(var v: i32) -> U64 { var r: U64 = *this; r.div(v); return r; }
-		inline sub new_div(var o: U64) -> U64 { var r: U64 = *this; r.div(o); return r; }
-		inline sub new_mod(var v: u32) -> U64 { var r: U64 = *this; r.mod(v); return r; }
-		inline sub new_mod(var v: i32) -> U64 { var r: U64 = *this; r.mod(v); return r; }
-		inline sub new_mod(var o: U64) -> U64 { var r: U64 = *this; r.mod(o); return r; }
-		inline sub new_divmod(var d: u32, var rem: u32*) -> U64 { var r: U64 = *this; r.divmod(d, rem); return r; }
-		inline sub new_divmod(var d: U64, var rem: U64*) -> U64 { var r: U64 = *this; r.divmod(d, rem); return r; }
-		inline sub new_neg() -> U64 { var r: U64 = *this; r.neg(); return r; }
-		inline sub new_inc() -> U64 { var r: U64 = *this; r.inc(); return r; }
-		inline sub new_dec() -> U64 { var r: U64 = *this; r.dec(); return r; }
-		inline sub new_min(var v: u32) -> U64 { var r: U64 = *this; r.min(v); return r; }
-		inline sub new_min(var v: i32) -> U64 { var r: U64 = *this; r.min(v); return r; }
-		inline sub new_min(var o: U64) -> U64 { var r: U64 = *this; r.min(o); return r; }
-		inline sub new_max(var v: u32) -> U64 { var r: U64 = *this; r.max(v); return r; }
-		inline sub new_max(var v: i32) -> U64 { var r: U64 = *this; r.max(v); return r; }
-		inline sub new_max(var o: U64) -> U64 { var r: U64 = *this; r.max(o); return r; }
-		inline sub new_band(var v: u32) -> U64 { var r: U64 = *this; r.band(v); return r; }
-		inline sub new_band(var v: i32) -> U64 { var r: U64 = *this; r.band(v); return r; }
-		inline sub new_band(var o: U64) -> U64 { var r: U64 = *this; r.band(o); return r; }
-		inline sub new_bor(var v: u32) -> U64 { var r: U64 = *this; r.bor(v); return r; }
-		inline sub new_bor(var v: i32) -> U64 { var r: U64 = *this; r.bor(v); return r; }
-		inline sub new_bor(var o: U64) -> U64 { var r: U64 = *this; r.bor(o); return r; }
-		inline sub new_bxor(var v: u32) -> U64 { var r: U64 = *this; r.bxor(v); return r; }
-		inline sub new_bxor(var v: i32) -> U64 { var r: U64 = *this; r.bxor(v); return r; }
-		inline sub new_bxor(var o: U64) -> U64 { var r: U64 = *this; r.bxor(o); return r; }
-		inline sub new_bnot() -> U64 { var r: U64 = *this; r.bnot(); return r; }
-		inline sub new_shl(var n: u32) -> U64 { var r: U64 = *this; r.shl(n); return r; }
-		inline sub new_shr(var n: u32) -> U64 { var r: U64 = *this; r.shr(n); return r; }
-		inline sub new_rol(var n: u32) -> U64 { var r: U64 = *this; r.rol(n); return r; }
-		inline sub new_ror(var n: u32) -> U64 { var r: U64 = *this; r.ror(n); return r; }
-		inline sub new_setb(var n: u32) -> U64 { var r: U64 = *this; r.setb(n); return r; }
-		inline sub new_clrb(var n: u32) -> U64 { var r: U64 = *this; r.clrb(n); return r; }
+		readonly inline constexpr sub new_add(var v: u32) -> U64 { var r: U64 = *this; r.add(v); return r; }
+		readonly inline constexpr sub new_add(var v: i32) -> U64 { var r: U64 = *this; r.add(v); return r; }
+		readonly inline constexpr sub new_add(var o: U64) -> U64 { var r: U64 = *this; r.add(o); return r; }
+		readonly inline constexpr sub new_subt(var v: u32) -> U64 { var r: U64 = *this; r.subt(v); return r; }
+		readonly inline constexpr sub new_subt(var v: i32) -> U64 { var r: U64 = *this; r.subt(v); return r; }
+		readonly inline constexpr sub new_subt(var o: U64) -> U64 { var r: U64 = *this; r.subt(o); return r; }
+		readonly inline constexpr sub new_mul(var v: u32) -> U64 { var r: U64 = *this; r.mul(v); return r; }
+		readonly inline constexpr sub new_mul(var v: i32) -> U64 { var r: U64 = *this; r.mul(v); return r; }
+		readonly inline constexpr sub new_mul(var o: U64) -> U64 { var r: U64 = *this; r.mul(o); return r; }
+		readonly inline constexpr sub new_div(var v: u32) -> U64 { var r: U64 = *this; r.div(v); return r; }
+		readonly inline constexpr sub new_div(var v: i32) -> U64 { var r: U64 = *this; r.div(v); return r; }
+		readonly inline constexpr sub new_div(var o: U64) -> U64 { var r: U64 = *this; r.div(o); return r; }
+		readonly inline constexpr sub new_mod(var v: u32) -> U64 { var r: U64 = *this; r.mod(v); return r; }
+		readonly inline constexpr sub new_mod(var v: i32) -> U64 { var r: U64 = *this; r.mod(v); return r; }
+		readonly inline constexpr sub new_mod(var o: U64) -> U64 { var r: U64 = *this; r.mod(o); return r; }
+		readonly inline constexpr sub new_divmod(var d: u32, var rem: u32*) -> U64 { var r: U64 = *this; r.divmod(d, rem); return r; }
+		readonly inline constexpr sub new_divmod(var d: U64, var rem: U64*) -> U64 { var r: U64 = *this; r.divmod(d, rem); return r; }
+		readonly inline constexpr sub new_neg() -> U64 { var r: U64 = *this; r.neg(); return r; }
+		readonly inline constexpr sub new_inc() -> U64 { var r: U64 = *this; r.inc(); return r; }
+		readonly inline constexpr sub new_dec() -> U64 { var r: U64 = *this; r.dec(); return r; }
+		readonly inline constexpr sub new_min(var v: u32) -> U64 { var r: U64 = *this; r.min(v); return r; }
+		readonly inline constexpr sub new_min(var v: i32) -> U64 { var r: U64 = *this; r.min(v); return r; }
+		readonly inline constexpr sub new_min(var o: U64) -> U64 { var r: U64 = *this; r.min(o); return r; }
+		readonly inline constexpr sub new_max(var v: u32) -> U64 { var r: U64 = *this; r.max(v); return r; }
+		readonly inline constexpr sub new_max(var v: i32) -> U64 { var r: U64 = *this; r.max(v); return r; }
+		readonly inline constexpr sub new_max(var o: U64) -> U64 { var r: U64 = *this; r.max(o); return r; }
+		readonly inline constexpr sub new_band(var v: u32) -> U64 { var r: U64 = *this; r.band(v); return r; }
+		readonly inline constexpr sub new_band(var v: i32) -> U64 { var r: U64 = *this; r.band(v); return r; }
+		readonly inline constexpr sub new_band(var o: U64) -> U64 { var r: U64 = *this; r.band(o); return r; }
+		readonly inline constexpr sub new_bor(var v: u32) -> U64 { var r: U64 = *this; r.bor(v); return r; }
+		readonly inline constexpr sub new_bor(var v: i32) -> U64 { var r: U64 = *this; r.bor(v); return r; }
+		readonly inline constexpr sub new_bor(var o: U64) -> U64 { var r: U64 = *this; r.bor(o); return r; }
+		readonly inline constexpr sub new_bxor(var v: u32) -> U64 { var r: U64 = *this; r.bxor(v); return r; }
+		readonly inline constexpr sub new_bxor(var v: i32) -> U64 { var r: U64 = *this; r.bxor(v); return r; }
+		readonly inline constexpr sub new_bxor(var o: U64) -> U64 { var r: U64 = *this; r.bxor(o); return r; }
+		readonly inline constexpr sub new_bnot() -> U64 { var r: U64 = *this; r.bnot(); return r; }
+		readonly inline constexpr sub new_shl(var n: u32) -> U64 { var r: U64 = *this; r.shl(n); return r; }
+		readonly inline constexpr sub new_shr(var n: u32) -> U64 { var r: U64 = *this; r.shr(n); return r; }
+		readonly inline constexpr sub new_rol(var n: u32) -> U64 { var r: U64 = *this; r.rol(n); return r; }
+		readonly inline constexpr sub new_ror(var n: u32) -> U64 { var r: U64 = *this; r.ror(n); return r; }
+		readonly inline constexpr sub new_setb(var n: u32) -> U64 { var r: U64 = *this; r.setb(n); return r; }
+		readonly inline constexpr sub new_clrb(var n: u32) -> U64 { var r: U64 = *this; r.clrb(n); return r; }
 	};
 
 	// ============================================================================
@@ -452,101 +452,102 @@ namespace std {
 		sub new(var o: I64) { this->hi = o.hi; this->lo = o.lo; }
 		sub new(var o: U64) { this->hi = o.hi; this->lo = o.lo; }
 
-		inline sub u() -> U64* { return cast<U64*>(this); }
+		inline constexpr sub u() -> U64* { return cast<U64*>(this); }
+		readonly inline constexpr sub u() -> const U64* { return cast<const U64*>(this); }
 
 		// ---- Setting ----
-		inline sub set(var v: u32) -> I64* { this->hi = 0; this->lo = v; return this; }
-		inline sub set(var v: i32) -> I64* { this->hi = (v < 0 ? 0xFFFFFFFF : 0); this->lo = cast<u32>(v); return this; }
-		inline sub set(var hi: u32, var lo: u32) -> I64* { this->hi = hi; this->lo = lo; return this; }
-		inline sub set(var o: I64) -> I64* { this->hi = o.hi; this->lo = o.lo; return this; }
-		inline sub set(var o: U64) -> I64* { this->hi = o.hi; this->lo = o.lo; return this; }
+		inline constexpr sub set(var v: u32) -> I64* { this->hi = 0; this->lo = v; return this; }
+		inline constexpr sub set(var v: i32) -> I64* { this->hi = (v < 0 ? 0xFFFFFFFF : 0); this->lo = cast<u32>(v); return this; }
+		inline constexpr sub set(var hi: u32, var lo: u32) -> I64* { this->hi = hi; this->lo = lo; return this; }
+		inline constexpr sub set(var o: I64) -> I64* { this->hi = o.hi; this->lo = o.lo; return this; }
+		inline constexpr sub set(var o: U64) -> I64* { this->hi = o.hi; this->lo = o.lo; return this; }
 
 		// ---- Arithmetic ----
-		inline sub add(var v: u32) -> I64* { int64::add(this->u(), 0, v); return this; }
-		inline sub add(var v: i32) -> I64* { int64::add(this->u(), (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v)); return this; }
-		inline sub add(var o: I64) -> I64* { int64::add(this->u(), o.hi, o.lo); return this; }
-		inline sub subt(var v: u32) -> I64* { int64::subt(this->u(), 0, v); return this; }
-		inline sub subt(var v: i32) -> I64* { int64::subt(this->u(), (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v)); return this; }
-		inline sub subt(var o: I64) -> I64* { int64::subt(this->u(), o.hi, o.lo); return this; }
-		inline sub mul(var v: u32) -> I64* { int64::mul(this->u(), 0, v); return this; }
-		inline sub mul(var v: i32) -> I64* { int64::mul(this->u(), (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v)); return this; }
-		inline sub mul(var o: I64) -> I64* { int64::mul(this->u(), o.hi, o.lo); return this; }
-		inline sub div(var v: u32) -> I64* { int64::sdivmod(this->hi, this->lo, 0, v, this->u(), null); return this; }
-		inline sub div(var v: i32) -> I64* { int64::sdivmod(this->hi, this->lo, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v), this->u(), null); return this; }
-		inline sub div(var o: I64) -> I64* { int64::sdivmod(this->hi, this->lo, o.hi, o.lo, this->u(), null); return this; }
-		inline sub mod(var v: u32) -> I64* { int64::sdivmod(this->hi, this->lo, 0, v, null, this->u()); return this; }
-		inline sub mod(var v: i32) -> I64* { int64::sdivmod(this->hi, this->lo, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v), null, this->u()); return this; }
-		inline sub mod(var o: I64) -> I64* { int64::sdivmod(this->hi, this->lo, o.hi, o.lo, null, this->u()); return this; }
+		inline constexpr sub add(var v: u32) -> I64* { int64::add(this->u(), 0, v); return this; }
+		inline constexpr sub add(var v: i32) -> I64* { int64::add(this->u(), (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v)); return this; }
+		inline constexpr sub add(var o: I64) -> I64* { int64::add(this->u(), o.hi, o.lo); return this; }
+		inline constexpr sub subt(var v: u32) -> I64* { int64::subt(this->u(), 0, v); return this; }
+		inline constexpr sub subt(var v: i32) -> I64* { int64::subt(this->u(), (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v)); return this; }
+		inline constexpr sub subt(var o: I64) -> I64* { int64::subt(this->u(), o.hi, o.lo); return this; }
+		inline constexpr sub mul(var v: u32) -> I64* { int64::mul(this->u(), 0, v); return this; }
+		inline constexpr sub mul(var v: i32) -> I64* { int64::mul(this->u(), (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v)); return this; }
+		inline constexpr sub mul(var o: I64) -> I64* { int64::mul(this->u(), o.hi, o.lo); return this; }
+		inline constexpr sub div(var v: u32) -> I64* { int64::sdivmod(this->hi, this->lo, 0, v, this->u(), null); return this; }
+		inline constexpr sub div(var v: i32) -> I64* { int64::sdivmod(this->hi, this->lo, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v), this->u(), null); return this; }
+		inline constexpr sub div(var o: I64) -> I64* { int64::sdivmod(this->hi, this->lo, o.hi, o.lo, this->u(), null); return this; }
+		inline constexpr sub mod(var v: u32) -> I64* { int64::sdivmod(this->hi, this->lo, 0, v, null, this->u()); return this; }
+		inline constexpr sub mod(var v: i32) -> I64* { int64::sdivmod(this->hi, this->lo, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v), null, this->u()); return this; }
+		inline constexpr sub mod(var o: I64) -> I64* { int64::sdivmod(this->hi, this->lo, o.hi, o.lo, null, this->u()); return this; }
 		// this / d (toward zero), and the remainder (the dividend's sign) in rem.
-		inline sub divmod(var d: i32, var rem: i32*) -> I64* { var r: U64; int64::sdivmod(this->hi, this->lo, (d < 0 ? 0xFFFFFFFF : 0), cast<u32>(d), this->u(), &r); if (rem) *rem = cast<i32>(r.lo); return this; }
-		inline sub divmod(var d: I64, var rem: I64*) -> I64* { var r: U64; int64::sdivmod(this->hi, this->lo, d.hi, d.lo, this->u(), &r); if (rem) { rem->hi = r.hi; rem->lo = r.lo; } return this; }
-		inline sub neg() -> I64* { this->hi = ~this->hi; this->lo = ~this->lo; int64::add(this->u(), 0, 1); return this; }
-		inline sub abs() -> I64* { if (this->is_neg()) this->neg(); return this; }
-		inline sub inc() -> I64* { int64::add(this->u(), 0, 1); return this; }
-		inline sub dec() -> I64* { int64::subt(this->u(), 0, 1); return this; }
-		inline sub min(var v: u32) -> I64* { if (this->gt(v)) this->set(v); return this; }
-		inline sub min(var v: i32) -> I64* { if (this->gt(v)) this->set(v); return this; }
-		inline sub min(var o: I64) -> I64* { if (this->gt(o)) this->set(o); return this; }
-		inline sub max(var v: u32) -> I64* { if (this->lt(v)) this->set(v); return this; }
-		inline sub max(var v: i32) -> I64* { if (this->lt(v)) this->set(v); return this; }
-		inline sub max(var o: I64) -> I64* { if (this->lt(o)) this->set(o); return this; }
+		inline constexpr sub divmod(var d: i32, var rem: i32*) -> I64* { var r: U64; int64::sdivmod(this->hi, this->lo, (d < 0 ? 0xFFFFFFFF : 0), cast<u32>(d), this->u(), &r); if (rem) *rem = cast<i32>(r.lo); return this; }
+		inline constexpr sub divmod(var d: I64, var rem: I64*) -> I64* { var r: U64; int64::sdivmod(this->hi, this->lo, d.hi, d.lo, this->u(), &r); if (rem) { rem->hi = r.hi; rem->lo = r.lo; } return this; }
+		inline constexpr sub neg() -> I64* { this->hi = ~this->hi; this->lo = ~this->lo; int64::add(this->u(), 0, 1); return this; }
+		inline constexpr sub abs() -> I64* { if (this->is_neg()) this->neg(); return this; }
+		inline constexpr sub inc() -> I64* { int64::add(this->u(), 0, 1); return this; }
+		inline constexpr sub dec() -> I64* { int64::subt(this->u(), 0, 1); return this; }
+		inline constexpr sub min(var v: u32) -> I64* { if (this->gt(v)) this->set(v); return this; }
+		inline constexpr sub min(var v: i32) -> I64* { if (this->gt(v)) this->set(v); return this; }
+		inline constexpr sub min(var o: I64) -> I64* { if (this->gt(o)) this->set(o); return this; }
+		inline constexpr sub max(var v: u32) -> I64* { if (this->lt(v)) this->set(v); return this; }
+		inline constexpr sub max(var v: i32) -> I64* { if (this->lt(v)) this->set(v); return this; }
+		inline constexpr sub max(var o: I64) -> I64* { if (this->lt(o)) this->set(o); return this; }
 
 		// ---- Bits ----
-		inline sub band(var v: u32) -> I64* { this->hi = 0; this->lo = this->lo & v; return this; }
-		inline sub band(var v: i32) -> I64* { this->hi = this->hi & (v < 0 ? 0xFFFFFFFF : 0); this->lo = this->lo & cast<u32>(v); return this; }
-		inline sub band(var o: I64) -> I64* { this->hi = this->hi & o.hi; this->lo = this->lo & o.lo; return this; }
-		inline sub bor(var v: u32) -> I64* { this->lo = this->lo | v; return this; }
-		inline sub bor(var v: i32) -> I64* { this->hi = this->hi | (v < 0 ? 0xFFFFFFFF : 0); this->lo = this->lo | cast<u32>(v); return this; }
-		inline sub bor(var o: I64) -> I64* { this->hi = this->hi | o.hi; this->lo = this->lo | o.lo; return this; }
-		inline sub bxor(var v: u32) -> I64* { this->lo = this->lo ^ v; return this; }
-		inline sub bxor(var v: i32) -> I64* { this->hi = this->hi ^ (v < 0 ? 0xFFFFFFFF : 0); this->lo = this->lo ^ cast<u32>(v); return this; }
-		inline sub bxor(var o: I64) -> I64* { this->hi = this->hi ^ o.hi; this->lo = this->lo ^ o.lo; return this; }
-		inline sub bnot() -> I64* { this->hi = ~this->hi; this->lo = ~this->lo; return this; }
-		inline sub shl(var n: u32) -> I64* { int64::shl(this->u(), n); return this; }
+		inline constexpr sub band(var v: u32) -> I64* { this->hi = 0; this->lo = this->lo & v; return this; }
+		inline constexpr sub band(var v: i32) -> I64* { this->hi = this->hi & (v < 0 ? 0xFFFFFFFF : 0); this->lo = this->lo & cast<u32>(v); return this; }
+		inline constexpr sub band(var o: I64) -> I64* { this->hi = this->hi & o.hi; this->lo = this->lo & o.lo; return this; }
+		inline constexpr sub bor(var v: u32) -> I64* { this->lo = this->lo | v; return this; }
+		inline constexpr sub bor(var v: i32) -> I64* { this->hi = this->hi | (v < 0 ? 0xFFFFFFFF : 0); this->lo = this->lo | cast<u32>(v); return this; }
+		inline constexpr sub bor(var o: I64) -> I64* { this->hi = this->hi | o.hi; this->lo = this->lo | o.lo; return this; }
+		inline constexpr sub bxor(var v: u32) -> I64* { this->lo = this->lo ^ v; return this; }
+		inline constexpr sub bxor(var v: i32) -> I64* { this->hi = this->hi ^ (v < 0 ? 0xFFFFFFFF : 0); this->lo = this->lo ^ cast<u32>(v); return this; }
+		inline constexpr sub bxor(var o: I64) -> I64* { this->hi = this->hi ^ o.hi; this->lo = this->lo ^ o.lo; return this; }
+		inline constexpr sub bnot() -> I64* { this->hi = ~this->hi; this->lo = ~this->lo; return this; }
+		inline constexpr sub shl(var n: u32) -> I64* { int64::shl(this->u(), n); return this; }
 		// Arithmetic: the sign bit comes in at the top.
-		inline sub shr(var n: u32) -> I64* { int64::shr(this->u(), n, ((this->hi & 0x80000000) != 0 ? 0xFFFFFFFF : 0)); return this; }
-		inline sub rol(var n: u32) -> I64* { int64::rol(this->u(), n); return this; }
-		inline sub ror(var n: u32) -> I64* { int64::rol(this->u(), 64 - (n & 63)); return this; }
-		inline sub bit(var n: u32) -> bool { return this->u()->bit(n); }
-		inline sub setb(var n: u32) -> I64* { this->u()->setb(n); return this; }
-		inline sub clrb(var n: u32) -> I64* { this->u()->clrb(n); return this; }
-		inline sub clz() -> u32 { return this->u()->clz(); }
-		inline sub ctz() -> u32 { return this->u()->ctz(); }
-		inline sub popc() -> u32 { return this->u()->popc(); }
+		inline constexpr sub shr(var n: u32) -> I64* { int64::shr(this->u(), n, ((this->hi & 0x80000000) != 0 ? 0xFFFFFFFF : 0)); return this; }
+		inline constexpr sub rol(var n: u32) -> I64* { int64::rol(this->u(), n); return this; }
+		inline constexpr sub ror(var n: u32) -> I64* { int64::rol(this->u(), 64 - (n & 63)); return this; }
+		readonly inline constexpr sub bit(var n: u32) -> bool { return this->u()->bit(n); }
+		inline constexpr sub setb(var n: u32) -> I64* { this->u()->setb(n); return this; }
+		inline constexpr sub clrb(var n: u32) -> I64* { this->u()->clrb(n); return this; }
+		readonly inline constexpr sub clz() -> u32 { return this->u()->clz(); }
+		readonly inline constexpr sub ctz() -> u32 { return this->u()->ctz(); }
+		readonly inline constexpr sub popc() -> u32 { return this->u()->popc(); }
 
 		// ---- Comparisons ----
-		inline sub cmp(var v: u32) -> i32 { return int64::scmp(this->hi, this->lo, 0, v); }
-		inline sub cmp(var v: i32) -> i32 { return int64::scmp(this->hi, this->lo, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v)); }
-		inline sub cmp(var o: I64) -> i32 { return int64::scmp(this->hi, this->lo, o.hi, o.lo); }
-		inline sub eq(var v: u32) -> bool { return this->hi == 0 and this->lo == v; }
-		inline sub eq(var v: i32) -> bool { return this->hi == (v < 0 ? 0xFFFFFFFF : 0) and this->lo == cast<u32>(v); }
-		inline sub eq(var o: I64) -> bool { return this->hi == o.hi and this->lo == o.lo; }
-		inline sub ne(var v: u32) -> bool { return not this->eq(v); }
-		inline sub ne(var v: i32) -> bool { return not this->eq(v); }
-		inline sub ne(var o: I64) -> bool { return not this->eq(o); }
-		inline sub lt(var v: u32) -> bool { return this->cmp(v) < 0; }
-		inline sub lt(var v: i32) -> bool { return this->cmp(v) < 0; }
-		inline sub lt(var o: I64) -> bool { return this->cmp(o) < 0; }
-		inline sub le(var v: u32) -> bool { return this->cmp(v) <= 0; }
-		inline sub le(var v: i32) -> bool { return this->cmp(v) <= 0; }
-		inline sub le(var o: I64) -> bool { return this->cmp(o) <= 0; }
-		inline sub gt(var v: u32) -> bool { return this->cmp(v) > 0; }
-		inline sub gt(var v: i32) -> bool { return this->cmp(v) > 0; }
-		inline sub gt(var o: I64) -> bool { return this->cmp(o) > 0; }
-		inline sub ge(var v: u32) -> bool { return this->cmp(v) >= 0; }
-		inline sub ge(var v: i32) -> bool { return this->cmp(v) >= 0; }
-		inline sub ge(var o: I64) -> bool { return this->cmp(o) >= 0; }
-		inline sub is_zero() -> bool { return this->hi == 0 and this->lo == 0; }
-		inline sub is_neg() -> bool { return (this->hi & 0x80000000) != 0; }
+		readonly inline constexpr sub cmp(var v: u32) -> i32 { return int64::scmp(this->hi, this->lo, 0, v); }
+		readonly inline constexpr sub cmp(var v: i32) -> i32 { return int64::scmp(this->hi, this->lo, (v < 0 ? 0xFFFFFFFF : 0), cast<u32>(v)); }
+		readonly inline constexpr sub cmp(var o: I64) -> i32 { return int64::scmp(this->hi, this->lo, o.hi, o.lo); }
+		readonly inline constexpr sub eq(var v: u32) -> bool { return this->hi == 0 and this->lo == v; }
+		readonly inline constexpr sub eq(var v: i32) -> bool { return this->hi == (v < 0 ? 0xFFFFFFFF : 0) and this->lo == cast<u32>(v); }
+		readonly inline constexpr sub eq(var o: I64) -> bool { return this->hi == o.hi and this->lo == o.lo; }
+		readonly inline constexpr sub ne(var v: u32) -> bool { return not this->eq(v); }
+		readonly inline constexpr sub ne(var v: i32) -> bool { return not this->eq(v); }
+		readonly inline constexpr sub ne(var o: I64) -> bool { return not this->eq(o); }
+		readonly inline constexpr sub lt(var v: u32) -> bool { return this->cmp(v) < 0; }
+		readonly inline constexpr sub lt(var v: i32) -> bool { return this->cmp(v) < 0; }
+		readonly inline constexpr sub lt(var o: I64) -> bool { return this->cmp(o) < 0; }
+		readonly inline constexpr sub le(var v: u32) -> bool { return this->cmp(v) <= 0; }
+		readonly inline constexpr sub le(var v: i32) -> bool { return this->cmp(v) <= 0; }
+		readonly inline constexpr sub le(var o: I64) -> bool { return this->cmp(o) <= 0; }
+		readonly inline constexpr sub gt(var v: u32) -> bool { return this->cmp(v) > 0; }
+		readonly inline constexpr sub gt(var v: i32) -> bool { return this->cmp(v) > 0; }
+		readonly inline constexpr sub gt(var o: I64) -> bool { return this->cmp(o) > 0; }
+		readonly inline constexpr sub ge(var v: u32) -> bool { return this->cmp(v) >= 0; }
+		readonly inline constexpr sub ge(var v: i32) -> bool { return this->cmp(v) >= 0; }
+		readonly inline constexpr sub ge(var o: I64) -> bool { return this->cmp(o) >= 0; }
+		readonly inline constexpr sub is_zero() -> bool { return this->hi == 0 and this->lo == 0; }
+		readonly inline constexpr sub is_neg() -> bool { return (this->hi & 0x80000000) != 0; }
 		// -1, 0 or 1.
-		inline sub sign() -> i32 { return (this->is_neg() ? -1 : (this->is_zero() ? 0 : 1)); }
+		readonly inline constexpr sub sign() -> i32 { return (this->is_neg() ? -1 : (this->is_zero() ? 0 : 1)); }
 		// The value fits in an i32 (to_i32 returns the low word either way).
-		inline sub fits32() -> bool { return this->hi == ((this->lo & 0x80000000) != 0 ? 0xFFFFFFFF : 0); }
-		inline sub to_i32() -> i32 { return cast<i32>(this->lo); }
+		readonly inline constexpr sub fits32() -> bool { return this->hi == ((this->lo & 0x80000000) != 0 ? 0xFFFFFFFF : 0); }
+		readonly inline constexpr sub to_i32() -> i32 { return cast<i32>(this->lo); }
 
 		// ---- Text ----
 		// The value in text (base 2 - 36, with a '-'): buffer needs 21 bytes in base 10, 66 in base 2.
-		sub str(var buffer: u8*, var base: u32 = 10) -> string {
+		readonly constexpr sub str(var buffer: u8*, var base: u32 = 10) -> string {
 			var m: U64(*this);
 			if (this->is_neg())
 				m.neg();
@@ -554,7 +555,7 @@ namespace std {
 		}
 		// The value of a text of digits, with an optional '-' / '+' (base 16 also takes 0x): false
 		// (and no change) on an empty or invalid text, or outside -2^63 .. 2^63 - 1.
-		sub parse(var text: string, var base: u32 = 10) -> bool {
+		constexpr sub parse(var text: string, var base: u32 = 10) -> bool {
 			if (not text)
 				return false;
 			var negative: bool = (text[0] == '-');
@@ -575,48 +576,48 @@ namespace std {
 
 		// ---- Copies ----
 		// new_<operation>: the operation on a copy, returned (this does not change).
-		inline sub new_add(var v: u32) -> I64 { var r: I64 = *this; r.add(v); return r; }
-		inline sub new_add(var v: i32) -> I64 { var r: I64 = *this; r.add(v); return r; }
-		inline sub new_add(var o: I64) -> I64 { var r: I64 = *this; r.add(o); return r; }
-		inline sub new_subt(var v: u32) -> I64 { var r: I64 = *this; r.subt(v); return r; }
-		inline sub new_subt(var v: i32) -> I64 { var r: I64 = *this; r.subt(v); return r; }
-		inline sub new_subt(var o: I64) -> I64 { var r: I64 = *this; r.subt(o); return r; }
-		inline sub new_mul(var v: u32) -> I64 { var r: I64 = *this; r.mul(v); return r; }
-		inline sub new_mul(var v: i32) -> I64 { var r: I64 = *this; r.mul(v); return r; }
-		inline sub new_mul(var o: I64) -> I64 { var r: I64 = *this; r.mul(o); return r; }
-		inline sub new_div(var v: u32) -> I64 { var r: I64 = *this; r.div(v); return r; }
-		inline sub new_div(var v: i32) -> I64 { var r: I64 = *this; r.div(v); return r; }
-		inline sub new_div(var o: I64) -> I64 { var r: I64 = *this; r.div(o); return r; }
-		inline sub new_mod(var v: u32) -> I64 { var r: I64 = *this; r.mod(v); return r; }
-		inline sub new_mod(var v: i32) -> I64 { var r: I64 = *this; r.mod(v); return r; }
-		inline sub new_mod(var o: I64) -> I64 { var r: I64 = *this; r.mod(o); return r; }
-		inline sub new_divmod(var d: i32, var rem: i32*) -> I64 { var r: I64 = *this; r.divmod(d, rem); return r; }
-		inline sub new_divmod(var d: I64, var rem: I64*) -> I64 { var r: I64 = *this; r.divmod(d, rem); return r; }
-		inline sub new_neg() -> I64 { var r: I64 = *this; r.neg(); return r; }
-		inline sub new_abs() -> I64 { var r: I64 = *this; r.abs(); return r; }
-		inline sub new_inc() -> I64 { var r: I64 = *this; r.inc(); return r; }
-		inline sub new_dec() -> I64 { var r: I64 = *this; r.dec(); return r; }
-		inline sub new_min(var v: u32) -> I64 { var r: I64 = *this; r.min(v); return r; }
-		inline sub new_min(var v: i32) -> I64 { var r: I64 = *this; r.min(v); return r; }
-		inline sub new_min(var o: I64) -> I64 { var r: I64 = *this; r.min(o); return r; }
-		inline sub new_max(var v: u32) -> I64 { var r: I64 = *this; r.max(v); return r; }
-		inline sub new_max(var v: i32) -> I64 { var r: I64 = *this; r.max(v); return r; }
-		inline sub new_max(var o: I64) -> I64 { var r: I64 = *this; r.max(o); return r; }
-		inline sub new_band(var v: u32) -> I64 { var r: I64 = *this; r.band(v); return r; }
-		inline sub new_band(var v: i32) -> I64 { var r: I64 = *this; r.band(v); return r; }
-		inline sub new_band(var o: I64) -> I64 { var r: I64 = *this; r.band(o); return r; }
-		inline sub new_bor(var v: u32) -> I64 { var r: I64 = *this; r.bor(v); return r; }
-		inline sub new_bor(var v: i32) -> I64 { var r: I64 = *this; r.bor(v); return r; }
-		inline sub new_bor(var o: I64) -> I64 { var r: I64 = *this; r.bor(o); return r; }
-		inline sub new_bxor(var v: u32) -> I64 { var r: I64 = *this; r.bxor(v); return r; }
-		inline sub new_bxor(var v: i32) -> I64 { var r: I64 = *this; r.bxor(v); return r; }
-		inline sub new_bxor(var o: I64) -> I64 { var r: I64 = *this; r.bxor(o); return r; }
-		inline sub new_bnot() -> I64 { var r: I64 = *this; r.bnot(); return r; }
-		inline sub new_shl(var n: u32) -> I64 { var r: I64 = *this; r.shl(n); return r; }
-		inline sub new_shr(var n: u32) -> I64 { var r: I64 = *this; r.shr(n); return r; }
-		inline sub new_rol(var n: u32) -> I64 { var r: I64 = *this; r.rol(n); return r; }
-		inline sub new_ror(var n: u32) -> I64 { var r: I64 = *this; r.ror(n); return r; }
-		inline sub new_setb(var n: u32) -> I64 { var r: I64 = *this; r.setb(n); return r; }
-		inline sub new_clrb(var n: u32) -> I64 { var r: I64 = *this; r.clrb(n); return r; }
+		readonly inline constexpr sub new_add(var v: u32) -> I64 { var r: I64 = *this; r.add(v); return r; }
+		readonly inline constexpr sub new_add(var v: i32) -> I64 { var r: I64 = *this; r.add(v); return r; }
+		readonly inline constexpr sub new_add(var o: I64) -> I64 { var r: I64 = *this; r.add(o); return r; }
+		readonly inline constexpr sub new_subt(var v: u32) -> I64 { var r: I64 = *this; r.subt(v); return r; }
+		readonly inline constexpr sub new_subt(var v: i32) -> I64 { var r: I64 = *this; r.subt(v); return r; }
+		readonly inline constexpr sub new_subt(var o: I64) -> I64 { var r: I64 = *this; r.subt(o); return r; }
+		readonly inline constexpr sub new_mul(var v: u32) -> I64 { var r: I64 = *this; r.mul(v); return r; }
+		readonly inline constexpr sub new_mul(var v: i32) -> I64 { var r: I64 = *this; r.mul(v); return r; }
+		readonly inline constexpr sub new_mul(var o: I64) -> I64 { var r: I64 = *this; r.mul(o); return r; }
+		readonly inline constexpr sub new_div(var v: u32) -> I64 { var r: I64 = *this; r.div(v); return r; }
+		readonly inline constexpr sub new_div(var v: i32) -> I64 { var r: I64 = *this; r.div(v); return r; }
+		readonly inline constexpr sub new_div(var o: I64) -> I64 { var r: I64 = *this; r.div(o); return r; }
+		readonly inline constexpr sub new_mod(var v: u32) -> I64 { var r: I64 = *this; r.mod(v); return r; }
+		readonly inline constexpr sub new_mod(var v: i32) -> I64 { var r: I64 = *this; r.mod(v); return r; }
+		readonly inline constexpr sub new_mod(var o: I64) -> I64 { var r: I64 = *this; r.mod(o); return r; }
+		readonly inline constexpr sub new_divmod(var d: i32, var rem: i32*) -> I64 { var r: I64 = *this; r.divmod(d, rem); return r; }
+		readonly inline constexpr sub new_divmod(var d: I64, var rem: I64*) -> I64 { var r: I64 = *this; r.divmod(d, rem); return r; }
+		readonly inline constexpr sub new_neg() -> I64 { var r: I64 = *this; r.neg(); return r; }
+		readonly inline constexpr sub new_abs() -> I64 { var r: I64 = *this; r.abs(); return r; }
+		readonly inline constexpr sub new_inc() -> I64 { var r: I64 = *this; r.inc(); return r; }
+		readonly inline constexpr sub new_dec() -> I64 { var r: I64 = *this; r.dec(); return r; }
+		readonly inline constexpr sub new_min(var v: u32) -> I64 { var r: I64 = *this; r.min(v); return r; }
+		readonly inline constexpr sub new_min(var v: i32) -> I64 { var r: I64 = *this; r.min(v); return r; }
+		readonly inline constexpr sub new_min(var o: I64) -> I64 { var r: I64 = *this; r.min(o); return r; }
+		readonly inline constexpr sub new_max(var v: u32) -> I64 { var r: I64 = *this; r.max(v); return r; }
+		readonly inline constexpr sub new_max(var v: i32) -> I64 { var r: I64 = *this; r.max(v); return r; }
+		readonly inline constexpr sub new_max(var o: I64) -> I64 { var r: I64 = *this; r.max(o); return r; }
+		readonly inline constexpr sub new_band(var v: u32) -> I64 { var r: I64 = *this; r.band(v); return r; }
+		readonly inline constexpr sub new_band(var v: i32) -> I64 { var r: I64 = *this; r.band(v); return r; }
+		readonly inline constexpr sub new_band(var o: I64) -> I64 { var r: I64 = *this; r.band(o); return r; }
+		readonly inline constexpr sub new_bor(var v: u32) -> I64 { var r: I64 = *this; r.bor(v); return r; }
+		readonly inline constexpr sub new_bor(var v: i32) -> I64 { var r: I64 = *this; r.bor(v); return r; }
+		readonly inline constexpr sub new_bor(var o: I64) -> I64 { var r: I64 = *this; r.bor(o); return r; }
+		readonly inline constexpr sub new_bxor(var v: u32) -> I64 { var r: I64 = *this; r.bxor(v); return r; }
+		readonly inline constexpr sub new_bxor(var v: i32) -> I64 { var r: I64 = *this; r.bxor(v); return r; }
+		readonly inline constexpr sub new_bxor(var o: I64) -> I64 { var r: I64 = *this; r.bxor(o); return r; }
+		readonly inline constexpr sub new_bnot() -> I64 { var r: I64 = *this; r.bnot(); return r; }
+		readonly inline constexpr sub new_shl(var n: u32) -> I64 { var r: I64 = *this; r.shl(n); return r; }
+		readonly inline constexpr sub new_shr(var n: u32) -> I64 { var r: I64 = *this; r.shr(n); return r; }
+		readonly inline constexpr sub new_rol(var n: u32) -> I64 { var r: I64 = *this; r.rol(n); return r; }
+		readonly inline constexpr sub new_ror(var n: u32) -> I64 { var r: I64 = *this; r.ror(n); return r; }
+		readonly inline constexpr sub new_setb(var n: u32) -> I64 { var r: I64 = *this; r.setb(n); return r; }
+		readonly inline constexpr sub new_clrb(var n: u32) -> I64 { var r: I64 = *this; r.clrb(n); return r; }
 	};
 }

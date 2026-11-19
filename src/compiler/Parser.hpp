@@ -73,7 +73,7 @@ namespace dscript
 			Node* parseStatement(void);
 			Node* parseBlock(void);
 			Node* atomicBlock(Node* body, const SourcePos& pos);
-			Node* parseLocalStatic(const SourcePos& pos);
+			Node* parseLocalStatic(const SourcePos& pos, bool isStatic);
 			// A defer as the body of if / while / ...: it needs a block of its own (it is run when
 			// a block is left).
 			void requireBlockFor(const Node* body, const std::string& what);
@@ -114,6 +114,10 @@ namespace dscript
 			std::map<std::string, int> m_hoistedCount;
 			std::vector<std::map<std::string, std::string>> m_scopes;
 			int m_hoistScope { -1 };
+			// A local const's value being parsed: does it use the sub's variables (then it is a
+			// constant variable of the sub, not a hidden declaration)?
+			bool m_probeLocals { false };
+			bool m_usedLocal { false };
 			// The namespace being parsed (Bios::Text16, "" at the global scope), and the scope of the
 			// declarations being parsed (the namespace, or a struct's full name in its body).
 			std::string m_namespace;

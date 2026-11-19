@@ -1,0 +1,2 @@
+// expect-error: it points at a constant (const u8*): it cannot be changed through it
+sub main() { var p: const u8* = "text"; *p = 'T'; }

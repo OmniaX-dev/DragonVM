@@ -3083,9 +3083,12 @@ sub main() -> i32 {
 	expect(27, same_value(x.new_band(mask.new_bnot()), 0xF0, 0xF0) and same(&x, 0xFF, 0xFF) and same(x.band(mask.new_bnot()), 0xF0, 0xF0) and same(&mask, 0x0F, 0x0F));
 	o.set(9);
 	expect(28, same(x.set(1)->add(o.new_inc())->mul(o), 0, 99) and o.eq(9) and x.new_setb(40).new_clrb(0).new_bxor(1).eq(x.new_bor(cast<u32>(0)).new_add(x.new_band(0).new_setb(40))));
-	// The limits (struct constants: through their fields).
-	var umax: std::U64(std::UINT64_MAX.hi, std::UINT64_MAX.lo);
-	var imax: std::I64(std::INT64_MAX.hi, std::INT64_MAX.lo);
-	expect(29, umax.new_inc().is_zero() and umax.eq(-1) and imax.new_inc().is_neg() and imax.new_inc().new_dec().eq(imax) and not imax.is_neg());
+	// The limits (struct constants: their readonly subs; the new_ copies of constants are computed
+	// when compiling).
+	var umax = std::UINT64_MAX;
+	expect(29, std::UINT64_MAX.new_inc().is_zero() and std::UINT64_MAX.eq(-1) and std::INT64_MAX.new_inc().is_neg() and
+		std::INT64_MAX.new_inc().new_dec().eq(std::INT64_MAX) and not std::INT64_MAX.is_neg() and umax.add(1)->is_zero());
+	var buf2: u8[24];
+	expect(30, std::strcmp(std::INT64_MAX.str(buf2), "9223372036854775807") == 0 and std::strcmp(std::UINT64_MAX.new_shr(60).str(buf2), "15") == 0);
 	return g_failures;
 }

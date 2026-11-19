@@ -1,0 +1,2 @@
+// expect-error: 'total' is a constant (const): it cannot change
+sub main() { var n = 2; const total = n * 2; total += 1; }

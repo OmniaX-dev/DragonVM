@@ -364,9 +364,9 @@ namespace dscript
 			bool found = isDeclared(candidate);
 			if (found && !s.empty() && m_structs.count(s) > 0)
 			{
-				// In a struct: only its nested types (and what is in them), not its subs.
+				// In a struct: only its nested types (and what is in them) and constants, not its subs.
 				const std::string first = s + "::" + written.substr(0, written.find("::"));
-				found = m_structs.count(first) > 0 || m_enums.count(first) > 0;
+				found = m_structs.count(first) > 0 || m_enums.count(first) > 0 || m_consts.count(first) > 0;
 			}
 			if (found)
 				return candidate;
@@ -585,6 +585,10 @@ namespace dscript
 						}
 						declareName(d->name, d->pos, "a constant");
 						m_consts[d->name].decl = d;
+						// (A const whose value is not a compile-time constant is a variable: in the
+						// globals' order. A local constant: in its sub.)
+						if (d->constKind == 1 && d->hoistKind != 1)
+							m_globalDecls.push_back(d);
 					break;
 					case NodeKind::VarDecl:
 					{
@@ -598,6 +602,8 @@ namespace dscript
 						v->pos = d->pos;
 						v->defPos = d->namePos;
 						v->external = d->external != 0;
+						v->constKind = d->constKind;
+						v->isConst = d->constKind == 1;
 						m_globals[d->name] = v;
 						m_globalDecls.push_back(d);
 					}
@@ -613,7 +619,7 @@ namespace dscript
 						f->decl = d;
 						f->interrupt = (d->value & 1) != 0;
 						f->isInline = (d->value & 2) != 0 && !m_options.noInline;
-						f->external = d->external != 0 && d->a == nullptr;
+						f->external = d->external != 0 && (d->a == nullptr || d->constKind != 0);
 						f->defined = d->a != nullptr || f->external;
 						m_funcs[d->name].push_back(f);
 						m_funcList.push_back(f);
@@ -698,7 +704,7 @@ namespace dscript
 				error(ts->pos, "unknown type: " + written);
 			}
 			case TypeSyntax::Kind::Pointer:
-				return m_types.pointer(resolveType(ts->base));
+				return m_types.pointer(resolveType(ts->base), ts->constTarget);
 			case TypeSyntax::Kind::Array:
 			{
 				if (ts->count == nullptr)
@@ -752,6 +758,7 @@ namespace dscript
 			field.namePos = f->namePos;
 			field.isPrivate = f->isPrivate;
 			field.isReadonly = f->isReadonly;
+			field.isConst = f->constKind == 1;
 			field.type = resolveType(f->typeSyntax);
 			if (field.type->kind == Type::Kind::Void)
 				error(f->pos, "fields cannot be void");
@@ -791,6 +798,11 @@ namespace dscript
 	int64_t CodeGen::constExpr(Node* e, const std::string& what)
 	{
 		check(e);
+		if (!e->isConst && e->kind == NodeKind::Call && e->func != nullptr && e->func->decl->constKind != 0 && !m_ctWhy.empty())
+			error(e->pos, what + " must be a compile-time constant: " + e->func->decl->shortName + "(...) could not be evaluated when compiling (" + m_ctWhy + ")");
+		if (!e->isConst && e->kind == NodeKind::Ident && e->var != nullptr && e->var->isConst)
+			error(e->pos, what + " must be a compile-time constant: '" + (e->text.empty() ? shownName(e->name) : e->text) +
+				"' is computed when the program runs (a const whose value is not a constant: use constexpr values here)");
 		if (!e->isConst || !(e->type->isInteger() || e->type->isFloat() || e->type->kind == Type::Kind::Null))
 			error(e->pos, what + " must be a constant number");
 		return e->constValue;
@@ -801,8 +813,130 @@ namespace dscript
 		ConstInfo& c = m_consts[name];
 		if (c.resolved)
 			return c.value;
+		if (c.runtime)
+			error(usePos, "'" + shownName(name) + "' is not a compile-time constant (its value is computed when the program runs): "
+				"use constexpr values here");
 		if (c.resolving)
 			error(usePos, "constant '" + name + "' depends on itself");
+		try
+		{
+			return resolveConstValue(name);
+		}
+		catch (CompileError&)
+		{
+			c.resolving = false;
+			c.fields.clear();
+			c.type = nullptr;
+			throw;
+		}
+	}
+
+	void CodeGen::decideConst(const std::string& name)
+	{
+		ConstInfo& c = m_consts[name];
+		if (c.resolved || c.runtime)
+			return;
+		if (m_inDeclarations || c.decl->constKind != 1)
+		{
+			resolveConst(name, c.decl->pos);
+			return;
+		}
+		try
+		{
+			resolveConst(name, c.decl->pos);
+			return;
+		}
+		catch (CompileError&)
+		{
+			// Not a compile-time constant: a constant variable (its real errors come back below,
+			// as the variable's).
+		}
+		c.runtime = true;
+		Node* d = c.decl;
+		if (d->hoistKind == 1)
+			return;		// a local constant: computed where it is declared, at every call
+		VarInfo* v = new VarInfo();
+		v->name = d->name;
+		v->storage = VarInfo::Storage::Global;
+		v->isStatic = d->hoistKind == 2;
+		v->decl = d;
+		v->symbol = dataSymbol(d->name, v->isStatic);
+		v->pos = d->pos;
+		v->defPos = d->namePos;
+		v->external = d->external != 0;
+		v->isConst = true;
+		v->constKind = 1;
+		m_globals[d->name] = v;
+		typeGlobal(d, v);
+	}
+
+	VarInfo* CodeGen::constStorage(const std::string& name)
+	{
+		ConstInfo& c = m_consts[name];
+		if (c.storage != nullptr)
+			return c.storage;
+		VarInfo* v = new VarInfo();
+		v->name = name;
+		v->type = c.type;
+		v->storage = VarInfo::Storage::Global;
+		v->symbol = "__dsconst_" + symbolChars(name);
+		v->readOnly = true;
+		v->isConst = true;
+		v->isStatic = true;
+		v->decl = c.decl;
+		v->pos = c.decl->pos;
+		v->defPos = c.decl->namePos;
+		c.storage = v;
+		// Its bytes: the fields' values (by path).
+		std::vector<uint8_t> bytes(c.type->size(), 0);
+		std::function<void(StructInfo*, uint32_t, const std::string&)> l_fields = [&](StructInfo* info, uint32_t offset, const std::string& prefix) {
+			for (const StructField& f : info->fields)
+			{
+				if (f.type->kind == Type::Kind::Struct)
+					l_fields(f.type->structInfo, offset + f.offset, prefix + f.name + ".");
+				else if (f.type->isScalar())
+				{
+					auto it = c.fields.find(prefix + f.name);
+					const int64_t value = it != c.fields.end() ? it->second : 0;
+					for (uint32_t i = 0; i < f.type->size(); i++)
+						bytes[offset + f.offset + i] = (uint8_t)((uint64_t)value >> (8 * (f.type->size() - 1 - i)));
+				}
+			}
+		};
+		l_fields(c.type->structInfo, 0, "");
+		m_ctBlobs[v] = bytes;		// (compile-time evaluation reads it; in the program if code uses it)
+		m_lazyData.push_back(v);
+		return v;
+	}
+
+	bool CodeGen::hasConstFields(Type* t, std::string* which)
+	{
+		if (t->kind == Type::Kind::Array)
+			return hasConstFields(t->base, which);
+		if (t->kind != Type::Kind::Struct)
+			return false;
+		for (const StructField& f : t->structInfo->fields)
+		{
+			std::string inner;
+			if (f.isConst || hasConstFields(f.type, &inner))
+			{
+				if (which != nullptr)
+					*which = f.name + (inner.empty() ? "" : "." + inner);
+				return true;
+			}
+		}
+		return false;
+	}
+
+	bool CodeGen::constructing(const StructInfo* info)
+	{
+		FuncInfo* f = m_inline.empty() ? m_func : m_inline.back().func;
+		return f != nullptr && f->decl != nullptr && (f->decl->value & 4) != 0 && f->decl->shortName == "new" && f->decl->owner == info->decl;
+	}
+
+	int64_t CodeGen::resolveConstValue(const std::string& name)
+	{
+		ConstInfo& c = m_consts[name];
 		c.resolving = true;
 		Type* t = c.decl->typeSyntax ? resolveType(c.decl->typeSyntax) : nullptr;
 		if (c.decl->a != nullptr)
@@ -851,6 +985,19 @@ namespace dscript
 
 	void CodeGen::constStructValues(StructInfo* info, Node* init, const std::string& prefix, ConstInfo& c, const std::string& constName)
 	{
+		if (init != nullptr && init->kind != NodeKind::InitList && prefix.empty())
+		{
+			// A struct value computed when compiling (a constexpr sub's): its fields.
+			check(init, m_types.structType(info));
+			requireConvertible(init, m_types.structType(info), "in the value of constant '" + constName + "'");
+			if (init->kind == NodeKind::Ident && init->var != nullptr && m_ctBlobs.count(init->var) > 0)
+			{
+				ctFields(info, m_ctBlobs[init->var], 0, "", c);
+				return;
+			}
+			if (init->kind == NodeKind::Call && init->func != nullptr && init->func->decl->constKind != 0 && !m_ctWhy.empty())
+				error(init->pos, "constant '" + constName + "': " + init->func->decl->shortName + "(...) could not be evaluated when compiling (" + m_ctWhy + ")");
+		}
 		if (init != nullptr && init->kind != NodeKind::InitList)
 			error(init->pos, "a struct constant's value is a { ... } list (or nothing: the fields' defaults)");
 		if (init != nullptr && init->list.size() > info->fields.size())
@@ -906,7 +1053,9 @@ namespace dscript
 		// The name of a string constant -> that string literal.
 		if (e == nullptr || e->kind != NodeKind::Ident || lookupVar(e->name) != nullptr || m_consts.count(e->name) == 0)
 			return;
-		resolveConst(e->name, e->pos);
+		decideConst(e->name);
+		if (m_consts[e->name].runtime)
+			return;
 		const ConstInfo& c = m_consts[e->name];
 		if (!c.isString)
 			return;
@@ -947,7 +1096,9 @@ namespace dscript
 		{
 			if (lookupVar(e->name) != nullptr || m_consts.count(e->name) == 0)
 				return nullptr;
-			resolveConst(e->name, e->pos);
+			decideConst(e->name);
+			if (m_consts[e->name].runtime)
+				return nullptr;
 			ConstInfo& c = m_consts[e->name];
 			if (c.type == nullptr || c.type->kind != Type::Kind::Struct)
 				return nullptr;
@@ -1027,7 +1178,7 @@ namespace dscript
 	{
 		switch (t->kind)
 		{
-			case Type::Kind::Pointer: return mangle(t->base) + "p";
+			case Type::Kind::Pointer: return mangle(t->base) + (t->constTarget ? "c" : "p");
 			case Type::Kind::Array: return mangle(t->base) + "a" + std::to_string(t->count);
 			case Type::Kind::Struct:
 			{
@@ -1205,6 +1356,9 @@ namespace dscript
 			if (to->isVoidPointer()) return 2;
 			return -1;
 		}
+		// const T* -> T*: no (it would let the target change); T* -> const T*: yes.
+		if (f->kind == Type::Kind::Pointer && to->kind == Type::Kind::Pointer && f->constTarget && !to->constTarget)
+			return -1;
 		// int -> f32: implicit (worse than any int -> int, so overloads prefer the integer
 		// ones for integers); f32 -> anything else needs a cast.
 		if (f->isInteger() && to->isFloat())
@@ -1225,6 +1379,8 @@ namespace dscript
 			return 2;
 		if (f->kind == Type::Kind::Pointer && to->kind == Type::Kind::Pointer)
 		{
+			if (f->base == to->base)
+				return 1;		// (adding const)
 			if (to->isVoidPointer() || f->isVoidPointer())
 				return 1;
 			return -1;
@@ -1244,6 +1400,8 @@ namespace dscript
 			hint = " (use cast<" + to->name() + ">(...))";
 		else if (from->type && from->type->isFloat() && to->isInteger())
 			hint = " (use cast<" + to->name() + ">(...): it truncates toward zero)";
+		else if (from->type && from->type->isConstPointer() && to->kind == Type::Kind::Pointer && !to->constTarget)
+			hint = " (it points at a constant: " + to->name() + " would let it change; cast<" + to->name() + ">(...) if it really may)";
 		else if (from->type && from->type->isPointer() && to->isPointer())
 			hint = " (use cast<" + to->name() + ">(...))";
 		error(from->pos, "cannot convert " + fromName + " to " + to->name() + " " + context + hint);
@@ -1288,6 +1446,19 @@ namespace dscript
 		for (size_t i = 0; i < args.size(); i++)
 			argTypes += (i > 0 ? ", " : "") + (args[i]->type ? args[i]->type->name() : std::string("sub"));
 		argTypes += ")";
+		if (best == nullptr && !args.empty() && args[0]->type != nullptr && args[0]->type->isConstPointer() && args[0]->type->base->kind == Type::Kind::Struct)
+		{
+			// A method that may change its struct, on one that cannot change.
+			for (FuncInfo* f : funcs)
+			{
+				if ((f->decl->value & 12) == 4 && !f->type->params.empty() && f->type->params[0] == m_types.pointer(args[0]->type->base))
+				{
+					const std::string why = (args[0]->kind == NodeKind::Unary && args[0]->name == "&") ? args[0]->a->readOnlyWhy : "";
+					error(pos, "'" + f->decl->shortName + "' is not a readonly sub (it may change the " + args[0]->type->base->name() + "), and " +
+						(why.empty() ? "this one is reached through a const pointer" : why) + " (if it does not change it: readonly sub " + f->decl->shortName + "(...))");
+				}
+			}
+		}
 		if (best == nullptr)
 		{
 			std::string msg = "no sub '" + name + "' takes " + argTypes;
@@ -1306,6 +1477,8 @@ namespace dscript
 
 	void CodeGen::check(Node* e, Type* expected)
 	{
+		const bool placeWanted = m_placeWanted;		// (only for e itself)
+		m_placeWanted = false;
 		e->isConst = false;
 		e->constPtr = false;
 		e->lvalue = false;
@@ -1350,7 +1523,7 @@ namespace dscript
 			case NodeKind::Binary: checkBinary(e); break;
 			case NodeKind::Assign: checkAssign(e); break;
 			case NodeKind::Call: checkCall(e); break;
-			case NodeKind::Member: checkMember(e); break;
+			case NodeKind::Member: checkMember(e, placeWanted); break;
 			case NodeKind::Ternary:
 			{
 				check(e->a);
@@ -1366,6 +1539,8 @@ namespace dscript
 					e->type = (tb == tc ? tb : arithmeticType(tb, tc));
 				else if (tb == tc && tb->isScalar())
 					e->type = tb;
+				else if (samePointee(tb, tc))
+					e->type = m_types.pointer(tb->base, true);	// (one of them is const)
 				else if (tb->isPointer() && tc->kind == Type::Kind::Null)
 					e->type = tb;
 				else if (tc->isPointer() && tb->kind == Type::Kind::Null)
@@ -1398,6 +1573,11 @@ namespace dscript
 				e->readOnly = e->a->readOnly && e->a->type->kind == Type::Kind::Array;
 				if (e->readOnly)
 					e->readOnlyWhy = e->a->readOnlyWhy;
+				if (ta->constTarget)
+				{
+					e->readOnly = true;
+					e->readOnlyWhy = "it points at constants (" + ta->name() + "): they cannot be changed through it";
+				}
 			}
 			break;
 			case NodeKind::Cast:
@@ -1499,10 +1679,39 @@ namespace dscript
 			e->type = v->type;
 			e->lvalue = true;
 			e->readOnly = v->readOnly;
+			if (v->isConst && e->name != " ctor")
+			{
+				e->readOnly = true;
+				e->readOnlyWhy = "'" + (e->text.empty() ? shownName(e->name) : e->text) + "' is a constant (const): it cannot change";
+			}
+			if (v->ctValue)
+			{
+				// A struct value computed when compiling: like a call's result (its address: a copy).
+				e->lvalue = false;
+				e->readOnly = false;
+				e->readOnlyWhy.clear();
+			}
 			return;
 		}
 		if (m_consts.count(e->name) > 0)
 		{
+			const Node* cd = m_consts[e->name].decl;
+			if (cd->isPrivate && cd->owner != nullptr && m_structs.count(cd->owner->name) > 0 && !insideStruct(m_structs[cd->owner->name]))
+				error(e->pos, "'" + cd->shortName + "' is private to " + cd->owner->name + " (priv): only the subs of " + cd->owner->name + " can use it");
+			decideConst(e->name);
+			if (m_consts[e->name].runtime)
+			{
+				// (A global one is a variable.)
+				if (lookupVar(e->name) != nullptr)
+				{
+					checkIdent(e, expected);
+					return;
+				}
+				if (m_globals.count(e->name) > 0 && m_globals[e->name]->type == nullptr)
+					error(e->pos, "'" + shownName(e->name) + "' is used in its own declaration");
+				error(e->pos, "'" + (e->text.empty() ? shownName(e->name) : e->text) + "' is computed when its declaration runs " + ownerOf(m_consts[e->name].decl) +
+					": it can only be used after it, in that sub (not in its lambdas, nor where a compile-time constant is needed)");
+			}
 			e->constValue = resolveConst(e->name, e->pos);
 			if (m_options.index != nullptr)
 				indexName(e->pos, (e->text.empty() ? e->name : e->text), m_consts[e->name].decl->namePos, hoverConst(e->name));
@@ -1515,7 +1724,18 @@ namespace dscript
 				return;
 			}
 			if (m_consts[e->name].type->kind == Type::Kind::Struct)
-				error(e->pos, "'" + e->name + "' is a struct constant: it has no address, use its fields (" + e->name + ".field)");
+			{
+				// A struct constant as a value: its read-only copy in the program.
+				if (m_inDeclarations)
+					error(e->pos, "'" + e->name + "' is a struct constant: here only its fields can be used (" + e->name + ".field)");
+				VarInfo* v = constStorage(e->name);
+				e->var = v;
+				e->type = v->type;
+				e->lvalue = true;
+				e->readOnly = true;
+				e->readOnlyWhy = "'" + (e->text.empty() ? shownName(e->name) : e->text) + "' is a constant: it cannot change";
+				return;
+			}
 			e->type = m_consts[e->name].type;
 			e->isConst = true;
 			return;
@@ -1523,6 +1743,8 @@ namespace dscript
 		if (m_funcs.count(e->name) > 0)
 		{
 			const auto& funcs = m_funcs[e->name];
+			if (std::all_of(funcs.begin(), funcs.end(), [](FuncInfo* f) { return f->decl->constKind == 3; }))
+				error(e->pos, "'" + (e->text.empty() ? e->name : e->text) + "' is consteval: it only exists when compiling (call it; it has no address)");
 			if (funcs.size() == 1)
 				e->func = funcs[0];
 			else if (expected && expected->isFunction())
@@ -1578,15 +1800,17 @@ namespace dscript
 				e->type = e->a->type;
 				return;
 			}
+			m_placeWanted = true;		// (a field of a struct constant: in its read-only copy, not its value)
 			check(e->a);
 			// A struct returned by a call is in the caller's frame (its result temporary): a method
 			// may be called on it (a.copy().add(1)), its address taken.
-			const bool structResult = e->a->kind == NodeKind::Call && e->a->type != nullptr && e->a->type->kind == Type::Kind::Struct;
+			const bool structResult = (e->a->kind == NodeKind::Call && e->a->type != nullptr && e->a->type->kind == Type::Kind::Struct)
+				|| (e->a->kind == NodeKind::Ident && e->a->var != nullptr && e->a->var->ctValue);
 			if (!e->a->lvalue && !structResult)
 				error(e->pos, "& needs a variable (or something stored in memory)");
-			if (e->a->readOnly && !e->a->readOnlyWhy.empty())
-				error(e->pos, e->a->readOnlyWhy + " (a pointer to it could change it)");
-			e->type = m_types.pointer(e->a->type);
+			// Something that cannot change (a constant, a const field, through a const pointer):
+			// a const pointer to it. (Constant arrays: as before, their elements' pointers.)
+			e->type = m_types.pointer(e->a->type, e->a->readOnly && !e->a->readOnlyWhy.empty());
 			return;
 		}
 		check(e->a);
@@ -1601,6 +1825,11 @@ namespace dscript
 				error(e->pos, "cannot dereference a void* (cast it first)");
 			e->type = t->base;
 			e->lvalue = true;
+			if (t->constTarget)
+			{
+				e->readOnly = true;
+				e->readOnlyWhy = "it points at a constant (" + t->name() + "): it cannot be changed through it";
+			}
 			return;
 		}
 		if (op == "!")
@@ -1666,7 +1895,7 @@ namespace dscript
 		{
 			bool ok = (ta->isArithmetic() && tb->isArithmetic());
 			if (ta->isPointer() && tb->isPointer())
-				ok = (ta == tb || ta->kind == Type::Kind::Null || tb->kind == Type::Kind::Null || ta->isVoidPointer() || tb->isVoidPointer());
+				ok = (ta == tb || samePointee(ta, tb) || ta->kind == Type::Kind::Null || tb->kind == Type::Kind::Null || ta->isVoidPointer() || tb->isVoidPointer());
 			if ((ta->isFunction() || tb->isFunction()) && (op == "==" || op == "!="))
 				ok = (ta == tb || ta->kind == Type::Kind::Null || tb->kind == Type::Kind::Null);
 			if ((ta->isPointer() && tb->isInteger() && e->b->isConst && e->b->constValue == 0) || (tb->isPointer() && ta->isInteger() && e->a->isConst && e->a->constValue == 0))
@@ -1703,7 +1932,7 @@ namespace dscript
 		if (op == "-" && ta->kind == Type::Kind::Pointer && tb->isInteger()) { e->type = ta; return; }
 		if (op == "-" && ta->kind == Type::Kind::Pointer && tb->kind == Type::Kind::Pointer)
 		{
-			if (ta != tb)
+			if (ta != tb && !samePointee(ta, tb))
 				error(e->pos, "cannot subtract " + tb->name() + " from " + ta->name());
 			e->type = m_types.i32();
 			return;
@@ -1749,12 +1978,18 @@ namespace dscript
 	{
 		check(e->a);
 		Type* t = e->a->type;
+		if (!e->a->lvalue && e->a->kind == NodeKind::Ident && m_consts.count(e->a->name) > 0)
+			error(e->a->pos, "'" + (e->a->text.empty() ? shownName(e->a->name) : e->a->text) + "' is a constant: it cannot change");
 		if (!e->a->lvalue)
 			error(e->a->pos, "cannot assign to this (not a variable)");
 		if (e->a->readOnly)
 			error(e->a->pos, e->a->readOnlyWhy.empty() ? "cannot assign to a constant array" : e->a->readOnlyWhy);
 		if (t->kind == Type::Kind::Array)
 			error(e->pos, "cannot assign to an array (assign its elements)");
+		std::string constField;
+		if (t->kind == Type::Kind::Struct && hasConstFields(t, &constField))
+			error(e->pos, "cannot assign a whole " + t->name() + ": it has a const field (" + constField + "), set only when a struct is built "
+				"(initialize a new variable instead)");
 		if (e->name == "=")
 		{
 			check(e->b, t);
@@ -1846,9 +2081,17 @@ namespace dscript
 		Node* obj = callee->a;
 		if (obj->kind == NodeKind::Ident)
 			resolveTemplateIdent(obj);		// Array<u32>.make(), T.make()
-		// Enum.Member and Constant.field are not methods.
-		if (obj->kind == NodeKind::Ident && lookupVar(obj->name) == nullptr && (m_enums.count(obj->name) > 0 || m_consts.count(obj->name) > 0))
+		// Enum.Member and Constant.field are not methods (a struct constant's are: on its read-only
+		// copy; a const computed when the program runs is a variable).
+		if (obj->kind == NodeKind::Ident && lookupVar(obj->name) == nullptr && m_enums.count(obj->name) > 0)
 			return;
+		if (obj->kind == NodeKind::Ident && lookupVar(obj->name) == nullptr && m_consts.count(obj->name) > 0)
+		{
+			decideConst(obj->name);
+			const ConstInfo& c = m_consts[obj->name];
+			if (!c.runtime && (c.type == nullptr || c.type->kind != Type::Kind::Struct))
+				return;
+		}
 		auto l_isStatic = [&](const std::string& method) {
 			for (FuncInfo* f : m_funcs[method])
 			{
@@ -1992,6 +2235,14 @@ namespace dscript
 			// sizes, default values): a call there is not a constant.
 			for (FuncInfo* f : m_funcs[callee->name])
 			{
+				// (constexpr / consteval subs: their types now, they can be evaluated)
+				if (f->type == nullptr && f->decl->constKind != 0 && !f->instance && !f->resolving)
+				{
+					f->resolving = true;
+					try { resolveFunction(f); }
+					catch (CompileError&) { f->resolving = false; f->type = nullptr; f->paramNames.clear(); f->defaults.clear(); f->requiredParams = 0; throw; }
+					f->resolving = false;
+				}
 				if (f->type == nullptr)
 					error(e->pos, "a sub call is not a constant");
 			}
@@ -2024,6 +2275,7 @@ namespace dscript
 			e->type = f->type->base;
 			if (m_options.index != nullptr)
 				indexName(callee->pos, callee->text.empty() ? callee->name : callee->text, f->decl->namePos, hoverFunc(f));
+			ctFold(e, f);		// constexpr / consteval: its value, if it can be computed now
 			return;
 		}
 		check(callee);
@@ -2098,7 +2350,7 @@ namespace dscript
 		}
 	}
 
-	void CodeGen::checkMember(Node* e)
+	void CodeGen::checkMember(Node* e, bool placeWanted)
 	{
 		// Enum.Member
 		if (e->value == 0 && e->a->kind == NodeKind::Ident && lookupVar(e->a->name) == nullptr && m_enums.count(e->a->name) > 0)
@@ -2122,8 +2374,26 @@ namespace dscript
 			e->constValue = info.values[e->name];
 			return;
 		}
-		// Constant.field: the field's value.
-		if (e->value == 0)
+		// Struct.NAME: a constant of the struct (constexpr NAME = ... in it).
+		if (e->value == 0 && e->a->kind == NodeKind::Ident && lookupVar(e->a->name) == nullptr)
+		{
+			resolveTemplateIdent(e->a);
+			if (m_structs.count(e->a->name) > 0 && m_consts.count(e->a->name + "::" + e->name) > 0)
+			{
+				if (m_options.index != nullptr)
+					indexName(e->a->pos, writtenName(e->a), m_structs[e->a->name]->decl->namePos, hoverStruct(m_structs[e->a->name]));
+				e->kind = NodeKind::Ident;
+				e->name = e->a->name + "::" + e->name;
+				e->text = writtenName(e->a) + "." + shownName(e->name).substr(shownName(e->name).rfind(':') + 1);
+				e->pos = e->namePos;
+				e->resolved = true;
+				e->a = nullptr;
+				checkIdent(e, nullptr);
+				return;
+			}
+		}
+		// Constant.field: the field's value (its place in the constant's copy for &).
+		if (e->value == 0 && !placeWanted)
 		{
 			Type* st = nullptr;
 			std::string path;
@@ -2136,7 +2406,7 @@ namespace dscript
 					indexName(e->namePos, e->name, f->namePos, hoverField(st->structInfo, *f));
 				checkFieldAccess(st->structInfo, f, e->namePos);
 				if (f->type->kind == Type::Kind::Struct)
-					error(e->pos, "'" + e->name + "' is a struct field of a constant: it has no address, use its fields");
+					goto memberOfValue;		// (in the constant's read-only copy)
 				e->type = f->type;
 				e->constValue = c->fields[path + e->name];
 				if (f->type->isInteger())
@@ -2146,15 +2416,18 @@ namespace dscript
 				return;
 			}
 		}
+	memberOfValue:
 		check(e->a);
 		Type* t = e->a->type;
 		if (t == nullptr)
 			error(e->a->pos, "not a struct");
+		bool throughConst = false;
 		if (e->value == 1)
 		{
 			t = decay(t);
 			if (t->kind != Type::Kind::Pointer || t->base->kind != Type::Kind::Struct)
 				error(e->pos, "-> needs a pointer to a struct (found " + t->name() + ")");
+			throughConst = t->constTarget;
 			t = t->base;
 		}
 		else if (t->kind != Type::Kind::Struct)
@@ -2165,6 +2438,20 @@ namespace dscript
 		}
 		resolveStruct(t->structInfo, e->pos);
 		const StructField* f = t->structInfo->field(e->name);
+		if (f == nullptr && m_consts.count(t->structInfo->name + "::" + e->name) > 0)
+		{
+			// x.NAME / p->NAME: a constant of its struct.
+			const std::string written = e->name;
+			e->kind = NodeKind::Ident;
+			e->name = t->structInfo->name + "::" + e->name;
+			e->text = written;
+			e->pos = e->namePos;
+			e->resolved = true;
+			e->a = nullptr;
+			e->value = 0;
+			checkIdent(e, nullptr);
+			return;
+		}
 		if (f == nullptr)
 			error(e->namePos, (t->structInfo->anonymous ? t->structInfo->displayName() : "struct " + t->structInfo->name) + " has no field '" + e->name + "'");
 		if (m_options.index != nullptr && !m_discarding)
@@ -2179,6 +2466,19 @@ namespace dscript
 		{
 			e->readOnly = true;
 			e->readOnlyWhy = "'" + e->name + "' is readonly: only the subs of " + t->structInfo->name + " can change it";
+		}
+		if (throughConst)
+		{
+			e->readOnly = true;
+			e->readOnlyWhy = "'" + e->name + "' is reached through a const pointer (" + decay(e->a->type)->name() + "): it cannot be changed through it" +
+				(e->a->kind == NodeKind::Ident && e->a->name == "this" ? " (this sub is readonly)" : "");
+		}
+		// A const field: set when the struct is built (its default, { ... }, this->field in new).
+		if (f->isConst && !(constructing(t->structInfo) && e->value == 1 && e->a->kind == NodeKind::Ident && e->a->name == "this"))
+		{
+			e->readOnly = true;
+			e->readOnlyWhy = "'" + e->name + "' is a const field of " + t->structInfo->name + ": it gets its value when the struct is built "
+				"(its default value, { ... }, or this->" + e->name + " in new), then never changes";
 		}
 	}
 
@@ -3184,6 +3484,7 @@ namespace dscript
 		switch (v->storage)
 		{
 			case VarInfo::Storage::Global:
+				v->addressUsed = true;
 				if (isSharedData(v))
 				{
 					// The process's copy: table[slot] + the offset (see CodeGenOptions::shared).
@@ -3372,6 +3673,18 @@ namespace dscript
 				{
 					if (e->a->func || (e->a->kind == NodeKind::Ident && !e->a->var))
 						return gen(e->a);
+					if (e->a->kind == NodeKind::Ident && e->a->var->ctValue)
+					{
+						// A struct value computed when compiling: a copy in the frame (as a call's result).
+						const uint32_t size = e->a->var->type->size();
+						Reg d = alloc(e->pos);
+						emit("mov " + d + ", FP");
+						addImmediate(d, temporary(size));
+						Reg src = genAddr(e->a);
+						copyMemory(d, src, size);
+						release(src);
+						return d;
+					}
 					return genAddr(e->a);
 				}
 				Reg r = gen(e->a);
@@ -4119,6 +4432,7 @@ namespace dscript
 			v->pos = f->decl->list[i]->pos;
 			v->defPos = f->decl->list[i]->namePos;
 			v->param = true;
+			v->isConst = f->decl->list[i]->constKind == 1;
 			if (m_options.index != nullptr && !m_discarding)
 				indexName(v->defPos, v->name, v->defPos, hoverVar(v));
 			optRegister(v, false);
@@ -4489,7 +4803,9 @@ namespace dscript
 		v->storage = VarInfo::Storage::Local;
 		v->pos = s->pos;
 		v->defPos = s->namePos;
-		if (m_options.index != nullptr)
+		v->isConst = s->constKind == 1;
+		v->constKind = s->constKind;
+		if (m_options.index != nullptr && s->hoisted == nullptr)
 		{
 			indexName(v->defPos, v->name, v->defPos, hoverVar(v));
 			completeLocal(v);
@@ -4656,6 +4972,20 @@ namespace dscript
 				m_defers.back().push_back({ s->a, m_scopes, m_atomic });
 			break;
 			case NodeKind::VarDecl:
+				if (s->hoisted != nullptr)
+				{
+					// A local constant (hidden at the top level): nothing here if it is a compile-time
+					// constant; otherwise a constant variable, computed here at every call.
+					Node* h = s->hoisted;
+					if (h->kind == NodeKind::ConstDecl && m_consts.count(h->name) > 0)
+					{
+						decideConst(h->name);
+						if (!m_consts[h->name].runtime)
+							break;
+					}
+					else if (m_globals.count(h->name) == 0 || !m_globals[h->name]->localRuntime)
+						break;		// a constant array (its values are constants: in the program)
+				}
 				genLocalVar(s);
 			break;
 			case NodeKind::ExprStmt:
@@ -5035,6 +5365,8 @@ namespace dscript
 					const int base = (pos.line == low->pos.line ? low->pos.column + 1 : 1) + (int)a;
 					indexLow({ pos.file, pos.line, base + (int)i + 1 }, written, name);
 				}
+				if (!name.empty() && lookupVar(name) == nullptr && m_consts.count(name) > 0)
+					decideConst(name);		// (a const computed when the program runs: a variable)
 				VarInfo* v = name.empty() ? nullptr : lookupVar(name);
 				// $Constant.field.field...: a field of a struct constant (its value).
 				if (v == nullptr && member.empty() && m_consts.count(name) > 0 && j < line.size() && line[j] == '.'
@@ -5196,6 +5528,7 @@ namespace dscript
 				v->pos = f->decl->list[i]->pos;
 				v->defPos = f->decl->list[i]->namePos;
 				v->param = true;
+				v->isConst = f->decl->list[i]->constKind == 1;
 				if (m_options.index != nullptr)
 					indexName(v->defPos, v->name, v->defPos, hoverVar(v));
 				m_scopes.back()[v->name] = v;
@@ -5826,37 +6159,51 @@ namespace dscript
 		{
 			Node* d = m_globalDecls[gi];
 			const bool ok = attempt([&] {
-				VarInfo* v = m_globals[d->name];
-				if (m_options.rom && !v->readOnly && v->isStatic && !v->external)
-					error(d->pos, "--rom: '" + d->text + "' is a static variable (stored in the program, like a global), but the program is in ROM, "
-						"where nothing can change: use const for read-only values, and keep what changes in RAM (locals, or a pointer to a RAM address)");
-				if (m_options.rom && !v->readOnly && !v->external)
-					error(d->pos, "--rom: '" + d->name + "' is a global variable, but the program (and its data) is in ROM, "
-						"where nothing can change: use const for read-only values, and keep what changes in RAM (locals, or a pointer to a RAM address)");
-				Type* t = nullptr;
-				if (!v->external)
-					inferArraySize(d->typeSyntax, d->a, d->pos);
-				if (d->typeSyntax)
-					t = resolveType(d->typeSyntax);
-				else
+				if (d->kind == NodeKind::ConstDecl && m_globals.count(d->name) == 0)
 				{
-					check(d->a);
-					t = decay(d->a->type);
-					if (t == nullptr || t->kind == Type::Kind::Null || t->kind == Type::Kind::Void)
-						error(d->pos, "cannot tell the type of '" + d->name + "' (write var " + d->name + ": <type>)");
-					if (t->isInteger() && d->a->kind == NodeKind::IntLit && d->a->name != "u")
-						t = m_types.i32();
+					decideConst(d->name);		// (a variable: typed there)
+					return;
 				}
-				if (t->kind == Type::Kind::Void)
-					error(d->pos, "variables cannot be void");
-				if (t->kind == Type::Kind::Struct)
-					resolveStruct(t->structInfo, d->pos);
-				v->type = t;
+				VarInfo* v = m_globals[d->name];
+				if (v->type == nullptr)
+					typeGlobal(d, v);
 			});
-			if (!ok)
+			if (!ok && m_globals.count(d->name) > 0 && m_globals[d->name]->type == nullptr)
 				m_globals[d->name]->type = m_types.i32();
 		}
 		m_globalsTyped = m_globalDecls.size();
+	}
+
+	void CodeGen::typeGlobal(Node* d, VarInfo* v)
+	{
+		if (m_options.rom && v->isConst && !v->external)
+			error(d->pos, "--rom: '" + shownName(d->name) + "' is a constant whose value is computed when the program runs: it needs RAM, "
+				"but the program (and its data) is in ROM (use constexpr values, or keep it in RAM: a local, or a pointer to a RAM address)");
+		if (m_options.rom && !v->readOnly && v->isStatic && !v->external)
+			error(d->pos, "--rom: '" + d->text + "' is a static variable (stored in the program, like a global), but the program is in ROM, "
+				"where nothing can change: use const for read-only values, and keep what changes in RAM (locals, or a pointer to a RAM address)");
+		if (m_options.rom && !v->readOnly && !v->external)
+			error(d->pos, "--rom: '" + d->name + "' is a global variable, but the program (and its data) is in ROM, "
+				"where nothing can change: use const for read-only values, and keep what changes in RAM (locals, or a pointer to a RAM address)");
+		Type* t = nullptr;
+		if (!v->external)
+			inferArraySize(d->typeSyntax, d->a, d->pos);
+		if (d->typeSyntax)
+			t = resolveType(d->typeSyntax);
+		else
+		{
+			check(d->a);
+			t = decay(d->a->type);
+			if (t == nullptr || t->kind == Type::Kind::Null || t->kind == Type::Kind::Void)
+				error(d->pos, "cannot tell the type of '" + d->name + "' (write var " + d->name + ": <type>)");
+			if (t->isInteger() && d->a->kind == NodeKind::IntLit && d->a->name != "u")
+				t = m_types.i32();
+		}
+		if (t->kind == Type::Kind::Void)
+			error(d->pos, "variables cannot be void");
+		if (t->kind == Type::Kind::Struct)
+			resolveStruct(t->structInfo, d->pos);
+		v->type = t;
 	}
 
 	// Their values (from: the ones not generated yet: the static locals of template instances come
@@ -5874,6 +6221,8 @@ namespace dscript
 		{
 			Node* d = m_globalDecls[gi];
 			attempt([&] {
+				if (m_globals.count(d->name) == 0)
+					return;		// a compile-time constant (no storage)
 				VarInfo* v = m_globals[d->name];
 				if (v->external)
 					return;		// in its library (which initializes it)
@@ -5945,6 +6294,8 @@ namespace dscript
 					requireConvertible(init, p.type, "in the initialization of '" + d->name + "'");
 					if (p.type->kind == Type::Kind::Struct && decay(init->type) == p.type && !v->readOnly)
 					{
+						if (v->constKind == 3)
+							error(init->pos, "constinit '" + shownName(d->name) + "': its value must be known when compiling (this struct is copied when the program starts)");
 						pending.push_back(p);		// a struct value (a call's result, another struct): copied by __ds_init
 						continue;
 					}
@@ -5960,8 +6311,21 @@ namespace dscript
 						putBytes(bytes, p.offset, p.type->size(), init->isConst ? constConvert(init->constValue, decay(init->type), p.type) : init->constValue);
 					else
 					{
+						if (v->readOnly && (d->constKind == 2 || m_options.rom))
+							error(init->pos, "the values of a " + std::string(d->constKind == 2 ? "constexpr" : "constant") + " array must be constants or strings ('" +
+								shownName(d->name) + "' is stored in the program" + (m_options.rom ? ", in ROM" : "") + ")");
 						if (v->readOnly)
-							error(init->pos, "the values of a constant array must be constants or strings ('" + d->name + "' is stored in the program)");
+						{
+							// A const array whose values are computed when the program runs: a constant
+							// variable (in RAM; a local constant's: in its sub, at every call).
+							v->readOnly = false;
+							v->isConst = true;
+							if (d->hoistKind == 1)
+							{
+								v->localRuntime = true;
+								return;
+							}
+						}
 						pending.push_back(p);
 					}
 				}
@@ -5991,6 +6355,11 @@ namespace dscript
 						line += buf;
 					}
 				}
+				if (v->readOnly && pending.empty() && refs.empty())
+					m_ctBlobs[v] = bytes;		// (a constant array: compile-time evaluation reads it)
+				if (v->constKind == 3 && (!pending.empty() || d->c != nullptr))
+					error((pending.empty() ? d->c : pending[0].init)->pos, "constinit '" + shownName(d->name) + "': its value must be known when compiling "
+						"(this is computed when the program starts: use var, or constant values)");
 				(isSharedData(v) ? m_dataRW : m_data).push_back(line);
 				// Run time initializations.
 				for (const auto& p : pending)
@@ -6021,6 +6390,834 @@ namespace dscript
 		m_out = outerOut;
 		m_localCursor = outerCursor;
 		m_localMin = outerMin;
+	}
+
+	// =============================== Compile-time evaluation ================================
+	// constexpr / consteval subs (see CodeGen.hpp). The sub's statements are checked as usual
+	// (with its parameters and locals in m_scopes, as variables of this memory), then run here.
+	static const uint32_t CtBase = 0x10000000;
+	static const int64_t CtMaxSteps = 4000000;
+	static const int CtMaxDepth = 256;
+
+	// A value of type t as a 64-bit number (signed types sign-extended; f32: its bits).
+	static int64_t ctNumber(uint32_t value, const Type* t)
+	{
+		if (t != nullptr && t->isSigned())
+			return (int32_t)value;
+		return (int64_t)value;
+	}
+
+	void CodeGen::ctFail(const SourcePos& pos, const std::string& why)
+	{
+		throw CtFail { pos, why };
+	}
+
+	uint32_t CodeGen::ctAlloc(uint32_t size)
+	{
+		const uint32_t at = (uint32_t)alignUp((uint32_t)m_ct.size(), 4);
+		if (at + size > 0x01000000)
+			ctFail({}, "it needs more than 16 MiB of memory");
+		m_ct.resize(at + std::max<uint32_t>(size, 1), 0);
+		return CtBase + at;
+	}
+
+	uint32_t CodeGen::ctString(const std::string& text)
+	{
+		const uint32_t at = ctAlloc((uint32_t)text.size() + 1);
+		std::memcpy(&m_ct[at - CtBase], text.data(), text.size());
+		return at;
+	}
+
+	uint8_t* CodeGen::ctBytes(uint32_t addr, uint32_t size, const SourcePos& pos)
+	{
+		if (addr == 0)
+			ctFail(pos, "it uses a null pointer");
+		if (addr < CtBase || (uint64_t)addr - CtBase + size > m_ct.size())
+			ctFail(pos, "it uses memory outside its own variables (an address it got from outside, or past the end of a variable)");
+		return &m_ct[addr - CtBase];
+	}
+
+	uint32_t CodeGen::ctLoad(uint32_t addr, Type* t, const SourcePos& pos)
+	{
+		const uint32_t size = t->size();
+		const uint8_t* p = ctBytes(addr, size, pos);
+		uint32_t v = 0;
+		for (uint32_t i = 0; i < size; i++)
+			v = (v << 8) | p[i];
+		switch (t->kind)
+		{
+			case Type::Kind::I8: return (uint32_t)(int32_t)(int8_t)v;
+			case Type::Kind::I16: return (uint32_t)(int32_t)(int16_t)v;
+			case Type::Kind::Bool: return v != 0;
+			default: return v;
+		}
+	}
+
+	void CodeGen::ctStore(uint32_t addr, Type* t, uint32_t value, const SourcePos& pos)
+	{
+		const uint32_t size = t->size();
+		uint8_t* p = ctBytes(addr, size, pos);
+		for (uint32_t i = 0; i < size; i++)
+			p[i] = (uint8_t)(value >> (8 * (size - 1 - i)));
+	}
+
+	uint32_t CodeGen::ctConvert(uint32_t value, Type* from, Type* to)
+	{
+		if (to == nullptr || from == nullptr || to->kind == Type::Kind::Struct || to->kind == Type::Kind::Array || to->kind == Type::Kind::Void)
+			return value;
+		if (from->kind == Type::Kind::Null)
+			return 0;
+		if (to->isArithmetic() && (from->isArithmetic()))
+			return (uint32_t)constConvert(ctNumber(value, from), from, to);
+		if (to->kind == Type::Kind::Bool)
+			return value != 0;
+		return value;		// pointers, sub pointers
+	}
+
+	// The read-only data's copy in this evaluation's memory.
+	uint32_t CodeGen::ctBlobAddress(VarInfo* v)
+	{
+		auto it = m_ctGlobals.find(v);
+		if (it != m_ctGlobals.end())
+			return it->second;
+		const std::vector<uint8_t>& bytes = m_ctBlobs[v];
+		const uint32_t at = ctAlloc((uint32_t)bytes.size());
+		if (!bytes.empty())
+			std::memcpy(&m_ct[at - CtBase], bytes.data(), bytes.size());
+		m_ctGlobals[v] = at;
+		return at;
+	}
+
+	VarInfo* CodeGen::ctBlob(Type* t, const std::vector<uint8_t>& bytes)
+	{
+		const int n = ++m_ctBlobCount;
+		VarInfo* v = new VarInfo();
+		v->name = "__ct_value_" + std::to_string(n);
+		v->type = t;
+		v->storage = VarInfo::Storage::Global;
+		v->symbol = "__dsct_" + std::to_string(n);
+		v->readOnly = true;
+		v->isConst = true;
+		v->isStatic = true;
+		v->ctValue = true;
+		m_globals[v->name] = v;
+		m_ctBlobs[v] = bytes;
+		m_lazyData.push_back(v);
+		return v;
+	}
+
+	void CodeGen::ctFields(StructInfo* info, const std::vector<uint8_t>& bytes, uint32_t offset, const std::string& prefix, ConstInfo& c)
+	{
+		for (const StructField& f : info->fields)
+		{
+			if (f.type->kind == Type::Kind::Struct)
+			{
+				ctFields(f.type->structInfo, bytes, offset + f.offset, prefix + f.name + ".", c);
+				continue;
+			}
+			if (!f.type->isScalar())
+				error(c.decl->pos, "constant '" + shownName(c.decl->name) + "': field '" + prefix + f.name + "' is " + f.type->name() +
+					" (struct constants can only have integer, pointer and struct fields)");
+			uint32_t v = 0;
+			for (uint32_t i = 0; i < f.type->size(); i++)
+				v = (v << 8) | bytes[offset + f.offset + i];
+			if (f.type->isPointer() && v != 0)
+				error(c.decl->pos, "constant '" + shownName(c.decl->name) + "': field '" + prefix + f.name + "' points into memory that exists only when compiling");
+			c.fields[prefix + f.name] = wrapTo(ctNumber(f.type->kind == Type::Kind::I8 ? (uint32_t)(int32_t)(int8_t)v : f.type->kind == Type::Kind::I16 ? (uint32_t)(int32_t)(int16_t)v : v, f.type), f.type);
+		}
+	}
+
+	// An argument known when compiling: its value (structs, strings, constant arrays: copied into
+	// the memory, their address).
+	bool CodeGen::ctArgument(Node* a, Type* param, uint32_t& out)
+	{
+		if (a->isConst && a->type != nullptr && (a->type->isArithmetic() || a->type->kind == Type::Kind::Null))
+		{
+			out = ctConvert((uint32_t)a->constValue, decay(a->type), param);
+			return true;
+		}
+		if (a->constPtr)
+		{
+			out = 0;
+			return a->constValue == 0;
+		}
+		if (a->kind == NodeKind::StrLit)
+		{
+			out = ctString(a->text);
+			return true;
+		}
+		Node* x = (a->kind == NodeKind::Unary && a->name == "&") ? a->a : a;
+		if (x->kind == NodeKind::Ident && x->var != nullptr && m_ctBlobs.count(x->var) > 0)
+		{
+			out = ctBlobAddress(x->var);
+			return true;
+		}
+		return false;
+	}
+
+	// After checkCall chose f: if f is constexpr / consteval and the arguments are constants,
+	// the call is evaluated and replaced by its value.
+	void CodeGen::ctFold(Node* e, FuncInfo* f)
+	{
+		const int kind = f->decl->constKind;
+		if (kind == 0 || m_ctDepth > 0)
+			return;		// (while evaluating, calls are run, not folded)
+		FuncInfo* current = m_inline.empty() ? m_func : m_inline.back().func;
+		const bool inConsteval = current != nullptr && current->decl != nullptr && current->decl->constKind == 3;
+		auto l_cannot = [&](const std::string& why) {
+			m_ctWhy = why;
+			if (kind == 3 && !inConsteval)
+				error(e->pos, "'" + f->decl->shortName + "' is consteval (it must be evaluated when compiling), but " + why);
+		};
+		if (f->type->variadic != 0)
+		{
+			l_cannot("subs with ... are not evaluated when compiling");
+			return;
+		}
+		if (f->type->base->kind == Type::Kind::Void)
+		{
+			l_cannot("it returns nothing (it has no value to give)");
+			return;
+		}
+		m_ct.clear();
+		m_ctGlobals.clear();
+		m_ctSteps = 0;
+		std::vector<uint32_t> args;
+		const auto& params = f->type->params;
+		for (size_t i = 0; i < params.size(); i++)
+		{
+			Node* a = i < e->list.size() ? e->list[i] : f->defaults[i];
+			uint32_t v = 0;
+			if (a == nullptr || !ctArgument(a, params[i], v))
+			{
+				l_cannot("argument " + std::to_string(i + 1) + " (" + f->paramNames[i] + ") is not a compile-time constant");
+				return;
+			}
+			args.push_back(v);
+		}
+		uint32_t value = 0;
+		try
+		{
+			value = ctCall(f, args, e->pos);
+		}
+		catch (CtFail& fail)
+		{
+			const std::string where = fail.pos.file.empty() ? "" : " (" + posString(fail.pos) + ")";
+			l_cannot(fail.why + where);
+			return;
+		}
+		catch (CompileError& err)
+		{
+			if (kind == 3 && !inConsteval)
+				throw;
+			m_ctWhy = err.message;
+			return;		// (its errors are reported where it is compiled)
+		}
+		m_ctWhy.clear();
+		Type* ret = f->type->base;
+		if (ret->kind == Type::Kind::Struct)
+		{
+			// A struct value: read-only data (its pointer fields must be null).
+			std::vector<uint8_t> bytes(ret->size());
+			std::memcpy(bytes.data(), ctBytes(value, ret->size(), e->pos), ret->size());
+			std::function<bool(StructInfo*, uint32_t)> l_pointers = [&](StructInfo* info, uint32_t offset) {
+				for (const StructField& fl : info->fields)
+				{
+					if (fl.type->kind == Type::Kind::Struct && !l_pointers(fl.type->structInfo, offset + fl.offset))
+						return false;
+					if ((fl.type->isPointer() || fl.type->isFunction()) && (bytes[offset + fl.offset] | bytes[offset + fl.offset + 1] | bytes[offset + fl.offset + 2] | bytes[offset + fl.offset + 3]) != 0)
+						return false;
+				}
+				return true;
+			};
+			if (!l_pointers(ret->structInfo, 0))
+			{
+				l_cannot("its value has a pointer into memory that exists only when compiling");
+				return;
+			}
+			VarInfo* v = ctBlob(ret, bytes);
+			e->kind = NodeKind::Ident;
+			e->name = v->name;
+			e->resolved = true;
+			e->list.clear();
+			e->a = nullptr;
+			e->func = nullptr;
+			e->var = v;
+			e->type = ret;
+			e->lvalue = false;
+			e->readOnly = false;
+			return;
+		}
+		if (ret->isPointer() || ret->isFunction())
+		{
+			if (value != 0)
+			{
+				l_cannot("it returns a pointer (into memory that exists only when compiling)");
+				return;
+			}
+			e->constPtr = true;
+			e->constValue = 0;
+			return;
+		}
+		e->isConst = true;
+		e->constValue = ret->isFloat() ? (int64_t)value : wrapTo(ctNumber(value, ret), ret);
+	}
+
+	uint32_t CodeGen::ctCall(FuncInfo* f, const std::vector<uint32_t>& args, const SourcePos& pos)
+	{
+		if (f->decl->constKind == 0)
+			ctFail(pos, "it calls " + f->name + ", which is not constexpr");
+		if (f->decl->a == nullptr)
+			ctFail(pos, f->name + " has no body here");
+		if (f->type->variadic != 0)
+			ctFail(pos, "it calls " + f->name + ", which has ...");
+		if ((int)m_ctFuncs.size() >= CtMaxDepth)
+			ctFail(pos, "its calls go deeper than " + std::to_string(CtMaxDepth) + " (endless recursion?)");
+		// The generator's state: the sub being evaluated is the one checked.
+		struct Saved
+		{
+			CodeGen* cg; FuncInfo* func; std::vector<std::map<std::string, VarInfo*>> scopes; std::vector<InlineCall> inl; bool discarding; std::vector<SourcePos> scopeEnds;
+			~Saved() { cg->m_func = func; cg->m_scopes = std::move(scopes); cg->m_inline = std::move(inl); cg->m_discarding = discarding; cg->m_scopeEnds = std::move(scopeEnds); cg->m_ctFuncs.pop_back(); cg->m_ctDepth--; }
+		} saved { this, m_func, std::move(m_scopes), std::move(m_inline), m_discarding, std::move(m_scopeEnds) };
+		m_ctFuncs.push_back(f);
+		m_ctDepth++;
+		m_func = f;
+		m_scopes.clear();
+		m_inline.clear();
+		m_scopeEnds.clear();
+		m_discarding = true;
+		Type* ret = f->type->base;
+		const uint32_t result = ret->kind == Type::Kind::Struct ? ctAlloc(ret->size()) : 0;
+		const size_t mark = m_ct.size();
+		m_scopes.push_back({});
+		for (size_t i = 0; i < f->paramNames.size(); i++)
+		{
+			Type* t = f->type->params[i];
+			VarInfo* v = new VarInfo();
+			v->name = f->paramNames[i];
+			v->type = t;
+			v->storage = VarInfo::Storage::Local;
+			v->ct = true;
+			v->param = true;
+			v->isConst = f->decl->list[i]->constKind == 1;
+			v->offset = (int32_t)ctAlloc(t->size());
+			if (t->kind == Type::Kind::Struct)
+				std::memcpy(ctBytes((uint32_t)v->offset, t->size(), pos), ctBytes(args[i], t->size(), pos), t->size());
+			else
+				ctStore((uint32_t)v->offset, t, args[i], pos);
+			m_scopes.back()[v->name] = v;
+		}
+		uint32_t value = 0;
+		const CtFlow flow = ctStatement(f->decl->a, value);
+		if (flow != CtFlow::Return)
+			value = 0;		// (as at run time: no return gives 0)
+		if (ret->kind == Type::Kind::Struct)
+		{
+			if (flow == CtFlow::Return)
+				std::memcpy(ctBytes(result, ret->size(), pos), ctBytes(value, ret->size(), pos), ret->size());
+			value = result;
+		}
+		m_ct.resize(mark);
+		return value;
+	}
+
+	CodeGen::CtFlow CodeGen::ctStatement(Node* s, uint32_t& result)
+	{
+		if (++m_ctSteps > CtMaxSteps)
+			ctFail(s->pos, "it takes too long (more than " + std::to_string(CtMaxSteps) + " steps)");
+		switch (s->kind)
+		{
+			case NodeKind::Block:
+			{
+				const size_t mark = m_ct.size();
+				m_scopes.push_back({});
+				CtFlow flow = CtFlow::Normal;
+				for (Node* st : s->list)
+				{
+					if (st->kind == NodeKind::Defer)
+						ctFail(st->pos, "defer is not evaluated when compiling");
+					flow = ctStatement(st, result);
+					if (flow != CtFlow::Normal)
+						break;
+				}
+				m_scopes.pop_back();
+				if (flow != CtFlow::Return)
+					m_ct.resize(mark);		// (a returned struct may be in this block's memory)
+				return flow;
+			}
+			case NodeKind::VarDecl:
+				if (s->hoisted != nullptr)
+				{
+					Node* h = s->hoisted;
+					if (h->kind == NodeKind::ConstDecl && m_consts.count(h->name) > 0)
+					{
+						decideConst(h->name);
+						if (!m_consts[h->name].runtime)
+							return CtFlow::Normal;
+					}
+					else if (m_globals.count(h->name) == 0 || !m_globals[h->name]->localRuntime)
+						return CtFlow::Normal;
+				}
+				ctLocal(s);
+				return CtFlow::Normal;
+			case NodeKind::ExprStmt:
+				check(s->a);
+				ctEval(s->a);
+				return CtFlow::Normal;
+			case NodeKind::Assert:
+			{
+				check(s->a);
+				if (!constTruth(ctEval(s->a), decay(s->a->type)))
+					ctFail(s->pos, "assert(" + s->text + ") failed");
+				return CtFlow::Normal;
+			}
+			case NodeKind::If:
+			{
+				if (s->isConstexpr)
+				{
+					if (evalCondition(s->a, nullptr) != 0)
+						return ctStatement(s->b, result);
+					return s->c ? ctStatement(s->c, result) : CtFlow::Normal;
+				}
+				check(s->a);
+				if (!decay(s->a->type)->isScalar())
+					error(s->a->pos, "the condition must be an integer or a pointer");
+				if (constTruth(ctEval(s->a), decay(s->a->type)))
+					return ctStatement(s->b, result);
+				return s->c ? ctStatement(s->c, result) : CtFlow::Normal;
+			}
+			case NodeKind::While:
+			case NodeKind::DoWhile:
+			{
+				check(s->a);
+				const bool doWhile = s->kind == NodeKind::DoWhile;
+				while (doWhile || constTruth(ctEval(s->a), decay(s->a->type)))
+				{
+					const CtFlow flow = ctStatement(s->b, result);
+					if (flow == CtFlow::Return)
+						return flow;
+					if (flow == CtFlow::Break)
+						break;
+					if (doWhile && !constTruth(ctEval(s->a), decay(s->a->type)))
+						break;
+				}
+				return CtFlow::Normal;
+			}
+			case NodeKind::ForIn:
+				return ctStatement(forInLoop(s), result);
+			case NodeKind::For:
+			{
+				const size_t mark = m_ct.size();
+				m_scopes.push_back({});
+				if (s->a)
+					ctStatement(s->a, result);
+				if (s->b)
+					check(s->b);
+				if (s->c)
+					check(s->c);
+				CtFlow out = CtFlow::Normal;
+				while (!s->b || constTruth(ctEval(s->b), decay(s->b->type)))
+				{
+					const CtFlow flow = ctStatement(s->d, result);
+					if (flow == CtFlow::Return)
+					{
+						out = flow;
+						break;
+					}
+					if (flow == CtFlow::Break)
+						break;
+					if (s->c)
+						ctEval(s->c);
+				}
+				m_scopes.pop_back();
+				if (out != CtFlow::Return)
+					m_ct.resize(mark);
+				return out;
+			}
+			case NodeKind::Return:
+			{
+				FuncInfo* fn = m_ctFuncs.back();
+				Type* ret = fn->type->base;
+				if (s->a == nullptr)
+				{
+					if (ret->kind != Type::Kind::Void)
+						error(s->pos, fn->name + " must return a value (" + ret->name() + ")");
+					result = 0;
+					return CtFlow::Return;
+				}
+				if (ret->kind == Type::Kind::Void)
+					error(s->pos, fn->name + " returns void");
+				check(s->a, ret);
+				requireConvertible(s->a, ret, "in the return value");
+				result = ctConvert(ctEval(s->a), decay(s->a->type), ret);
+				return CtFlow::Return;
+			}
+			case NodeKind::Break: return CtFlow::Break;
+			case NodeKind::Continue: return CtFlow::Continue;
+			case NodeKind::LowBlock: ctFail(s->pos, "low blocks run only on the machine");
+			case NodeKind::DebugPrint: ctFail(s->pos, "debug_print runs only on the machine");
+			case NodeKind::Defer: ctFail(s->pos, "defer is not evaluated when compiling");
+			default: ctFail(s->pos, "this statement is not evaluated when compiling");
+		}
+	}
+
+	void CodeGen::ctLocal(Node* s)
+	{
+		if (m_scopes.back().count(s->name) > 0)
+			error(s->pos, "'" + s->name + "' is already declared in this block");
+		Type* t = nullptr;
+		inferArraySize(s->typeSyntax, s->a, s->pos);
+		if (s->typeSyntax)
+			t = resolveType(s->typeSyntax);
+		else
+		{
+			check(s->a);
+			t = decay(s->a->type);
+			if (t == nullptr || t->kind == Type::Kind::Null || t->kind == Type::Kind::Void)
+				error(s->pos, "cannot tell the type of '" + s->name + "' (write var " + s->name + ": <type>)");
+			if (t->isInteger() && s->a->kind == NodeKind::IntLit && s->a->name != "u")
+				t = m_types.i32();
+		}
+		if (t->kind == Type::Kind::Void)
+			error(s->pos, "variables cannot be void");
+		if (t->kind == Type::Kind::Struct)
+			resolveStruct(t->structInfo, s->pos);
+		VarInfo* v = new VarInfo();
+		v->name = s->name;
+		v->type = t;
+		v->storage = VarInfo::Storage::Local;
+		v->ct = true;
+		v->isConst = s->constKind == 1;
+		v->offset = (int32_t)ctAlloc(t->size());
+		std::vector<std::pair<int32_t, const StructField*>> defaults;
+		collectDefaults(t, 0, defaults);
+		for (const auto& d : defaults)
+		{
+			Node* init = d.second->init;
+			uint32_t value = 0;
+			if (init->kind == NodeKind::StrLit)
+				value = ctString(init->text);
+			else if (init->kind == NodeKind::Ident && init->func != nullptr)
+				ctFail(init->pos, "a sub pointer (field '" + d.second->name + "') is not evaluated when compiling");
+			else
+				value = (uint32_t)constConvert(init->constValue, decay(init->type), d.second->type);
+			ctStore((uint32_t)v->offset + (uint32_t)d.first, d.second->type, value, s->pos);
+		}
+		if (s->a)
+			ctInit((uint32_t)v->offset, t, s->a);
+		if (s->c)
+		{
+			m_scopes.push_back({ { " ctor", v } });
+			check(s->c);
+			ctEval(s->c);
+			m_scopes.pop_back();
+		}
+		m_scopes.back()[s->name] = v;
+	}
+
+	void CodeGen::ctInit(uint32_t addr, Type* type, Node* init)
+	{
+		foldStringConst(init);
+		if (type->kind == Type::Kind::Array && init->kind == NodeKind::StrLit)
+		{
+			if (type->base->size() != 1)
+				error(init->pos, "strings can only initialize u8 / i8 arrays");
+			if (init->text.size() + 1 > type->count && init->text.size() != type->count)
+				error(init->pos, "the string is longer than the array (" + std::to_string(type->count) + " bytes)");
+			const uint32_t n = std::min<uint32_t>((uint32_t)init->text.size() + 1, type->count);
+			uint8_t* p = ctBytes(addr, n, init->pos);
+			for (uint32_t i = 0; i < n; i++)
+				p[i] = i < init->text.size() ? (uint8_t)init->text[i] : 0;
+			return;
+		}
+		if (init->kind == NodeKind::InitList)
+		{
+			if (type->kind == Type::Kind::Array)
+			{
+				if (init->list.size() > type->count)
+					error(init->pos, "too many values for " + type->name());
+				for (size_t i = 0; i < init->list.size(); i++)
+					ctInit(addr + (uint32_t)i * type->base->size(), type->base, init->list[i]);
+				return;
+			}
+			if (type->kind == Type::Kind::Struct)
+			{
+				const auto& fields = type->structInfo->fields;
+				if (init->list.size() > fields.size())
+					error(init->pos, "too many values for struct " + type->name());
+				for (size_t i = 0; i < init->list.size(); i++)
+				{
+					checkFieldAccess(type->structInfo, &fields[i], init->list[i]->pos);
+					ctInit(addr + fields[i].offset, fields[i].type, init->list[i]);
+				}
+				return;
+			}
+			error(init->pos, "{ ... } initializes arrays and structs, not " + type->name());
+		}
+		check(init, type);
+		requireConvertible(init, type, "in the initialization");
+		if (type->kind == Type::Kind::Struct)
+		{
+			const uint32_t src = ctEval(init);
+			std::memmove(ctBytes(addr, type->size(), init->pos), ctBytes(src, type->size(), init->pos), type->size());
+			return;
+		}
+		if (type->kind == Type::Kind::Array)
+			error(init->pos, "arrays are initialized with { ... } or a string");
+		ctStore(addr, type, ctConvert(ctEval(init), decay(init->type), type), init->pos);
+	}
+
+	// a OP b (arithmetic, comparisons, bits) as the generated code computes it: the operands in
+	// `result`'s type (comparisons: in the type they are compared in).
+	uint32_t CodeGen::ctArith(const std::string& op, uint32_t a, Type* ta, uint32_t b, Type* tb, Type* result, const SourcePos& pos)
+	{
+		if (isComparison(op))
+		{
+			bool r = false;
+			if (ta->isFloat() || tb->isFloat())
+			{
+				const float x = f32Of(constConvert(ctNumber(a, ta), ta, m_types.f32())), y = f32Of(constConvert(ctNumber(b, tb), tb, m_types.f32()));
+				if (op == "==") r = x == y; else if (op == "!=") r = x != y; else if (op == "<") r = x < y;
+				else if (op == "<=") r = x <= y; else if (op == ">") r = x > y; else r = x >= y;
+				return r;
+			}
+			const bool isUnsigned = !ta->isInteger() || !tb->isInteger() || arithmeticType(ta, tb)->kind == Type::Kind::U32;
+			const int64_t x = isUnsigned ? (int64_t)a : (int64_t)(int32_t)a, y = isUnsigned ? (int64_t)b : (int64_t)(int32_t)b;
+			if (op == "==") r = x == y; else if (op == "!=") r = x != y; else if (op == "<") r = x < y;
+			else if (op == "<=") r = x <= y; else if (op == ">") r = x > y; else r = x >= y;
+			return r;
+		}
+		if (result->isFloat())
+		{
+			const float x = f32Of(constConvert(ctNumber(a, ta), ta, result)), y = f32Of(constConvert(ctNumber(b, tb), tb, result));
+			float r = 0.0f;
+			if (op == "+") r = x + y; else if (op == "-") r = x - y; else if (op == "*") r = x * y; else r = x / y;
+			return (uint32_t)bitsOf(r);
+		}
+		const bool isUnsigned = result->kind == Type::Kind::U32;
+		const int64_t x = isUnsigned ? (int64_t)a : (int64_t)(int32_t)a, y = isUnsigned ? (int64_t)b : (int64_t)(int32_t)b;
+		if ((op == "/" || op == "%") && y == 0)
+			ctFail(pos, "it divides by zero");
+		int64_t r = 0;
+		if (op == "+") r = x + y; else if (op == "-") r = x - y; else if (op == "*") r = x * y;
+		else if (op == "/") r = (!isUnsigned && x == INT32_MIN && y == -1) ? x : x / y;
+		else if (op == "%") r = (!isUnsigned && x == INT32_MIN && y == -1) ? 0 : x % y;
+		else if (op == "&") r = x & y; else if (op == "|") r = x | y; else if (op == "^") r = x ^ y;
+		else if (op == "<<") r = (int64_t)((uint32_t)x << (y & 31));
+		else if (op == ">>") r = isUnsigned ? (int64_t)((uint32_t)x >> (y & 31)) : (int64_t)((int32_t)x >> (y & 31));
+		return (uint32_t)wrapTo(r, result);
+	}
+
+	uint32_t CodeGen::ctEval(Node* e)
+	{
+		if (++m_ctSteps > CtMaxSteps)
+			ctFail(e->pos, "it takes too long (more than " + std::to_string(CtMaxSteps) + " steps)");
+		if (e->isConst && e->type != nullptr && (e->type->isArithmetic() || e->type->kind == Type::Kind::Null))
+			return (uint32_t)e->constValue;
+		if (e->constPtr)
+		{
+			if (e->constValue != 0)
+				ctFail(e->pos, "it uses a memory address (" + number(e->constValue) + "): memory exists only when the program runs");
+			return 0;
+		}
+		Type* t = e->type;
+		const bool aggregate = t != nullptr && (t->kind == Type::Kind::Struct || t->kind == Type::Kind::Array);
+		switch (e->kind)
+		{
+			case NodeKind::StrLit: return ctString(e->text);
+			case NodeKind::Null: return 0;
+			case NodeKind::Ident:
+			{
+				if (e->var == nullptr)
+					ctFail(e->pos, "it uses the sub '" + e->name + "' as a value");
+				const uint32_t addr = ctAddr(e);
+				return aggregate ? addr : ctLoad(addr, t, e->pos);
+			}
+			case NodeKind::Index:
+			case NodeKind::Member:
+			{
+				const uint32_t addr = ctAddr(e);
+				return aggregate ? addr : ctLoad(addr, t, e->pos);
+			}
+			case NodeKind::Unary:
+			{
+				const std::string& op = e->name;
+				if (op == "&")
+				{
+					if (e->a->func != nullptr || (e->a->kind == NodeKind::Ident && e->a->var == nullptr))
+						ctFail(e->pos, "it takes the address of a sub");
+					return ctAddr(e->a);
+				}
+				if (op == "*")
+				{
+					const uint32_t p = ctEval(e->a);
+					return aggregate ? p : ctLoad(p, t, e->pos);
+				}
+				Type* ta = decay(e->a->type);
+				const uint32_t v = ctEval(e->a);
+				if (op == "!")
+					return !constTruth(v, ta);
+				if (op == "-" && ta->isFloat())
+					return v ^ 0x80000000u;
+				const int64_t x = ctNumber(ctConvert(v, ta, t), t);
+				return (uint32_t)wrapTo(op == "-" ? -x : ~x, t);
+			}
+			case NodeKind::Binary:
+			{
+				const std::string& op = e->name;
+				Type* ta = decay(e->a->type);
+				Type* tb = decay(e->b->type);
+				if (op == "&&" || op == "||")
+				{
+					const bool x = constTruth(ctEval(e->a), ta);
+					if (op == "&&" ? !x : x)
+						return x;
+					return constTruth(ctEval(e->b), tb);
+				}
+				const uint32_t a = ctEval(e->a);
+				const uint32_t b = ctEval(e->b);
+				// Pointers: + / - an integer (scaled), the difference of two, comparisons.
+				if (ta->kind == Type::Kind::Pointer && tb->isInteger() && (op == "+" || op == "-"))
+					return a + (uint32_t)((op == "+" ? 1 : -1) * ctNumber(b, tb) * (int64_t)std::max<uint32_t>(ta->base->size(), 1));
+				if (tb->kind == Type::Kind::Pointer && ta->isInteger() && op == "+")
+					return b + (uint32_t)(ctNumber(a, ta) * (int64_t)std::max<uint32_t>(tb->base->size(), 1));
+				if (ta->kind == Type::Kind::Pointer && tb->kind == Type::Kind::Pointer && op == "-")
+					return (uint32_t)(int32_t)(((int64_t)a - (int64_t)b) / (int64_t)std::max<uint32_t>(ta->base->size(), 1));
+				return ctArith(op, a, ta, b, tb, t, e->pos);
+			}
+			case NodeKind::Assign:
+			{
+				Type* ta = e->a->type;
+				const uint32_t addr = ctAddr(e->a);
+				if (e->name == "=")
+				{
+					if (ta->kind == Type::Kind::Struct)
+					{
+						const uint32_t src = ctEval(e->b);
+						std::memmove(ctBytes(addr, ta->size(), e->pos), ctBytes(src, ta->size(), e->pos), ta->size());
+						return 0;
+					}
+					const uint32_t v = ctConvert(ctEval(e->b), decay(e->b->type), ta);
+					ctStore(addr, ta, v, e->pos);
+					return v;
+				}
+				const std::string op = e->name.substr(0, e->name.size() - 1);
+				Type* tb = decay(e->b->type);
+				const uint32_t cur = ctLoad(addr, ta, e->pos);
+				const uint32_t b = ctEval(e->b);
+				uint32_t v = 0;
+				if (ta->kind == Type::Kind::Pointer)
+					v = cur + (uint32_t)((op == "+" ? 1 : -1) * ctNumber(b, tb) * (int64_t)std::max<uint32_t>(ta->base->size(), 1));
+				else
+				{
+					Type* rt = ta->isFloat() || tb->isFloat() ? m_types.f32() : (op == "<<" || op == ">>") ? promote(ta) : arithmeticType(ta, tb);
+					v = ctConvert(ctArith(op, cur, ta, b, tb, rt, e->pos), rt, ta);
+				}
+				ctStore(addr, ta, v, e->pos);
+				return v;
+			}
+			case NodeKind::Ternary:
+			{
+				Node* chosen = constTruth(ctEval(e->a), decay(e->a->type)) ? e->b : e->c;
+				return ctConvert(ctEval(chosen), decay(chosen->type), t);
+			}
+			case NodeKind::Call:
+			{
+				if (e->vaBuiltin != 0)
+					ctFail(e->pos, "va_count / va_start / va_types are not evaluated when compiling");
+				FuncInfo* f = e->func;
+				if (f == nullptr)
+					ctFail(e->pos, "it calls a sub through a pointer");
+				std::vector<uint32_t> args;
+				const auto& params = f->type->params;
+				if (e->list.size() > params.size())
+					ctFail(e->pos, "it calls " + f->name + " with ... arguments");
+				for (size_t i = 0; i < params.size(); i++)
+				{
+					if (i < e->list.size())
+					{
+						Node* a = e->list[i];
+						uint32_t v = ctEval(a);
+						if (params[i]->kind == Type::Kind::Struct)
+						{
+							// (a copy: the callee changes its own)
+							const uint32_t copy = ctAlloc(params[i]->size());
+							std::memmove(ctBytes(copy, params[i]->size(), a->pos), ctBytes(v, params[i]->size(), a->pos), params[i]->size());
+							v = copy;
+						}
+						else
+							v = ctConvert(v, decay(a->type), params[i]);
+						args.push_back(v);
+					}
+					else
+					{
+						Node* d = f->defaults[i];
+						args.push_back(d->kind == NodeKind::StrLit ? ctString(d->text) : (uint32_t)constConvert(d->constValue, decay(d->type), params[i]));
+					}
+				}
+				return ctCall(f, args, e->pos);
+			}
+			case NodeKind::Cast:
+				return ctConvert(ctEval(e->a), decay(e->a->type), t);
+			case NodeKind::PreInc: case NodeKind::PreDec: case NodeKind::PostInc: case NodeKind::PostDec:
+			{
+				const uint32_t addr = ctAddr(e->a);
+				const uint32_t old = ctLoad(addr, t, e->pos);
+				const bool inc = e->kind == NodeKind::PreInc || e->kind == NodeKind::PostInc;
+				uint32_t v = 0;
+				if (t->kind == Type::Kind::Pointer)
+					v = old + (inc ? 1u : (uint32_t)-1) * std::max<uint32_t>(t->base->size(), 1);
+				else if (t->isFloat())
+					v = (uint32_t)bitsOf(f32Of(old) + (inc ? 1.0f : -1.0f));
+				else
+					v = (uint32_t)wrapTo(ctNumber(old, t) + (inc ? 1 : -1), t);
+				ctStore(addr, t, v, e->pos);
+				return (e->kind == NodeKind::PreInc || e->kind == NodeKind::PreDec) ? v : old;
+			}
+			default:
+				ctFail(e->pos, "this is not evaluated when compiling");
+		}
+	}
+
+	uint32_t CodeGen::ctAddr(Node* e)
+	{
+		switch (e->kind)
+		{
+			case NodeKind::Ident:
+			{
+				VarInfo* v = e->var;
+				if (v == nullptr)
+					ctFail(e->pos, "it uses the sub '" + e->name + "' as a value");
+				if (v->ct)
+					return (uint32_t)v->offset;
+				if (m_ctBlobs.count(v) > 0)
+					return ctBlobAddress(v);
+				ctFail(e->pos, "it uses '" + (e->text.empty() ? shownName(e->name) : e->text) + "', a variable that exists only when the program runs");
+			}
+			case NodeKind::Unary:
+				if (e->name == "*")
+					return ctEval(e->a);
+			break;
+			case NodeKind::Index:
+			{
+				Type* ta = decay(e->a->type);
+				const uint32_t base = ctEval(e->a);
+				return base + (uint32_t)(ctNumber(ctEval(e->b), decay(e->b->type)) * (int64_t)ta->base->size());
+			}
+			case NodeKind::Member:
+			{
+				Type* st = e->value == 1 ? decay(e->a->type)->base : e->a->type;
+				const StructField* f = st->structInfo->field(e->name);
+				const uint32_t base = ctEval(e->a);		// (a struct: its address; ->: the pointer)
+				return base + f->offset;
+			}
+			case NodeKind::Call:
+				if (e->type != nullptr && e->type->kind == Type::Kind::Struct)
+					return ctEval(e);
+			break;
+			default: break;
+		}
+		ctFail(e->pos, "this has no address when compiling");
 	}
 
 	// ===================================== Analysis =====================================
@@ -6075,7 +7272,9 @@ namespace dscript
 		else
 			where = v->readOnly ? "constant array" : "global";
 		const std::string size = (v->type && !v->type->isScalar()) ? bytes(v->type->size()) : "";
-		const std::string keyword = v->readOnly ? "const " : (hidden ? "static var " : "var ");
+		if (v->isConst && !v->readOnly && v->storage == VarInfo::Storage::Global)
+			where = (hidden ? "static, " + ownerOf(v->decl) : "global") + std::string(", computed when the program starts");
+		const std::string keyword = (v->readOnly || v->isConst) ? (hidden && !v->readOnly ? "static const " : "const ") : v->constKind == 3 ? "constinit " : (hidden ? "static var " : "var ");
 		return keyword + (hidden ? declaredName(v->decl) : v->name) + ": " + type + comment({ where, size });
 	}
 
@@ -6085,11 +7284,15 @@ namespace dscript
 		std::string s;
 		if (f->interrupt)
 			s += "interrupt ";
+		if (f->decl->constKind == 2)
+			s += "constexpr ";
+		else if (f->decl->constKind == 3)
+			s += "consteval ";
 		if ((f->decl->value & 2) != 0)
 			s += "inline ";
 		const bool method = (f->decl->value & 4) != 0;
 		const bool isStatic = (f->decl->value & 8) != 0;
-		s = std::string((f->decl->value & 16) != 0 ? "priv " : "") + (isStatic ? "static " : "") + s;
+		s = std::string((f->decl->value & 16) != 0 ? "priv " : "") + (isStatic ? "static " : "") + ((f->decl->value & 64) != 0 ? "readonly " : "") + s;
 		const size_t first = (method && !isStatic) ? 1 : 0;	// this is not shown
 		const std::string owner = (method && f->decl->owner) ? f->decl->owner->name : "";
 		s += lambda ? "sub(" : "sub " + (method ? owner + "." + f->decl->shortName : f->decl->name) + "(";
@@ -6097,7 +7300,8 @@ namespace dscript
 		{
 			for (size_t i = first; i < f->type->params.size() && i < f->paramNames.size(); i++)
 			{
-				s += (i > first ? ", " : "") + std::string("var ") + f->paramNames[i] + ": " + f->type->params[i]->name(true);
+				const bool constParam = i < f->decl->list.size() && f->decl->list[i]->constKind == 1;
+				s += (i > first ? ", " : "") + std::string(constParam ? "const " : "var ") + f->paramNames[i] + ": " + f->type->params[i]->name(true);
 				const Node* d = i < f->defaults.size() ? f->defaults[i] : nullptr;
 				if (d != nullptr)
 				{
@@ -6118,7 +7322,7 @@ namespace dscript
 	std::string CodeGen::hoverConst(const std::string& name)
 	{
 		const ConstInfo& c = m_consts[name];
-		const std::string head = "const " + (c.decl->text.empty() ? name : c.decl->text);
+		const std::string head = std::string(c.decl->constKind == 2 ? "constexpr " : "const ") + (c.decl->text.empty() ? name : c.decl->text);
 		const std::string note = comment({ ownerOf(c.decl) });
 		if (!c.resolved || c.type == nullptr)
 			return head + note;
@@ -6168,7 +7372,7 @@ namespace dscript
 			return s;
 		s += " {  // " + bytes(info->size) + "\n";
 		for (const StructField& f : info->fields)
-			s += std::string("\t") + (f.isPrivate ? "priv " : "") + (f.isReadonly ? "readonly " : "") + "var " + f.name + ": " + (f.type ? f.type->name(true) : "?") + ";  // +" + std::to_string(f.offset) + "\n";
+			s += std::string("\t") + (f.isPrivate ? "priv " : "") + (f.isReadonly ? "readonly " : "") + (f.isConst ? "const " : "var ") + f.name + ": " + (f.type ? f.type->name(true) : "?") + ";  // +" + std::to_string(f.offset) + "\n";
 		// Its methods and static subs (the signature, without the comment).
 		for (FuncInfo* f : m_funcList)
 		{
@@ -6187,7 +7391,7 @@ namespace dscript
 	std::string CodeGen::hoverField(StructInfo* info, const StructField& f)
 	{
 		const std::string owner = info->anonymous ? "struct { ... }" : info->name;
-		return std::string(f.isPrivate ? "priv " : "") + (f.isReadonly ? "readonly " : "") + "var " + f.name + ": " + (f.type ? f.type->name(true) : "?") + comment({ "field of " + owner + " at +" + std::to_string(f.offset),
+		return std::string(f.isPrivate ? "priv " : "") + (f.isReadonly ? "readonly " : "") + (f.isConst ? "const " : "var ") + f.name + ": " + (f.type ? f.type->name(true) : "?") + comment({ "field of " + owner + " at +" + std::to_string(f.offset),
 			f.type ? bytes(f.type->size()) : "" });
 	}
 
@@ -6462,7 +7666,7 @@ namespace dscript
 		std::vector<std::string> out;
 		for (FuncInfo* f : m_funcList)
 		{
-			if (!f->external && !f->instance && f->decl->name.rfind("__lambda_", 0) != 0 && !f->label.empty())
+			if (!f->external && !f->instance && f->decl->name.rfind("__lambda_", 0) != 0 && !f->label.empty() && f->decl->constKind != 3)
 				out.push_back(f->label);	// (inline subs without code: not in the image; template instances: each user has its own)
 		}
 		for (const auto& g : m_globals)
@@ -6482,9 +7686,9 @@ namespace dscript
 			case Type::Kind::Array:
 			{
 				std::string base = interfaceType(t->base);
-				if (t->base->kind == Type::Kind::Function)
+				if (t->base->kind == Type::Kind::Function || (t->constTarget && t->base->kind == Type::Kind::Pointer))
 					base = "(" + base + ")";
-				return base + (t->kind == Type::Kind::Pointer ? "*" : "[" + std::to_string(t->count) + "]");
+				return std::string(t->constTarget ? "const " : "") + base + (t->kind == Type::Kind::Pointer ? "*" : "[" + std::to_string(t->count) + "]");
 			}
 			case Type::Kind::Struct:
 			{
@@ -6594,13 +7798,14 @@ namespace dscript
 			if (f->type == nullptr)
 				return;
 			const bool method = (d->value & 4) != 0, isStatic = (d->value & 8) != 0;
-			const std::string head = indent + ((d->value & 16) != 0 ? "priv " : "") + (isStatic ? "static " : "") + (f->interrupt ? "interrupt " : "")
-				+ ((d->value & 2) != 0 ? "inline " : "") + "sub ";
+			const std::string head = indent + ((d->value & 16) != 0 ? "priv " : "") + (isStatic ? "static " : "") + ((d->value & 64) != 0 ? "readonly " : "")
+				+ (f->interrupt ? "interrupt " : "") + (d->constKind == 2 ? "constexpr " : d->constKind == 3 ? "consteval " : "") + ((d->value & 2) != 0 ? "inline " : "") + "sub ";
 			std::string text = head + declaredName(d) + "(";
 			const size_t first = (method && !isStatic) ? 1 : 0;
 			for (size_t i = first; i < f->type->params.size() && i < f->paramNames.size(); i++)
 			{
-				text += (i > first ? ", " : "") + std::string("var ") + f->paramNames[i] + ": " + interfaceType(f->type->params[i]);
+				const bool constParam = i < d->list.size() && d->list[i]->constKind == 1;
+				text += (i > first ? ", " : "") + std::string(constParam ? "const " : "var ") + f->paramNames[i] + ": " + interfaceType(f->type->params[i]);
 				if (i < f->defaults.size() && f->defaults[i] != nullptr)
 					text += " = " + interfaceValue(f->defaults[i], f->type->params[i]);
 			}
@@ -6609,13 +7814,13 @@ namespace dscript
 			text += ")";
 			if (f->type->base->kind != Type::Kind::Void)
 				text += " -> " + interfaceType(f->type->base);
-			if ((d->value & 2) == 0 || d->bodyTokens.empty())
+			if (((d->value & 2) == 0 && d->constKind == 0) || d->bodyTokens.empty())
 			{
 				l_line(text + ";", &d->namePos, head.size());
 				return;
 			}
-			// An inline sub: its body, each token where it is in the source (the lines and the
-			// columns, so that errors and the index point there).
+			// An inline (constexpr, consteval) sub: its body, each token where it is in the source
+			// (the lines and the columns, so that errors and the index point there).
 			std::string line = text;
 			SourcePos linePos = d->namePos;
 			size_t lineName = head.size();
@@ -6678,33 +7883,6 @@ namespace dscript
 			if (!text.empty())
 				l_line(indent + text, &linePos, indent.size());
 		};
-		std::function<void(Node*, const std::string&)> l_struct = [&](Node* d, const std::string& indent) {
-			StructInfo* info = m_structs[d->name];
-			const std::string head = indent + (d->isPrivate ? "priv " : "") + "struct ";
-			l_line(head + declaredName(d) + " {", &d->namePos, head.size());
-			for (const StructField& f : info->fields)
-			{
-				const std::string h = indent + "\t" + (f.isPrivate ? "priv " : "") + (f.isReadonly ? "readonly " : "") + "var ";
-				l_line(h + f.name + ": " + interfaceType(f.type) + (f.init != nullptr ? " = " + interfaceValue(f.init, f.type) : "") + ";", &f.namePos, h.size());
-			}
-			for (Node* n : m_program->list)
-			{
-				if (n->owner != d || n->external != 0 || !n->text.empty() || n->name.rfind("__lambda_", 0) == 0)
-					continue;
-				if (n->kind == NodeKind::StructDecl && m_structs.count(n->name) > 0)
-					l_struct(n, indent + "\t");
-				else if (n->kind == NodeKind::EnumDecl && m_enums.count(n->name) > 0)
-					l_enum(n, indent + "\t");
-				else if (n->kind == NodeKind::FuncDecl)
-				{
-					if (FuncInfo* f = l_func(n))
-						l_sub(f, indent + "\t");
-				}
-				else if (n->kind == NodeKind::TemplateDecl)
-					l_template(n, indent + "\t");		// (a method template)
-			}
-			l_line(indent + "}");
-		};
 		// A struct constant's value: its fields (up to the first private one: { ... } cannot set
 		// those outside the struct, they keep their defaults).
 		std::function<std::string(StructInfo*, const std::string&, const ConstInfo&)> l_constFields = [&](StructInfo* info, const std::string& prefix, const ConstInfo& c) {
@@ -6726,6 +7904,47 @@ namespace dscript
 				}
 			}
 			return s + " }";
+		};
+		std::function<void(Node*, const std::string&)> l_struct = [&](Node* d, const std::string& indent) {
+			StructInfo* info = m_structs[d->name];
+			const std::string head = indent + (d->isPrivate ? "priv " : "") + "struct ";
+			l_line(head + declaredName(d) + " {", &d->namePos, head.size());
+			for (const StructField& f : info->fields)
+			{
+				const std::string h = indent + "\t" + (f.isPrivate ? "priv " : "") + (f.isReadonly ? "readonly " : "") + (f.isConst ? "const " : "var ");
+				l_line(h + f.name + ": " + interfaceType(f.type) + (f.init != nullptr ? " = " + interfaceValue(f.init, f.type) : "") + ";", &f.namePos, h.size());
+			}
+			for (Node* n : m_program->list)
+			{
+				if (n->owner != d || n->external != 0 || !n->text.empty() || n->name.rfind("__lambda_", 0) == 0)
+					continue;
+				if (n->kind == NodeKind::StructDecl && m_structs.count(n->name) > 0)
+					l_struct(n, indent + "\t");
+				else if (n->kind == NodeKind::EnumDecl && m_enums.count(n->name) > 0)
+					l_enum(n, indent + "\t");
+				else if (n->kind == NodeKind::FuncDecl)
+				{
+					if (FuncInfo* f = l_func(n))
+						l_sub(f, indent + "\t");
+				}
+				else if (n->kind == NodeKind::TemplateDecl)
+					l_template(n, indent + "\t");		// (a method template)
+				else if (n->kind == NodeKind::ConstDecl && m_consts.count(n->name) > 0)
+				{
+					// A constant of the struct.
+					const ConstInfo& c = m_consts[n->name];
+					const std::string h = indent + "\t" + (n->isPrivate ? "priv " : "") + "constexpr ";
+					std::string text = h + n->shortName;
+					if (c.isString)
+						text += " = " + dscript::quoted(c.text) + ";";
+					else if (c.type != nullptr && c.type->kind == Type::Kind::Struct)
+						text += ": " + interfaceType(c.type) + " = " + l_constFields(c.type->structInfo, "", c) + ";";
+					else
+						text += ": " + (c.type ? interfaceType(c.type) : std::string("i32")) + " = " + interfaceNumber(c.value, c.type) + ";";
+					l_line(text, &n->namePos, h.size());
+				}
+			}
+			l_line(indent + "}");
 		};
 
 		for (Node* d : m_program->list)
@@ -6754,17 +7973,18 @@ namespace dscript
 				break;
 				case NodeKind::VarDecl:
 				{
-					const std::string head = indent + "var ";
 					VarInfo* v = m_globals[d->name];
+					const std::string head = indent + (v->isConst ? "readonly var " : "var ");		// (readonly var: a constant variable of the library)
 					l_line(head + name + ": " + interfaceType(v->type ? v->type : m_types.i32()) + ";", &d->namePos, head.size());
 				}
 				break;
 				case NodeKind::ConstDecl:
 				{
-					const std::string head = indent + "const ";
+					const bool variable = m_globals.count(d->name) > 0 && m_globals[d->name]->isConst;
+					const std::string head = indent + (variable ? "readonly var " : "const ");
 					std::string text = head + name;
 					if (m_globals.count(d->name) > 0)
-						text += ": " + interfaceType(m_globals[d->name]->type ? m_globals[d->name]->type : m_types.i32()) + ";";	// a constant array: its data is in the library
+						text += ": " + interfaceType(m_globals[d->name]->type ? m_globals[d->name]->type : m_types.i32()) + ";";	// a constant array (its data is in the library), a constant variable
 					else
 					{
 						const ConstInfo& c = m_consts[d->name];
@@ -6814,6 +8034,14 @@ namespace dscript
 		}
 		for (auto& c : m_consts)
 		{
+			if (c.second.decl->constKind == 1)
+			{
+				// const: if its value is not a compile-time constant (or not yet: it may use subs,
+				// globals), it is decided after the declarations (decideConst).
+				try { resolveConst(c.first, c.second.decl->pos); }
+				catch (CompileError&) {}
+				continue;
+			}
 			if (!attempt([&] { resolveConst(c.first, c.second.decl->pos); }))
 			{
 				c.second.resolving = false;
@@ -6841,8 +8069,8 @@ namespace dscript
 		for (size_t fi = 0; fi < m_funcList.size(); fi++)		// (instantiating a template adds subs)
 		{
 			FuncInfo* f = m_funcList[fi];
-			if (f->instance)
-				continue;		// (resolved when instantiated)
+			if (f->instance || f->type != nullptr)
+				continue;		// (resolved when instantiated, or already: a constexpr sub a constant used)
 			if (!attempt([&] { resolveFunction(f); }))
 			{
 				// As a sub without parameters (calls to it will report the arguments).
@@ -6977,7 +8205,7 @@ namespace dscript
 					error(f->decl->pos, "sub '" + f->name + "' is declared but not defined");
 			}))
 				continue;
-			if (!f->isInline && !f->external)
+			if (!f->isInline && !f->external && f->decl->constKind != 3)
 				l_gen(f);
 		}
 		if (m_options.noInline)
@@ -6992,7 +8220,7 @@ namespace dscript
 			for (size_t i = 0; i < m_funcList.size(); i++)
 			{
 				FuncInfo* f = m_funcList[i];
-				if (f->instance && f->used && !f->generated && !f->isInline && f->defined)
+				if (f->instance && f->used && !f->generated && !f->isInline && f->defined && f->decl->constKind != 3)
 				{
 					l_gen(f);
 					more = true;
@@ -7012,7 +8240,9 @@ namespace dscript
 		}
 		for (FuncInfo* f : m_funcList)
 		{
-			if (!f->isInline || kept.count(f) || !f->defined || f->instance)
+			// The inline subs nothing needs as code, and the consteval subs (never code): checked.
+			const bool onlyChecked = f->decl->constKind == 3 && !f->external && f->decl->a != nullptr;
+			if ((!f->isInline && !onlyChecked) || kept.count(f) || !f->defined || (f->instance && !(onlyChecked && f->used)))
 				continue;
 			const size_t codeSize = m_code.size();
 			const auto strings = m_strings;
@@ -7046,6 +8276,23 @@ namespace dscript
 		out.push_back(m_options.library ? ".entry __ds_lib_init" : ".entry __ds_start");
 		for (const auto& d : m_options.directives)
 			out.push_back(d);
+		// The read-only data made when compiling that the code uses.
+		for (VarInfo* v : m_lazyData)
+		{
+			if (!v->addressUsed)
+				continue;
+			const std::vector<uint8_t>& bytes = m_ctBlobs[v];
+			std::string line = "\t$" + v->symbol + " ";
+			for (size_t i = 0; i < bytes.size(); i++)
+			{
+				char buf[8];
+				std::snprintf(buf, sizeof(buf), "0x%02X", bytes[i]);
+				line += (i > 0 ? ", " : "") + std::string(buf);
+			}
+			if (bytes.empty())
+				line += "0x00";
+			m_data.push_back(line);
+		}
 		out.push_back(".data");
 		for (const auto& d : m_data)
 			out.push_back(d);

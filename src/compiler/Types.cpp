@@ -30,7 +30,12 @@ namespace dscript
 			case Kind::U32: return "u32";
 			case Kind::F32: return "f32";
 			case Kind::Null: return "null";
-			case Kind::Pointer: return (base->kind == Kind::Function ? "(" + base->name(brief) + ")" : base->name(brief)) + "*";
+			case Kind::Pointer:
+			{
+				// const T*; a pointer to a constant pointer: const (T*)* (const u8** is a pointer to a const u8*)
+				const bool paren = base->kind == Kind::Function || (constTarget && base->kind == Kind::Pointer);
+				return std::string(constTarget ? "const " : "") + (paren ? "(" + base->name(brief) + ")" : base->name(brief)) + "*";
+			}
 			case Kind::Array: return base->name(brief) + "[" + std::to_string(count) + "]";
 			case Kind::Struct: return (brief && structInfo->anonymous) ? "struct { ... }" : structInfo->displayName();
 			case Kind::Function:
@@ -85,15 +90,16 @@ namespace dscript
 		return t;
 	}
 
-	Type* TypeTable::pointer(Type* base)
+	Type* TypeTable::pointer(Type* base, bool constTarget)
 	{
 		for (Type* t : m_types)
 		{
-			if (t->kind == Type::Kind::Pointer && t->base == base)
+			if (t->kind == Type::Kind::Pointer && t->base == base && t->constTarget == constTarget)
 				return t;
 		}
 		Type* t = make(Type::Kind::Pointer);
 		t->base = base;
+		t->constTarget = constTarget;
 		return t;
 	}
 

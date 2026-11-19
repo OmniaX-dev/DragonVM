@@ -1,6 +1,6 @@
-// expect-error: is a struct constant: it has no address
+// expect-error: 'x' is reached through a const pointer
 const Origin: struct { var x: i32; } = { 1 };
-sub f(var p: struct { var x: i32; }*) -> void { }
 sub main() -> void {
-    var c = Origin;
+    var p = &Origin;
+    p->x = 2;
 }

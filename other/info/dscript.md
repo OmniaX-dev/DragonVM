@@ -147,11 +147,14 @@ console.print(&a);                      // TextSingle / Text16 / Text16Console p
   types use the `u32` / `i32` one (zero / sign extended), and so does an integer literal (`i32`).
 - `new_<operation>` (`new_add`, `new_band`, `new_shl`, `new_abs`, ...): every operation that
   changes the struct, except `set`.
-- The limits: `std::UINT64_MAX`, `std::INT64_MAX` (struct constants: `std::UINT64_MAX.hi`; a
-  copy is `std::U64(std::UINT64_MAX.hi, std::UINT64_MAX.lo)`).
+- The limits: `std::UINT64_MAX`, `std::INT64_MAX` (struct constants: `var m = std::UINT64_MAX;`,
+  `std::INT64_MAX.str(text)`, `std::UINT64_MAX.new_shr(4)`).
+- The subs that do not change the struct are `readonly` (callable on constants), and all of
+  them are `constexpr`: with constant operands (`std::UINT64_MAX.new_shr(60)`), when compiling.
 - Arithmetic: `add`, `subt` (`sub` is a keyword), `mul`, `div`, `mod`, `divmod(d, &rem)` (`rem`
-  a pointer: it gets the remainder), `neg`, `inc`, `dec`, `min`, `max`; `I64` also `abs`. Signed division truncates toward zero, the
-  remainder has the dividend's sign (as for `i32`); division by zero is the CPU's.
+  a pointer: it gets the remainder), `neg`, `inc`, `dec`, `min`, `max`; `I64` also `abs`. Signed
+  division truncates toward zero, the remainder has the dividend's sign (as for `i32`); division
+  by zero is the CPU's.
 - Bits: `band`, `bor`, `bxor`, `bnot` (`and` / `or` / `not` are keywords), `shl`, `shr` (`I64`:
   arithmetic), `rol`, `ror`, `bit(n)`, `setb(n)`, `clrb(n)`, `clz`, `ctz`, `popc`.
 - Other: `set(...)` (the constructors' forms), `is_zero`, `fits32`, `to_u32` / `to_i32` (the low
@@ -281,6 +284,9 @@ const NAME = 5;  const MASK: u32 = 0xFF;    // integer constants
 const Origin: Point = { 3, 4 };         // struct constants (see below)
 const VERSION = "DragonBIOS 0.5";       // string constants
 const Primes: u16[] = { 2, 3, 5, 7 };   // constant arrays: read-only data in the program
+const START = read_clock();             // not a constant value: a variable that never changes
+constexpr SIZE = 4 * 1024;              // must be a compile-time constant (see "const, constexpr...")
+constinit g_count: u32 = SIZE;          // a variable whose value is known when compiling
                                         // (all constants can also be declared in a sub, see below)
 enum Color { Red, Green = 5, Blue }     // Color.Blue == 6
 enum Kind: u8 { Cmd, Data = 0x80 }      // a typed enum: 1 byte (in structs, arrays, sizeof); the
@@ -289,11 +295,14 @@ alias Handler = sub(i32) -> void;       // a name for a type
 struct Point { var x: i32; var y: i32 = 7; }    // fields can have constant default values
 struct Box { var w: u32; sub area() -> u32 { return this->w * this->w; } }   // methods (see below)
 struct Snake { readonly var length: u32 = 3; }  // readonly: only its subs change it (see below)
+struct Id { const value: u32; readonly sub get() -> u32 { ... } }  // const fields, readonly subs
 sub name(var a: i32, b: u8 = 0) -> i32 { ... }  // 'var' is optional; default values are constants
 sub name(var a: string) -> void { ... } // overloads: same name, other parameter types
 sub later(var x: i32) -> i32;           // a declaration (the definition can come later)
 interrupt sub handler() { ... }         // ends with rti; no parameters, returns void
 inline sub sq(var x: i32) -> i32 { ... }    // the body is generated at every call (see below)
+constexpr sub f(var n: u32) -> u32 { ... }  // evaluated when compiling when it can (see below)
+consteval sub g(var n: u32) -> u32 { ... }  // always evaluated when compiling
 low { ... }                             // raw dasm (e.g. helper routines with labels)
 namespace Bios { ... }                  // groups declarations under a name (see below)
 ```
@@ -337,8 +346,9 @@ var c: Bios::Color = Bios::Color.White;
 
 ### Local constants and static variables
 In a sub (or any block), `const` declares any kind of constant (integer, struct, string,
-array) visible only there; `static var` is a variable that lives for the whole program, like a
-global, but is only visible there:
+array) visible only there (one whose value is not a compile-time constant is a variable that
+never changes: see "const, constexpr, constinit"); `static var` is a variable that lives for
+the whole program, like a global, but is only visible there:
 ```
 sub size_text(var bytes: u32, var buff: u8*) -> string {
     const units: string[] = { "B", "KiB", "MiB", "GiB" };     // stored once, in the data
@@ -347,12 +357,14 @@ sub size_text(var bytes: u32, var buff: u8*) -> string {
     ...
 }
 ```
-- They are stored exactly like the top-level ones (a hidden declaration named `<sub>::<name>`,
-  which is also what error messages show), so local constants are safe in ROM.
+- Compile-time ones are stored exactly like the top-level ones (a hidden declaration named
+  `<sub>::<name>`, which is also what error messages show), so they are safe in ROM. The others
+  are computed where they are declared, every time (`const square = i * i;` in a loop).
 - A static variable is set once, before `main` (like a global, in the order of the source),
   not at its first use; its value can be any expression that does not use the sub's locals or
   parameters (it can use constants, globals and other subs).
-- `static const` is the same as `const`. `static` is an error at the top level.
+- `static const` is a `const` set once (a value that is not a compile-time constant: before
+  `main`, like a static variable). `static` is an error at the top level.
 - Each sub (and each lambda) has its own; an inline sub's static variable is shared by all the
   places it is expanded. Lambdas can use the constants and statics of the sub around them.
 - Inner declarations hide outer ones (a local `var` hides a constant of the same name, and the
@@ -387,13 +399,23 @@ var f: sub(Counter*, i32) -> i32 = Counter::add; // the method as a sub: this co
   the struct, `{ ... }` can only set the fields before the first private one (the private ones
   get their default values), and the private fields of struct constants are read only inside.
 - `readonly` before a field (`readonly var length: u32 = 3;`) lets everyone read it, but only the
-  struct's own subs (as for `priv`) change it: outside, assigning it, `++` / `--`, changing a
-  field or element in it (`s.head.x = 1`, `s.cells[0] = 1`) and taking its address (`&s.length`)
-  are errors. Initializing it (its default value, `{ ... }`) and copying a whole struct
-  (`a = b`) are allowed. It protects the field itself: a pointer field's target can still be
-  changed, a method called on a struct field can change it, and an array field still converts
-  to a pointer (`print(s.name)`). Only named structs have readonly fields; a field is either
-  `priv` or `readonly`.
+  struct's own subs (as for `priv`) change it: outside, assigning it, `++` / `--` and changing a
+  field or element in it (`s.head.x = 1`, `s.cells[0] = 1`) are errors; its address is a const
+  pointer (`&s.length` is a `const u32*`), and only readonly subs can be called on a struct
+  field. Initializing it (its default value, `{ ... }`) and copying a whole struct (`a = b`) are
+  allowed. It protects the field itself: a pointer field's target can still be changed, and an
+  array field still converts to a pointer (`print(s.name)`). Only named structs have readonly
+  fields; a field is either `priv` or `readonly`.
+- `const` fields (`const id: u32 = 1;`) never change once the struct is built: their value is
+  their default, `{ ... }`, or what the constructor gives them (`this->id = id;` in `new`, the
+  only place they can be assigned). A whole struct with a const field (also in a struct field or
+  an array of them) cannot be assigned (`a = b`): initialize a new variable instead.
+- `readonly sub` (a method that does not change the struct): its `this` is a `const T*`, so it
+  cannot change the fields or call subs that are not readonly. Only readonly subs can be called
+  on a constant (or through a `const T*`). A readonly and a normal sub can have the same name and
+  parameters (the readonly one for constants, the other one for variables).
+- `constexpr NAME = value;` in a struct is a constant of the struct (no memory): `Struct.NAME`,
+  `Struct::NAME`, `x.NAME`, or just `NAME` in its subs (`priv constexpr`: only there).
 - `static sub` in a struct has no `this`: it is a sub grouped under the struct's name, called as
   `Struct.name(...)` or `Struct::name(...)` (also from the struct's other subs: a struct's subs
   are not found by their name alone). A struct can have only static subs (and no fields).
@@ -584,6 +606,79 @@ tracing without the VGA stack. It is the `debug_print` instruction (`debug_print
 `debug_print R1` in dasm), which is always assembled and run (not only with `-g`, unlike
 `debug_break`). At most 4096 bytes are printed per call.
 
+### const, constexpr, constinit
+`const` declares something that never changes once it has its value, anywhere a `var` can be
+(globals, locals, parameters, fields; `const p: Point(1, 2)` too). If its value is a
+compile-time constant, it is one (usable in array sizes, enum values, `$NAME` in low blocks...,
+as always); otherwise it is a variable that cannot change:
+```
+const LIMIT = 10;                       // a compile-time constant
+const START = read_clock();             // computed when the program starts (globals: before main,
+                                        // in the order of the source, like var)
+sub f(const n: u32) {                   // the sub cannot change n
+    const half = n / 2;                 // computed at every call
+    half++;                             // error: 'half' is a constant (const): it cannot change
+}
+```
+- `constexpr` is a `const` that must be a compile-time constant (an error otherwise): for a
+  value that must not cost anything when the program runs.
+- `constinit` (globals only) is a `var` whose value must be known when compiling: no code sets it
+  before `main` (it is in the program's data), but it can change.
+- A constant's address is a const pointer (`&START` is a `const u32*`): it cannot be changed
+  through it.
+- `--rom`: a `const` computed when the program runs needs RAM: an error (use constexpr values).
+- Libraries: a constant computed when a library starts is a read-only global of the library
+  (`readonly var` in its interface).
+
+### Const pointers and readonly subs
+`const T*` is a pointer that cannot change what it points at (it can point elsewhere). The
+`const` in front of a declaration is about the variable, in a type about the target:
+```
+var p: const u8* = text;                // *p = 'x' is an error; p = other is fine
+const q: u8* = buffer;                  // *q = 'x' is fine; q = other is an error
+const r: const u8* = text;              // neither
+var s: const u8** = &p;                 // a pointer to a const u8* (const (u8*)* is the other way)
+```
+- `T*` converts to `const T*` (also as a sub's argument); `const T*` to `T*` needs a cast
+  (`cast<u8*>(p)`: when it really may be changed). `const void*` takes any pointer.
+- Through a `const T*`, `*p`, `p[i]` and `p->field` cannot be changed (a field that is itself a
+  pointer can still point elsewhere: as in C, it protects one level).
+- `&` of something that cannot change (a constant, a const or readonly field, through a const
+  pointer) is a const pointer; constant arrays still give their elements' plain pointers (as
+  before), and string literals are `string` (`u8*`).
+- Methods: see `readonly sub` (under Methods); `this` of a readonly sub is a `const T*`.
+- Templates: `T*` matched with a `const u8*` gives `T = u8` (then the const is an error: use
+  `const T*` for parameters that only read).
+
+### constexpr and consteval subs
+A `constexpr sub` is evaluated when compiling when all its arguments are compile-time constants:
+its value replaces the call (no code runs). Otherwise (or if it cannot be evaluated) it is a
+normal call. A `consteval sub` is always evaluated when compiling (an error if it cannot be), and
+has no code in the program:
+```
+constexpr sub fact(var n: u32) -> u32 { return n <= 1 ? 1 : n * fact(n - 1); }
+consteval sub mask(var bits: u32) -> u32 { return (1u << bits) - 1; }
+
+var table: u8[fact(4)];                 // an array size (24)
+constexpr ORIGIN: Point = make(3, 4);   // a struct constant from a constexpr sub
+var x = fact(n);                        // n is a variable: a normal call
+const m = mask(4);                      // 15, when compiling
+```
+- When compiling, they can use locals, parameters, loops, `if`, recursion (up to 256 deep),
+  structs (by value, methods, `this`), arrays, pointers to their own variables, strings, f32,
+  constants, constant arrays and struct constants, and other constexpr / consteval subs.
+- They cannot use (when compiling) globals that are variables, memory addresses, other subs,
+  sub pointers, `...`, low blocks, `debug_print`, `defer`; and they run at most 4 million steps.
+  A constexpr call that does any of that is a normal call; for consteval, it is an error that
+  says why and where.
+- The value: a number, `bool`, f32, `null`, or a struct (read-only data in the program; its
+  pointer fields must be null). A call that returns a pointer is not replaced.
+- Methods can be constexpr / consteval too (`readonly constexpr sub len() -> u32`), and called
+  on struct constants: `std::UINT64_MAX.new_shr(60)` is computed when compiling.
+- A consteval sub cannot be used as a value (it has no address); its calls with arguments that
+  are not constants are only allowed in another consteval sub.
+- Libraries: their bodies are in the interface (like inline subs), so programs evaluate them.
+
 ### Struct constants
 A `const` with a struct type (named or nameless) is a group of compile-time values: reading a
 field gives its value, like an enum member (no memory is read).
@@ -601,10 +696,12 @@ low { mov R1, $MemoryLayout.VGA }           // and in low blocks ($Box.br.x for 
 ```
 - The fields can be integers, pointers (`null`, `cast<T*>(constant)`) and structs (nested
   `{ ... }`); arrays and strings are not allowed (they would need memory).
-- Every value must be a constant: no variables, no sub calls.
-- A struct constant has no address: only its integer and pointer fields can be used.
-  `var c = MemoryLayout;`, `&MemoryLayout` or passing it to a sub is an error, and so is
-  assigning to its fields. `sizeof(MemoryLayout)` works.
+- Every value must be a constant (or the value of a constexpr sub that returns the struct: then
+  the constant is that value). With values that are not constants, a `const` struct is a
+  variable that never changes (see "const, constexpr, constinit").
+- Used as a value (`var c = Origin;`, `&Origin`, passing it to a sub, calling one of its readonly
+  subs, a struct field of it), it is a read-only copy in the program's data (only when something
+  uses it). Assigning to its fields is an error.
 
 ### String constants
 `const NAME = "text";` (or `const NAME: string = ...`) is used exactly like the literal: a
@@ -626,12 +723,14 @@ const Table: Entry[] = { { 'a', "alpha" }, { 'b', "beta" } };
 
 for (var i: u32 = 0; i < sizeof(Logo) / sizeof(Logo[0]); i++) { print(Logo[i]); new_line(); }
 ```
-- The values must be constants, strings, `null` or `cast<T*>(constant)` (the elements can be
+- The values are constants, strings, `null` or `cast<T*>(constant)` (the elements can be
   integers, pointers, arrays and structs of them); everything is in the program's data, so it
-  is safe in ROM.
+  is safe in ROM. With values computed when the program runs, a `const` array is a constant
+  variable (set before `main`; a local one at every call); `constexpr` arrays must be constant.
 - Assigning to an element (or `++` / `--`) is an error. Its address can be taken (`&Primes[2]`,
-  or passing it to a sub): the compiler cannot stop writes through such a pointer (there are
-  no read-only pointer types), so in ROM they fail at run time.
+  or passing it to a sub): it is a plain pointer (as before const pointers existed), so writes
+  through it are not stopped (in ROM they fail at run time): take a `const T*` where only
+  reading is meant.
 - In low blocks `$Name` is its address.
 
 ### ROM programs (`--rom`)

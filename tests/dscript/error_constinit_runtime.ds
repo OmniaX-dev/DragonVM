@@ -1,0 +1,4 @@
+// expect-error: constinit 'g_id': its value must be known when compiling
+sub next() -> u32 { return 3; }
+constinit g_id: u32 = next();
+sub main() { }

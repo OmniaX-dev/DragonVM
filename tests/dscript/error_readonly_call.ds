@@ -1,0 +1,4 @@
+// expect-error: 'move' is not a readonly sub (it may change the Point), and 'Origin' is a constant
+struct Point { var x: i32; sub move() { this->x++; } };
+const Origin: Point = { 1 };
+sub main() { Origin.move(); }

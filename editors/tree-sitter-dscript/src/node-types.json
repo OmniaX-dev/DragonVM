@@ -22,6 +22,10 @@
             "named": true
           },
           {
+            "type": "const_type",
+            "named": true
+          },
+          {
             "type": "function_type",
             "named": true
           },
@@ -174,6 +178,10 @@
         "types": [
           {
             "type": "array_type",
+            "named": true
+          },
+          {
+            "type": "const_type",
             "named": true
           },
           {
@@ -1233,6 +1241,10 @@
             "named": true
           },
           {
+            "type": "const_type",
+            "named": true
+          },
+          {
             "type": "function_type",
             "named": true
           },
@@ -1392,6 +1404,16 @@
     "type": "const_declaration",
     "named": true,
     "fields": {
+      "arguments": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "argument_list",
+            "named": true
+          }
+        ]
+      },
       "name": {
         "multiple": false,
         "required": true,
@@ -1408,6 +1430,10 @@
         "types": [
           {
             "type": "array_type",
+            "named": true
+          },
+          {
+            "type": "const_type",
             "named": true
           },
           {
@@ -1539,6 +1565,63 @@
         ]
       }
     }
+  },
+  {
+    "type": "const_type",
+    "named": true,
+    "fields": {
+      "type": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "array_type",
+            "named": true
+          },
+          {
+            "type": "const_type",
+            "named": true
+          },
+          {
+            "type": "function_type",
+            "named": true
+          },
+          {
+            "type": "generic_type",
+            "named": true
+          },
+          {
+            "type": "parenthesized_type",
+            "named": true
+          },
+          {
+            "type": "pointer_type",
+            "named": true
+          },
+          {
+            "type": "primitive_type",
+            "named": true
+          },
+          {
+            "type": "scoped_type_identifier",
+            "named": true
+          },
+          {
+            "type": "struct_type",
+            "named": true
+          },
+          {
+            "type": "type_identifier",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "constexpr_modifier",
+    "named": true,
+    "fields": {}
   },
   {
     "type": "continue_statement",
@@ -2000,6 +2083,10 @@
             "named": true
           },
           {
+            "type": "const_type",
+            "named": true
+          },
+          {
             "type": "function_type",
             "named": true
           },
@@ -2274,6 +2361,10 @@
             "named": true
           },
           {
+            "type": "const_type",
+            "named": true
+          },
+          {
             "type": "function_type",
             "named": true
           },
@@ -2431,6 +2522,10 @@
         },
         {
           "type": "nested_type_declaration",
+          "named": true
+        },
+        {
+          "type": "struct_constant",
           "named": true
         },
         {
@@ -2650,6 +2745,10 @@
         "types": [
           {
             "type": "array_type",
+            "named": true
+          },
+          {
+            "type": "const_type",
             "named": true
           },
           {
@@ -3097,6 +3196,10 @@
             "named": true
           },
           {
+            "type": "const_type",
+            "named": true
+          },
+          {
             "type": "function_type",
             "named": true
           },
@@ -3140,6 +3243,14 @@
           "named": true
         },
         {
+          "type": "consteval_modifier",
+          "named": true
+        },
+        {
+          "type": "constexpr_modifier",
+          "named": true
+        },
+        {
           "type": "inline_modifier",
           "named": true
         },
@@ -3149,6 +3260,10 @@
         },
         {
           "type": "priv_modifier",
+          "named": true
+        },
+        {
+          "type": "readonly_modifier",
           "named": true
         },
         {
@@ -3168,6 +3283,10 @@
         "types": [
           {
             "type": "array_type",
+            "named": true
+          },
+          {
+            "type": "const_type",
             "named": true
           },
           {
@@ -3211,6 +3330,10 @@
       "types": [
         {
           "type": "array_type",
+          "named": true
+        },
+        {
+          "type": "const_type",
           "named": true
         },
         {
@@ -3898,6 +4021,10 @@
             "named": true
           },
           {
+            "type": "const_type",
+            "named": true
+          },
+          {
             "type": "function_type",
             "named": true
           },
@@ -4280,6 +4407,10 @@
             "named": true
           },
           {
+            "type": "const_type",
+            "named": true
+          },
+          {
             "type": "function_type",
             "named": true
           },
@@ -4446,6 +4577,10 @@
           "named": true
         },
         {
+          "type": "const_type",
+          "named": true
+        },
+        {
           "type": "function_type",
           "named": true
         },
@@ -4490,6 +4625,10 @@
         "types": [
           {
             "type": "array_type",
+            "named": true
+          },
+          {
+            "type": "const_type",
             "named": true
           },
           {
@@ -4924,6 +5063,10 @@
             "named": true
           },
           {
+            "type": "const_type",
+            "named": true
+          },
+          {
             "type": "function_type",
             "named": true
           },
@@ -4991,6 +5134,10 @@
           },
           {
             "type": "concatenated_string",
+            "named": true
+          },
+          {
+            "type": "const_type",
             "named": true
           },
           {
@@ -5172,6 +5319,172 @@
     }
   },
   {
+    "type": "struct_constant",
+    "named": true,
+    "fields": {
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
+      "type": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "array_type",
+            "named": true
+          },
+          {
+            "type": "const_type",
+            "named": true
+          },
+          {
+            "type": "function_type",
+            "named": true
+          },
+          {
+            "type": "generic_type",
+            "named": true
+          },
+          {
+            "type": "parenthesized_type",
+            "named": true
+          },
+          {
+            "type": "pointer_type",
+            "named": true
+          },
+          {
+            "type": "primitive_type",
+            "named": true
+          },
+          {
+            "type": "scoped_type_identifier",
+            "named": true
+          },
+          {
+            "type": "struct_type",
+            "named": true
+          },
+          {
+            "type": "type_identifier",
+            "named": true
+          }
+        ]
+      },
+      "value": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "assignment_expression",
+            "named": true
+          },
+          {
+            "type": "binary_expression",
+            "named": true
+          },
+          {
+            "type": "boolean_literal",
+            "named": true
+          },
+          {
+            "type": "call_expression",
+            "named": true
+          },
+          {
+            "type": "cast_expression",
+            "named": true
+          },
+          {
+            "type": "char_literal",
+            "named": true
+          },
+          {
+            "type": "concatenated_string",
+            "named": true
+          },
+          {
+            "type": "generic_expression",
+            "named": true
+          },
+          {
+            "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "index_expression",
+            "named": true
+          },
+          {
+            "type": "initializer_list",
+            "named": true
+          },
+          {
+            "type": "lambda_expression",
+            "named": true
+          },
+          {
+            "type": "member_expression",
+            "named": true
+          },
+          {
+            "type": "null_literal",
+            "named": true
+          },
+          {
+            "type": "number_literal",
+            "named": true
+          },
+          {
+            "type": "parenthesized_expression",
+            "named": true
+          },
+          {
+            "type": "scoped_identifier",
+            "named": true
+          },
+          {
+            "type": "sizeof_expression",
+            "named": true
+          },
+          {
+            "type": "string_literal",
+            "named": true
+          },
+          {
+            "type": "ternary_expression",
+            "named": true
+          },
+          {
+            "type": "unary_expression",
+            "named": true
+          },
+          {
+            "type": "update_expression",
+            "named": true
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": false,
+      "required": false,
+      "types": [
+        {
+          "type": "priv_modifier",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "struct_declaration",
     "named": true,
     "fields": {
@@ -5223,6 +5536,10 @@
       "types": [
         {
           "type": "array_type",
+          "named": true
+        },
+        {
+          "type": "const_type",
           "named": true
         },
         {
@@ -5960,6 +6277,10 @@
             "named": true
           },
           {
+            "type": "const_type",
+            "named": true
+          },
+          {
             "type": "function_type",
             "named": true
           },
@@ -6498,7 +6819,15 @@
     "named": false
   },
   {
+    "type": "consteval_modifier",
+    "named": true
+  },
+  {
     "type": "constexpr",
+    "named": false
+  },
+  {
+    "type": "constinit",
     "named": false
   },
   {

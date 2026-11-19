@@ -1,0 +1,3 @@
+// expect-error: 'square' is consteval (it must be evaluated when compiling), but argument 1 (x) is not a compile-time constant
+consteval sub square(var x: i32) -> i32 { return x * x; }
+sub main() -> i32 { var n = 3; return square(n); }

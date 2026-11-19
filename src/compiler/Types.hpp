@@ -16,6 +16,9 @@ namespace dscript
 		StructInfo* structInfo { nullptr };	// Struct
 		std::vector<Type*> params;			// Function
 		int variadic { 0 };					// Function: 1 ... (more arguments), 2 ...typed
+		// Pointer: what it points at is constant (const T*: reading it is fine, changing it through
+		// the pointer is an error). Values have no const of their own: only what a pointer points at.
+		bool constTarget { false };
 
 		bool isInteger(void) const { return kind >= Kind::Bool && kind <= Kind::U32; }
 		bool isSigned(void) const { return kind == Kind::I8 || kind == Kind::I16 || kind == Kind::I32; }
@@ -27,6 +30,7 @@ namespace dscript
 		// Fits in a register (integers, floats, pointers, function pointers).
 		bool isScalar(void) const { return isInteger() || isFloat() || isPointer() || isFunction(); }
 		bool isVoidPointer(void) const { return kind == Kind::Pointer && base->kind == Kind::Void; }
+		bool isConstPointer(void) const { return kind == Kind::Pointer && constTarget; }
 		uint32_t size(void) const;
 		// brief: nameless structs as "struct { ... }" (without where they are declared)
 		std::string name(bool brief = false) const;
@@ -42,6 +46,7 @@ namespace dscript
 		SourcePos namePos;
 		bool isPrivate { false };	// priv var: only the struct's own subs can use it
 		bool isReadonly { false };	// readonly var: everyone reads it, only the struct's own subs change it
+		bool isConst { false };		// const: set when the struct is built (default, { ... }, in new), then never changed
 	};
 
 	struct StructInfo
@@ -73,7 +78,7 @@ namespace dscript
 			Type* u32(void) { return m_u32; }
 			Type* f32(void) { return m_f32; }
 			Type* nullType(void) { return m_null; }
-			Type* pointer(Type* base);
+			Type* pointer(Type* base, bool constTarget = false);
 			Type* array(Type* base, uint32_t count);
 			Type* function(const std::vector<Type*>& params, Type* ret, int variadic = 0);
 			Type* structType(StructInfo* info);

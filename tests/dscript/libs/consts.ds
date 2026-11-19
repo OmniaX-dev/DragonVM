@@ -1,0 +1,24 @@
+// A library with the const forms (const_library.ds, const_dynamic.ds): a constant computed when
+// it starts, compile-time constants, constexpr / consteval subs (their bodies are in its
+// interface), a struct with const fields, readonly subs and constants of its own.
+namespace kc {
+	var starts: u32 = 0;
+	sub start_value() -> u32 { starts++; return 1000 + starts; }
+	const STARTED = start_value();			// a constant variable of the library
+	const LIMIT = 64;						// a compile-time constant
+	constexpr sub square(var n: i32) -> i32 { return n * n; }
+	consteval sub cube(var n: i32) -> i32 { return n * n * n; }
+	struct Box {
+		const id: u32 = 1;
+		var w: i32 = 0;
+		var h: i32 = 0;
+		constexpr SIDES = 4;
+		sub new(var id: u32, var w: i32, var h: i32) { this->id = id; this->w = w; this->h = h; }
+		readonly constexpr sub area() -> i32 { return this->w * this->h; }
+		sub grow(var by: i32) { this->w += by; this->h += by; }
+	};
+	constexpr sub make(var w: i32, var h: i32) -> Box { var b: Box = { 9, w, h }; return b; }
+	const Unit: Box = { 2, 1, 1 };
+	sub area_of(var b: const Box*) -> i32 { return b->area(); }
+	sub unit_area() -> i32 { var b = Unit; return area_of(&Unit) + b.w; }		// (its own copy of Unit)
+}
