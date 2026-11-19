@@ -24,6 +24,7 @@
 #include "../compiler/Preprocessor.hpp"
 #include "../compiler/Parser.hpp"
 #include "../compiler/CodeGen.hpp"
+#include "../compiler/ConditionBuiltins.hpp"
 #include <ostd/vendor/nlohmann/json.hpp>
 #include <filesystem>
 #include <fstream>
@@ -1584,6 +1585,60 @@ namespace
 			}
 		};
 
+		// The words that are only keywords in one place (where, constexpr, optional), and the
+		// built-ins of compile-time conditions: from what comes before the name (this line and a
+		// few above it: a template's condition may be on the next lines).
+		auto l_addContextual = [&]() {
+			std::string before = rest;
+			for (int l = line, n = 0; l >= 1 && n < 6; l--, n++)
+			{
+				const std::string above = lineText(file, l);
+				if (above.find_first_of(";}") != std::string::npos)
+					break;
+				before = above + " " + before;
+			}
+			static const std::regex afterTemplate(R"(\btemplate\s*\([^()]*\)\s*$)");
+			static const std::regex templateParam(R"(\btemplate\s*\([^()]*[(,]\s*$)");
+			static const std::regex afterIf(R"(\bif\s*$)");
+			static const std::regex inWhere(R"(\btemplate\s*\([^()]*\)\s*where\b[^{;]*$)");
+			static const std::regex constexprOpen(R"(\bif\s+constexpr\s*\()");
+			if (std::regex_search(before, afterTemplate))
+				l_add("where", -1, "", 0);
+			if (std::regex_search(before, templateParam))
+				l_add("optional", -1, "", 0);
+			if (std::regex_search(before, afterIf))
+				l_add("constexpr", -1, "", 0);
+			bool condition = std::regex_search(before, inWhere);
+			if (!condition)
+			{
+				// if constexpr ( ... |: still inside its parentheses.
+				size_t open = std::string::npos;
+				for (auto it = std::sregex_iterator(before.begin(), before.end(), constexprOpen); it != std::sregex_iterator(); ++it)
+					open = (size_t)(it->position() + it->length());
+				int depth = 1;
+				for (size_t i = open; open != std::string::npos && i < before.size() && depth > 0; i++)
+					depth += before[i] == '(' ? 1 : before[i] == ')' ? -1 : 0;
+				condition = open != std::string::npos && depth > 0;
+			}
+			if (!condition)
+				return;
+			for (const ConditionBuiltin* b : conditionBuiltins())
+			{
+				// is_one_of(T, T...): the arguments from the letters.
+				std::string sig = std::string(b->name) + "(";
+				const std::string args = b->args;
+				for (size_t i = 0; i < args.size(); i++)
+				{
+					if (args[i] == '*')
+						sig += "...";
+					else
+						sig += std::string(i > 0 ? ", " : "") + (args[i] == 'T' ? "T" : "name");
+				}
+				sig += ")";
+				l_add(b->name, CS::Sub, sig + "\n// " + b->help, 0);
+			}
+		};
+
 		static const char* builtinTypes[] = { "i8", "u8", "i16", "u16", "i32", "u32", "f32", "bool", "char", "int", "uint", "float", "string", "void", nullptr };
 		static const char* keywords[] = { "var", "auto", "const", "sub", "template", "struct", "enum", "alias", "return", "if", "else", "while", "do", "for",
 			"break", "continue", "null", "true", "false", "cast", "sizeof", "low", "interrupt", "inline", "static", "priv", "assert",
@@ -1602,6 +1657,7 @@ namespace
 			{
 				for (int i = 0; keywords[i] != nullptr; i++)
 					l_add(keywords[i], -1, "", 4);
+				l_addContextual();
 			}
 		}
 		else

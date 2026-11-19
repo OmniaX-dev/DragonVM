@@ -3043,6 +3043,14 @@ namespace dscript
 		return nullptr;
 	}
 
+	std::vector<const ConditionBuiltin*> conditionBuiltins(void)
+	{
+		std::vector<const ConditionBuiltin*> all;
+		for (const auto& e : ConditionEval::table())
+			all.push_back(&e.spec);
+		return all;
+	}
+
 	int64_t CodeGen::evalCondition(Node* e, const Bindings* bindings)
 	{
 		auto l_bound = [&](const std::string& name) -> const Type* const* {

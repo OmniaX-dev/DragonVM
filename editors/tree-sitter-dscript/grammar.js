@@ -68,8 +68,10 @@ module.exports = grammar({
 			token.immediate('('),
 			field('path', choice(
 				$.string_literal,
-				alias(token(prec(1, /<[^>\n]*>/)), $.string_literal),
-				alias(token(prec(1, /[^\s(),"<>]+/)), $.string_literal),
+				// (a negative precedence: these match almost anything, so in error recovery, where
+				// every token is possible, any other token wins; they are only taken after '(')
+				alias(token(prec(-1, /<[^>\n]*>/)), $.string_literal),
+				alias(token(prec(-1, /[^\s(),"<>]+/)), $.string_literal),
 			)),
 			optional(seq(',', field('mode', $.identifier))),
 			')',

@@ -6,6 +6,7 @@
 // (its table, in CodeGen.cpp, adds what each one computes: one entry per built-in).
 
 #include <string>
+#include <vector>
 
 namespace dscript
 {
@@ -20,4 +21,6 @@ namespace dscript
 
 	// nullptr: not a built-in.
 	const ConditionBuiltin* findConditionBuiltin(const std::string& name);
+	// All of them, in the table's order (the language server's completion).
+	std::vector<const ConditionBuiltin*> conditionBuiltins(void);
 }
