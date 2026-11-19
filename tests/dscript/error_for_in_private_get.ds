@@ -1,0 +1,10 @@
+// Outside a for-in, a range's priv methods stay private.
+// expect-error: 'get' is private to Buffer (priv)
+struct Buffer {
+	var items: u32[4];
+	sub begin() -> u32 { return 0; }
+	sub end() -> u32 { return 4; }
+	sub next(var i: u32) -> u32 { return i + 1; }
+	priv sub get(var i: u32) -> u32* { return &this->items[i]; }
+};
+sub main() -> i32 { var b: Buffer; return cast<i32>(*b.get(7)); }

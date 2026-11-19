@@ -1853,6 +1853,7 @@ namespace dscript
 		id->name = method;
 		id->text = callee->name;
 		id->pos = callee->namePos;
+		id->isPrivate = callee->isPrivate;
 		e->a = id;
 		e->list.insert(e->list.begin(), self);
 	}
@@ -1891,7 +1892,10 @@ namespace dscript
 			for (Node* arg : e->list)
 				check(arg);
 			FuncInfo* f = resolveOverload(callee->name, e->list, e->pos);
-			checkSubAccess(f, callee->pos);
+			// (A for-in may use a range's priv begin / end / next / get: its cursors only come from
+			// begin and next, so an unchecked get is safe there.)
+			if (!callee->isPrivate)
+				checkSubAccess(f, callee->pos);
 			if (f->interrupt)
 				error(e->pos, "interrupt subs cannot be called (they end with rti)");
 			for (size_t i = 0; i < e->list.size(); i++)
@@ -2285,6 +2289,7 @@ namespace dscript
 		auto l_method = [&](Node* object, const std::string& name, std::vector<Node*> args) {
 			Node* member = l_node(NodeKind::Member);
 			member->value = 1;		// ->
+			member->isPrivate = true;	// (the loop's own call: begin / end / next / get may be priv)
 			member->a = object;
 			member->name = name;
 			member->namePos = s->b->pos;

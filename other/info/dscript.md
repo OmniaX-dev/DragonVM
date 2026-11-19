@@ -665,6 +665,9 @@ struct Chain {                       // a linked list: node pointers, null at th
   loop does.
 - The range is a variable (or a field, or a pointer to the struct); `in` is not a keyword (it
   means something only there).
+- `begin` / `end` / `next` / `get` can be `priv`: a for-in may still use them, nothing else can.
+  Its cursors only come from `begin()` and `next()`, so a `get()` without bound checks is safe
+  there without being callable with any index.
 
 ### defer
 `defer <statement or block>` runs that code when the block it is in is left, on every way out:

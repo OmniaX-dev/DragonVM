@@ -52,7 +52,8 @@ namespace dscript
 		Node* c { nullptr };
 		Node* d { nullptr };
 		std::vector<Node*> list;		// Program / Block / struct fields / params / call arguments / ...
-		bool isPrivate { false };		// a struct field declared priv (methods: FuncDecl flag 16); a priv nested struct / enum
+		bool isPrivate { false };		// a struct field declared priv (methods: FuncDecl flag 16); a priv nested struct / enum;
+										// Member / Ident of a for-in's own call (begin, end, next, get): it may call a priv method
 		bool isReadonly { false };		// a struct field declared readonly
 		int variadic { 0 };				// FuncDecl: 1 if the parameters end with ..., 2 with ...typed
 		// Call of a variadic sub's built-in (va_count, va_start, va_types): 1, 2, 3 (0: a normal call).

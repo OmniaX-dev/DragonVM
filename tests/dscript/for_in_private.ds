@@ -1,0 +1,32 @@
+// A range's begin / end / next / get can be priv: a for-in may still use them (its cursors only
+// come from begin and next, so a get without bound checks is safe there), nothing else can.
+// expect-rv: 0
+#include(check.ds)
+
+struct Buffer {
+	priv var items: u32[4];
+	priv var count: u32;
+	sub push(var v: u32) { this->items[this->count] = v; this->count++; }
+	sub begin() -> u32 { return 0; }						// public
+	priv inline sub end() -> u32 { return this->count; }	// the others: priv
+	priv inline sub next(var i: u32) -> u32 { return i + 1; }
+	priv inline sub get(var i: u32) -> u32* { return &this->items[i]; }	// no bound check
+	sub sum() -> u32 { var s: u32 = 0; for (auto v in this) s += v; return s; }	// (inside: as always)
+};
+
+sub main() -> i32 {
+	var b: Buffer;
+	b.push(10);
+	b.push(20);
+	b.push(30);
+	var total: u32 = 0;
+	for (auto v in b) total += v;
+	check(1, total == 60);
+	for (auto& v in b) *v += 1;
+	check(2, b.sum() == 63);
+	var p: Buffer* = &b;
+	total = 0;
+	for (var v: u32 in p) total += v;
+	check(3, total == 63);
+	return result();
+}
