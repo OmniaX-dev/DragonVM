@@ -53,7 +53,8 @@ sub main() -> i32 {
 	check(51, same(std::error_name(std::ExecErrors.InvalidMagic), "not a DRX file"));
 	check(52, same(std::error_name(std::ExecErrors.EntryOutOfRange), "entry point outside the image"));
 	check(53, same(std::error_group_name(std::ExecErrors.Overlap), "program loading"));
-	check(54, all_named(std::ExecErrors.NotAFile, std::ExecErrors.EntryOutOfRange));
+	check(54, all_named(std::ExecErrors.NotAFile, std::ExecErrors.NotShareable));
+	check(55, same(std::error_name(std::ExecErrors.AbiMismatch), "library version mismatch (ABI)"));
 
 	// Every group starts at its own base (32 codes each), so no two codes are the same.
 	check(60, std::FileErrors.NotMounted == -33 and std::SystemErrors.NoMemory == -65);

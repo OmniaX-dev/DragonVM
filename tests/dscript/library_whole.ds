@@ -1,0 +1,11 @@
+// --whole-libraries: the libraries linked whole (as before), the same program works.
+// dsc-lib: libs/strip_a.ds libs/strip_b.ds
+// dsc-flags: --whole-libraries
+// expect-rv: 0
+#include(check.ds)
+#import(<strip_b>)
+
+sub main() -> i32 {
+	check(1, sb::uses_a(5) == 14 and sb::unused_b() == 36 + 1);
+	return result();
+}

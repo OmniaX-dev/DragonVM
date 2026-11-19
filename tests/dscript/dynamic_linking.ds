@@ -1,0 +1,46 @@
+// Dynamic linking: a program (DRX2) using two shared libraries (DRL), one using the other. The
+// libraries' writable globals are the process's copies (the program and both libraries see the
+// same ones), their code is shared (other/info/dynamic-linking.md).
+// dsc-shared: libs/dyn_counter.ds libs/dyn_user.ds
+// dsc-flags: --dynamic
+// expect-rv: 0
+#include(check.ds)
+#import(<libcore>)
+#import(<dyn_user>)
+
+sub main() -> i32 {
+	// The initial values (the template copied for the process) and the library's init.
+	check(1, dc::counter == 5 and dc::table[3] == 4 and dc::small == 200 and dc::signed16 == -300);
+	check(2, dc::origin.x == 10 and dc::origin.y == -20 and dc::computed == 42);
+	check(3, std::strcmp(dc::name, "counter") == 0 and dc::name_length() == 7);
+	// One copy: what the library changes, the program sees, and the other way around.
+	check(10, dc::bump(3) == 8 and dc::counter == 8);
+	dc::counter = 20;
+	check(11, dc::bump(1) == 21);
+	check(12, dc::counter_address() == &dc::counter);
+	check(13, dc::calls() == 1 and dc::calls() == 2 and dc::calls() == 3);
+	check(14, dc::sum_table() == 27);
+	dc::table[2] = 30;
+	check(15, dc::sum_table() == 54);
+	dc::move_origin(5);
+	check(16, dc::origin.x == 15 and dc::origin.y == -25);
+	dc::small = 7;
+	dc::signed16 = -2;
+	check(17, dc::small == 7 and dc::signed16 == -2);
+	// Low blocks.
+	check(20, dc::low_read() == 21);
+	dc::low_write(77);
+	check(21, dc::counter == 77 and dc::low_read() == 77);
+	// The second library: dc's global and subs from its shared code.
+	dc::counter = 8;
+	check(30, du::use_counter() == 100 + 19 and dc::counter == 19 and du::total == 119);
+	check(31, du::origin_sum() == -10);
+	// Pointers in its writable data: its own sub, the other library's sub, its own global, a string.
+	check(40, du::apply(21) == 42);
+	check(41, du::apply_other(1) == 20 and dc::counter == 20);
+	check(42, du::through_pointer() == 120 and *du::total_ptr == 120 and du::total_ptr == &du::total);
+	check(43, du::greeting_char(1) == 'e' and du::greeting_char(4) == 'o');
+	du::op = dc::bump;
+	check(44, du::apply(5) == 25);
+	return result();
+}

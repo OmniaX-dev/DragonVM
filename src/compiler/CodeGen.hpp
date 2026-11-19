@@ -65,6 +65,16 @@ namespace dscript
 		// The libraries the program imports: __ds_start calls their __ds_lib_init first (as
 		// __dlib_init_<n>, which the linker connects), in this order.
 		int libraries { 0 };
+		// A shared library (dsc --lib --shared, a DRL): its code is loaded once for every process,
+		// so it never uses the address of a writable global directly. Its writable globals are
+		// together between $__ds_rw_start and $__ds_rw_end (every process gets its own copy), and
+		// their addresses come from the running process's table:
+		//   mov R, [$__ds_libtable]           the table (the system word LibTable points at it)
+		//   movo R, *R, dword $__ds_slot      this library's bias (its slot: 4 * slot)
+		//   addip R, $__dsrw__<symbol>        + the global's offset in the library
+		// (another library's writable global: $__dsslot__<symbol> / $__dsoff__<symbol>). The
+		// linker (dsc) and the loader fill those in; see other/info/dynamic-linking.md.
+		bool shared { false };
 	};
 
 	// Checks the program (types, names, overloads) and generates dasm source for it.
@@ -87,6 +97,11 @@ namespace dscript
 			// For the debugger (the disassembly's { SUBS }): a line per sub with code here (inline
 			// subs too: their copies), "<name>\t<label>\t<parameter types>\t<inline 0/1>\t<file>\t<line>\t<last line>".
 			std::vector<std::string> subTable(void) const;
+			// The labels where a library's code can be cut into pieces for the linker (which keeps
+			// only the pieces a program uses): __ds_lib_init (the first code) and every sub that
+			// follows code ending with ret (another sub), in the order of the code. A sub right
+			// after a top-level low block is not one (the low code could run into it).
+			const std::vector<std::string>& pieceStarts(void) const { return m_pieceStarts; }
 
 		private:
 			// Struct constants: type is the struct, fields holds every scalar field's value by its
@@ -231,6 +246,8 @@ namespace dscript
 			void loadVar(const Reg& dst, VarInfo* v, bool fromMemory = false);
 			// taken: -O pass 1, the variable can't be in a register.
 			void varAddress(const Reg& dst, VarInfo* v, bool taken = true);
+			// A shared library's writable global (its address comes from the process's table).
+			bool isSharedData(const VarInfo* v) const;
 			void convert(const Reg& r, Type* from, Type* to);
 			void normalize(const Reg& r, Type* t);
 			void copyMemory(const Reg& dst, const Reg& src, uint32_t size);
@@ -316,6 +333,9 @@ namespace dscript
 			std::vector<std::string> m_sourcePaths;
 
 			std::vector<std::string> m_data;
+			std::vector<std::string> m_dataRW;	// shared library: the writable globals (its rw part)
+			std::vector<std::string> m_pieceStarts;
+			bool m_subEmitted { false };
 			std::vector<std::string> m_code;
 			std::vector<std::string> m_initCode;
 			std::map<std::string, std::string> m_strings;

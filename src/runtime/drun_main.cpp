@@ -13,6 +13,7 @@
 #include "DragonRuntime.hpp"
 #include "../hardware/Text16Console.hpp"
 #include "../tools/DRX.hpp"
+#include "../tools/DynamicLinking.hpp"
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
@@ -170,6 +171,11 @@ static void usage(void)
 {
 	std::cout << "Usage: drun <machine.dvm> [program.drx | program.bin --at <address>] [options] [-- arguments]\n"
 				 "  --at <address>         Load address (DRX: default 0x01020000; raw binaries: required)\n"
+				 "  -L <dir>               Where the shared libraries (<name>.drl) of a DRX2 (dsc --dynamic) are; they\n"
+				 "                         are loaded after the program and linked (see other/info/dynamic-linking.md)\n"
+				 "  --link-log             Prints what the linker does (each library's slot and addresses), to stderr\n"
+				 "  --file <address>:<path>  Puts a file in memory before the program runs: its size (a word, big\n"
+				 "                         endian) at address, its bytes after it (e.g. for a test that reads a file)\n"
 				 "  --boot                 Runs the BIOS first (its interrupts then work)\n"
 				 "  --max-cycles <n>       Stops after n cycles (default 50000000)\n"
 				 "  --dump <address>[:n]   Prints n bytes (default 4) of memory at the end\n"
@@ -197,7 +203,9 @@ int main(int argc, char** argv)
 	}
 	std::string config = argv[1], programPath;
 	i64 at = -1;
-	bool boot = false, quiet = false, screen = false, drxEvents = false, userMode = false;
+	bool boot = false, quiet = false, screen = false, drxEvents = false, userMode = false, linkLog = false;
+	std::vector<std::string> libraryDirs;
+	std::vector<std::pair<u32, std::string>> files;
 	u64 maxCycles = 50000000;
 	i64 vsyncCycles = -1;
 	i64 unixTime = -1;
@@ -215,6 +223,15 @@ int main(int argc, char** argv)
 		auto l_value = [&](void) -> std::string { if (i + 1 >= argc) { usage(); std::exit(2); } return argv[++i]; };
 		if (a == "--at") at = (i64)std::strtoull(l_value().c_str(), nullptr, 0);
 		else if (a == "--boot") boot = true;
+		else if (a == "-L") libraryDirs.push_back(l_value());
+		else if (a == "--link-log") linkLog = true;
+		else if (a == "--file")
+		{
+			const std::string f = l_value();
+			const size_t colon = f.find(':');
+			if (colon == std::string::npos) { usage(); return 2; }
+			files.push_back({ (u32)std::strtoul(f.substr(0, colon).c_str(), nullptr, 0), f.substr(colon + 1) });
+		}
 		else if (a == "--quiet") quiet = true;
 		else if (a == "--screen") screen = true;
 		else if (a == "--drx-events") drxEvents = true;
@@ -291,6 +308,26 @@ int main(int argc, char** argv)
 				return (cpu.isHalted() ? 1 : 2);
 			}
 		}
+		for (const auto& f : files)
+		{
+			std::vector<uint8_t> bytes;
+			if (!readFile(f.second, bytes))
+			{
+				std::cerr << "drun: cannot read " << f.second << "\n";
+				return 1;
+			}
+			std::vector<uint8_t> sized(4);
+			drx::writeU32(sized.data(), (u32)bytes.size());
+			sized.insert(sized.end(), bytes.begin(), bytes.end());
+			for (size_t i = 0; i < sized.size(); i++)
+			{
+				if (!mem.poke8(f.first + (u32)i, sized[i]))
+				{
+					std::cerr << "drun: " << f.second << " doesn't fit in memory at " << String::getHexStr(f.first, true, 4) << "\n";
+					return 1;
+				}
+			}
+		}
 		std::vector<uint8_t> file;
 		if (!readFile(programPath, file))
 		{
@@ -299,7 +336,45 @@ int main(int argc, char** argv)
 		}
 		std::vector<uint8_t> image;
 		u32 entry = 0;
-		if (drx::isDRX(file))
+		if (dyn::isProgram(file))
+		{
+			// A DRX2: the program at its base, its shared libraries after it (dyn::Linker).
+			dyn::Program program;
+			std::string message;
+			if (!dyn::read(file, program, message))
+			{
+				std::cerr << "drun: " << programPath << ": " << message << "\n";
+				return 1;
+			}
+			const u32 base = (at < 0 ? 0x01020000u : (u32)at);
+			dyn::Linker linker;
+			linker.directories = libraryDirs;
+			linker.write = [&](u32 address, const std::vector<uint8_t>& bytes) {
+				for (size_t i = 0; i < bytes.size(); i++)
+				{
+					if (!mem.poke8(address + (u32)i, bytes[i]))
+						return false;
+				}
+				return true;
+			};
+			linker.notify = [&](u32 libBase, u32 size, u64 id) {
+				if (drxEvents)
+					std::fprintf(stderr, "[drun] DRL loaded at 0x%08X, %u bytes, id %s\n", libBase, size, drx::idString(id).c_str());
+			};
+			if (linkLog)
+				linker.log = [](const std::string& s) { std::fprintf(stderr, "[drun] link: %s\n", s.c_str()); };
+			if (!linker.link(program, base, base + (u32)program.image.size(), image, message))
+			{
+				std::cerr << "drun: " << programPath << ": " << message << "\n";
+				return 1;
+			}
+			if (linkLog)
+				std::fprintf(stderr, "[drun] link: program at 0x%08X, LibTable word at 0x%08X, %zu libraries, end 0x%08X\n", base,
+					linker.libTableWord(), linker.libraries().size(), linker.end());
+			entry = base + program.entry;
+			at = base;
+		}
+		else if (drx::isDRX(file))
 		{
 			drx::Program program;
 			std::string message;

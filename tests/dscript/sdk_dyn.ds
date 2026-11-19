@@ -1,0 +1,84 @@
+// dr::dyn: the dynamic linking files read in place, from what dsc wrote: a shared library
+// (libs/dyn_user.drl, at 0x01800000) and this program itself (a DRX2, at 0x01900000), put in
+// memory by drun --file (the size, then the bytes). Then broken copies: each error.
+// dsc-shared: libs/dyn_counter.ds libs/dyn_user.ds
+// dsc-flags: --dynamic
+// drun-flags: --file 0x01800000:@LIBS@/dyn_user.drl --file 0x01900000:@PROGRAM@
+// expect-rv: 0
+#include(check.ds)
+#import(<dragon-sdk>)
+
+sub same(var a: string, var b: string) -> bool { return std::strcmp(a, b) == 0; }
+
+sub main() -> i32 {
+	var lib_size: u32 = *cast<u32*>(0x01800000);
+	var lib: u8* = cast<u8*>(0x01800004);
+	var prog_size: u32 = *cast<u32*>(0x01900000);
+	var prog: u8* = cast<u8*>(0x01900004);
+
+	// The library.
+	var h: dr::dyn::LibraryHeader;
+	check(1, dr::dyn::is_library(lib, lib_size) and not dr::dyn::is_program(lib, lib_size));
+	check(2, dr::dyn::read_library_header(lib, lib_size, &h) == std::Ok);
+	check(3, same(h.name, "dyn_user") and h.abi != 0 and h.image_size > 0 and h.init < h.image_size);
+	check(4, h.rw_size > 0 and h.rw_start + h.rw_size <= h.image_size);
+	var dep: dr::dyn::LibraryRef;
+	check(5, h.dependencies.count == 1 and dr::dyn::library_dependency(lib, &h, 0, &dep) == std::Ok and same(dep.name, "dyn_counter") and dep.abi != 0);
+	check(6, dr::dyn::library_dependency(lib, &h, 1, &dep) == std::SystemErrors.InvalidArgument);
+	// Every relocation and import is valid; the shared code has every kind of import.
+	var offset: u32 = 0;
+	var bad: u32 = 0;
+	for (var i: u32 = 0; i < h.text_relocations.count; i++)
+		if (dr::dyn::library_relocation(lib, &h, &h.text_relocations, i, &offset) != std::Ok or dr::dyn::in_rw(&h, offset)) bad++;
+	for (var i: u32 = 0; i < h.data_text_relocations.count; i++)
+		if (dr::dyn::library_relocation(lib, &h, &h.data_text_relocations, i, &offset) != std::Ok or not dr::dyn::in_rw(&h, offset)) bad++;
+	check(10, bad == 0 and h.text_relocations.count > 0 and h.data_text_relocations.count == 1);	// (greeting: a string)
+	var kinds: u32[6] = { 0, 0, 0, 0, 0, 0 };
+	var imp: dr::dyn::Import;
+	for (var i: u32 = 0; i < h.imports.count; i++) {
+		if (dr::dyn::library_import(lib, &h, i, &imp) != std::Ok) bad++;
+		else kinds[imp.kind]++;
+		if (imp.kind == dr::dyn::ImportKinds.SlotOf and not same(imp.symbol, "__ns_dc__counter") and not same(imp.symbol, "__ns_dc__origin")) bad++;
+	}
+	check(11, bad == 0 and kinds[dr::dyn::ImportKinds.Absolute] > 0 and kinds[dr::dyn::ImportKinds.SlotOf] > 0);
+	check(12, kinds[dr::dyn::ImportKinds.OffsetOf] == kinds[dr::dyn::ImportKinds.SlotOf] and kinds[dr::dyn::ImportKinds.Init] == 0);
+	check(13, kinds[dr::dyn::ImportKinds.SelfSlot] > 0 and kinds[dr::dyn::ImportKinds.SelfSlot] == kinds[dr::dyn::ImportKinds.LibTable] - kinds[dr::dyn::ImportKinds.SlotOf]);
+	// Exports: by index, and by name (binary search).
+	var e: dr::dyn::Export;
+	check(20, h.exports.count > 0 and dr::dyn::library_export(lib, &h, 0, &e) == std::Ok);
+	check(21, dr::dyn::find_export(lib, &h, "__ns_du__total", &offset) == std::Ok and dr::dyn::in_rw(&h, offset));
+	check(22, dr::dyn::find_export(lib, &h, "__ns_du__twice", &offset) == std::Ok and not dr::dyn::in_rw(&h, offset));
+	check(23, dr::dyn::find_export(lib, &h, "nope", &offset) == std::ExecErrors.SymbolNotFound);
+	for (var i: u32 = 0; i < h.exports.count; i++)
+		if (dr::dyn::library_export(lib, &h, i, &e) != std::Ok or dr::dyn::find_export(lib, &h, e.symbol, &offset) != std::Ok or offset != e.offset) bad++;
+	check(24, bad == 0);
+
+	// This program (a DRX2): its libraries, its imports (an Init for each library).
+	var p: dr::dyn::ProgramHeader;
+	check(30, dr::dyn::is_program(prog, prog_size) and dr::dyn::read_program_header(prog, prog_size, &p) == std::Ok);
+	var ref: dr::dyn::LibraryRef;
+	var found_sdk: bool = false;
+	for (var i: u32 = 0; i < p.libraries.count; i++) {
+		if (dr::dyn::program_library(prog, &p, i, &ref) != std::Ok) bad++;
+		else if (same(ref.name, "dragon-sdk")) found_sdk = true;
+	}
+	check(31, bad == 0 and found_sdk and p.libraries.count >= 2);		// libcore, dragon-sdk
+	var inits: u32 = 0;
+	for (var i: u32 = 0; i < p.imports.count; i++) {
+		if (dr::dyn::program_import(prog, &p, i, &imp) != std::Ok) bad++;
+		else if (imp.kind == dr::dyn::ImportKinds.Init) inits++;
+	}
+	check(32, bad == 0 and inits == p.libraries.count);
+	for (var i: u32 = 0; i < p.relocations.count; i++)
+		if (dr::dyn::program_relocation(prog, &p, i, &offset) != std::Ok) bad++;
+	check(33, bad == 0 and p.relocations.count > 0);
+
+	// Broken files.
+	check(40, dr::dyn::read_library_header(lib, 10, &h) == std::ExecErrors.FileTooSmall);
+	check(41, dr::dyn::read_library_header(lib, h.header_size + 4, &h) == std::ExecErrors.TruncatedFile);
+	check(42, dr::dyn::read_library_header(prog, prog_size, &h) == std::ExecErrors.InvalidMagic);
+	check(43, dr::dyn::read_program_header(lib, lib_size, &p) == std::ExecErrors.InvalidMagic);
+	check(44, dr::dyn::read_program_header(prog, p.strings, &p) == std::ExecErrors.TruncatedFile);	// (no strings)
+	check(45, dr::dyn::read_library_header(null, lib_size, &h) == std::SystemErrors.InvalidArgument);
+	return result();
+}

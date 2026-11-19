@@ -1,0 +1,19 @@
+// Static and dynamic libraries together: dyn_user is copied into the program (static), and its
+// code uses dyn_counter, which is shared (dynamic): the program and dyn_user's copy see the
+// same dc::counter (the process's copy of the shared library's globals). libcore: static.
+// dsc-shared: libs/dyn_counter.ds libs/dyn_user.ds
+// expect-rv: 0
+#include(check.ds)
+#import(<libcore>)
+#import(<dyn_counter>, dynamic)
+#import(<dyn_user>, static)
+
+sub main() -> i32 {
+	check(1, dc::counter == 5 and du::total == 100 and dc::computed == 42);
+	dc::counter = 8;
+	check(2, du::use_counter() == 119 and dc::counter == 19);		// dyn_user's static code, the shared counter
+	check(3, du::apply_other(1) == 20 and dc::counter == 20);		// a pointer to the shared library's sub
+	check(4, du::apply(21) == 42 and std::strcmp(du::greeting, "hello") == 0);
+	check(5, dc::counter_address() == &dc::counter);
+	return result();
+}

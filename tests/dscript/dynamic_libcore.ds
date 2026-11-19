@@ -1,0 +1,21 @@
+// A program using libcore as a shared library (dsc --dynamic): libcore.drl is loaded and linked
+// by drun; the program has none of libcore's code.
+// dsc-flags: --dynamic
+// expect-rv: 0
+#include(check.ds)
+#import(<libcore>)
+
+sub main() -> i32 {
+	var buffer: u8[16];
+	check(1, std::strcmp(std::itoa(-1234, buffer), "-1234") == 0);
+	check(2, std::strlen("dynamic") == 7);
+	var a: u8[8] = { 1, 2, 3, 4, 5, 6, 7, 8 };
+	var b: u8[8];
+	std::memcpy(b, a, 8);
+	check(3, std::memcmp(a, b, 8) == 0);
+	std::memset(b, 9, 8);
+	check(4, b[0] == 9 and b[7] == 9);
+	check(5, std::strcmp(std::error_name(std::FsErrors.NotFound), "not found") == 0);
+	check(6, std::strcmp(std::error_group_name(std::ProcessErrors.NoChild), "process") == 0);
+	return result();
+}

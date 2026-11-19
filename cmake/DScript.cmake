@@ -30,6 +30,9 @@
 #   - Drake and kernel0: bin/dragon/drake.bin (a DRX, as /init/boot.img on partition 1),
 #     bin/dragon/snake_kernel0.bin (at 0x00401000 and as /boot/kernel0 on partition 3),
 #     in bin/dragon/disk.drd
+#   - the shared libraries of DragonOS programs (dsc --lib --shared: libcore.drl, stdlib.drl, see
+#     other/info/dynamic-linking.md): next to the .dlib files, and on DragonOS's partition (2) as
+#     /lib/<name>.drl; their disassembly in bin/disassembly (ddb places it where they are loaded)
 #   - DragonOS's user programs (extra/ds/dragon-os/user_programs, linking stdlib): DRX files in
 #     bin/dragon (dinit.drx, wingsh.drx), put on DragonOS's partition (2) as /boot/dinit (the
 #     first process the kernel starts) and /bin/wingsh
@@ -59,6 +62,8 @@ string(MD5 DS_BIOS_DDS "dragon/bios.bin")
 string(MD5 DS_DRAKE_DDS "dragon/drake.bin")
 string(MD5 DS_SNAKE_KERNEL0_DDS "dragon/snake_kernel0.bin")
 string(MD5 DS_DRAGON_OS_DDS "dragon/dragon-os.bin")
+string(MD5 DS_LIBCORE_DRL_DDS "lib/libcore.drl")
+string(MD5 DS_STDLIB_DRL_DDS "lib/stdlib.drl")
 string(MD5 DS_DINIT_DDS "dragon/dinit.drx")
 string(MD5 DS_WINGSH_DDS "dragon/wingsh.drx")
 
@@ -71,6 +76,8 @@ function(ds_add_env TARGET MODE ASM_FLAGS)
 	set(LIBCORE ${OUT}/lib/libcore.dlib)
 	set(SDK ${OUT}/lib/dragon-sdk.dlib)
 	set(STDLIB ${OUT}/lib/stdlib.dlib)
+	set(LIBCORE_DRL ${OUT}/lib/libcore.drl)
+	set(STDLIB_DRL ${OUT}/lib/stdlib.drl)
 	# What a supervisor-mode program (the BIOS, Drake, the kernels) links.
 	set(SYSTEM_LIBS ${LIBCORE} ${SDK})
 	# What a DragonOS user program links.
@@ -81,10 +88,12 @@ function(ds_add_env TARGET MODE ASM_FLAGS)
 		set(LIBS_EXTRA_DIR ${DS_RUN_DIR}/ds)
 	endif()
 
+	# libcore and stdlib (what DragonOS programs use) are also shared libraries: --shared writes
+	# both the .dlib and the .drl (other/info/dynamic-linking.md).
 	add_custom_command(
-		OUTPUT ${LIBCORE}
+		OUTPUT ${LIBCORE} ${LIBCORE_DRL} ${OUT}/disassembly/${DS_LIBCORE_DRL_DDS}.dds
 		COMMAND ${CMAKE_COMMAND} -E make_directory ${OUT}/lib ${OUT}/disassembly
-		COMMAND ${DSC} --lib ${DS_LIBCORE_SOURCES} -o ${LIBCORE} -O ${WA}
+		COMMAND ${DSC} --lib --shared ${DS_LIBCORE_SOURCES} -o ${LIBCORE} -O --save-disassembly ${OUT}/disassembly/${DS_LIBCORE_DRL_DDS}.dds ${WA}
 		DEPENDS ${DS_LIBCORE_SOURCES} ${COMPILER_TARGET}
 		WORKING_DIRECTORY ${DS_RUN_DIR}
 		COMMENT "DScript (${MODE}): libcore"
@@ -99,12 +108,13 @@ function(ds_add_env TARGET MODE ASM_FLAGS)
 		VERBATIM)
 
 	add_custom_command(
-		OUTPUT ${STDLIB}
-		COMMAND ${DSC} --lib ${DS_STDLIB_SOURCES} -o ${STDLIB} -L ${OUT}/lib -O ${WA}
+		OUTPUT ${STDLIB} ${STDLIB_DRL} ${OUT}/disassembly/${DS_STDLIB_DRL_DDS}.dds
+		COMMAND ${DSC} --lib --shared ${DS_STDLIB_SOURCES} -o ${STDLIB} -L ${OUT}/lib -O --save-disassembly ${OUT}/disassembly/${DS_STDLIB_DRL_DDS}.dds ${WA}
 		DEPENDS ${DS_STDLIB_SOURCES} ${LIBCORE} ${COMPILER_TARGET}
 		WORKING_DIRECTORY ${DS_RUN_DIR}
 		COMMENT "DScript (${MODE}): stdlib"
 		VERBATIM)
+
 
 	add_custom_command(
 		OUTPUT ${OUT}/bios.bin
@@ -173,6 +183,10 @@ function(ds_add_env TARGET MODE ASM_FLAGS)
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${LIBCORE} ${LIBS_EXTRA_DIR}/libcore/lib/libcore.dlib
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${SDK} ${LIBS_EXTRA_DIR}/dragon-sdk/lib/dragon-sdk.dlib
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${STDLIB} ${LIBS_EXTRA_DIR}/stdlib/lib/stdlib.dlib
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${LIBCORE_DRL} ${DS_RUN_DIR}/ds/libcore/lib/libcore.drl
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${STDLIB_DRL} ${DS_RUN_DIR}/ds/stdlib/lib/stdlib.drl
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${LIBCORE_DRL} ${LIBS_EXTRA_DIR}/libcore/lib/libcore.drl
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${STDLIB_DRL} ${LIBS_EXTRA_DIR}/stdlib/lib/stdlib.drl
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${OUT}/bios.bin ${DS_RUN_DIR}/dragon/bios.bin
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${OUT}/drake.bin ${DS_RUN_DIR}/dragon/drake.bin
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${OUT}/snake_kernel0.bin ${DS_RUN_DIR}/dragon/snake_kernel0.bin
@@ -183,6 +197,8 @@ function(ds_add_env TARGET MODE ASM_FLAGS)
 																									${OUT}/disassembly/${DS_DRAKE_DDS}.dds
 																									${OUT}/disassembly/${DS_SNAKE_KERNEL0_DDS}.dds
 																									${OUT}/disassembly/${DS_DRAGON_OS_DDS}.dds
+																									${OUT}/disassembly/${DS_LIBCORE_DRL_DDS}.dds
+																									${OUT}/disassembly/${DS_STDLIB_DRL_DDS}.dds
 																									${OUT}/disassembly/${DS_DINIT_DDS}.dds
 																									${OUT}/disassembly/${DS_WINGSH_DDS}.dds
 																									${DS_RUN_DIR}/disassembly/
@@ -191,10 +207,13 @@ function(ds_add_env TARGET MODE ASM_FLAGS)
 		COMMAND ${DTOOLS} dfs dragon/disk.drd 2 install-kernel dragon/dragon-os.bin
 		COMMAND ${DTOOLS} dfs dragon/disk.drd 2 mkdir -p /boot
 		COMMAND ${DTOOLS} dfs dragon/disk.drd 2 put dragon/dinit.drx /boot/dinit
+		COMMAND ${DTOOLS} dfs dragon/disk.drd 2 mkdir -p /lib
+		COMMAND ${DTOOLS} dfs dragon/disk.drd 2 put ${LIBCORE_DRL} /lib/libcore.drl
+		COMMAND ${DTOOLS} dfs dragon/disk.drd 2 put ${STDLIB_DRL} /lib/stdlib.drl
 		COMMAND ${DTOOLS} dfs dragon/disk.drd 2 mkdir -p /bin
 		COMMAND ${DTOOLS} dfs dragon/disk.drd 2 put dragon/wingsh.drx /bin/wingsh
 		COMMAND ${DTOOLS} dfs dragon/disk.drd 3 install-kernel dragon/snake_kernel0.bin
-		DEPENDS ${LIBCORE} ${SDK} ${STDLIB} ${OUT}/bios.bin ${OUT}/drake.bin ${OUT}/snake_kernel0.bin ${OUT}/dragon-os.bin
+		DEPENDS ${LIBCORE} ${SDK} ${STDLIB} ${LIBCORE_DRL} ${STDLIB_DRL} ${OUT}/bios.bin ${OUT}/drake.bin ${OUT}/snake_kernel0.bin ${OUT}/dragon-os.bin
 																									${OUT}/dinit.drx ${OUT}/wingsh.drx ${TOOLS_TARGET}
 		WORKING_DIRECTORY ${DS_RUN_DIR}
 		COMMENT "DScript (${MODE}): BIOS, Drake, the kernels and DragonOS's programs in place"

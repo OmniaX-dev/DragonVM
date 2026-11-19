@@ -1,0 +1,13 @@
+// A dynamic library's dependencies are dynamic: dyn_user is chosen dynamic, dyn_counter (which it
+// needs) is made dynamic too, without being named.
+// dsc-shared: libs/dyn_counter.ds libs/dyn_user.ds
+// expect-rv: 0
+#include(check.ds)
+#import(<dyn_user>, dynamic)
+
+sub main() -> i32 {
+	dc::counter = 8;
+	check(1, du::use_counter() == 119 and dc::counter == 19);
+	check(2, dc::counter_address() == &dc::counter);
+	return result();
+}

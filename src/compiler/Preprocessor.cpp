@@ -431,13 +431,13 @@ namespace dscript
 		error(tok.pos, "#import: library not found: " + path + (m_libraryDirs.empty() ? " (no library directories: -L <dir>)" : " (searched in the -L directories)"));
 	}
 
-	void Preprocessor::importLibrary(const Token& tok, const std::string& path, std::vector<Token>& out)
+	size_t Preprocessor::importLibrary(const Token& tok, const std::string& path, std::vector<Token>& out)
 	{
 		const std::string canonical = std::filesystem::weakly_canonical(path).string();
-		for (const auto& imp : m_imports)
+		for (size_t i = 0; i < m_imports.size(); i++)
 		{
-			if (imp.path == canonical)
-				return;
+			if (m_imports[i].path == canonical)
+				return i;
 		}
 		for (const auto& p : m_importStack)
 		{
@@ -458,7 +458,7 @@ namespace dscript
 		m_importStack.push_back(canonical);
 		const std::string libDir = std::filesystem::path(canonical).parent_path().string();
 		for (const auto& dep : imp.library.dependencies)
-			importLibrary(tok, resolveImport(tok, dep, libDir), out);
+			imp.deps.push_back(importLibrary(tok, resolveImport(tok, dep, libDir), out));
 		m_importStack.pop_back();
 		// Its declarations, where they come from (the library's sources), without this
 		// program's defines.
@@ -498,6 +498,7 @@ namespace dscript
 		t.text = "}";
 		out.push_back(t);
 		m_imports.push_back(std::move(imp));
+		return m_imports.size() - 1;
 	}
 
 	void Preprocessor::directive(const Token& tok, const std::string& directory, std::vector<Token>& out, std::vector<Conditional>& stack)
@@ -598,13 +599,30 @@ namespace dscript
 		}
 		else if (name == "import")
 		{
-			const std::string written = argument(tok, rest, name);
+			// #import(<name>) or #import(<name>, static / dynamic): how the program links it
+			// (other/info/dynamic-linking.md).
+			std::string written = argument(tok, rest, name);
+			std::string mode;
+			const size_t comma = written.rfind(',');
+			if (comma != std::string::npos && written.find('>', comma) == std::string::npos && written.find('"', comma) == std::string::npos)
+			{
+				mode = trim(written.substr(comma + 1));
+				written = trim(written.substr(0, comma));
+				if (mode != "static" && mode != "dynamic")
+					error(tok.pos, "#import: unknown way to link the library: '" + mode + "' (static or dynamic)");
+			}
 			const std::string path = resolveImport(tok, written, directory);
 			if (std::find(m_importArguments.begin(), m_importArguments.end(), written) == m_importArguments.end())
 				m_importArguments.push_back(written);
 			if (m_index != nullptr)
 				m_index->add(tok.pos, (int)tok.text.size() + 1, {}, "#import " + std::filesystem::weakly_canonical(path).string());
-			importLibrary(tok, path, out);
+			const size_t index = importLibrary(tok, path, out);
+			if (!mode.empty())
+			{
+				if (!m_imports[index].mode.empty() && m_imports[index].mode != mode)
+					error(tok.pos, "#import: " + written + " is imported both static and dynamic");
+				m_imports[index].mode = mode;
+			}
 		}
 		else if (name == "once")
 			;	// the default

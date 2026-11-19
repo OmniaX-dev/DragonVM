@@ -2254,6 +2254,11 @@ namespace dscript
 		}
 	}
 
+	bool CodeGen::isSharedData(const VarInfo* v) const
+	{
+		return m_options.shared && v->storage == VarInfo::Storage::Global && !v->readOnly;
+	}
+
 	void CodeGen::varAddress(const Reg& dst, VarInfo* v, bool taken)
 	{
 		if (!v->reg.empty())
@@ -2263,7 +2268,23 @@ namespace dscript
 		switch (v->storage)
 		{
 			case VarInfo::Storage::Global:
-				emit("mov " + dst + ", $" + v->symbol);
+				if (isSharedData(v))
+				{
+					// The process's copy: table[slot] + the offset (see CodeGenOptions::shared).
+					emit("mov " + dst + ", [$__ds_libtable]");
+					if (v->external)
+					{
+						emit("movo " + dst + ", *" + dst + ", dword $__dsslot__" + v->symbol);
+						emit("addip " + dst + ", $__dsoff__" + v->symbol);
+					}
+					else
+					{
+						emit("movo " + dst + ", *" + dst + ", dword $__ds_slot");
+						emit("addip " + dst + ", $__dsrw__" + v->symbol);
+					}
+				}
+				else
+					emit("mov " + dst + ", $" + v->symbol);
 			break;
 			case VarInfo::Storage::Local:
 				emit("mov " + dst + ", FP");
@@ -2292,6 +2313,12 @@ namespace dscript
 			return;
 		}
 		const char* sizeSuffix = (t->size() == 1 ? "b" : (t->size() == 2 ? "w" : ""));
+		if (v->storage == VarInfo::Storage::Global && isSharedData(v))
+		{
+			varAddress(dst, v, false);
+			load(dst, dst, t);
+			return;
+		}
 		if (v->storage == VarInfo::Storage::Global)
 			emit(std::string("mov") + sizeSuffix + " " + dst + ", [$" + v->symbol + "]");
 		else
@@ -4126,7 +4153,7 @@ namespace dscript
 						default: break;
 					}
 				}
-				else if (v->storage == VarInfo::Storage::Global)
+				else if (v->storage == VarInfo::Storage::Global && !isSharedData(v))
 				{
 					const char* suffix = (v->type->size() == 1 ? "b" : (v->type->size() == 2 ? "w" : ""));
 					emit(std::string("mov") + suffix + " [$" + v->symbol + "], " + reg);
@@ -4254,6 +4281,13 @@ namespace dscript
 		}
 		m_out = &m_code;
 		m_code.push_back("");
+		if (!m_discarding)
+		{
+			// (After the top-level low blocks, the first sub is not a safe place to cut.)
+			if (m_subEmitted || m_topLows.empty())
+				m_pieceStarts.push_back(f->label);
+			m_subEmitted = true;
+		}
 		label(f->label);
 		loc(f->decl->pos);	// the prologue
 		if (m_localMin < 4)
@@ -4946,7 +4980,7 @@ namespace dscript
 						line += buf;
 					}
 				}
-				m_data.push_back(line);
+				(isSharedData(v) ? m_dataRW : m_data).push_back(line);
 				// Run time initializations.
 				for (const auto& p : pending)
 				{
@@ -4960,7 +4994,7 @@ namespace dscript
 						convert(val, decay(p.init->type), p.type);
 					}
 					Reg addr = alloc(p.init->pos);
-					emit("mov " + addr + ", $" + v->symbol);
+					varAddress(addr, v, false);
 					addImmediate(addr, p.offset);
 					store(addr, val, p.type);
 					release(addr);
@@ -5951,10 +5985,21 @@ namespace dscript
 				line = "\t$" + s.second + " 0x00";
 			out.push_back(line);
 		}
+		if (m_options.shared)
+		{
+			// The writable globals, together: every process gets its own copy of this part (the
+			// image keeps it as their initial values). The markers are one byte each (the
+			// assembler has no empty data entries that code can name).
+			out.push_back("\t$__ds_rw_start 0x00");
+			for (const auto& d : m_dataRW)
+				out.push_back(d);
+			out.push_back("\t$__ds_rw_end 0x00");
+		}
 		out.push_back(".code");
 		if (m_options.library)
 		{
 			// Called by the programs that import the library (before their main).
+			m_pieceStarts.insert(m_pieceStarts.begin(), "__ds_lib_init");
 			out.push_back("__ds_lib_init:");
 			out.push_back(".loc -");
 			if (!m_initCode.empty())
@@ -6020,6 +6065,8 @@ namespace dscript
 		out.insert(out.end(), m_code.begin(), m_code.end());
 		if (m_helpers.count("__ds_shru") > 0)
 		{
+			if (m_subEmitted || m_topLows.empty())
+				m_pieceStarts.push_back("__ds_shru");
 			// __ds_shru(value, count): logical shift right.
 			const char* helper[] = {
 				"", "__ds_shru:", ".loc -",

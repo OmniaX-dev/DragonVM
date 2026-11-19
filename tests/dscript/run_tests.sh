@@ -14,15 +14,21 @@
 #                              debugger) has the source lines of these files (also the libraries')
 #   // dsc-lib: <file.ds> ...  libraries to compile first (dsc --lib, in this order, into a
 #                              directory given to the test with -L: #import(<file>))
+#   // dsc-shared: <file.ds> ...  shared libraries to compile first (dsc --lib --shared: a .dlib and a
+#                              .drl each). A test using shared libraries (dsc-shared, or dsc-flags with
+#                              --dynamic / --dynamic=<names>; #import(<name>, dynamic) needs one of
+#                              them) runs as a DRX only, with drun -L (see other/info/dynamic-linking.md)
 # DSCRIPT_TEST_DSC_FLAGS=<options>: added to every dsc command (the libraries' too), e.g. -O.
+# DSCRIPT_TEST_TOOLS=<dir>: where dsc and drun are (default: bin; the machine still runs from bin).
 # Every test runs twice: as a DRX (relocatable, loaded at 0x01020000) and as a raw binary
 # (--raw --load 0x01030000).
 
 cd "$(dirname "$0")"
 ROOT="$(cd ../.. && pwd)"
 BIN="$ROOT/bin"
-DSC="$BIN/dsc"
-DRUN="$BIN/drun"
+TOOLS="${DSCRIPT_TEST_TOOLS:-$BIN}"
+DSC="$TOOLS/dsc"
+DRUN="$TOOLS/drun"
 CONFIG="${DSCRIPT_TEST_CONFIG:-config/testMachine.dvm}"	# another machine: DSCRIPT_TEST_CONFIG=<file.dvm>
 read -r -a EXTRA_FLAGS <<< "${DSCRIPT_TEST_DSC_FLAGS:-}"
 dsc() { "$DSC" "$@" "${EXTRA_FLAGS[@]}"; }
@@ -33,7 +39,8 @@ trap 'rm -rf "$OUT"' EXIT
 # #import(<libcore>), #import(<dragon-sdk>), #import(<stdlib>)): libcore first, the others import it.
 mkdir -p "$OUT/lib"
 for lib in libcore dragon-sdk stdlib; do
-	if ! dsc --lib "$ROOT"/extra/ds/$lib/src/*.ds -L "$OUT/lib" -o "$OUT/lib/$lib.dlib"; then
+	# (shared: a .dlib and a .drl, for the tests that link them dynamically)
+	if ! dsc --lib --shared "$ROOT"/extra/ds/$lib/src/*.ds -L "$OUT/lib" -o "$OUT/lib/$lib.dlib"; then
 		echo "cannot build the $lib library"
 		exit 1
 	fi
@@ -52,8 +59,10 @@ for t in "${tests[@]}"; do
 	err="$(grep -m1 '^// expect-error:' "$t" | sed 's|^// expect-error: *||')"
 	romrv="$(grep -m1 '^// expect-rom-rv:' "$t" | sed 's|^// expect-rom-rv: *||')"
 	read -r -a flags <<< "$(grep -m1 '^// dsc-flags:' "$t" | sed 's|^// dsc-flags: *||')"
-	read -r -a runflags <<< "$(grep -m1 '^// drun-flags:' "$t" | sed 's|^// drun-flags: *||')"
+	# (@LIBS@: the test's libraries' directory, @PROGRAM@: the compiled test, for drun --file)
+	read -r -a runflags <<< "$(grep -m1 '^// drun-flags:' "$t" | sed 's|^// drun-flags: *||' | sed "s|@LIBS@|$OUT/$name.libs|g; s|@PROGRAM@|$OUT/$name.drx|g")"
 	read -r -a libs <<< "$(grep -m1 '^// dsc-lib:' "$t" | sed 's|^// dsc-lib: *||')"
+	read -r -a shared <<< "$(grep -m1 '^// dsc-shared:' "$t" | sed 's|^// dsc-shared: *||')"
 	read -r -a sources <<< "$(grep -m1 '^// expect-sources:' "$t" | sed 's|^// expect-sources: *||')"
 	ok=1
 	msg=""
@@ -63,10 +72,24 @@ for t in "${tests[@]}"; do
 			# a.ds,b.ds: one library from several files (named after the first one)
 			IFS=, read -r -a lib_sources <<< "$lib"
 			if ! dsc "${lib_sources[@]}" --lib -L "$OUT/lib" -L "$OUT/$name.libs" -o "$OUT/$name.libs/$(basename "${lib_sources[0]}" .ds).dlib" > "$OUT/$name.log" 2>&1; then
-				ok=0; msg="library $lib: compile error: $(cat "$OUT/$name.log")"
+				ok=0; msg="library $lib: compile error: $(cat "$OUT/$name.log")"; break
 			fi
 		done
 		flags+=(-L "$OUT/$name.libs")
+	fi
+	dynamic=0
+	[[ " ${flags[*]} " == *" --dynamic"* ]] && dynamic=1
+	if [ ${#shared[@]} -gt 0 ]; then
+		mkdir -p "$OUT/$name.libs"
+		for lib in "${shared[@]}"; do
+			IFS=, read -r -a lib_sources <<< "$lib"
+			base="$OUT/$name.libs/$(basename "${lib_sources[0]}" .ds)"
+			if ! dsc "${lib_sources[@]}" --lib --shared -L "$OUT/lib" -L "$OUT/$name.libs" -o "$base.dlib" > "$OUT/$name.log" 2>&1; then
+				ok=0; msg="shared library $lib: compile error: $(cat "$OUT/$name.log")"; break
+			fi
+		done
+		flags+=(-L "$OUT/$name.libs")
+		dynamic=1
 	fi
 	if [ $ok -eq 0 ]; then
 		:
@@ -92,7 +115,9 @@ for t in "${tests[@]}"; do
 			fi
 		fi
 	else
-		for mode in drx raw; do
+		modes=(drx raw)
+		[ $dynamic -eq 1 ] && modes=(drx) && runflags+=(-L "$OUT/lib") && [ -d "$OUT/$name.libs" ] && runflags+=(-L "$OUT/$name.libs")
+		for mode in "${modes[@]}"; do
 			if [ $mode = drx ]; then
 				dsc "$t" -L "$OUT/lib" "${flags[@]}" -o "$OUT/$name.drx" > "$OUT/$name.log" 2>&1 || { ok=0; msg="$mode: compile error: $(cat "$OUT/$name.log")"; break; }
 				prog="$OUT/$name.drx"; at=()

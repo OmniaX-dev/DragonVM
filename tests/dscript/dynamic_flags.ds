@@ -1,0 +1,13 @@
+// The command line chooses: --dynamic (everything) with --static=libcore (libcore copied in).
+// dsc-shared: libs/dyn_counter.ds libs/dyn_user.ds
+// dsc-flags: --dynamic --static=libcore
+// expect-rv: 0
+#include(check.ds)
+#import(<libcore>)
+#import(<dyn_user>)
+
+sub main() -> i32 {
+	var buffer: u8[8];
+	check(1, std::strcmp(std::itoa(du::use_counter(), buffer), "116") == 0);	// 100 + (5 + 1 + 10)
+	return result();
+}

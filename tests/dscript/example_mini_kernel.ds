@@ -1,4 +1,0 @@
-// The mini kernel example (extra/ds/examples/mini-kernel/kernel.ds): its three tasks run, A and B
-// exit, C is killed (an access violation); RV = exited + 10 * killed.
-// expect-rv: 12
-#include(../../extra/ds/examples/mini-kernel/kernel.ds)

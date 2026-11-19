@@ -729,6 +729,7 @@ sub print(var text: string) -> void {
 #include(file.ds)          relative to the file, then the -I directories
 #include(<file.ds>)        the -I directories only
 #import(<name>)            a compiled library (name.dlib) from the -L directories (see "Libraries")
+#import(<name>, dynamic)   the same, linked dynamically (or static; see "Shared libraries")
 #define(NAME = tokens)     #define(NAME)     #undef(NAME)
 #define(NAME(a, b) = tokens)                 with parameters
 #if(expr) #ifdef(NAME) #ifndef(NAME) #elif(expr) #else #endif
@@ -854,8 +855,29 @@ sub main() -> i32 { return Gfx::width(); }
   (with its source lines and files), and the program's (`--save-disassembly`,
   `-Wa,--save-disassembly`) gets it at the address the library is linked at, with the
   addresses in its instructions as linked (and the symbols of other libraries by name).
-- For now: the whole library is linked (also what the program doesn't use); a raw program with
-  libraries is padded (`--fixed`) after linking.
+- Only what the program uses is linked: a `.dlib` records where its image can be cut (each sub,
+  global, string and constant array is a piece), and dsc keeps the pieces reachable from what the
+  program uses (its calls and addresses of the library's things, every library's initialization,
+  then what those pieces call or point to, in the same library or another one). Every address in
+  a library is a relocation, so the kept pieces are moved together and their addresses fixed.
+  wing-shell: 1.5 KB instead of 32 KB (145 bytes of libcore's 26 KB). `--whole-libraries` links
+  them whole, as before. A sub right after a top-level low block stays with the code before it
+  (the low code could run into it). A raw program with libraries is padded (`--fixed`) after
+  linking.
+
+### Shared libraries (dynamic linking)
+A library can also be compiled as a **shared library**: `dsc --lib --shared` writes both the
+`.dlib` and a `.drl`. A program then chooses, for each library, to link it statically (copied in,
+as above) or dynamically (only recorded: its loader loads the `.drl` once for every process that
+uses it; the library's writable globals stay per process). drun loads them
+(`drun ... prog.drx -L <dir>`); everything else (choosing static / dynamic, the formats, what a
+loader does, the SDK readers `dr::dyn`, the plan for the DragonOS kernel's loader) is in
+[dynamic-linking.md](dynamic-linking.md).
+```
+dsc --lib --shared mylib.ds -o lib/mylib.dlib    // lib/mylib.dlib and lib/mylib.drl
+dsc prog.ds -L lib --dynamic -o prog.drx         // every library dynamic: a DRX2 (659 bytes instead of 32 KB for wing-shell)
+#import(<mylib>, dynamic)                        // or one by one, in the source (also --dynamic=mylib, --static=...)
+```
 
 DragonVM's own libraries (`extra/ds/<name>/src`, built by `ds_env` into `<name>.dlib`, copied to
 `extra/ds/<name>/lib`):

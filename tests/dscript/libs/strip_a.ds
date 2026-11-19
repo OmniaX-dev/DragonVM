@@ -1,0 +1,22 @@
+// A library of which a program uses little (library_unused_code.ds): what it reaches must be
+// linked (through calls, pointers in globals and constant arrays, init code, inline subs),
+// the rest is left out.
+namespace sa {
+	sub one() -> u32 { return 1; }
+	sub two() -> u32 { return 2; }
+	sub three() -> u32 { return 3; }
+	alias Op = sub() -> u32;
+	var ops: Op[3] = { one, two, three };					// reached only through the array
+	var later: sub() -> u32 = two;							// set by the library's init
+	var computed: u32 = three() * 10;						// init code calls three
+	const message: string = "kept";
+	const big: u32[64] = { 1, 2, 3, 4, 5, 6, 7, 8 };		// only unused() uses it
+
+	sub helper(var x: u32) -> u32 { static var calls: u32 = 0; calls++; return x * 2 + calls; }
+	sub used(var x: u32) -> u32 { return helper(x); }
+	sub via_table(var i: u32) -> u32 { return ops[i](); }
+	sub via_global() -> u32 { return later(); }
+	sub message_length() -> u32 { var n: u32 = 0; while (message[n] != 0) n++; return n; }
+	inline sub doubled(var x: u32) -> u32 { return used(x) + used(x); }		// compiled into the program
+	sub unused() -> u32 { var s: u32 = 0; for (var i: u32 = 0; i < 64; i++) s += big[i]; return s; }
+}

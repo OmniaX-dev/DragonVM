@@ -1,0 +1,284 @@
+#include(hardware.ds)
+
+// dr::dyn: the files of dynamic linking, read in place (nothing is copied or allocated):
+//   DRX2  a program that uses shared libraries (dsc --dynamic)
+//   DRL   a shared library (dsc --lib --shared)
+// The headers are checked against the file when they are read (every table inside the file, the
+// string table ending with a 0), the entries when they are taken (an offset inside the image, a
+// library index that exists). What to do with them (loading, slots, the per-process tables) is
+// the loader's: other/info/dynamic-linking.md describes all of it.
+//
+// Errors: std::ExecErrors (FileTooSmall, InvalidMagic, TruncatedFile, RelocationOutOfRange,
+// EntryOutOfRange, BadImport), std::SystemErrors.InvalidArgument (a null pointer, an index past
+// a table).
+namespace dr::dyn {
+	const ProgramMagic: u32 = 0x44525832;		// "DRX2"
+	const LibraryMagic: u32 = 0x44524C31;		// "DRL1"
+	const ProgramHeaderSize: u32 = 0x40;
+	const LibraryHeaderSize: u32 = 0x60;
+	const NoLibrary: u16 = 0xFFFF;
+
+	// What an import word gets (Import.kind).
+	const ImportKinds: struct {
+		var Absolute: u16 = 0;		// the symbol's address: in its library's text, or (a writable global) in the process's copy
+		var Init: u16 = 1;			// (programs) the library's initialization routine: its text + init
+		var SlotOf: u16 = 2;		// (shared code) 4 * the slot of the symbol's library
+		var OffsetOf: u16 = 3;		// (shared code) the symbol's offset in its library's image
+		var SelfSlot: u16 = 4;		// (shared code) 4 * this library's own slot
+		var LibTable: u16 = 5;		// (shared code) the address of the system word that points at the running process's table
+	};
+
+	// A table of the file: count entries, at offset (from the file's start).
+	struct Table {
+		var count: u32 = 0;
+		var offset: u32 = 0;
+	};
+
+	struct ProgramHeader {
+		var header_size: u32 = 0;
+		var image_size: u32 = 0;			// the image is at file + header_size
+		var entry: u32 = 0;
+		var relocations: Table;				// words: + the program's base
+		var libraries: Table;				// 8 bytes each (program_library), in initialization order
+		var imports: Table;					// 12 bytes each (program_import)
+		var strings: u32 = 0;				// the string table (0-terminated names)
+		var strings_size: u32 = 0;
+		var id_hi: u32 = 0;					// the build's id (debug_drx_load)
+		var id_lo: u32 = 0;
+	};
+
+	struct LibraryHeader {
+		var header_size: u32 = 0;
+		var image_size: u32 = 0;			// the image (the text, with the rw template) is at file + header_size
+		var init: u32 = 0;					// its initialization routine (the program's __ds_start calls it)
+		var rw_start: u32 = 0;				// the writable part: [rw_start, rw_start + rw_size) of the image
+		var rw_size: u32 = 0;
+		var id_hi: u32 = 0;
+		var id_lo: u32 = 0;
+		var abi: u32 = 0;					// the version of its interface (what a program / library recorded)
+		var name: string = null;			// (in the file)
+		var text_relocations: Table;		// words outside rw: + text base (once, shared)
+		var data_text_relocations: Table;	// words inside rw pointing into the text: + text base (per process)
+		var data_data_relocations: Table;	// words inside rw pointing into rw: + bias (per process)
+		var dependencies: Table;			// 8 bytes each (library_dependency)
+		var imports: Table;					// 12 bytes each (library_import)
+		var exports: Table;					// 8 bytes each (library_export), sorted by name
+		var strings: u32 = 0;
+		var strings_size: u32 = 0;
+	};
+
+	// A library a program needs, or a library's dependency.
+	struct LibraryRef {
+		var name: string = null;			// (in the file)
+		var abi: u32 = 0;
+	};
+
+	struct Import {
+		var offset: u32 = 0;				// the word to fill in (in the image)
+		var library: u16 = 0;				// the index in the program's libraries / the library's dependencies (NoLibrary: none)
+		var kind: u16 = 0;					// ImportKinds
+		var symbol: string = null;			// (in the file; "" for Init, SelfSlot, LibTable)
+	};
+
+	struct Export {
+		var symbol: string = null;
+		var offset: u32 = 0;				// in the library's image
+	};
+
+	sub __u32(var p: u8*) -> u32 { return (cast<u32>(p[0]) << 24) | (cast<u32>(p[1]) << 16) | (cast<u32>(p[2]) << 8) | p[3]; }
+	sub __u16(var p: u8*) -> u16 { return cast<u16>((cast<u32>(p[0]) << 8) | p[1]); }
+
+	// The table whose count and offset are at file[at]: false if it isn't inside the file.
+	sub __table(var file: u8*, var size: u32, var at: u32, var entry_size: u32, var out: Table*) -> bool {
+		out->count = __u32(&file[at]);
+		out->offset = __u32(&file[at + 4]);
+		if (out->offset > size)
+			return false;
+		return out->count <= (size - out->offset) / entry_size;
+	}
+
+	// The string at offset of the string table (null if it isn't one).
+	sub __string(var file: u8*, var strings: u32, var strings_size: u32, var offset: u32) -> string {
+		if (offset >= strings_size)
+			return null;
+		return cast<string>(&file[strings + offset]);
+	}
+
+	// The image inside the file, the string table inside the file and ending with a 0.
+	sub __check_common(var file: u8*, var size: u32, var header_size: u32, var image_size: u32, var strings: u32, var strings_size: u32) -> i32 {
+		if (header_size > size or image_size > size - header_size)
+			return std::ExecErrors.TruncatedFile;
+		if (strings_size == 0 or strings > size or strings_size > size - strings or file[strings + strings_size - 1] != 0)
+			return std::ExecErrors.TruncatedFile;
+		return std::Ok;
+	}
+
+	// ================================ DRX2 ================================
+	sub is_program(var file: u8*, var size: u32) -> bool { return file != null and size >= ProgramHeaderSize and __u32(file) == ProgramMagic; }
+
+	sub read_program_header(var file: u8*, var size: u32, var out: ProgramHeader*) -> i32 {
+		if (not file or not out) return std::SystemErrors.InvalidArgument;
+		if (size < ProgramHeaderSize) return std::ExecErrors.FileTooSmall;
+		if (__u32(file) != ProgramMagic) return std::ExecErrors.InvalidMagic;
+		out->header_size = __u32(&file[0x04]);
+		out->image_size = __u32(&file[0x08]);
+		out->entry = __u32(&file[0x0C]);
+		out->id_hi = __u32(&file[0x18]);
+		out->id_lo = __u32(&file[0x1C]);
+		out->strings = __u32(&file[0x30]);
+		out->strings_size = __u32(&file[0x34]);
+		if (out->header_size < ProgramHeaderSize)
+			return std::ExecErrors.TruncatedFile;
+		var r: i32 = __check_common(file, size, out->header_size, out->image_size, out->strings, out->strings_size);
+		if (r != std::Ok) return r;
+		if (not __table(file, size, 0x10, 4, &out->relocations) or not __table(file, size, 0x20, 8, &out->libraries)
+			or not __table(file, size, 0x28, 12, &out->imports))
+			return std::ExecErrors.TruncatedFile;
+		if (out->entry >= out->image_size)
+			return std::ExecErrors.EntryOutOfRange;
+		return std::Ok;
+	}
+
+	// Relocation i: the offset of a word (checked: inside the image).
+	sub program_relocation(var file: u8*, var h: ProgramHeader*, var i: u32, var out_offset: u32*) -> i32 {
+		if (i >= h->relocations.count) return std::SystemErrors.InvalidArgument;
+		var offset: u32 = __u32(&file[h->relocations.offset + i * 4]);
+		if (h->image_size < 4 or offset > h->image_size - 4) return std::ExecErrors.RelocationOutOfRange;
+		*out_offset = offset;
+		return std::Ok;
+	}
+
+	sub program_library(var file: u8*, var h: ProgramHeader*, var i: u32, var out: LibraryRef*) -> i32 {
+		if (i >= h->libraries.count) return std::SystemErrors.InvalidArgument;
+		var e: u8* = &file[h->libraries.offset + i * 8];
+		out->name = __string(file, h->strings, h->strings_size, __u32(e));
+		out->abi = __u32(&e[4]);
+		if (out->name == null or out->name[0] == 0) return std::ExecErrors.BadImport;
+		return std::Ok;
+	}
+
+	// Import i (checked: the word inside the image, a library of the program, a kind programs have).
+	sub program_import(var file: u8*, var h: ProgramHeader*, var i: u32, var out: Import*) -> i32 {
+		if (i >= h->imports.count) return std::SystemErrors.InvalidArgument;
+		var e: u8* = &file[h->imports.offset + i * 12];
+		out->offset = __u32(e);
+		out->library = __u16(&e[4]);
+		out->kind = __u16(&e[6]);
+		out->symbol = __string(file, h->strings, h->strings_size, __u32(&e[8]));
+		if (h->image_size < 4 or out->offset > h->image_size - 4 or out->library >= h->libraries.count or out->symbol == null)
+			return std::ExecErrors.BadImport;
+		if (out->kind != ImportKinds.Absolute and out->kind != ImportKinds.Init)
+			return std::ExecErrors.BadImport;
+		return std::Ok;
+	}
+
+	// ================================ DRL ================================
+	sub is_library(var file: u8*, var size: u32) -> bool { return file != null and size >= LibraryHeaderSize and __u32(file) == LibraryMagic; }
+
+	sub read_library_header(var file: u8*, var size: u32, var out: LibraryHeader*) -> i32 {
+		if (not file or not out) return std::SystemErrors.InvalidArgument;
+		if (size < LibraryHeaderSize) return std::ExecErrors.FileTooSmall;
+		if (__u32(file) != LibraryMagic) return std::ExecErrors.InvalidMagic;
+		out->header_size = __u32(&file[0x04]);
+		out->image_size = __u32(&file[0x08]);
+		out->init = __u32(&file[0x0C]);
+		out->rw_start = __u32(&file[0x10]);
+		out->rw_size = __u32(&file[0x14]);
+		out->id_hi = __u32(&file[0x18]);
+		out->id_lo = __u32(&file[0x1C]);
+		out->abi = __u32(&file[0x20]);
+		out->strings = __u32(&file[0x58]);
+		out->strings_size = __u32(&file[0x5C]);
+		if (out->header_size < LibraryHeaderSize)
+			return std::ExecErrors.TruncatedFile;
+		var r: i32 = __check_common(file, size, out->header_size, out->image_size, out->strings, out->strings_size);
+		if (r != std::Ok) return r;
+		out->name = __string(file, out->strings, out->strings_size, __u32(&file[0x24]));
+		if (out->name == null or out->name[0] == 0)
+			return std::ExecErrors.TruncatedFile;
+		if (out->rw_start > out->image_size or out->rw_size > out->image_size - out->rw_start)
+			return std::ExecErrors.TruncatedFile;
+		if (out->image_size > 0 and out->init >= out->image_size)
+			return std::ExecErrors.EntryOutOfRange;
+		if (not __table(file, size, 0x28, 4, &out->text_relocations) or not __table(file, size, 0x30, 4, &out->data_text_relocations)
+			or not __table(file, size, 0x38, 4, &out->data_data_relocations) or not __table(file, size, 0x40, 8, &out->dependencies)
+			or not __table(file, size, 0x48, 12, &out->imports) or not __table(file, size, 0x50, 8, &out->exports))
+			return std::ExecErrors.TruncatedFile;
+		return std::Ok;
+	}
+
+	// The offset is in the library's writable part.
+	inline sub in_rw(var h: LibraryHeader*, var offset: u32) -> bool { return offset >= h->rw_start and offset - h->rw_start < h->rw_size; }
+
+	// Entry i of one of the three relocation tables (h->text_relocations, ...): the offset of a
+	// word (checked: inside the image, and inside / outside rw as the table says).
+	sub library_relocation(var file: u8*, var h: LibraryHeader*, var table: Table*, var i: u32, var out_offset: u32*) -> i32 {
+		if (i >= table->count) return std::SystemErrors.InvalidArgument;
+		var offset: u32 = __u32(&file[table->offset + i * 4]);
+		if (h->image_size < 4 or offset > h->image_size - 4) return std::ExecErrors.RelocationOutOfRange;
+		if (in_rw(h, offset) != (table != &h->text_relocations)) return std::ExecErrors.RelocationOutOfRange;
+		*out_offset = offset;
+		return std::Ok;
+	}
+
+	sub library_dependency(var file: u8*, var h: LibraryHeader*, var i: u32, var out: LibraryRef*) -> i32 {
+		if (i >= h->dependencies.count) return std::SystemErrors.InvalidArgument;
+		var e: u8* = &file[h->dependencies.offset + i * 8];
+		out->name = __string(file, h->strings, h->strings_size, __u32(e));
+		out->abi = __u32(&e[4]);
+		if (out->name == null or out->name[0] == 0) return std::ExecErrors.BadImport;
+		return std::Ok;
+	}
+
+	// Import i (checked: the word inside the image; Absolute / SlotOf / OffsetOf name a dependency;
+	// in the writable part only Absolute).
+	sub library_import(var file: u8*, var h: LibraryHeader*, var i: u32, var out: Import*) -> i32 {
+		if (i >= h->imports.count) return std::SystemErrors.InvalidArgument;
+		var e: u8* = &file[h->imports.offset + i * 12];
+		out->offset = __u32(e);
+		out->library = __u16(&e[4]);
+		out->kind = __u16(&e[6]);
+		out->symbol = __string(file, h->strings, h->strings_size, __u32(&e[8]));
+		if (h->image_size < 4 or out->offset > h->image_size - 4 or out->symbol == null)
+			return std::ExecErrors.BadImport;
+		var k: u16 = out->kind;
+		if (k == ImportKinds.Absolute or k == ImportKinds.SlotOf or k == ImportKinds.OffsetOf) {
+			if (out->library >= h->dependencies.count) return std::ExecErrors.BadImport;
+		}
+		else if (k != ImportKinds.SelfSlot and k != ImportKinds.LibTable)
+			return std::ExecErrors.BadImport;
+		if (in_rw(h, out->offset) and k != ImportKinds.Absolute)
+			return std::ExecErrors.BadImport;
+		return std::Ok;
+	}
+
+	sub library_export(var file: u8*, var h: LibraryHeader*, var i: u32, var out: Export*) -> i32 {
+		if (i >= h->exports.count) return std::SystemErrors.InvalidArgument;
+		var e: u8* = &file[h->exports.offset + i * 8];
+		out->symbol = __string(file, h->strings, h->strings_size, __u32(e));
+		out->offset = __u32(&e[4]);
+		if (out->symbol == null or out->offset >= h->image_size) return std::ExecErrors.BadImport;
+		return std::Ok;
+	}
+
+	// The export named symbol (binary search: the exports are sorted): std::Ok and its offset, or
+	// std::ExecErrors.SymbolNotFound.
+	sub find_export(var file: u8*, var h: LibraryHeader*, var symbol: string, var out_offset: u32*) -> i32 {
+		var first: u32 = 0;
+		var past: u32 = h->exports.count;			// (the range left: [first, past))
+		var e: Export;
+		while (first < past) {
+			var mid: u32 = first + (past - first) / 2;
+			var r: i32 = library_export(file, h, mid, &e);
+			if (r != std::Ok) return r;
+			var c: i32 = std::strcmp(e.symbol, symbol);
+			if (c == 0) {
+				*out_offset = e.offset;
+				return std::Ok;
+			}
+			if (c < 0) first = mid + 1;
+			else past = mid;
+		}
+		return std::ExecErrors.SymbolNotFound;
+	}
+}

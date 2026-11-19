@@ -7,7 +7,9 @@
 #include "../assembler/Assembler.hpp"
 #include "../tools/DRX.hpp"
 #include "../tools/DLIB.hpp"
+#include "../tools/DynamicLinking.hpp"
 #include <set>
+#include <functional>
 #include <iostream>
 #include <fstream>
 #include <filesystem>
@@ -25,6 +27,13 @@ struct Options
 	std::vector<std::string> includeDirs;
 	std::vector<std::string> libraryDirs;
 	bool library { false };
+	bool shared { false };				// --lib --shared: a shared library (.drl)
+	// How a program links each library it imports (other/info/dynamic-linking.md): static (copied
+	// into it) unless --dynamic (all of them), --dynamic=<names> or #import(<name>, dynamic);
+	// --static=<names> and #import(<name>, static) keep one static.
+	bool dynamicAll { false };
+	bool wholeLibraries { false };		// --whole-libraries: static libraries linked whole (not only what is used)
+	std::set<std::string> dynamicNames, staticNames;
 	std::vector<std::pair<std::string, std::string>> defines;
 	bool raw { false };
 	bool rom { false };
@@ -51,6 +60,18 @@ static void printHelp(void)
 		"  --lib                     Compiles a library (.dlib) instead of a program: no main; programs use it with\n"
 		"                            #import(<name>), and it is linked into them. Can take several source files\n"
 		"                            (compiled as one, in order; -o is then required)\n"
+		"  --shared                  With --lib: also a shared library: <name>.dlib (what programs compile\n"
+		"                            against, and link statically) and <name>.drl (what their loader loads when\n"
+		"                            they link it dynamically: one copy of its code for every process, its\n"
+		"                            writable globals per process). See other/info/dynamic-linking.md\n"
+		"  --dynamic                 Links every imported library dynamically (its .drl, loaded with the program:\n"
+		"                            a DRX2) instead of copying it into the program\n"
+		"  --dynamic=<name>[,...]    Links these libraries dynamically (the others: static)\n"
+		"  --static=<name>[,...]     Links these libraries statically (also with --dynamic). In the source:\n"
+		"                            #import(<name>, dynamic) / #import(<name>, static). A dynamic library's\n"
+		"                            dependencies are dynamic too (the ones not chosen: automatically)\n"
+		"  --whole-libraries         Links the static libraries whole (by default only the subs and data the\n"
+		"                            program reaches from what it uses are linked)\n"
 		"  -D <NAME>[=<value>]       Defines NAME (like #define)\n"
 		"  --emit-dasm <file>        Also writes the generated dasm source\n"
 		"  --debug, -g               Keeps debug_break / debug_* instructions of low blocks\n"
@@ -96,6 +117,24 @@ static int parseArgs(int argc, char** argv, Options& o)
 		else if (a == "-I") o.includeDirs.push_back(l_value(a));
 		else if (a == "-L") o.libraryDirs.push_back(l_value(a));
 		else if (a == "--lib") o.library = true;
+		else if (a == "--shared") o.shared = true;
+		else if (a == "--dynamic") o.dynamicAll = true;
+		else if (a == "--whole-libraries") o.wholeLibraries = true;
+		else if (a.rfind("--dynamic=", 0) == 0 || a.rfind("--static=", 0) == 0)
+		{
+			const bool dyn = a[2] == 'd';
+			std::string list = a.substr(dyn ? 10 : 9);
+			size_t start = 0;
+			while (start <= list.size())
+			{
+				size_t comma = list.find(',', start);
+				if (comma == std::string::npos)
+					comma = list.size();
+				if (comma > start)
+					(dyn ? o.dynamicNames : o.staticNames).insert(list.substr(start, comma - start));
+				start = comma + 1;
+			}
+		}
 		else if (a == "-D")
 		{
 			std::string d = l_value(a);
@@ -163,6 +202,24 @@ static int parseArgs(int argc, char** argv, Options& o)
 	if (!o.header.empty() && dragon::code::Assembler::headerBytes(o.header).empty())
 	{
 		std::cerr << "dsc: unknown --header " << o.header << " (known: KERNEL0_BOOT)\n";
+		return 2;
+	}
+	if (o.shared && !o.library)
+	{
+		std::cerr << "dsc: --shared is for libraries (--lib --shared); a program that uses shared libraries is --dynamic\n";
+		return 2;
+	}
+	for (const auto& n : o.dynamicNames)
+	{
+		if (o.staticNames.count(n) > 0)
+		{
+			std::cerr << "dsc: " << n << " is both --dynamic and --static\n";
+			return 2;
+		}
+	}
+	if ((o.dynamicAll || !o.dynamicNames.empty() || !o.staticNames.empty()) && o.library)
+	{
+		std::cerr << "dsc: --dynamic / --static are for programs: a program decides how it links its libraries\n";
 		return 2;
 	}
 	if (o.library && o.raw)
@@ -581,15 +638,356 @@ static void saveDisassembly(const std::string& file, const std::vector<Disassemb
 		std::cerr << "dsc: cannot save the disassembly to " << file << "\n";
 }
 
-int main(int argc, char** argv)
+// ================================== Unused code ===================================
+// A library's pieces (DLIB::pieces): where its image can be cut. 0 (the entry jump), every data
+// symbol that isn't inside another one (a global, a string, a constant array), and the code
+// labels the code generator says are safe (CodeGen::pieceStarts: __ds_lib_init, and the subs
+// that follow a ret).
+static std::vector<uint32_t> libraryPieces(const Unit& unit, const std::vector<std::string>& starts)
 {
-	Options o;
-	int r = parseArgs(argc, argv, o);
-	if (r != 0)
-		return r == 1 ? 0 : r;
+	std::set<uint32_t> cuts { 0 };
+	DisassemblyParts parts;
+	parts.add(unit.disassembly);
+	std::vector<std::pair<uint32_t, uint32_t>> data;
+	for (const auto& e : parts.data)
+		data.push_back({ e.addr, e.size });
+	std::sort(data.begin(), data.end());
+	uint32_t end = 0;
+	for (const auto& d : data)
+	{
+		if (d.first >= end)
+			cuts.insert(d.first);
+		end = std::max(end, d.first + d.second);
+	}
+	std::map<std::string, uint32_t> address(unit.symbols.begin(), unit.symbols.end());
+	for (const auto& s : starts)
+	{
+		auto it = address.find(s);
+		if (it != address.end())
+			cuts.insert(it->second);
+	}
+	std::vector<uint32_t> out;
+	for (uint32_t c : cuts)
+	{
+		if (c < unit.image.size())
+			out.push_back(c);
+	}
+	return out;
+}
 
+static size_t pieceOf(const std::vector<uint32_t>& pieces, uint32_t offset)
+{
+	return (size_t)(std::upper_bound(pieces.begin(), pieces.end(), offset) - pieces.begin()) - 1;
+}
+
+// The library with only its kept pieces (in their order): the relocations (their places and the
+// addresses in them), imports, exports, init and disassembly moved to the new offsets. remap
+// gets old offset -> new offset (for kept pieces). false: an address points into a piece that
+// was left out (the reachability missed something: a bug).
+static bool compactLibrary(const dragon::dlib::Library& lib, const std::vector<char>& kept, dragon::dlib::Library& out,
+	std::function<uint32_t(uint32_t)>& remap, std::string& message)
+{
+	const std::vector<uint32_t>& pieces = lib.pieces;
+	std::vector<int64_t> delta(pieces.size(), 0);
+	out = lib;
+	out.image.clear();
+	for (size_t p = 0; p < pieces.size(); p++)
+	{
+		if (!kept[p])
+			continue;
+		const uint32_t start = pieces[p], end = (p + 1 < pieces.size()) ? pieces[p + 1] : (uint32_t)lib.image.size();
+		delta[p] = (int64_t)out.image.size() - start;
+		out.image.insert(out.image.end(), lib.image.begin() + start, lib.image.begin() + end);
+	}
+	remap = [pieces, delta](uint32_t off) { return (uint32_t)((int64_t)off + delta[pieceOf(pieces, off)]); };
+	auto l_kept = [&](uint32_t off) { return off < lib.image.size() && kept[pieceOf(pieces, off)]; };
+	// The disassembly: code entries (by their old address) for rewriting the addresses in them.
+	std::vector<std::pair<uint32_t, size_t>> codeEntries;
+	{
+		int part = 0;
+		for (size_t i = 0; i < lib.debug.size(); i++)
+		{
+			const std::string& t = lib.debug[i].text;
+			if (t == "{ DATA }") part = 1;
+			else if (t == "{ LABELS }") part = 2;
+			else if (t == "{ LINES }") part = 3;
+			else if (t == "{ SOURCES }") part = 4;
+			else if (t == "{ SUBS }") part = 5;
+			else if (part == 0)
+				codeEntries.push_back({ lib.debug[i].address, i });
+		}
+		std::sort(codeEntries.begin(), codeEntries.end());
+	}
+	std::vector<std::string> texts;
+	for (const auto& e : lib.debug)
+		texts.push_back(e.text);
+	out.relocations.clear();
+	for (uint32_t r : lib.relocations)
+	{
+		if (!l_kept(r))
+			continue;
+		const uint32_t value = dragon::drx::readU32(&lib.image[r]);
+		if (!l_kept(value))
+		{
+			message = "an address (at 0x" + hexWord(r).substr(2) + ") points into a piece that was left out";
+			return false;
+		}
+		const uint32_t moved = remap(value);
+		dragon::drx::writeU32(&out.image[remap(r)], moved);
+		out.relocations.push_back(remap(r));
+		auto it = std::upper_bound(codeEntries.begin(), codeEntries.end(), std::make_pair(r, (size_t)-1));
+		if (moved != value && it != codeEntries.begin())
+		{
+			std::string& text = texts[(--it)->second];
+			const size_t at = text.find(hexWord(value));
+			if (at != std::string::npos)
+				text.replace(at, 10, hexWord(moved));
+		}
+	}
+	out.imports.clear();
+	for (const auto& i : lib.imports)
+	{
+		if (l_kept(i.offset))
+			out.imports.push_back({ remap(i.offset), i.symbol });
+	}
+	out.exports.clear();
+	for (const auto& e : lib.exports)
+	{
+		if (l_kept(e.offset))
+			out.exports.push_back({ e.symbol, remap(e.offset) });
+	}
+	out.init = remap(lib.init);
+	// The disassembly: what is left, at its new addresses (sources and subs are no addresses;
+	// a sub left out disappears from the sub table).
+	out.debug.clear();
+	std::set<std::string> labels;
+	int part = 0;
+	for (size_t i = 0; i < lib.debug.size(); i++)
+	{
+		dragon::dlib::DebugEntry e = lib.debug[i];
+		e.text = texts[i];
+		if (e.text == "{ DATA }" || e.text == "{ LABELS }" || e.text == "{ LINES }" || e.text == "{ SOURCES }" || e.text == "{ SUBS }")
+		{
+			part = (e.text == "{ DATA }") ? 1 : (e.text == "{ LABELS }") ? 2 : (e.text == "{ LINES }") ? 3 : (e.text == "{ SOURCES }") ? 4 : 5;
+			out.debug.push_back(e);
+			continue;
+		}
+		if (part <= 3)
+		{
+			if (!l_kept(e.address))
+				continue;
+			e.address = remap(e.address);
+			if (part == 2)
+				labels.insert(e.text.size() > 1 && e.text[0] == '$' ? e.text.substr(1) : e.text);
+		}
+		else if (part == 5)
+		{
+			const size_t tab = e.text.find('\t');
+			const size_t tab2 = (tab == std::string::npos) ? std::string::npos : e.text.find('\t', tab + 1);
+			if (tab2 != std::string::npos && labels.count(e.text.substr(tab + 1, tab2 - tab - 1)) == 0)
+				continue;
+		}
+		out.debug.push_back(e);
+	}
+	out.pieces.clear();
+	return true;
+}
+
+// ================================== Dynamic linking ===================================
+// (other/info/dynamic-linking.md)
+typedef std::map<std::string, std::pair<size_t, uint32_t>> SymbolMap;
+
+static std::string libraryName(const std::string& path) { return std::filesystem::path(path).stem().string(); }
+
+// Saves the disassembly where the options say (-Wa,--save-disassembly and --save-disassembly).
+static void saveDisassemblies(const Options& o, const std::vector<DisassemblyLine>& entries)
+{
+	if (dragon::code::Assembler::Application::args.save_disassembly && !o.dasmArgs.empty())
+		saveDisassembly(dragon::code::Assembler::Application::args.disassembly_file_path.cpp_str(), entries);
+	if (o.disassemblyDir.empty())
+		return;
+	std::string file = o.disassemblyDir;
+	if (file.back() == '/' || std::filesystem::is_directory(file))
+	{
+		std::filesystem::create_directories(file);
+		file = (std::filesystem::path(file) / (ostd::Hash::md5(String(o.output)).cpp_str() + ".dds")).string();
+	}
+	saveDisassembly(file, entries);
+}
+
+// The disassembly of a unit that is linked by its loader: the import words shown as $symbol
+// (assembled: the image as assembled, with the made-up addresses), its id (the debugger moves
+// it to where it is loaded, as a DRX's).
+static std::vector<DisassemblyLine> loadedDisassembly(const Unit& unit, const std::vector<uint8_t>& assembled, uint64_t id)
+{
+	std::vector<DisassemblyLine> entries = unit.disassembly;
+	if (entries.empty())
+		return entries;
+	DisassemblyParts parts;
+	parts.add(entries);
+	for (const auto& i : unit.imports)
+		parts.patch(i.offset, hexWord(dragon::drx::readU32(&assembled[i.offset])), "$" + i.symbol, 0);
+	entries = parts.entries();
+	auto at = entries.begin();
+	while (at != entries.end() && (at->code.startsWith("{ NAME } ") || at->code.startsWith("{ VERSION } ")))
+		at++;
+	entries.insert(at, { 0, String("{ DRX } ").add(dragon::drx::idString(id)), 0 });
+	return entries;
+}
+
+static bool hasPrefix(const std::string& s, const char* prefix) { return s.rfind(prefix, 0) == 0; }
+
+// dsc --lib --shared: a DRL. The code generator (CodeGenOptions::shared) reaches the writable
+// globals through the process's table; here the made-up symbols it uses become what the loader
+// fills in (imports of kinds SelfSlot, LibTable, SlotOf, OffsetOf) or are resolved now
+// ($__dsrw__<g>: g's offset in the image), and the relocations are sorted by where the word is
+// (text: shared, rw: per process) and what it points to.
+static int linkShared(const Options& o, const std::vector<std::string>& dasm, const std::set<std::string>& importable, const std::string& directory,
+	const SymbolMap& symbols, const std::vector<Preprocessor::ImportedLibrary>& libraries, const std::vector<std::string>& exported,
+	const std::string& interface, const std::vector<std::string>& subTable)
+{
+	using namespace dragon::dyn;
+	// The made-up symbols of the generated code: imports too.
+	std::set<std::string> names = importable;
+	for (const auto& line : dasm)
+	{
+		for (size_t i = line.find("$__ds"); i != std::string::npos; i = line.find("$__ds", i + 1))
+		{
+			size_t j = i + 1;
+			while (j < line.size() && (std::isalnum((unsigned char)line[j]) || line[j] == '_'))
+				j++;
+			const std::string name = line.substr(i + 1, j - i - 1);
+			if (hasPrefix(name, "__dsrw__") || hasPrefix(name, "__dsslot__") || hasPrefix(name, "__dsoff__") || name == "__ds_slot" || name == "__ds_libtable")
+				names.insert(name);
+		}
+	}
+	Unit unit;
+	if (!assembleUnit(dasm, names, directory, 0, true, unit, o, true))
+		return 1;
+	addSubTable(unit, subTable);
+	const std::vector<uint8_t> assembled = unit.image;
+	std::map<std::string, uint32_t> address(unit.symbols.begin(), unit.symbols.end());
+	if (address.count("__ds_rw_start") == 0 || address.count("__ds_rw_end") == 0)
+	{
+		std::cerr << "dsc: internal error: no rw markers in a shared library\n";
+		return 1;
+	}
+	Library lib;
+	lib.name = libraryName(o.output);
+	lib.abi = abiOf(interface);
+	lib.image = unit.image;
+	// (After the start marker's byte: a library without writable globals has an empty rw part.)
+	lib.rwStart = address["__ds_rw_start"] + 1;
+	lib.rwSize = address["__ds_rw_end"] - lib.rwStart;
+	auto l_symbolAt = [&](uint32_t a) -> std::string {
+		std::string best = "?";
+		for (const auto& s : unit.symbols)
+		{
+			if (s.second == a && s.first != "__ds_rw_end")
+				return s.first;
+		}
+		return best;
+	};
+	auto l_library = [&](const std::string& symbol, uint16_t& out) -> bool {
+		auto it = symbols.find(symbol);
+		if (it == symbols.end())
+		{
+			std::cerr << "dsc: " << o.input << " uses " << symbol << ", which none of the imported libraries has (a library missing?)\n";
+			return false;
+		}
+		out = (uint16_t)it->second.first;
+		return true;
+	};
+	for (const auto& i : unit.imports)
+	{
+		Import imp;
+		imp.offset = i.offset;
+		const std::string& name = i.symbol;
+		if (hasPrefix(name, "__dsrw__"))
+		{
+			const std::string own = name.substr(8);
+			auto it = address.find(own);
+			if (it == address.end() || !lib.inRw(it->second))
+			{
+				std::cerr << "dsc: internal error: " << own << " is not in the library's writable data\n";
+				return 1;
+			}
+			dragon::drx::writeU32(&lib.image[i.offset], it->second);
+			continue;
+		}
+		if (name == "__ds_slot")
+			imp.kind = ImportKind::SelfSlot;
+		else if (name == "__ds_libtable")
+			imp.kind = ImportKind::LibTable;
+		else if (hasPrefix(name, "__dsslot__") || hasPrefix(name, "__dsoff__"))
+		{
+			imp.kind = hasPrefix(name, "__dsslot__") ? ImportKind::SlotOf : ImportKind::OffsetOf;
+			imp.symbol = name.substr(hasPrefix(name, "__dsslot__") ? 10 : 9);
+			if (!l_library(imp.symbol, imp.library))
+				return 1;
+		}
+		else
+		{
+			imp.kind = ImportKind::Absolute;
+			imp.symbol = name;
+			if (!l_library(name, imp.library))
+				return 1;
+		}
+		if (lib.inRw(i.offset) && imp.kind != ImportKind::Absolute)
+		{
+			std::cerr << "dsc: internal error: a " << kindName(imp.kind) << " import in the writable data\n";
+			return 1;
+		}
+		lib.imports.push_back(imp);
+	}
+	for (uint32_t r : unit.relocations)
+	{
+		const uint32_t target = dragon::drx::readU32(&lib.image[r]);
+		const bool toRw = lib.inRw(target);
+		if (lib.inRw(r))
+			(toRw ? lib.dataDataRelocations : lib.dataTextRelocations).push_back(r);
+		else if (toRw)
+		{
+			std::cerr << "dsc: " << o.input << ": the shared code uses the address of the writable global " << l_symbolAt(target)
+					  << " directly (at offset 0x" << std::hex << r << std::dec << "): in a shared library every process has its own copy of it. "
+					  << "A low block or a constant array that names a global? (use the variable in DScript, or make the data const)\n";
+			return 1;
+		}
+		else
+			lib.textRelocations.push_back(r);
+	}
+	const std::set<std::string> wanted(exported.begin(), exported.end());
+	for (const auto& sym : unit.symbols)
+	{
+		if (sym.first == "__ds_lib_init")
+			lib.init = sym.second;
+		else if (wanted.count(sym.first) > 0)
+			lib.exports.push_back({ sym.first, sym.second });
+	}
+	std::sort(lib.exports.begin(), lib.exports.end(), [](const auto& x, const auto& y) { return x.symbol < y.symbol; });
+	for (const auto& l : libraries)
+		lib.dependencies.push_back({ libraryName(l.path), abiOf(l.library.interface) });
+	lib.id = computeId(lib);
+	saveDisassemblies(o, loadedDisassembly(unit, assembled, lib.id));
+	if (!writeFile(o.output, write(lib)))
+	{
+		std::cerr << "dsc: cannot write " << o.output << "\n";
+		return 1;
+	}
+	if (o.verbose)
+		std::cout << o.output << ": shared library " << lib.name << ", " << lib.image.size() << " bytes (" << lib.rwSize << " writable), "
+				  << lib.exports.size() << " symbols, " << lib.textRelocations.size() << " + " << lib.dataTextRelocations.size() + lib.dataDataRelocations.size()
+				  << " relocations, " << lib.imports.size() << " imports, ABI " << dragon::drx::idString(lib.abi).substr(10) << ", id "
+				  << dragon::drx::idString(lib.id) << "\n";
+	return 0;
+}
+
+// Compiles and links one output (o.output).
+static int build(const Options& o)
+{
 	std::vector<std::string> dasm;
 	std::vector<std::string> subTable;	// the disassembly's { SUBS } (CodeGen::subTable)
+	std::vector<std::string> pieceStarts;	// CodeGen::pieceStarts (a library's pieces)
 	std::vector<Preprocessor::ImportedLibrary> libraries;
 	std::vector<std::string> dependencies, exported;
 	std::string interface;
@@ -625,10 +1023,12 @@ int main(int argc, char** argv)
 			// addresses (the program's and the libraries') are those of the code after it.
 		}
 		cg.library = o.library;
+		cg.shared = o.shared;
 		cg.libraries = o.library ? 0 : (int)pp.imports().size();
 		CodeGen codegen(cg);
 		dasm = codegen.generate(program);
 		subTable = codegen.subTable();
+		pieceStarts = codegen.pieceStarts();
 		libraries = pp.imports();
 		if (o.library)
 		{
@@ -683,6 +1083,9 @@ int main(int argc, char** argv)
 	for (const auto& sym : symbols)
 		importable.insert(sym.first);
 
+	if (o.shared)
+		return linkShared(o, dasm, importable, directory, symbols, libraries, exported, interface, subTable);
+
 	if (o.library)
 	{
 		Unit unit;
@@ -727,6 +1130,7 @@ int main(int argc, char** argv)
 			if (!e.code.startsWith("{ NAME } ") && !e.code.startsWith("{ VERSION } "))
 				lib.debug.push_back({ e.addr, e.size, e.code.cpp_str() });
 		}
+		lib.pieces = libraryPieces(unit, pieceStarts);
 		if (dragon::code::Assembler::Application::args.save_disassembly && !o.dasmArgs.empty())
 			saveDisassembly(dragon::code::Assembler::Application::args.disassembly_file_path.cpp_str(), unit.disassembly);
 		if (!writeFile(o.output, dragon::dlib::write(lib)))
@@ -740,23 +1144,166 @@ int main(int argc, char** argv)
 		return 0;
 	}
 
-	// The program, then each library (aligned), connected: base is where the image runs (raw:
-	// the load address; DRX: 0, everything relocated by the loader).
+	// How each library is linked: static (copied after the program) or dynamic (its .drl, loaded
+	// with the program: a DRX2). A dynamic library's dependencies are dynamic too: its .drl uses
+	// their shared copies, so a static copy in the program would be a second one (a second set of
+	// globals).
+	std::vector<bool> dynamicLib(libraries.size(), false), chosenStatic(libraries.size(), false);
+	for (size_t k = 0; k < libraries.size(); k++)
+	{
+		const std::string name = libraryName(libraries[k].path);
+		const std::string& mode = libraries[k].mode;
+		if (o.staticNames.count(name) > 0)
+			chosenStatic[k] = true;
+		else if (o.dynamicNames.count(name) > 0)
+			dynamicLib[k] = true;
+		else if (mode == "static")
+			chosenStatic[k] = true;
+		else
+			dynamicLib[k] = (mode == "dynamic" || o.dynamicAll);
+	}
+	for (size_t k = libraries.size(); k-- > 0; )		// (dependencies come first: they are seen after)
+	{
+		if (!dynamicLib[k])
+			continue;
+		for (size_t d : libraries[k].deps)
+		{
+			if (chosenStatic[d])
+			{
+				std::cerr << "dsc: " << libraryName(libraries[d].path) << " is linked statically, but " << libraryName(libraries[k].path)
+						  << ", linked dynamically, needs it: its shared library uses the shared " << libraryName(libraries[d].path)
+						  << " (a static copy would be a second one, with its own globals). Link " << libraryName(libraries[d].path)
+						  << " dynamically too, or " << libraryName(libraries[k].path) << " statically\n";
+				return 1;
+			}
+			dynamicLib[d] = true;
+		}
+	}
+	std::vector<Preprocessor::ImportedLibrary> staticLibs;	// (in the program, in this order)
+	std::vector<uint32_t> dynamicIndex(libraries.size(), 0);	// index in the DRX2's library table
+	dragon::dyn::Program dynamic;
+	for (size_t k = 0; k < libraries.size(); k++)
+	{
+		if (dynamicLib[k])
+		{
+			dynamicIndex[k] = (uint32_t)dynamic.libraries.size();
+			dynamic.libraries.push_back({ libraryName(libraries[k].path), dragon::dyn::abiOf(libraries[k].library.interface) });
+		}
+		else
+			staticLibs.push_back(libraries[k]);
+	}
+	if (o.raw && !dynamic.libraries.empty())
+	{
+		std::cerr << "dsc: a raw program (--raw, --rom) can't link libraries dynamically (" << dynamic.libraries[0].name << "): it has no loader\n";
+		return 1;
+	}
+
+	// The program, then each static library (aligned), connected: base is where the image runs
+	// (raw: the load address; DRX: 0, everything relocated by the loader).
 	uint32_t base = 0;
 	if (o.raw)
 		base = (uint32_t)std::strtoul((o.load.empty() ? (o.rom ? "0x00000000" : "0x01010000") : o.load).c_str(), nullptr, 0);
 	Unit unit;
-	if (!assembleUnit(dasm, importable, directory, 0, !o.raw, unit, o, true, libraries))
+	if (!assembleUnit(dasm, importable, directory, 0, !o.raw, unit, o, true, staticLibs))
 		return 1;
 	addSubTable(unit, subTable);
+
+	// Unused code: of each static library with pieces (DLIB::pieces), only the pieces reachable
+	// from what the program uses: its imports, every library's initialization (__ds_start calls
+	// them), then whatever a kept piece's relocations point to (same library) and its imports
+	// name (other static libraries). The libraries without pieces are linked whole.
+	std::vector<Preprocessor::ImportedLibrary> linked = libraries;
+	if (!o.wholeLibraries)
+	{
+		std::vector<std::vector<char>> kept(libraries.size());
+		std::vector<std::pair<size_t, size_t>> work;
+		auto l_reach = [&](const std::string& symbol) {
+			auto it = symbols.find(symbol);
+			if (it == symbols.end() || dynamicLib[it->second.first] || libraries[it->second.first].library.pieces.empty())
+				return;
+			const auto& pieces = libraries[it->second.first].library.pieces;
+			if (it->second.second < libraries[it->second.first].library.image.size())
+				work.push_back({ it->second.first, pieceOf(pieces, it->second.second) });
+		};
+		for (size_t k = 0; k < libraries.size(); k++)
+		{
+			if (dynamicLib[k])
+				continue;
+			const auto& lib = libraries[k].library;
+			kept[k].assign(lib.pieces.size(), 0);
+			l_reach("__dlib_init_" + std::to_string(k));
+			if (lib.pieces.empty())
+			{
+				for (const auto& i : lib.imports)		// (linked whole: everything it uses is reached)
+					l_reach(i.symbol);
+			}
+		}
+		for (const auto& i : unit.imports)
+			l_reach(i.symbol);
+		while (!work.empty())
+		{
+			const auto [k, p] = work.back();
+			work.pop_back();
+			if (kept[k][p])
+				continue;
+			kept[k][p] = 1;
+			const auto& lib = libraries[k].library;
+			const uint32_t start = lib.pieces[p], end = (p + 1 < lib.pieces.size()) ? lib.pieces[p + 1] : (uint32_t)lib.image.size();
+			for (uint32_t r : lib.relocations)
+			{
+				if (r < start || r >= end)
+					continue;
+				const uint32_t target = dragon::drx::readU32(&lib.image[r]);
+				if (target < lib.image.size())
+					work.push_back({ k, pieceOf(lib.pieces, target) });
+			}
+			for (const auto& i : lib.imports)
+			{
+				if (i.offset >= start && i.offset < end)
+					l_reach(i.symbol);
+			}
+		}
+		for (size_t k = 0; k < libraries.size(); k++)
+		{
+			const auto& lib = libraries[k].library;
+			if (dynamicLib[k] || lib.pieces.empty())
+				continue;
+			std::function<uint32_t(uint32_t)> remap;
+			std::string message;
+			if (!compactLibrary(lib, kept[k], linked[k].library, remap, message))
+			{
+				std::cerr << "dsc: internal error while leaving out the unused code of " << libraries[k].path << ": " << message << " (--whole-libraries avoids it)\n";
+				return 1;
+			}
+			// Its symbols, at their new offsets (the ones left out: never used).
+			for (auto& sym : symbols)
+			{
+				if (sym.second.first != k)
+					continue;
+				const uint32_t off = sym.second.second;
+				sym.second.second = (off < lib.image.size() && kept[k][pieceOf(lib.pieces, off)]) ? remap(off) : UINT32_MAX;
+			}
+			if (o.verbose)
+				std::cout << libraryName(libraries[k].path) << ": " << linked[k].library.image.size() << " of " << lib.image.size() << " bytes linked\n";
+		}
+		staticLibs.clear();
+		for (size_t k = 0; k < libraries.size(); k++)
+		{
+			if (!dynamicLib[k])
+				staticLibs.push_back(linked[k]);
+		}
+	}
 	std::vector<uint8_t> image = unit.image;
 	std::vector<uint32_t> relocations = unit.relocations;
-	std::vector<uint32_t> offsets;
-	for (const auto& l : libraries)
+	std::vector<uint32_t> offsets(libraries.size(), 0), staticOffsets;
+	for (size_t k = 0; k < libraries.size(); k++)
 	{
+		if (dynamicLib[k])
+			continue;
 		image.resize((image.size() + 15) & ~(size_t)15, 0);
-		offsets.push_back((uint32_t)image.size());
-		image.insert(image.end(), l.library.image.begin(), l.library.image.end());
+		offsets[k] = (uint32_t)image.size();
+		staticOffsets.push_back(offsets[k]);
+		image.insert(image.end(), linked[k].library.image.begin(), linked[k].library.image.end());
 	}
 	auto l_add = [&](uint32_t at, uint32_t value) { dragon::drx::writeU32(&image[at], dragon::drx::readU32(&image[at]) + value); };
 	auto l_resolve = [&](const std::string& symbol, const std::string& user, uint32_t at) -> bool {
@@ -766,7 +1313,21 @@ int main(int argc, char** argv)
 			std::cerr << "dsc: " << user << " uses " << symbol << ", which none of the imported libraries has (a library missing?)\n";
 			return false;
 		}
-		dragon::drx::writeU32(&image[at], base + offsets[it->second.first] + it->second.second);
+		const size_t k = it->second.first;
+		if (dynamicLib[k])
+		{
+			// Filled in by the loader (__dlib_init_<n>: the library's initialization).
+			const bool init = symbol.rfind("__dlib_init_", 0) == 0;
+			dynamic.imports.push_back({ at, (uint16_t)dynamicIndex[k], init ? dragon::dyn::ImportKind::Init : dragon::dyn::ImportKind::Absolute, init ? "" : symbol });
+			dragon::drx::writeU32(&image[at], 0);
+			return true;
+		}
+		if (it->second.second == UINT32_MAX)
+		{
+			std::cerr << "dsc: internal error: " << symbol << " was left out of " << libraries[k].path << " (--whole-libraries avoids it)\n";
+			return false;
+		}
+		dragon::drx::writeU32(&image[at], base + offsets[k] + it->second.second);
 		if (!o.raw)
 			relocations.push_back(at);
 		return true;
@@ -778,7 +1339,9 @@ int main(int argc, char** argv)
 	}
 	for (size_t k = 0; k < libraries.size(); k++)
 	{
-		const auto& lib = libraries[k].library;
+		if (dynamicLib[k])
+			continue;
+		const auto& lib = linked[k].library;
 		for (uint32_t r : lib.relocations)
 		{
 			l_add(offsets[k] + r, base + offsets[k]);
@@ -800,10 +1363,13 @@ int main(int argc, char** argv)
 		program.image = image;
 		program.entry = 0;
 		program.relocations = relocations;
+		for (const auto& i : dynamic.imports)	// (a DRX2: what the loader fills in is part of the build)
+			program.relocations.push_back(i.offset ^ ((uint32_t)i.library << 24) ^ ((uint32_t)i.kind << 28));
 		program.id = dragon::drx::computeId(program);
+		program.relocations = relocations;
 	}
 	auto l_disassembly = [&]() {
-		std::vector<DisassemblyLine> entries = linkedDisassembly(unit, base, libraries, offsets);
+		std::vector<DisassemblyLine> entries = linkedDisassembly(unit, base, staticLibs, staticOffsets);
 		if (program.id != 0)
 		{
 			auto at = entries.begin();
@@ -814,20 +1380,7 @@ int main(int argc, char** argv)
 		return entries;
 	};
 	// The disassembly for the debugger (-Wa,--save-disassembly, --save-disassembly).
-	if (dragon::code::Assembler::Application::args.save_disassembly && !o.dasmArgs.empty())
-		saveDisassembly(dragon::code::Assembler::Application::args.disassembly_file_path.cpp_str(), l_disassembly());
-	auto l_saveDisassembly = [&]() {
-		if (o.disassemblyDir.empty())
-			return;
-		// A directory (as for ddb: one file per program, named like dasm's), or a file.
-		std::string file = o.disassemblyDir;
-		if (file.back() == '/' || std::filesystem::is_directory(file))
-		{
-			std::filesystem::create_directories(file);
-			file = (std::filesystem::path(file) / (ostd::Hash::md5(String(o.output)).cpp_str() + ".dds")).string();
-		}
-		saveDisassembly(file, l_disassembly());
-	};
+	auto l_saveDisassembly = [&]() { saveDisassemblies(o, l_disassembly()); };
 
 	if (o.raw)
 	{
@@ -864,14 +1417,56 @@ int main(int argc, char** argv)
 		std::cerr << "dsc: the program is too big (16 MiB at most)\n";
 		return 1;
 	}
-	if (!writeFile(o.output, dragon::drx::write(program)))
+	// Without dynamic libraries: a DRX (DRX1, as always); with: a DRX2.
+	std::vector<uint8_t> file;
+	if (dynamic.libraries.empty())
+		file = dragon::drx::write(program);
+	else
+	{
+		dynamic.image = image;
+		dynamic.entry = 0;
+		dynamic.relocations = relocations;
+		dynamic.id = program.id;
+		file = dragon::dyn::write(dynamic);
+	}
+	if (!writeFile(o.output, file))
 	{
 		std::cerr << "dsc: cannot write " << o.output << "\n";
 		return 1;
 	}
 	l_saveDisassembly();
 	if (o.verbose)
-		std::cout << o.output << ": " << image.size() << " bytes, " << relocations.size() << " relocations"
-				  << (libraries.empty() ? "" : ", " + std::to_string(libraries.size()) + " libraries") << ", id " << dragon::drx::idString(program.id) << "\n";
+	{
+		std::cout << o.output << ": " << image.size() << " bytes, " << relocations.size() << " relocations";
+		if (!staticLibs.empty())
+			std::cout << ", " << staticLibs.size() << " static libraries";
+		if (!dynamic.libraries.empty())
+			std::cout << ", " << dynamic.libraries.size() << " shared libraries (DRX2, " << dynamic.imports.size() << " imports)";
+		std::cout << ", id " << dragon::drx::idString(program.id) << "\n";
+	}
 	return 0;
+}
+
+int main(int argc, char** argv)
+{
+	Options o;
+	int r = parseArgs(argc, argv, o);
+	if (r != 0)
+		return r == 1 ? 0 : r;
+	if (!o.shared)
+		return build(o);
+	// --lib --shared: both the .dlib (static) and the .drl (shared), from the same sources.
+	std::filesystem::path stem(o.output);
+	if (stem.extension() == ".dlib" || stem.extension() == ".drl")
+		stem.replace_extension();
+	Options staticLib = o;
+	staticLib.shared = false;
+	staticLib.output = stem.string() + ".dlib";
+	staticLib.disassemblyDir.clear();		// (the .dlib keeps its disassembly in itself)
+	r = build(staticLib);
+	if (r != 0)
+		return r;
+	Options sharedLib = o;
+	sharedLib.output = stem.string() + ".drl";
+	return build(sharedLib);
 }

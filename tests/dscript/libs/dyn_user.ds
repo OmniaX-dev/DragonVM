@@ -1,0 +1,19 @@
+#import(<dyn_counter>)
+// A shared library that uses another one (dynamic_linking.ds): its writable global and its
+// subs from shared code (another library's slot), and pointers in its own writable data: to a
+// sub of its own, to a string, to another global of its own, to the other library's sub.
+namespace du {
+	var total: u32 = 100;
+	sub twice(var x: u32) -> u32 { return x * 2; }
+	var op: sub(u32) -> u32 = twice;
+	var other_op: sub(u32) -> u32 = dc::bump;
+	var greeting: string = "hello";
+	var total_ptr: u32* = &total;
+
+	sub use_counter() -> u32 { dc::counter += 1; total += dc::bump(10); return total; }
+	sub apply(var x: u32) -> u32 { return op(x); }
+	sub apply_other(var x: u32) -> u32 { return other_op(x); }
+	sub through_pointer() -> u32 { *total_ptr += 1; return total; }
+	sub greeting_char(var i: u32) -> u8 { return greeting[i]; }
+	sub origin_sum() -> i32 { return dc::origin.x + dc::origin.y; }
+}

@@ -43,7 +43,10 @@ namespace dscript
 			inline bool isDefined(const std::string& name) const { return m_defines.count(name) > 0; }
 			// Compiled libraries (#import): where they are searched, and the ones imported (the
 			// dependencies before the libraries that need them).
-			struct ImportedLibrary { std::string path; dragon::dlib::Library library; };
+			// mode: what #import(<name>, static / dynamic) asked for ("" if nothing: the default,
+			// or a library only imported by other libraries); deps: the libraries it imports
+			// (indices in imports()).
+			struct ImportedLibrary { std::string path; dragon::dlib::Library library; std::string mode; std::vector<size_t> deps; };
 			void setLibraryDirs(const std::vector<std::string>& dirs) { m_libraryDirs = dirs; }
 			const std::vector<ImportedLibrary>& imports(void) const { return m_imports; }
 			// The #import(...)s of the sources themselves, as written (a library's dependencies).
@@ -73,7 +76,8 @@ namespace dscript
 			std::string resolveInclude(const Token& tok, std::string path, const std::string& directory);
 			std::string resolveImport(const Token& tok, std::string path, const std::string& directory);
 			// Imports the library at path (if it isn't yet): its declarations go to out.
-			void importLibrary(const Token& tok, const std::string& path, std::vector<Token>& out);
+			// The library's index in m_imports (imported now, or before).
+			size_t importLibrary(const Token& tok, const std::string& path, std::vector<Token>& out);
 			// Replaces the defines in `in`. `usePos`: where the tokens of a define body go (the
 			// outermost use; null at the top level). `hidden`: the defines being expanded.
 			void expand(const std::vector<Token>& in, std::vector<Token>& out, const SourcePos* usePos, std::vector<std::string>& hidden, int depth);

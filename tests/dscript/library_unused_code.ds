@@ -1,0 +1,16 @@
+// Static linking keeps only the pieces of a library the program reaches (the rest is left out);
+// everything reachable works: calls between libraries, sub pointers in constant arrays and in
+// globals set at init, init code, static locals, strings, inline subs of the interface.
+// dsc-lib: libs/strip_a.ds libs/strip_b.ds
+// expect-rv: 0
+#include(check.ds)
+#import(<strip_b>)
+
+sub main() -> i32 {
+	check(1, sb::uses_a(5) == 10 + 1 + 3);				// helper: 5 * 2 + 1 call; ops[2] = three
+	check(2, sa::via_table(0) == 1 and sa::via_table(1) == 2);
+	check(3, sa::via_global() == 2 and sa::computed == 30);
+	check(4, sa::message_length() == 4);
+	check(5, sa::doubled(1) == (2 + 2) + (2 + 3));		// calls 2 and 3 of helper
+	return result();
+}

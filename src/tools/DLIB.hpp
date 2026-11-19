@@ -19,6 +19,11 @@
 //   debug          (optional) the library's disassembly for the debugger, as the assembler
 //                  saves it (.dds entries: address, size, text; addresses from 0): dsc puts it
 //                  in the program's disassembly, at the library's address
+//   pieces         (optional) where the image can be cut (sorted offsets, the first 0): piece i is
+//                  [pieces[i], pieces[i + 1]) (the last one up to the end): a sub, a global, a
+//                  string, the initialization. Every address inside the image is a relocation, so
+//                  dsc links only the pieces a program reaches from what it uses (the others are
+//                  left out). Without it, the library is linked whole.
 //
 // File layout (big endian): 'D' 'L' 'B' '1', then every part in the order above: counts (u32),
 // numbers (u32), strings (u32 length, then the bytes), byte arrays (u32 length, then the bytes).
@@ -49,6 +54,7 @@ namespace dragon
 			std::string interface;
 			std::vector<LineInfo> lines;
 			std::vector<DebugEntry> debug;
+			std::vector<uint32_t> pieces;
 		};
 
 		namespace detail
@@ -130,6 +136,9 @@ namespace dragon
 				w.u32(e.size);
 				w.str(e.text);
 			}
+			w.u32((uint32_t)lib.pieces.size());
+			for (uint32_t p : lib.pieces)
+				w.u32(p);
 			return w.out;
 		}
 
@@ -183,6 +192,17 @@ namespace dragon
 					e.text = r.str();
 					lib.debug.push_back(e);
 				}
+			}
+			if (r.ok && r.pos < file.size())
+			{
+				for (uint32_t i = 0, n = r.count(); i < n && r.ok; i++)
+					lib.pieces.push_back(r.u32());
+				// (Sorted, starting at 0, inside the image: otherwise not used.)
+				bool valid = !lib.pieces.empty() && lib.pieces[0] == 0;
+				for (size_t i = 1; i < lib.pieces.size() && valid; i++)
+					valid = lib.pieces[i] > lib.pieces[i - 1] && lib.pieces[i] < lib.image.size();
+				if (!valid)
+					lib.pieces.clear();
 			}
 			if (!r.ok)
 			{
