@@ -1,0 +1,4 @@
+// Parameters need a type: auto is for variables with a value.
+// expect-error: parameters need a type (auto is for variables with a value)
+sub f(auto x) -> i32 { return 0; }
+sub main() -> i32 { return 0; }

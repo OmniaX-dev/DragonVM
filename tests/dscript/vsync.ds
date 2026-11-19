@@ -4,7 +4,7 @@
 // re-entered. 1 = it ran several times, never nested.
 // drun-flags: --boot --vsync 300
 // expect-rv: 1
-#import(<dragon-sdk>)
+#import("dragon-sdk")
 
 var con: dr::Text16Console;
 var inside: bool = false;

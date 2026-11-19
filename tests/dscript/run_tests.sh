@@ -13,10 +13,10 @@
 #   // expect-sources: <file.ds> ...  the raw build's disassembly (--save-disassembly, for the
 #                              debugger) has the source lines of these files (also the libraries')
 #   // dsc-lib: <file.ds> ...  libraries to compile first (dsc --lib, in this order, into a
-#                              directory given to the test with -L: #import(<file>))
+#                              directory given to the test with -L: #import("file"))
 #   // dsc-shared: <file.ds> ...  shared libraries to compile first (dsc --lib --shared: a .dlib and a
 #                              .drl each). A test using shared libraries (dsc-shared, or dsc-flags with
-#                              --dynamic / --dynamic=<names>; #import(<name>, dynamic) needs one of
+#                              --dynamic / --dynamic=<names>; #import("name", dynamic) needs one of
 #                              them) runs as a DRX only, with drun -L (see other/info/dynamic-linking.md)
 # DSCRIPT_TEST_DSC_FLAGS=<options>: added to every dsc command (the libraries' too), e.g. -O.
 # DSCRIPT_TEST_TOOLS=<dir>: where dsc and drun are (default: bin; the machine still runs from bin).
@@ -36,7 +36,7 @@ OUT="$(mktemp -d)"
 trap 'rm -rf "$OUT"' EXIT
 
 # The libraries, built from their sources into one directory (the tests use them with
-# #import(<libcore>), #import(<dragon-sdk>), #import(<stdlib>)): libcore first, the others import it.
+# #import("libcore"), #import("dragon-sdk"), #import("stdlib")): libcore first, the others import it.
 mkdir -p "$OUT/lib"
 for lib in libcore dragon-sdk stdlib; do
 	# (shared: a .dlib and a .drl, for the tests that link them dynamically)

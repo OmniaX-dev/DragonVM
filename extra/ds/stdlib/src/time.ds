@@ -1,5 +1,5 @@
 #include(syscall.ds)
-#import(<libcore>)
+#import("libcore")
 
 // std::time, the clock part: the timer through system calls (the calendar and DateTime are in
 // libcore).

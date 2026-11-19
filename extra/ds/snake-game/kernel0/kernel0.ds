@@ -1,5 +1,5 @@
-#import(<dragon-sdk>)
-#import(<libcore>)
+#import("dragon-sdk")
+#import("libcore")
 
 #define(KEY_BUFF_SIZE = 128)
 

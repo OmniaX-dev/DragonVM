@@ -1,6 +1,6 @@
 // expect-rv: 0
 
-#import(<dragon-sdk>)
+#import("dragon-sdk")
 
 struct Event { var note: u8; var velocity: u8; var time: u32; }
 

@@ -4,7 +4,7 @@
 // their names, and every code of a group has a name.
 // expect-rv: 0
 #include(check.ds)
-#import(<libcore>)
+#import("libcore")
 
 sub same(var a: string, var b: string) -> bool { return std::strcmp(a, b) == 0; }
 

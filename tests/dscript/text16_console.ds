@@ -4,7 +4,7 @@
 // fields (they are priv); text16_screen.ds checks what present() puts on the screen.
 // drun-flags: --boot
 // expect-rv: 0
-#import(<dragon-sdk>)
+#import("dragon-sdk")
 
 alias Con = dr::Text16Console;
 

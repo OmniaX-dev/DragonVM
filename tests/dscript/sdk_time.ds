@@ -2,7 +2,7 @@
 // (DateTime, the calendar).
 // drun-flags: --unix-time 1763200000
 // expect-rv: 0
-#import(<dragon-sdk>)
+#import("dragon-sdk")
 
 var g_failures: i32 = 0;
 

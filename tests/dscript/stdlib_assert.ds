@@ -3,8 +3,8 @@
 // ends the process with the Exit system call (R9 0x10: R8 the exit code, 134). A tiny kernel
 // here (main, in supervisor mode) answers the system calls and runs user_main in user mode.
 // expect-output: Assertion failed: n * 2 == 7 (stdlib_assert.ds:61): user maths\nexit 134\n
-#import(<dragon-sdk>)
-#import(<stdlib>)
+#import("dragon-sdk")
+#import("stdlib")
 
 var kernel_stack: u32[1024];
 var user_stack: u32[1024];

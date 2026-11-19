@@ -1,0 +1,10 @@
+// The old form #import(<name>) still works (the library directories only), next to the usual
+// #import("name") (next to the file first, then the library directories).
+// expect-rv: 0
+#include(check.ds)
+#import(<libcore>)
+
+sub main() -> i32 {
+	check(1, std::strlen("still works") == 11);
+	return result();
+}

@@ -36,10 +36,10 @@
 
 (source_file
 	(variable_declaration
-		"var" @context
+		["var" "auto"] @context
 		name: (identifier) @name) @item)
 
 (declaration_list
 	(variable_declaration
-		"var" @context
+		["var" "auto"] @context
 		name: (identifier) @name) @item)

@@ -2,7 +2,7 @@
 // overloads of min / max / abs / clamp, the constants, and the text of floats.
 // drun-flags: --boot
 // expect-output: 3.141593|-2.50|0.000|-0.000000|inf|-inf|nan|1.234568e+12|100|0.100000000|7|3.5
-#import(<dragon-sdk>)
+#import("dragon-sdk")
 
 var g_failures: i32 = 0;
 

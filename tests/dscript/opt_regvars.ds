@@ -1,7 +1,7 @@
 // -O: locals and parameters in registers (and the peephole pass), where it could go wrong.
 // expect-rv: 0
 // dsc-flags: -O
-#import(<dragon-sdk>)
+#import("dragon-sdk")
 
 var g_failures: i32 = 0;
 var g_calls: i32 = 0;

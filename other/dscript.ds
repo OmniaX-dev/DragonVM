@@ -1,7 +1,7 @@
 // DScript example (the original mock-up, adjusted to what dsc compiles).
 // Compile: dsc other/dscript.ds -I extra/ds/sdk          (relocatable .drx)
 //          dsc other/dscript.ds -I extra/ds/sdk --raw    (bare metal .bin)
-#include(<bios.ds>)            // print(...), new_line(), println(...)
+#include("bios.ds")            // print(...), new_line(), println(...)
 
 #define(SOME_DEF = 4)
 

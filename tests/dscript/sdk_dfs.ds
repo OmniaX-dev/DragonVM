@@ -3,7 +3,7 @@
 // tests/dfs/vm_test.sh (on a real disk).
 // expect-rv: 0
 #include(check.ds)
-#import(<dragon-sdk>)
+#import("dragon-sdk")
 
 const DiskSize: u32 = 256 * 1024;
 var g_disk: u8* = cast<u8*>(0x01800000);				// the RAM disk (free memory: no BIOS here)

@@ -6,7 +6,7 @@
 // drun-flags: --file 0x01800000:@LIBS@/dyn_user.drl --file 0x01900000:@PROGRAM@
 // expect-rv: 0
 #include(check.ds)
-#import(<dragon-sdk>)
+#import("dragon-sdk")
 
 sub same(var a: string, var b: string) -> bool { return std::strcmp(a, b) == 0; }
 

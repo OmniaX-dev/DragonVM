@@ -36,7 +36,7 @@ namespace dscript
 	}
 
 	static const char* s_keywords[] = {
-		"var", "const", "sub", "struct", "enum", "alias", "return", "if", "else", "while", "do", "for",
+		"var", "auto", "const", "sub", "struct", "enum", "alias", "return", "if", "else", "while", "do", "for",
 		"break", "continue", "null", "true", "false", "cast", "sizeof", "low", "interrupt", "inline", "static", "priv", "readonly",
 		"assert", "debug_print", "namespace", "defer", "atomic", "and", "or", "not", "void", nullptr
 	};
@@ -266,6 +266,12 @@ namespace dscript
 		}
 		if (tooLarge)
 			error(t.pos, "integer literal too large (32 bits at most)");
+		// 123u, 0xFFU: a u32 (as unsigned int in C).
+		if ((peek() == 'u' || peek() == 'U') && !std::isalnum((unsigned char)peek(1)) && peek(1) != '_')
+		{
+			advance();
+			t.isUnsigned = true;
+		}
 		if (std::isalnum((unsigned char)peek()) || peek() == '.')
 			error(t.pos, peek() == '.' ? "invalid '.' after an integer literal" : "invalid character in integer literal");
 		t.value = (int64_t)value;

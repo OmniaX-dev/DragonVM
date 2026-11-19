@@ -3,7 +3,7 @@
 // and that many milliseconds are 250 * clock / 1000 cycles. Interrupts stay enabled.
 // 1 = all right; 2: millis wrong; 3: cycles don't match the clock; 4: sleep(0) / sleep(-5) waited.
 // expect-rv: 1
-#import(<dragon-sdk>)
+#import("dragon-sdk")
 
 sub main() -> u32 {
 	var clock: u32 = *cast<u32*>(dr::CMOSRegisters.ClockSpeed);

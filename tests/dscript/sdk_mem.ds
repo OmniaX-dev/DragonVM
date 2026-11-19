@@ -1,6 +1,6 @@
 // expect-rv: 0
 #include(check.ds)
-#import(<dragon-sdk>)
+#import("dragon-sdk")
 
 sub main() -> i32 {
     var a: u8[16];

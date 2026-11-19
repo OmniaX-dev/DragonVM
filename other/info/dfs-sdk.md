@@ -133,7 +133,7 @@ first block), offset 1152. The root (inode 1) is at offset 128 of the same block
 
 ## 3. The SDK: how the code is organised
 
-`#import(<dragon-sdk>)` gives you `dr::dfs`. The code is in `extra/ds/dragon-sdk/src/dfs.ds`. It is a copy, function
+`#import("dragon-sdk")` gives you `dr::dfs`. The code is in `extra/ds/dragon-sdk/src/dfs.ds`. It is a copy, function
 for function, of the C++ core that `dtools` and the debugger use (`src/storage/dfs/DfsCore.cpp`). Both write exactly
 the same bytes, and `tests/dfs/vm_test.sh` checks that.
 

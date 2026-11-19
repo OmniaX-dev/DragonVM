@@ -1,4 +1,4 @@
-#import(<dragon-sdk>)
+#import("dragon-sdk")
 
 interrupt sub __int_30_handler() {
 	var code: u32;

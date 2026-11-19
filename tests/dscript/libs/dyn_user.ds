@@ -1,4 +1,4 @@
-#import(<dyn_counter>)
+#import("dyn_counter")
 // A shared library that uses another one (dynamic_linking.ds): its writable global and its
 // subs from shared code (another library's slot), and pointers in its own writable data: to a
 // sub of its own, to a string, to another global of its own, to the other library's sub.

@@ -30,7 +30,7 @@ module.exports = grammar({
 	word: $ => $.identifier,
 
 	// Preprocessor directives can appear on any line.
-	extras: $ => [/\s/, $.line_comment, $.block_comment, $.preproc_directive],
+	extras: $ => [/\s/, $.line_comment, $.block_comment, $.preproc_include, $.preproc_directive],
 
 	conflicts: $ => [
 		[$._expression, $._type],
@@ -55,7 +55,21 @@ module.exports = grammar({
 		line_comment: _ => token(seq('//', /[^\n]*/)),
 		block_comment: _ => token(seq('/*', /[^*]*\*+([^/*][^*]*\*+)*/, '/')),
 
-		// #include(file.ds)  #define(NAME = value)  #if(expr)  #else  #endif  #once ...
+		// #include("file.ds")  #import("name")  #import("name", dynamic): the path is a string
+		// (also the old <name> and unquoted forms).
+		preproc_include: $ => seq(
+			alias(token(prec(2, /#(include|import)/)), $.preproc_keyword),
+			token.immediate('('),
+			field('path', choice(
+				$.string_literal,
+				alias(token(prec(1, /<[^>\n]*>/)), $.string_literal),
+				alias(token(prec(1, /[^\s(),"<>]+/)), $.string_literal),
+			)),
+			optional(seq(',', field('mode', $.identifier))),
+			')',
+		),
+
+		// #define(NAME = value)  #if(expr)  #else  #endif  #once ...
 		// (one token: it runs to the end of the line, before a comment)
 		preproc_directive: _ => token(prec(1, seq(/#[A-Za-z_]+/, /([^\n/]|\/[^\n/*])*/))),
 
@@ -127,13 +141,17 @@ module.exports = grammar({
 			';',
 		),
 
-		variable_declaration: $ => seq(
-			'var',
-			field('name', $.identifier),
-			optional(seq(':', field('type', $._type),
-				// var p: Point(1, 2): the struct's constructor (sub new)
-				optional(field('arguments', $.argument_list)))),
-			optional(seq('=', field('value', choice($._expression, $.initializer_list)))),
+		variable_declaration: $ => choice(
+			seq(
+				'var',
+				field('name', $.identifier),
+				optional(seq(':', field('type', $._type),
+					// var p: Point(1, 2): the struct's constructor (sub new)
+					optional(field('arguments', $.argument_list)))),
+				optional(seq('=', field('value', choice($._expression, $.initializer_list)))),
+			),
+			// auto x = value: the type comes from the value (no ': type')
+			seq('auto', field('name', $.identifier), '=', field('value', $._expression)),
 		),
 
 		initializer_list: $ => seq(
@@ -392,9 +410,10 @@ module.exports = grammar({
 
 		// ===== Literals and names =====
 		number_literal: _ => token(choice(
-			/0[xX][0-9a-fA-F][0-9a-fA-F_]*/,
-			/0[bB][01][01_]*/,
-			/[0-9][0-9_]*/,
+			// (u / U: unsigned, 123u is a u32)
+			/0[xX][0-9a-fA-F][0-9a-fA-F_]*[uU]?/,
+			/0[bB][01][01_]*[uU]?/,
+			/[0-9][0-9_]*[uU]?/,
 			// f32: 1.5, 2., 1e-3, 2.5e+4, 3f, 0.5f
 			/[0-9][0-9_]*\.[0-9_]*([eE][+-]?[0-9]+)?[fF]?/,
 			/[0-9][0-9_]*[eE][+-]?[0-9]+[fF]?/,

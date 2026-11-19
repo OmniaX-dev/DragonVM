@@ -1,4 +1,4 @@
-#import(<strip_a>)
+#import("strip_a")
 // Uses strip_a: what its used subs need from strip_a is linked too (library_unused_code.ds).
 namespace sb {
 	sub uses_a(var x: u32) -> u32 { return sa::used(x) + sa::via_table(2); }

@@ -3,7 +3,7 @@
 // dsc-shared: libs/dyn_counter.ds libs/dyn_user.ds
 // expect-rv: 0
 #include(check.ds)
-#import(<dyn_user>, dynamic)
+#import("dyn_user", dynamic)
 
 sub main() -> i32 {
 	dc::counter = 8;

@@ -26,7 +26,7 @@ Contents:
 
 ```
 dsc --lib --shared src/*.ds -o lib/mylib.dlib    // lib/mylib.dlib and lib/mylib.drl
-dsc prog.ds -L lib --dynamic -o prog.drx         // a DRX2: #import(<mylib>) is linked at load time
+dsc prog.ds -L lib --dynamic -o prog.drx         // a DRX2: #import("mylib") is linked at load time
 drun machine.dvm prog.drx -L lib                 // drun loads lib/mylib.drl and links it
 ```
 - `--lib --shared` compiles the library twice, internally, from the same sources: the `.dlib`
@@ -42,9 +42,9 @@ drun machine.dvm prog.drx -L lib                 // drun loads lib/mylib.drl and
 A program chooses, for each library it imports, whether it is **static** (its `.dlib` code is
 copied into the program, as always) or **dynamic** (its `.drl` is loaded with the program):
 ```
-#import(<stdlib>, dynamic)       // in the source: this one dynamic
-#import(<mylib>, static)         // this one static (also when the command line says --dynamic)
-#import(<other>)                 // the command line decides (static by default)
+#import("stdlib", dynamic)       // in the source: this one dynamic
+#import("mylib", static)         // this one static (also when the command line says --dynamic)
+#import("other")                 // the command line decides (static by default)
 ```
 ```
 dsc prog.ds -L lib                          // every library static (a DRX, as before)

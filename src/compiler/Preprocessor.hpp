@@ -9,15 +9,17 @@
 namespace dscript
 {
 	// Runs the directives on the tokens of a file (and of the files it includes):
-	//   #include(path)            path relative to the including file, then the include dirs
-	//   #include(<path>)          the include dirs only
+	//   #include("path")          path relative to the including file, then the include dirs (also
+	//                             without quotes); <path> (the old form): the include dirs only
 	//   #define(NAME = tokens)    #define(NAME)    #undef(NAME)
 	//   #define(NAME(a, b) = tokens)   with parameters: NAME(x, y) is replaced by the tokens,
 	//                             a and b by the (expanded) x and y
 	//   #if(expr) #ifdef(NAME) #ifndef(NAME) #elif(expr) #else #endif
-	//   #import(path) #import(<name>)   a compiled library (name.dlib, see DLIB.hpp): next to the
-	//                             file, then in the library dirs (-L); <name>: the library dirs only.
-	//                             Its declarations are put there (once), its dependencies first.
+	//   #import("name")           a compiled library (name.dlib, see DLIB.hpp): next to the file,
+	//                             then in the library dirs (-L) (also without quotes); <name> (the
+	//                             old form): the library dirs only. Its declarations are put there
+	//                             (once), its dependencies first. #import("name", static / dynamic):
+	//                             how the program links it (other/info/dynamic-linking.md).
 	//   #multiple                 (first thing in the file) the file can be included many times;
 	//                             every other file is included only once
 	//   #once                     accepted, does nothing (it is the default)
@@ -43,7 +45,7 @@ namespace dscript
 			inline bool isDefined(const std::string& name) const { return m_defines.count(name) > 0; }
 			// Compiled libraries (#import): where they are searched, and the ones imported (the
 			// dependencies before the libraries that need them).
-			// mode: what #import(<name>, static / dynamic) asked for ("" if nothing: the default,
+			// mode: what #import("name", static / dynamic) asked for ("" if nothing: the default,
 			// or a library only imported by other libraries); deps: the libraries it imports
 			// (indices in imports()).
 			struct ImportedLibrary { std::string path; dragon::dlib::Library library; std::string mode; std::vector<size_t> deps; };

@@ -1,4 +1,4 @@
-#import(<dragon-sdk>)
+#import("dragon-sdk")
 
 const PAGE_SIZE: u32 = 4096;
 const PAGE_SHIFT: u32 = 12;

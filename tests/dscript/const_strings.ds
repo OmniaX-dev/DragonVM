@@ -1,6 +1,6 @@
 // expect-output: DragonBIOS 0.5\nv=DragonBIOS 0.5\nhi there\n[abc]
 // String constants: used like the string literal (stored once in the program).
-#import(<dragon-sdk>)
+#import("dragon-sdk")
 #include(check.ds)
 
 const VERSION = "DragonBIOS 0.5";

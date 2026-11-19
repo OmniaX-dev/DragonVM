@@ -1,7 +1,7 @@
 // std::utoa: unsigned integers, in any base from 2 to 36.
 // expect-rv: 0
 #include(check.ds)
-#import(<dragon-sdk>)
+#import("dragon-sdk")
 
 sub main() -> i32 {
 	var b: u8[33];

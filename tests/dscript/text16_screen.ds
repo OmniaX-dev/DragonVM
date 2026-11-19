@@ -3,7 +3,7 @@
 // the Scroll policy (and several presents), the screen shows the last 20 and the empty last row.
 // drun-flags: --screen
 // expect-output: row 5\nrow 6\nrow 7\nrow 8\nrow 9\nrow 10\nrow 11\nrow 12\nrow 13\nrow 14\nrow 15\nrow 16\nrow 17\nrow 18\nrow 19\nrow 20\nrow 21\nrow 22\nrow 23\nrow 24
-#import(<dragon-sdk>)
+#import("dragon-sdk")
 
 sub main() -> void {
 	dr::vga_set_video_mode(dr::VGAVideoModes.Text16Color);

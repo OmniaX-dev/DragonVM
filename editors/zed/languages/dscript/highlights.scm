@@ -9,10 +9,14 @@
 (line_comment) @comment
 (block_comment) @comment
 (preproc_directive) @preproc
+(preproc_keyword) @preproc
+(preproc_include path: (string_literal) @string)
+(preproc_include mode: (identifier) @keyword)
 
 ; Keywords
 [
 	"var"
+	"auto"
 	"const"
 	"sub"
 	"struct"

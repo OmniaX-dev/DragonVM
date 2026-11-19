@@ -1,5 +1,5 @@
 // expect-output: Hello, DragonOS!\n-42 / 4294967295 / x
-#import(<dragon-sdk>)
+#import("dragon-sdk")
 
 sub main() -> void {
     dr::TextSingle::println("Hello, DragonOS!");

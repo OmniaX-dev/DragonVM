@@ -1,7 +1,7 @@
 // DScript SDK: the BIOS text output (int 0x30, single color text mode).
 // The BIOS must have run (it installs the interrupt handlers).
 // The freestanding utilities (std::itoa, std::BitField32, std::VaList, ...): libcore.
-#import(<libcore>)
+#import("libcore")
 #include(print.ds)
 #include(assert.ds)
 #include(hardware.ds)

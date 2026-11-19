@@ -1,4 +1,4 @@
-#import(<dragon-sdk>)
+#import("dragon-sdk")
 
 var g_argc: i32 = 0;
 var g_argv: string* = null;

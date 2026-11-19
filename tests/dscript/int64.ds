@@ -3,7 +3,7 @@
 // parse errors, chaining, aliasing, constructors. Generated (the cases are tables: one call of
 // each method, in the dispatchers). Signed division truncates toward zero, as for i32.
 // expect-rv: 0
-#import(<dragon-sdk>)
+#import("dragon-sdk")
 
 var g_failures: i32 = 0;
 

@@ -2,7 +2,7 @@
 // dr::cpu::switch_stack and release_boot_stack: main moves to its own stack, gives the boot stack
 // up (CMOS StackSize 0) and hands its memory to a heap.
 #include(check.ds)
-#import(<dragon-sdk>)
+#import("dragon-sdk")
 
 var stack: u8[8192];
 var arena: u8[8192];

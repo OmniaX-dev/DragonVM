@@ -3,7 +3,7 @@
 // drun-flags: --boot
 // expect-rv: 0
 #include(check.ds)
-#import(<dragon-sdk>)
+#import("dragon-sdk")
 
 sub main() -> i32 {
 	var differ: bool = false;

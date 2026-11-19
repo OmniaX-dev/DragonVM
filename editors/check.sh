@@ -26,7 +26,7 @@ for g in dscript dasm; do
 	files=()
 	if [ $g = dscript ]; then
 		for f in "$ROOT"/tests/dscript/*.ds "$ROOT"/extra/ds/dragon-sdk/src/*.ds "$ROOT"/other/*.ds; do
-			case "$(basename "$f")" in error_syntax.ds|error_static_toplevel.ds|error_static_field.ds|error_priv_toplevel.ds|error_readonly_priv.ds|error_readonly_sub.ds|error_define_unclosed.ds|error_namespace_local.ds) continue;; esac
+			case "$(basename "$f")" in error_syntax.ds|error_variadic_last.ds|error_auto_field.ds|error_auto_list.ds|error_auto_no_value.ds|error_auto_parameter.ds|error_auto_type.ds|error_unsigned_literal.ds|error_static_toplevel.ds|error_static_field.ds|error_priv_toplevel.ds|error_readonly_priv.ds|error_readonly_sub.ds|error_define_unclosed.ds|error_namespace_local.ds) continue;; esac
 			files+=("$f")
 		done
 	else

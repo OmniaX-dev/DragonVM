@@ -13,7 +13,7 @@
 //     }
 
 #include(syscall.ds)
-#import(<libcore>)
+#import("libcore")
 
 namespace std {
 	const ASSERT_EXIT_CODE: i32 = 134;

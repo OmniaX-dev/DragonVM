@@ -1,7 +1,7 @@
 // With NDEBUG, asserts are compiled out: their conditions are not run.
 // dsc-flags: -D NDEBUG
 // expect-rv: 0
-#import(<dragon-sdk>)
+#import("dragon-sdk")
 
 var g_calls: u32 = 0;
 sub bump() -> u32 { g_calls++; return g_calls; }

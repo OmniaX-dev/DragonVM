@@ -1,4 +1,4 @@
-#import(<dragon-sdk>)
+#import("dragon-sdk")
 
 #include(memory.ds)
 #include(process.ds)

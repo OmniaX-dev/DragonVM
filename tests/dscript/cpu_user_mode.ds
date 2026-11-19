@@ -3,7 +3,7 @@
 // instruction and protected write, skipped by the handler) and the Timer interrupt all come back
 // to supervisor mode on the kernel stack, and rti returns to user mode on the user stack.
 // expect-rv: 0
-#import(<dragon-sdk>)
+#import("dragon-sdk")
 
 var g_failures: i32 = 0;
 

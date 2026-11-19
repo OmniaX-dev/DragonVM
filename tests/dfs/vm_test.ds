@@ -1,6 +1,6 @@
 // Run by vm_test.sh on a disk image with two DPT partitions: partition 1 was formatted and filled
 // by dtools (the C++ core), partition 2 is formatted here. dtools then checks what this wrote.
-#import(<dragon-sdk>)
+#import("dragon-sdk")
 
 var g_failed: i32 = 0;
 

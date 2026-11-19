@@ -70,7 +70,7 @@ Breakpoints on source lines and subs (the `break` command, the Breakpoints tab's
 Pipeline: lexer -> preprocessor (on tokens) -> parser (AST) -> checking + code generation
 (dasm text) -> assembler -> DRX / raw binary. Sources: `src/compiler/`.
 
-Compiled libraries: `dsc lib.ds --lib` makes a `.dlib`, that programs `#import(<lib>)` (see
+Compiled libraries: `dsc lib.ds --lib` makes a `.dlib`, that programs `#import("lib")` (see
 "Libraries").
 
 Editors: `dsls` is the language server (errors as you type, go to definition, hover, completion, symbols;
@@ -95,6 +95,11 @@ the source refers to (`src/compiler/Index.hpp`).
 | `struct { fields }` | sum of the fields | a nameless struct, usable wherever a type goes |
 | `sub(T1, T2) -> R` | 4 | sub pointers; `(sub(i32) -> i32)[4]` for an array of them |
 | enums | 4, or the size of their type | their values are constants of the enum's type (`i32` by default): `Color.Red`; `enum Kind: u8 { ... }` gives them a type (i8, i16, i32, u8, u16, u32) |
+
+Integer literals: `123`, `0xFF`, `0b1010` (`_` between digits: `0x0000_FFFF`), `'a'` (a `u8`).
+A literal is an `i32` (a `u32` if it doesn't fit: `0xFFFFFFFF`); with the `u` / `U` suffix it is a
+`u32` whatever its value, as `unsigned int` in C: `123u`, `0xFFu`, `0b101U`. So `var h = 2166136261u;`
+is a `u32`, `x - 1u` stays unsigned, and C code with `u` constants ports as it is.
 
 ### Floating point
 
@@ -262,6 +267,9 @@ std::debug_printf("ticks: {}\n", ticks);          // through debug_print (up to 
 ### Declarations (top level)
 ```
 var name: type = value;                 // global variable (the type can be inferred: var n = 5;)
+auto name = value;                      // the type from the value, and saying so: an error with ': type'
+                                        // or without a value (variables only: locals, globals, for,
+                                        // static; not parameters or fields)
 const NAME = 5;  const MASK: u32 = 0xFF;    // integer constants
 const Origin: Point = { 3, 4 };         // struct constants (see below)
 const VERSION = "DragonBIOS 0.5";       // string constants
@@ -520,7 +528,7 @@ When the condition is false, the program calls the global `__assert_fail(file, l
 message)` (the condition as written, the message or ""); without one, an assert is an error.
 The program decides what a failed assert does, not its libraries: libcore and the SDK don't
 define it.
-- A DragonOS program gets it from the stdlib (`#import(<stdlib>)`): it prints the failure with
+- A DragonOS program gets it from the stdlib (`#import("stdlib")`): it prints the failure with
   the Print system call and ends the process (the Exit system call, code 134).
 - A program on the SDK (a BIOS, a boot loader, a kernel) writes its own; the SDK's
   `dr::assert_fail_halt` prints to the host's terminal with `debug_print` (no VGA needed), then
@@ -726,10 +734,12 @@ sub print(var text: string) -> void {
 
 ### Preprocessor
 ```
-#include(file.ds)          relative to the file, then the -I directories
-#include(<file.ds>)        the -I directories only
-#import(<name>)            a compiled library (name.dlib) from the -L directories (see "Libraries")
-#import(<name>, dynamic)   the same, linked dynamically (or static; see "Shared libraries")
+#include("file.ds")        next to the file, then in the -I directories (the quotes are optional)
+#import("name")            a compiled library (name.dlib): next to the file, then in the -L
+                           directories (see "Libraries")
+#import("name", dynamic)   the same, linked dynamically (or static; see "Shared libraries")
+#include(<file.ds>)        the old forms, with <>: still accepted, they search only the -I / -L
+#import(<name>)            directories
 #define(NAME = tokens)     #define(NAME)     #undef(NAME)
 #define(NAME(a, b) = tokens)                 with parameters
 #if(expr) #ifdef(NAME) #ifndef(NAME) #elif(expr) #else #endif
@@ -821,11 +831,11 @@ declarations into the `.dlib` itself.
 ```
 dsc gfx.ds --lib -o build/gfx.dlib           // a library: no main
 dsc src/*.ds --lib -o build/gfx.dlib         // several files, compiled as one, in order
-dsc game.ds -L build -o game.drx             // #import(<gfx>) in game.ds
+dsc game.ds -L build -o game.drx             // #import("gfx") in game.ds
 ```
 ```
-#import(<gfx>)          // gfx.dlib, in the -L directories
-#import(libs/gfx)       // next to this file first, then the -L directories (.dlib is added)
+#import("gfx")          // gfx.dlib: next to this file first, then the -L directories
+#import("libs/gfx")     // a path works too (.dlib is added)
 
 sub main() -> i32 { return Gfx::width(); }
 ```
@@ -876,7 +886,7 @@ loader does, the SDK readers `dr::dyn`, the plan for the DragonOS kernel's loade
 ```
 dsc --lib --shared mylib.ds -o lib/mylib.dlib    // lib/mylib.dlib and lib/mylib.drl
 dsc prog.ds -L lib --dynamic -o prog.drx         // every library dynamic: a DRX2 (659 bytes instead of 32 KB for wing-shell)
-#import(<mylib>, dynamic)                        // or one by one, in the source (also --dynamic=mylib, --static=...)
+#import("mylib", dynamic)                        // or one by one, in the source (also --dynamic=mylib, --static=...)
 ```
 
 DragonVM's own libraries (`extra/ds/<name>/src`, built by `ds_env` into `<name>.dlib`, copied to

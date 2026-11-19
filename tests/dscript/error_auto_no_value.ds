@@ -1,0 +1,3 @@
+// auto needs a value to take its type from.
+// expect-error: needs a value to take its type from
+sub main() -> i32 { auto x; return 0; }

@@ -2,7 +2,7 @@
 Declarations
 ================================================================================
 
-#include(<bios.ds>)
+#include("bios.ds")
 const SIZE: u32 = 4;
 enum Color { Red, Green = 5, }
 alias Handler = sub(i32) -> void;
@@ -14,7 +14,9 @@ sub later(var x: i32 = 5) -> i32;
 --------------------------------------------------------------------------------
 
 (source_file
-  (preproc_directive)
+  (preproc_include
+    (preproc_keyword)
+    (string_literal))
   (const_declaration
     (identifier)
     (primitive_type)
@@ -914,3 +916,84 @@ var q: sub(...typed);
     (identifier)
     (function_type
       (variadic_parameter))))
+
+================================================================================
+Includes, imports and unsigned literals
+================================================================================
+
+#include("file.ds")
+#include(file.ds)
+#import("stdlib")
+#import("mylib", dynamic)
+#import(<oldstyle>)
+#define(LIMIT = 10)
+const A: u32 = 123u;
+const B = 0xFFU;
+const C = 0b1010u;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (preproc_include
+    (preproc_keyword)
+    path: (string_literal))
+  (preproc_include
+    (preproc_keyword)
+    path: (string_literal))
+  (preproc_include
+    (preproc_keyword)
+    path: (string_literal))
+  (preproc_include
+    (preproc_keyword)
+    path: (string_literal)
+    mode: (identifier))
+  (preproc_include
+    (preproc_keyword)
+    path: (string_literal))
+  (preproc_directive)
+  (const_declaration
+    name: (identifier)
+    type: (primitive_type)
+    value: (number_literal))
+  (const_declaration
+    name: (identifier)
+    value: (number_literal))
+  (const_declaration
+    name: (identifier)
+    value: (number_literal)))
+
+================================================================================
+Auto
+================================================================================
+
+auto total = 5u;
+sub f() {
+	auto x = total + 1;
+	for (auto i = 0; i < 3; i++) { }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (variable_declaration
+    (identifier)
+    (number_literal))
+  (function_declaration
+    (identifier)
+    (parameter_list)
+    (block
+      (variable_declaration
+        (identifier)
+        (binary_expression
+          (identifier)
+          (number_literal)))
+      (for_statement
+        (variable_declaration
+          (identifier)
+          (number_literal))
+        (binary_expression
+          (identifier)
+          (number_literal))
+        (update_expression
+          (identifier))
+        (block)))))

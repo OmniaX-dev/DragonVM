@@ -24,6 +24,7 @@ namespace dscript
 		int64_t value { 0 };
 		SourcePos pos;
 		bool isChar { false };		// Integer written as a character literal
+		bool isUnsigned { false };	// Integer with the u / U suffix (123u, 0xFFu): a u32
 	};
 
 	// Splits a source text into tokens. Comments are dropped. Directive lines (a '#' as the

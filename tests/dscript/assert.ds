@@ -1,6 +1,6 @@
 // assert(condition[, message]): true conditions do nothing (and run once).
 // expect-rv: 0
-#import(<dragon-sdk>)
+#import("dragon-sdk")
 
 // The libraries don't define __assert_fail: the program does (here, the SDK's halt).
 sub __assert_fail(var file: string, var line: u32, var condition: string, var message: string) {

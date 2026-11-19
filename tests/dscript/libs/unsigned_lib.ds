@@ -1,0 +1,6 @@
+// unsigned_literals.ds: u literals in a library's interface (constants, inline subs).
+namespace ulib {
+	const SEVEN = 7u;
+	inline sub minus_one() -> u32 { var x = 0u; return x - 1u; }		// var x = 0u: a u32 in the program too
+	inline sub half(var v: u32) -> u32 { var t = v; t = t / 2u; return t; }
+}

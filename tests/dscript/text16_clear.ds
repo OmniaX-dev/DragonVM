@@ -3,7 +3,7 @@
 // once the buffers are swapped (with double buffering, the screen shows the finished buffer).
 // drun-flags: --screen
 // expect-output: after the clear
-#import(<dragon-sdk>)
+#import("dragon-sdk")
 
 sub main() -> void {
 	dr::vga_set_video_mode(dr::VGAVideoModes.Text16Color);

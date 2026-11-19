@@ -1,6 +1,6 @@
 // expect-output: hit 1\nhit 2\nhits: 2
 // An interrupt sub written as a lambda, installed with int 0x20.
-#import(<dragon-sdk>)
+#import("dragon-sdk")
 
 var hits: i32 = 0;
 

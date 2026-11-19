@@ -1,5 +1,5 @@
-#import(<dragon-sdk>)
-#import(<libcore>)
+#import("dragon-sdk")
+#import("libcore")
 
 namespace vga {
 	sub init_video() {

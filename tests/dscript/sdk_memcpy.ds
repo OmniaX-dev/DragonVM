@@ -3,7 +3,7 @@
 // (bigger copies, through the 8-word rounds) -40 .. 40 (forward: the same bytes as a byte loop,
 // also dst 1 - 31 bytes above src), the bytes around untouched, the return values.
 // expect-rv: 0
-#import(<dragon-sdk>)
+#import("dragon-sdk")
 
 var g_failures: i32 = 0;
 

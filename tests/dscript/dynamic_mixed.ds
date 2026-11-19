@@ -4,9 +4,9 @@
 // dsc-shared: libs/dyn_counter.ds libs/dyn_user.ds
 // expect-rv: 0
 #include(check.ds)
-#import(<libcore>)
-#import(<dyn_counter>, dynamic)
-#import(<dyn_user>, static)
+#import("libcore")
+#import("dyn_counter", dynamic)
+#import("dyn_user", static)
 
 sub main() -> i32 {
 	check(1, dc::counter == 5 and du::total == 100 and dc::computed == 42);

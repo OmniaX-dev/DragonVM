@@ -1,4 +1,4 @@
-#include(<shapes.ds>)
+#include("shapes.ds")
 
 var g_count: u32 = 3;
 

@@ -1,7 +1,7 @@
 // std::data::ASCII (ascii.ds): the 256 characters of CP437 by name (1..31 and 127 also by their pictures).
 // expect-rv: 0
 #include(check.ds)
-#import(<dragon-sdk>)
+#import("dragon-sdk")
 
 sub main() -> i32 {
 	check(1, std::data::ASCII.Null == 0 and std::data::ASCII.StartOfHeading == 1 and std::data::ASCII.Escape == 27 and std::data::ASCII.UnitSeparator == 31);

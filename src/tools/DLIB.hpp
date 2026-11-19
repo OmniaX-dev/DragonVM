@@ -1,6 +1,6 @@
 #pragma once
 
-// DLIB: a compiled DScript library (dsc --lib), linked into programs by dsc (#import(<name>)).
+// DLIB: a compiled DScript library (dsc --lib), linked into programs by dsc (#import("name")).
 //
 // It holds the library's code and data (an image assembled at address 0, like a DRX), what is
 // needed to put it anywhere and to connect it to the program and to other libraries, and the

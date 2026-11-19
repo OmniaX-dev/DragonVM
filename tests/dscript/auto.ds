@@ -1,0 +1,31 @@
+// auto: a variable whose type comes from its value (like var without a type, but saying so).
+// expect-rv: 0
+#include(check.ds)
+
+auto g_count = 3u;									// a global: u32
+struct Point { var x: i32; var y: i32; };
+var g_origin: Point = { 4, 8 };
+sub ratio() -> f32 { return 0.5; }
+
+sub main() -> i32 {
+	auto a = 5;										// i32
+	auto b = 5u;									// u32
+	auto f = ratio();								// f32
+	auto text = "auto";								// string
+	auto p = g_origin;								// Point (a copy)
+	auto ptr = &a;									// i32*
+	b = b - 6u;
+	check(1, a == 5 and b > 100u);					// b wrapped: a u32
+	check(2, f == 0.5 and text[1] == 'u');
+	p.x = 40;
+	check(3, p.x == 40 and p.y == 8 and g_origin.x == 4);
+	*ptr = 7;
+	check(4, a == 7 and g_count == 3u);
+	auto sum = 0;
+	for (auto i = 0; i < 4; i++) sum += i;
+	check(5, sum == 6);
+	static auto calls = 0u;
+	calls++;
+	check(6, calls == 1u);
+	return result();
+}

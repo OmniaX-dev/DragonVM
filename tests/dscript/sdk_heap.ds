@@ -1,7 +1,7 @@
 // expect-rv: 0
 // dr::Heap: alloc, free, aligned blocks, realloc in place and moved, more regions, bad pointers.
 #include(check.ds)
-#import(<dragon-sdk>)
+#import("dragon-sdk")
 
 var arena: u8[64 * 1024];
 var second: u8[16 * 1024];

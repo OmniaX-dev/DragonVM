@@ -273,7 +273,7 @@ namespace dscript
 			l->scope = m_scope;
 			return l;
 		}
-		if (isKeyword("var"))
+		if (isKeyword("var") || isKeyword("auto"))
 		{
 			Node* v = parseVarDecl();
 			expectPunct(";", "after the variable declaration");
@@ -405,6 +405,8 @@ namespace dscript
 			}
 			if (isKeyword("interrupt"))
 				error(peek().pos, "interrupt subs cannot be methods (they take no parameters)");
+			if (isKeyword("auto"))
+				error(peek().pos, "struct fields need a type: declare them with 'var' (auto is for variables with a value)");
 			if (!isKeyword("var"))
 				error(peek().pos, "struct fields are declared with 'var' (methods with 'sub'), found " + describe(peek()));
 			Node* field = parseVarDecl(false);
@@ -478,9 +480,14 @@ namespace dscript
 	Node* Parser::parseVarDecl(bool allowNoType)
 	{
 		Node* n = make(NodeKind::VarDecl, peek().pos);
-		expectKeyword("var", "");
-		n->name = expectIdentifier("after 'var'");
+		// auto: the type comes from the value (as var without a type), and saying it is an error.
+		const bool isAuto = acceptKeyword("auto");
+		if (!isAuto)
+			expectKeyword("var", "");
+		n->name = expectIdentifier(isAuto ? "after 'auto'" : "after 'var'");
 		n->namePos = lastPos();
+		if (isAuto && isPunct(":"))
+			error(peek().pos, "'auto' takes its type from the value: remove ': <type>' (or declare '" + n->name + "' with var)");
 		if (acceptPunct(":"))
 			n->typeSyntax = parseType();
 		if (n->typeSyntax != nullptr && isPunct("("))
@@ -513,6 +520,10 @@ namespace dscript
 		}
 		if (acceptPunct("="))
 			n->a = parseInitializer();
+		if (isAuto && n->a == nullptr)
+			error(n->pos, "'auto " + n->name + "' needs a value to take its type from (auto " + n->name + " = ...;)");
+		if (isAuto && n->a->kind == NodeKind::InitList)
+			error(n->a->pos, "'auto' can't take a type from { ... }: declare '" + n->name + "' with var and its type");
 		if (n->typeSyntax == nullptr && (n->a == nullptr || !allowNoType || n->a->kind == NodeKind::InitList))
 			error(n->pos, "the type of '" + n->name + "' is needed (var " + n->name + ": <type>)");
 		return n;
@@ -612,6 +623,8 @@ namespace dscript
 				break;
 			}
 			Node* p = make(NodeKind::VarDecl, peek().pos);
+			if (isKeyword("auto"))
+				error(peek().pos, "parameters need a type (auto is for variables with a value): var name: type");
 			acceptKeyword("var");
 			p->pos = peek().pos;
 			p->name = expectIdentifier("(parameter name)");
@@ -1051,7 +1064,7 @@ namespace dscript
 			return parseBlock();
 		if (acceptPunct(";"))
 			return make(NodeKind::Block, pos);
-		if (isKeyword("var"))
+		if (isKeyword("var") || isKeyword("auto"))
 		{
 			Node* v = parseVarDecl();
 			expectPunct(";", "after the variable declaration");
@@ -1062,8 +1075,8 @@ namespace dscript
 			return parseLocalStatic(pos);
 		if (acceptKeyword("static"))
 		{
-			if (!isKeyword("var") && !isKeyword("const"))
-				error(peek().pos, "'var' or 'const' expected after 'static', found " + describe(peek()));
+			if (!isKeyword("var") && !isKeyword("auto") && !isKeyword("const"))
+				error(peek().pos, "'var', 'auto' or 'const' expected after 'static', found " + describe(peek()));
 			return parseLocalStatic(pos);
 		}
 		if (isKeyword("low"))
@@ -1091,7 +1104,7 @@ namespace dscript
 		{
 			// defer statement: run when the block it is in is left (in the reverse order).
 			Node* n = make(NodeKind::Defer, pos);
-			if (isKeyword("var"))
+			if (isKeyword("var") || isKeyword("auto"))
 				error(peek().pos, "a deferred variable would not be usable: defer a statement or a block");
 			n->a = parseStatement();
 			requireBlockFor(n->a, "defer");
@@ -1148,7 +1161,7 @@ namespace dscript
 			Node* n = make(NodeKind::For, pos);
 			expectPunct("(", "after 'for'");
 			pushScope();
-			if (isKeyword("var"))
+			if (isKeyword("var") || isKeyword("auto"))
 			{
 				n->a = parseVarDecl();
 				declareLocal(n->a->name);
@@ -1395,7 +1408,7 @@ namespace dscript
 		{
 			Node* n = make(NodeKind::IntLit, t.pos);
 			n->value = t.value;
-			n->name = t.isChar ? "char" : "";
+			n->name = t.isChar ? "char" : t.isUnsigned ? "u" : "";
 			next();
 			return n;
 		}

@@ -2,7 +2,7 @@
 // infinities and NaN), default values, field defaults, overloads and inline subs.
 // dsc-lib: libs/floats.ds
 // expect-rv: 0
-#import(<floats>)
+#import("floats")
 
 sub bits(var f: f32) -> u32 {
 	return *cast<u32*>(&f);

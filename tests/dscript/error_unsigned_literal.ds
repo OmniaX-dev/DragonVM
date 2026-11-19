@@ -1,0 +1,3 @@
+// A u suffix ends the literal: anything after it is an error.
+// expect-error: invalid character in integer literal
+sub main() -> i32 { return cast<i32>(12uz); }

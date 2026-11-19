@@ -2,7 +2,7 @@
 // Faults in supervisor mode: with the fault vectors enabled, the kernel's own failing instructions
 // raise them (on the current stack, the saved mode 1) instead of stopping the machine.
 #include(check.ds)
-#import(<dragon-sdk>)
+#import("dragon-sdk")
 
 var g_skip: u32 = 0;
 var g_faults: i32 = 0;

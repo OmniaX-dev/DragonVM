@@ -2,7 +2,7 @@
 // the CPU): every result is checked as its exact f32 bits. Edge cases: infinities, NaN in
 // comparisons, -0.0, saturating conversions, rounding halves away from zero.
 // expect-rv: 0
-#import(<dragon-sdk>)
+#import("dragon-sdk")
 
 var g_failures: i32 = 0;
 

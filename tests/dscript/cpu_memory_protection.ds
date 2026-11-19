@@ -2,7 +2,7 @@
 // Denied reads, writes and instruction fetches are access violation faults (the handler skips the
 // instruction, or grants the page and retries); supervisor mode is never checked.
 // expect-rv: 0
-#import(<dragon-sdk>)
+#import("dragon-sdk")
 
 var g_failures: i32 = 0;
 

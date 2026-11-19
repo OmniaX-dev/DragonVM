@@ -1,5 +1,5 @@
 // expect-output: tick 1\ntick 2\nticks: 2
-#import(<dragon-sdk>)
+#import("dragon-sdk")
 
 var ticks: i32 = 0;
 

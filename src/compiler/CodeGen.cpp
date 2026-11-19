@@ -1260,7 +1260,8 @@ namespace dscript
 		switch (e->kind)
 		{
 			case NodeKind::IntLit:
-				e->type = (e->name == "char") ? m_types.u8() : (e->value > 0x7FFFFFFF ? m_types.u32() : m_types.i32());
+				// 'c': u8; 123u: u32; otherwise i32 (u32 if it doesn't fit).
+				e->type = (e->name == "char") ? m_types.u8() : (e->name == "u" || e->value > 0x7FFFFFFF) ? m_types.u32() : m_types.i32();
 				e->isConst = true;
 				e->constValue = e->value;
 			break;
@@ -3514,7 +3515,7 @@ namespace dscript
 			t = decay(s->a->type);
 			if (t == nullptr || t->kind == Type::Kind::Null || t->kind == Type::Kind::Void)
 				error(s->pos, "cannot tell the type of '" + s->name + "' (write var " + s->name + ": <type>)");
-			if (t->isInteger() && s->a->kind == NodeKind::IntLit)
+			if (t->isInteger() && s->a->kind == NodeKind::IntLit && s->a->name != "u")	// (var x = 5u: a u32)
 				t = m_types.i32();
 		}
 		if (t->kind == Type::Kind::Void)
@@ -3719,7 +3720,7 @@ namespace dscript
 					break;
 				if (m_funcs.count("__assert_fail") == 0)
 					error(s->pos, "assert needs a sub __assert_fail(var file: string, var line: u32, var condition: string, "
-						"var message: string) to call when the condition is false: #import(<stdlib>) in a DragonOS program, or write "
+						"var message: string) to call when the condition is false: #import(\"stdlib\") in a DragonOS program, or write "
 						"your own (e.g. calling the SDK's dr::assert_fail_halt)");
 				auto l_node = [&](NodeKind kind) { Node* n = new Node(); n->kind = kind; n->pos = s->pos; return n; };
 				Node* call = l_node(NodeKind::Call);
@@ -4848,7 +4849,7 @@ namespace dscript
 					t = decay(d->a->type);
 					if (t == nullptr || t->kind == Type::Kind::Null || t->kind == Type::Kind::Void)
 						error(d->pos, "cannot tell the type of '" + d->name + "' (write var " + d->name + ": <type>)");
-					if (t->isInteger() && d->a->kind == NodeKind::IntLit)
+					if (t->isInteger() && d->a->kind == NodeKind::IntLit && d->a->name != "u")
 						t = m_types.i32();
 				}
 				if (t->kind == Type::Kind::Void)
@@ -5569,7 +5570,7 @@ namespace dscript
 						}
 						return std::string("'") + c + "'";
 					}
-					return std::to_string(t.value);
+					return std::to_string(t.value) + (t.isUnsigned ? "u" : "");	// (5u keeps its type in the interface)
 				default: return t.text;
 			}
 		};

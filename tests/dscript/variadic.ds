@@ -2,7 +2,7 @@
 // Variadic subs: ... and ...typed, va_count / va_start / va_types, std::VaList, overloads, sub
 // pointers, methods, and std::format / vformat.
 #include(check.ds)
-#import(<dragon-sdk>)
+#import("dragon-sdk")
 
 sub sum(var count: u32, ...) -> i32 {
 	var args: std::VaList(va_start(), va_count());

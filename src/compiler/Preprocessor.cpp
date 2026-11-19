@@ -88,7 +88,7 @@ namespace dscript
 			const Token& t = tokens[i];
 			std::string text = t.text;
 			if (t.kind == TokenKind::Integer)
-				text = t.isChar ? "'" + escape(std::string(1, (char)t.value), '\'') + "'" : std::to_string(t.value);
+				text = t.isChar ? "'" + escape(std::string(1, (char)t.value), '\'') + "'" : std::to_string(t.value) + (t.isUnsigned ? "u" : "");
 			else if (t.kind == TokenKind::String)
 				text = "\"" + escape(t.text, '"') + "\"";
 			else if (t.kind == TokenKind::LowBlock)
@@ -599,7 +599,7 @@ namespace dscript
 		}
 		else if (name == "import")
 		{
-			// #import(<name>) or #import(<name>, static / dynamic): how the program links it
+			// #import("name") or #import("name", static / dynamic): how the program links it
 			// (other/info/dynamic-linking.md).
 			std::string written = argument(tok, rest, name);
 			std::string mode;

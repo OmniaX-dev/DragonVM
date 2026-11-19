@@ -6,7 +6,7 @@
 // handler takes a multiple of it, the next VSync comes as it returns, and main never runs again.
 // drun-flags: --vsync 37
 // expect-rv: 1
-#import(<dragon-sdk>)
+#import("dragon-sdk")
 
 var handled: u32 = 0;
 

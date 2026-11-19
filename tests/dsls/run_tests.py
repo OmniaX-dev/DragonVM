@@ -269,7 +269,7 @@ with tempfile.TemporaryDirectory() as tmp:
         f.write("namespace Geo {\n\tsub area(w: i32, h: i32) -> i32 {\n\t\treturn w * h;\n\t}\n}\n")
     subprocess.run([os.path.join(ROOT, "bin", "dsc"), "--lib", "src/geo.ds", "-o", "lib/geo.dlib"], cwd=os.path.join(tmp, "sdk"), check=True)
     app = os.path.join(tmp, "app.ds")
-    app_text = "#import(<geo>)\nsub main() -> i32 {\n\treturn Geo::area(2, 3);\n}\n"
+    app_text = "#import(\"geo\")\nsub main() -> i32 {\n\treturn Geo::area(2, 3);\n}\n"
     with open(app, "w") as f:
         f.write(app_text)
     with open(os.path.join(tmp, "dsls.json"), "w") as f:

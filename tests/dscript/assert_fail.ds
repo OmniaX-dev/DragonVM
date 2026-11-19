@@ -1,6 +1,6 @@
 // A false assert prints where it is and what failed, then stops the machine.
 // expect-output: Assertion failed: x * 2 == 7 (assert_fail.ds:13): math is broken\n
-#import(<dragon-sdk>)
+#import("dragon-sdk")
 
 // The libraries don't define __assert_fail: the program does (here, the SDK's halt).
 sub __assert_fail(var file: string, var line: u32, var condition: string, var message: string) {

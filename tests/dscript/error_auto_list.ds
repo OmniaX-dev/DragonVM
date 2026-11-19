@@ -1,0 +1,3 @@
+// auto can't take a type from an initializer list.
+// expect-error: can't take a type from { ... }
+sub main() -> i32 { auto a = { 1, 2 }; return 0; }

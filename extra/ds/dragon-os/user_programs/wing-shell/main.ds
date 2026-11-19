@@ -1,4 +1,4 @@
-#import(<stdlib>)
+#import("stdlib")
 
 sub main(var argc: u32, var argv: u8**) -> i32 {
 	var cycles: u32 = 0;

@@ -1,6 +1,6 @@
 // expect-output: |=====|\n| ab  |\n|=====|\nred green blue
 // Constant arrays (read-only data in the program) and array sizes from the value ([]).
-#import(<dragon-sdk>)
+#import("dragon-sdk")
 #include(check.ds)
 
 const Logo: u8[8][] = {

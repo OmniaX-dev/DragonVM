@@ -4,7 +4,7 @@
 // dsc-lib: libs/strip_a.ds libs/strip_b.ds
 // expect-rv: 0
 #include(check.ds)
-#import(<strip_b>)
+#import("strip_b")
 
 sub main() -> i32 {
 	check(1, sb::uses_a(5) == 10 + 1 + 3);				// helper: 5 * 2 + 1 call; ops[2] = three

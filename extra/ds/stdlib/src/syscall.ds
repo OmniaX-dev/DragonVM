@@ -1,6 +1,6 @@
 // System calls: how a DragonOS program asks the kernel for things (int 0x40, the function in R9,
 // its arguments in R8, R7, ...; the result in RV).
-#import(<libcore>)
+#import("libcore")
 
 namespace std {
 	enum SystemCalls: u32 {

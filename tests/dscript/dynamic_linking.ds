@@ -5,8 +5,8 @@
 // dsc-flags: --dynamic
 // expect-rv: 0
 #include(check.ds)
-#import(<libcore>)
-#import(<dyn_user>)
+#import("libcore")
+#import("dyn_user")
 
 sub main() -> i32 {
 	// The initial values (the template copied for the process) and the library's init.

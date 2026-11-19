@@ -4011,6 +4011,43 @@
     }
   },
   {
+    "type": "preproc_include",
+    "named": true,
+    "extra": true,
+    "fields": {
+      "mode": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
+      "path": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "string_literal",
+            "named": true
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "preproc_keyword",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "primitive_type",
     "named": true,
     "fields": {}
@@ -5470,6 +5507,10 @@
     "named": false
   },
   {
+    "type": "auto",
+    "named": false
+  },
+  {
     "type": "block_comment",
     "named": true,
     "extra": true
@@ -5611,6 +5652,10 @@
     "type": "preproc_directive",
     "named": true,
     "extra": true
+  },
+  {
+    "type": "preproc_keyword",
+    "named": true
   },
   {
     "type": "priv_modifier",

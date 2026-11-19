@@ -3,8 +3,8 @@
 // int 0x40 and runs user_main in user mode.
 // expect-rv: 0
 #include(check.ds)
-#import(<dragon-sdk>)
-#import(<stdlib>)
+#import("dragon-sdk")
+#import("stdlib")
 
 var kernel_stack: u32[1024];
 var user_stack: u32[1024];

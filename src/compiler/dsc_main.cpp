@@ -29,8 +29,8 @@ struct Options
 	bool library { false };
 	bool shared { false };				// --lib --shared: a shared library (.drl)
 	// How a program links each library it imports (other/info/dynamic-linking.md): static (copied
-	// into it) unless --dynamic (all of them), --dynamic=<names> or #import(<name>, dynamic);
-	// --static=<names> and #import(<name>, static) keep one static.
+	// into it) unless --dynamic (all of them), --dynamic=<names> or #import("name", dynamic);
+	// --static=<names> and #import("name", static) keep one static.
 	bool dynamicAll { false };
 	bool wholeLibraries { false };		// --whole-libraries: static libraries linked whole (not only what is used)
 	std::set<std::string> dynamicNames, staticNames;
@@ -55,10 +55,12 @@ static void printHelp(void)
 		"Usage: dsc <source.ds> [options]\n"
 		"       dsc --lib <source.ds>... -o <file.dlib> [options]\n\n"
 		"  -o <file>                 Output file (default: the source name with .drx, or .bin with --raw)\n"
-		"  -I <dir>                  Adds an include directory (#include(<file>) and fallback for #include(file))\n"
-		"  -L <dir>                  Adds a library directory (#import(<name>): name.dlib; fallback for #import(path))\n"
+		"  -I <dir>                  Adds an include directory (#include(\"file\"): after the including file's\n"
+		"                            directory)\n"
+		"  -L <dir>                  Adds a library directory (#import(\"name\"): name.dlib, after the importing\n"
+		"                            file's directory)\n"
 		"  --lib                     Compiles a library (.dlib) instead of a program: no main; programs use it with\n"
-		"                            #import(<name>), and it is linked into them. Can take several source files\n"
+		"                            #import(\"name\"), and it is linked into them. Can take several source files\n"
 		"                            (compiled as one, in order; -o is then required)\n"
 		"  --shared                  With --lib: also a shared library: <name>.dlib (what programs compile\n"
 		"                            against, and link statically) and <name>.drl (what their loader loads when\n"
@@ -68,7 +70,7 @@ static void printHelp(void)
 		"                            a DRX2) instead of copying it into the program\n"
 		"  --dynamic=<name>[,...]    Links these libraries dynamically (the others: static)\n"
 		"  --static=<name>[,...]     Links these libraries statically (also with --dynamic). In the source:\n"
-		"                            #import(<name>, dynamic) / #import(<name>, static). A dynamic library's\n"
+		"                            #import(\"name\", dynamic) / #import(\"name\", static). A dynamic library's\n"
 		"                            dependencies are dynamic too (the ones not chosen: automatically)\n"
 		"  --whole-libraries         Links the static libraries whole (by default only the subs and data the\n"
 		"                            program reaches from what it uses are linked)\n"

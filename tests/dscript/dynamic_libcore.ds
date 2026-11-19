@@ -3,7 +3,7 @@
 // dsc-flags: --dynamic
 // expect-rv: 0
 #include(check.ds)
-#import(<libcore>)
+#import("libcore")
 
 sub main() -> i32 {
 	var buffer: u8[16];

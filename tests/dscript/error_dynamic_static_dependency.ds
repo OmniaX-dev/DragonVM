@@ -2,6 +2,6 @@
 // program would have two copies, each with its own globals).
 // dsc-shared: libs/dyn_counter.ds libs/dyn_user.ds
 // expect-error: dyn_counter is linked statically, but dyn_user, linked dynamically, needs it
-#import(<dyn_counter>, static)
-#import(<dyn_user>, dynamic)
+#import("dyn_counter", static)
+#import("dyn_user", dynamic)
 sub main() -> i32 { return 0; }

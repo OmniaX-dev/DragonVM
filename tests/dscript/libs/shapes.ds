@@ -1,5 +1,5 @@
 // A library that uses another one (geom).
-#import(<geom>)
+#import("geom")
 
 struct Rect {
 	var corner: Geom::Vec;

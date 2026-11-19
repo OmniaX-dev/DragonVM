@@ -1,0 +1,36 @@
+// Unsigned integer literals: 123u / 456U / 0xFFu / 0b101u are u32 (as unsigned int in C), also
+// small ones; var x = 5u infers u32; in a library's interface they keep their type.
+// dsc-lib: libs/unsigned_lib.ds
+// expect-rv: 0
+#include(check.ds)
+#import("unsigned_lib")
+
+const PRIME = 16777619u;
+const ALL = 0xFFFFFFFFU;
+
+sub fnv(var s: string) -> u32 {
+	var h = 2166136261u;
+	for (var i: u32 = 0u; s[i] != 0; i++) {
+		h ^= s[i];
+		h *= PRIME;
+	}
+	return h;
+}
+
+sub main() -> i32 {
+	var a = 5u;
+	a = a - 6u;									// wraps: a is a u32
+	check(1, a == ALL and a > 100u);
+	check(2, fnv("a") == 0xE40C292Cu);
+	check(3, (ALL >> 28) == 0xFu and 0x80000000u >> 31 == 1u);	// logical shifts
+	check(4, 3000000000u / 3u == 1000000000u and ALL % 10u == 5u);	// unsigned division
+	check(5, 0b1010u == 10u and 456U == 456u);
+	var small = 0u;
+	small = small - 1u;
+	check(6, small > 0u);						// 0u - 1u: huge, not -1
+	check(7, ulib::SEVEN == 7u and ulib::minus_one() == ALL and ulib::half(9u) == 4u);
+	var m = ulib::SEVEN;
+	m = m - 8u;
+	check(8, m > 0u);
+	return result();
+}

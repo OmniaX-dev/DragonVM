@@ -2,7 +2,7 @@
 // offsets) and the unsigned conditional jumps (jgru / jlsu / jgeu / jleu, immediate and register
 // operands), in low blocks: the CPU and the assembler, not dsc.
 // expect-rv: 0
-#import(<dragon-sdk>)
+#import("dragon-sdk")
 
 var g_failures: i32 = 0;
 

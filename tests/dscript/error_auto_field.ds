@@ -1,0 +1,4 @@
+// Struct fields need a type: auto is for variables with a value.
+// expect-error: struct fields need a type
+struct S { auto x = 1; };
+sub main() -> i32 { return 0; }
