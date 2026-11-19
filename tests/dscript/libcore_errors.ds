@@ -1,0 +1,68 @@
+// libcore's error system: the codes of each group (std::FsErrors, FileErrors, SystemErrors,
+// ProcessErrors, ExecErrors) and std::error_name / error_group_name. Each group's struct and names
+// array must stay in the same order: the first and last code of every group are checked against
+// their names, and every code of a group has a name.
+// expect-rv: 0
+#include(check.ds)
+#import(<libcore>)
+
+sub same(var a: string, var b: string) -> bool { return std::strcmp(a, b) == 0; }
+
+// Every code from first down to last has a real name, and the one after last doesn't.
+sub all_named(var first: i32, var last: i32) -> bool {
+	for (var e: i32 = first; e >= last; e--) {
+		if (same(std::error_name(e), "unknown error"))
+			return false;
+	}
+	return same(std::error_name(last - 1), "unknown error");
+}
+
+sub main() -> i32 {
+	check(1, same(std::error_name(std::Ok), "ok") and same(std::error_name(42), "ok"));
+	check(2, same(std::error_group_name(std::Ok), "ok"));
+
+	// File system (group 0): the same numbers as the C++ DfsCore.
+	check(10, std::FsErrors.NotFound == -1 and std::FsErrors.TooManyLinks == -14);
+	check(11, same(std::error_name(std::FsErrors.NotFound), "not found"));
+	check(12, same(std::error_name(std::FsErrors.TooManyLinks), "too many links"));
+	check(13, same(std::error_name(std::FsErrors.NotEmpty), "directory not empty"));
+	check(14, same(std::error_group_name(std::FsErrors.IOError), "file system"));
+	check(15, all_named(std::FsErrors.NotFound, std::FsErrors.TooManyLinks));
+
+	// Files (group 1).
+	check(20, same(std::error_name(std::FileErrors.NotMounted), "not mounted"));
+	check(21, same(std::error_name(std::FileErrors.BadMode), "invalid open mode"));
+	check(22, same(std::error_group_name(std::FileErrors.NotOpen), "files"));
+	check(23, all_named(std::FileErrors.NotMounted, std::FileErrors.BadMode));
+
+	// System (group 2).
+	check(30, same(std::error_name(std::SystemErrors.NoMemory), "out of memory"));
+	check(31, same(std::error_name(std::SystemErrors.BadAddress), "bad address"));
+	check(32, same(std::error_name(std::SystemErrors.NoSuchCall), "no such system call"));
+	check(33, same(std::error_group_name(std::SystemErrors.TooMany), "system"));
+	check(34, all_named(std::SystemErrors.NoMemory, std::SystemErrors.NoSuchCall));
+
+	// Processes (group 3).
+	check(40, same(std::error_name(std::ProcessErrors.NoChild), "no such child"));
+	check(41, same(std::error_name(std::ProcessErrors.NoProcess), "no such process"));
+	check(42, same(std::error_group_name(std::ProcessErrors.NoChild), "process"));
+	check(43, all_named(std::ProcessErrors.NoChild, std::ProcessErrors.NoProcess));
+
+	// Program loading (group 4).
+	check(50, same(std::error_name(std::ExecErrors.NotAFile), "not a file"));
+	check(51, same(std::error_name(std::ExecErrors.InvalidMagic), "not a DRX file"));
+	check(52, same(std::error_name(std::ExecErrors.EntryOutOfRange), "entry point outside the image"));
+	check(53, same(std::error_group_name(std::ExecErrors.Overlap), "program loading"));
+	check(54, all_named(std::ExecErrors.NotAFile, std::ExecErrors.EntryOutOfRange));
+
+	// Every group starts at its own base (32 codes each), so no two codes are the same.
+	check(60, std::FileErrors.NotMounted == -33 and std::SystemErrors.NoMemory == -65);
+	check(61, std::ProcessErrors.NoChild == -97 and std::ExecErrors.NotAFile == -129);
+
+	// Unknown codes: a gap inside a group, between groups, and a group that doesn't exist.
+	check(70, same(std::error_name(-15), "unknown error") and same(std::error_group_name(-15), "file system"));
+	check(71, same(std::error_name(-32), "unknown error"));
+	check(72, same(std::error_name(-1000), "unknown error") and same(std::error_group_name(-1000), "unknown"));
+	check(73, same(std::error_name(cast<i32>(0x80000000)), "unknown error"));
+	return result();
+}

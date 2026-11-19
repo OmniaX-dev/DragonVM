@@ -8,8 +8,8 @@
 // have 12 direct pointers, a single-indirect and a double-indirect one. Directories are files of
 // fixed size entries.
 //
-//   - Every fallible sub returns an i32: >= 0 success (or a value), < 0 an error (NotFound, ...;
-//     error_name() describes one). Struct results go through out pointers.
+//   - Every fallible sub returns an i32: >= 0 success (or a value), < 0 an error (std::FsErrors,
+//     from libcore; std::error_name describes one). Struct results go through out pointers.
 //   - The disk is reached through a Device (sub pointers over partition relative bytes):
 //     disk_device() makes one for a partition of a machine disk (through the BIOS, int 0x20).
 //   - All the memory DFS needs is in a Volume (about 28 KiB: allocate it, don't put it on the
@@ -21,22 +21,7 @@
 #include(dpt.ds)
 
 namespace dr::dfs {
-	// ---- Errors ----
-	const Ok: i32 = 0;
-	const NotFound: i32 = -1;
-	const Exists: i32 = -2;
-	const NoSpace: i32 = -3;
-	const NotDir: i32 = -4;
-	const IsDir: i32 = -5;
-	const NotEmpty: i32 = -6;
-	const Invalid: i32 = -7;
-	const IOError: i32 = -8;
-	const Corrupt: i32 = -9;
-	const TooBig: i32 = -10;
-	const NameTooLong: i32 = -11;
-	const ReadOnly: i32 = -12;
-	const Unsupported: i32 = -13;
-	const TooManyLinks: i32 = -14;
+	// Errors: std::FsErrors (libcore), std::error_name describes them.
 
 	// ---- Fixed format constants ----
 	const Magic: u32 = 0x44465331;			// 'DFS1'
@@ -73,7 +58,7 @@ namespace dr::dfs {
 	// ---- The device: partition relative byte offsets (the backend adds the partition's start) ----
 	struct Device {
 		var user: void*;
-		var read: sub(void*, u32, u8*, u32) -> i32;		// (user, offset, buffer, size): Ok or IOError
+		var read: sub(void*, u32, u8*, u32) -> i32;		// (user, offset, buffer, size): std::Ok or std::FsErrors.IOError
 		var write: sub(void*, u32, u8*, u32) -> i32;	// same
 		var now: sub(void*) -> u32;						// seconds (any epoch), may be null
 	};
@@ -219,26 +204,6 @@ namespace dr::dfs {
 		return (len == 1 and name[0] == '.') or (len == 2 and name[0] == '.' and name[1] == '.');
 	}
 
-	// The error's description ("not found").
-	sub error_name(var error: i32) -> string {
-		if (error == Ok) return "ok";
-		if (error == NotFound) return "not found";
-		if (error == Exists) return "already exists";
-		if (error == NoSpace) return "no space left";
-		if (error == NotDir) return "not a directory";
-		if (error == IsDir) return "is a directory";
-		if (error == NotEmpty) return "directory not empty";
-		if (error == Invalid) return "invalid argument";
-		if (error == IOError) return "I/O error";
-		if (error == Corrupt) return "corrupted file system";
-		if (error == TooBig) return "file too big";
-		if (error == NameTooLong) return "name too long";
-		if (error == ReadOnly) return "read only file system";
-		if (error == Unsupported) return "unsupported file system";
-		if (error == TooManyLinks) return "too many links";
-		return "unknown error";
-	}
-
 	// ============================================================================
 	// L0: device
 	// ============================================================================
@@ -250,22 +215,22 @@ namespace dr::dfs {
 
 	sub dev_read(var vol: Volume*, var offset: u32, var buffer: u8*, var size: u32) -> i32 {
 		if (vol->dev.read(vol->dev.user, offset, buffer, size) < 0)
-			return IOError;
-		return Ok;
+			return std::FsErrors.IOError;
+		return std::Ok;
 	}
 
 	// Every write goes through here, so a read only volume can't write anything.
 	sub dev_write(var vol: Volume*, var offset: u32, var buffer: u8*, var size: u32) -> i32 {
 		if (vol->read_only)
-			return ReadOnly;
+			return std::FsErrors.ReadOnly;
 		if (vol->dev.write(vol->dev.user, offset, buffer, size) < 0)
-			return IOError;
-		return Ok;
+			return std::FsErrors.IOError;
+		return std::Ok;
 	}
 
 	sub read_block(var vol: Volume*, var block: u32, var buffer: u8*) -> i32 {
 		if (block == 0 or block >= vol->layout.total_blocks)
-			return Corrupt;
+			return std::FsErrors.Corrupt;
 		return dev_read(vol, block << vol->layout.block_size_log2, buffer, vol->layout.block_size);
 	}
 
@@ -273,7 +238,7 @@ namespace dr::dfs {
 	// buffer (e.g. freed, then reused for data), is dropped from them.
 	sub write_block(var vol: Volume*, var block: u32, var buffer: u8*) -> i32 {
 		if (block == 0 or block >= vol->layout.total_blocks)
-			return Corrupt;
+			return std::FsErrors.Corrupt;
 		if (block == vol->ind_block and buffer != vol->buf_ind)
 			vol->ind_block = 0;
 		if (block == vol->ind2_block and buffer != vol->buf_ind2)
@@ -289,12 +254,12 @@ namespace dr::dfs {
 	sub read_pointer_block(var vol: Volume*, var block: u32, var dindirect: bool, var out_result: i32*) -> u8* {
 		var buffer: u8* = (dindirect ? vol->buf_ind2 : vol->buf_ind);
 		var cached: u32* = (dindirect ? &vol->ind2_block : &vol->ind_block);
-		*out_result = Ok;
+		*out_result = std::Ok;
 		if (*cached == block and block != 0)
 			return buffer;
 		*cached = 0;
 		*out_result = read_block(vol, block, buffer);
-		if (*out_result == Ok)
+		if (*out_result == std::Ok)
 			*cached = block;
 		return buffer;
 	}
@@ -315,7 +280,7 @@ namespace dr::dfs {
 		l->dirents_per_block = l->block_size / dirent_size;
 		l->bits_per_block = l->block_size * 8;
 		if (inode_count <= FirstInode or inode_count % l->inodes_per_block != 0)
-			return Invalid;
+			return std::FsErrors.Invalid;
 		l->inode_bitmap_block = 1;
 		l->inode_bitmap_len = div_up(inode_count, l->bits_per_block);
 		l->block_bitmap_block = l->inode_bitmap_block + l->inode_bitmap_len;
@@ -324,13 +289,13 @@ namespace dr::dfs {
 		l->inode_table_len = inode_count / l->inodes_per_block;
 		l->first_data_block = l->inode_table_block + l->inode_table_len;
 		if (l->first_data_block >= total_blocks or l->inode_table_len > total_blocks)
-			return Invalid;
-		return Ok;
+			return std::FsErrors.Invalid;
+		return std::Ok;
 	}
 
 	sub layout_from_params(var out: Layout*, var partition_size: u32, var block_size_log2: u32, var bytes_per_inode: u32) -> i32 {
 		if (block_size_log2 < MinBlockSizeLog2 or block_size_log2 > MaxBlockSizeLog2 or bytes_per_inode < InodeSize)
-			return Invalid;
+			return std::FsErrors.Invalid;
 		var block_size: u32 = cast<u32>(1) << block_size_log2;
 		var inodes_per_block: u32 = block_size / InodeSize;
 		var count: u32 = partition_size / bytes_per_inode;
@@ -344,20 +309,20 @@ namespace dr::dfs {
 
 	sub layout_from_superblock(var out: Layout*, var sb: Superblock*) -> i32 {
 		if (sb->block_size_log2 < MinBlockSizeLog2 or sb->block_size_log2 > MaxBlockSizeLog2)
-			return Corrupt;
+			return std::FsErrors.Corrupt;
 		var block_size: u32 = cast<u32>(1) << sb->block_size_log2;
 		if (sb->inode_size < InodeSize or block_size % sb->inode_size != 0)
-			return Corrupt;
+			return std::FsErrors.Corrupt;
 		if (sb->dirent_size < DirEntrySize or block_size % sb->dirent_size != 0)
-			return Corrupt;
+			return std::FsErrors.Corrupt;
 		if (layout_compute(out, sb->block_size_log2, sb->total_blocks, sb->inode_count, sb->inode_size, sb->dirent_size) < 0)
-			return Corrupt;
+			return std::FsErrors.Corrupt;
 		if (out->inode_bitmap_block != sb->inode_bitmap_block or out->inode_bitmap_len != sb->inode_bitmap_len
 				or out->block_bitmap_block != sb->block_bitmap_block or out->block_bitmap_len != sb->block_bitmap_len
 				or out->inode_table_block != sb->inode_table_block or out->inode_table_len != sb->inode_table_len
 				or out->first_data_block != sb->first_data_block)
-			return Corrupt;
-		return Ok;
+			return std::FsErrors.Corrupt;
+		return std::Ok;
 	}
 
 	// ============================================================================
@@ -389,10 +354,10 @@ namespace dr::dfs {
 				if (r < 0) return r;
 				*hint = n + 1;
 				*out = n;
-				return Ok;
+				return std::Ok;
 			}
 		}
-		return NoSpace;
+		return std::FsErrors.NoSpace;
 	}
 
 	sub bitmap_free(var vol: Volume*, var bitmap_block: u32, var n: u32) -> i32 {
@@ -402,7 +367,7 @@ namespace dr::dfs {
 		if (r < 0) return r;
 		var mask: u32 = cast<u32>(1) << (bit % 8);
 		if ((vol->buf_meta[bit / 8] & mask) == 0)
-			return Corrupt;		// already free
+			return std::FsErrors.Corrupt;		// already free
 		vol->buf_meta[bit / 8] = cast<u8>(vol->buf_meta[bit / 8] & ~mask);
 		return write_block(vol, block, vol->buf_meta);
 	}
@@ -411,7 +376,7 @@ namespace dr::dfs {
 	sub bitmap_mark(var vol: Volume*, var bitmap_block: u32, var from: u32, var to: u32) -> i32 {
 		var bits: u32 = vol->layout.bits_per_block;
 		var current: u32 = 0xFFFFFFFF;
-		var r: i32 = Ok;
+		var r: i32 = std::Ok;
 		for (var n: u32 = from; n < to; n++) {
 			if (n / bits != current) {
 				if (current != 0xFFFFFFFF) {
@@ -437,44 +402,44 @@ namespace dr::dfs {
 
 	sub alloc_block(var vol: Volume*, var out_block: u32*) -> i32 {
 		if (vol->sb.free_blocks == 0)
-			return NoSpace;
+			return std::FsErrors.NoSpace;
 		var l: Layout* = &vol->layout;
 		var r: i32 = bitmap_alloc(vol, l->block_bitmap_block, l->block_bitmap_len, l->total_blocks, &vol->block_hint, out_block);
 		if (r < 0) return r;
 		if (*out_block < l->first_data_block)
-			return Corrupt;		// mkfs marks the metadata blocks as used
+			return std::FsErrors.Corrupt;		// mkfs marks the metadata blocks as used
 		vol->sb.free_blocks--;
-		return Ok;
+		return std::Ok;
 	}
 
 	sub free_block(var vol: Volume*, var block: u32) -> i32 {
 		if (block < vol->layout.first_data_block or block >= vol->layout.total_blocks)
-			return Corrupt;
+			return std::FsErrors.Corrupt;
 		var r: i32 = bitmap_free(vol, vol->layout.block_bitmap_block, block);
 		if (r < 0) return r;
 		vol->sb.free_blocks++;
-		return Ok;
+		return std::Ok;
 	}
 
 	sub alloc_inode(var vol: Volume*, var out_ino: u32*) -> i32 {
 		if (vol->sb.free_inodes == 0)
-			return NoSpace;
+			return std::FsErrors.NoSpace;
 		var l: Layout* = &vol->layout;
 		var r: i32 = bitmap_alloc(vol, l->inode_bitmap_block, l->inode_bitmap_len, l->inode_count, &vol->inode_hint, out_ino);
 		if (r < 0) return r;
 		if (*out_ino < FirstInode)
-			return Corrupt;		// mkfs marks the reserved inodes as used
+			return std::FsErrors.Corrupt;		// mkfs marks the reserved inodes as used
 		vol->sb.free_inodes--;
-		return Ok;
+		return std::Ok;
 	}
 
 	sub free_inode(var vol: Volume*, var ino: u32) -> i32 {
 		if (ino < FirstInode or ino >= vol->layout.inode_count)
-			return Corrupt;
+			return std::FsErrors.Corrupt;
 		var r: i32 = bitmap_free(vol, vol->layout.inode_bitmap_block, ino);
 		if (r < 0) return r;
 		vol->sb.free_inodes++;
-		return Ok;
+		return std::Ok;
 	}
 
 	sub alloc_zeroed_block(var vol: Volume*, var out_block: u32*) -> i32 {
@@ -510,13 +475,13 @@ namespace dr::dfs {
 		if (r < 0) return r;
 		var sb: Superblock* = &vol->sb;
 		if (sb->magic != Magic)
-			return Unsupported;
+			return std::FsErrors.Unsupported;
 		if (sb->version != Version or sb->feature_incompat != 0)
-			return Unsupported;
+			return std::FsErrors.Unsupported;
 		r = layout_from_superblock(&vol->layout, sb);
 		if (r < 0) return r;
 		if (sb->root_inode != RootInode or sb->first_inode != FirstInode)
-			return Corrupt;
+			return std::FsErrors.Corrupt;
 		vol->read_only = (read_only or sb->feature_ro_compat != 0);
 		vol->mounted = true;
 		if (not vol->read_only) {
@@ -529,20 +494,20 @@ namespace dr::dfs {
 				return r;
 			}
 		}
-		return Ok;
+		return std::Ok;
 	}
 
 	sub sync(var vol: Volume*) -> i32 {
 		if (not vol->mounted or vol->read_only)
-			return Ok;
+			return std::Ok;
 		vol->sb.last_write = now(vol);
 		return write_superblock(vol);
 	}
 
 	sub unmount(var vol: Volume*) -> i32 {
 		if (not vol->mounted)
-			return Ok;
-		var r: i32 = Ok;
+			return std::Ok;
+		var r: i32 = std::Ok;
 		if (not vol->read_only) {
 			vol->sb.state = StateClean;
 			vol->sb.last_write = now(vol);
@@ -663,11 +628,11 @@ namespace dr::dfs {
 	// ============================================================================
 	sub inode_location(var vol: Volume*, var ino: u32, var out_block: u32*, var out_offset: u32*) -> i32 {
 		if (ino == 0 or ino >= vol->layout.inode_count)
-			return Invalid;
+			return std::FsErrors.Invalid;
 		var byte: u32 = ino * vol->layout.inode_size;
 		*out_block = vol->layout.inode_table_block + (byte >> vol->layout.block_size_log2);
 		*out_offset = byte & vol->layout.block_mask;
-		return Ok;
+		return std::Ok;
 	}
 
 	sub read_inode(var vol: Volume*, var ino: u32, var out: Inode*) -> i32 {		// buf_inode
@@ -678,7 +643,7 @@ namespace dr::dfs {
 		r = read_block(vol, block, vol->buf_inode);
 		if (r < 0) return r;
 		std::memcpy(out, vol->buf_inode + offset, InodeSize);
-		return Ok;
+		return std::Ok;
 	}
 
 	sub write_inode(var vol: Volume*, var ino: u32, var node: Inode*) -> i32 {		// buf_inode
@@ -698,7 +663,7 @@ namespace dr::dfs {
 	sub bmap(var vol: Volume*, var node: Inode*, var file_block: u32, var allocate: bool, var out_block: u32*) -> i32 {
 		var P: u32 = vol->layout.pointers_per_block;
 		*out_block = 0;
-		var r: i32 = Ok;
+		var r: i32 = std::Ok;
 		if (file_block < DirectPointers) {
 			if (node->direct[file_block] != 0 or not allocate) {
 				*out_block = node->direct[file_block];
@@ -719,7 +684,7 @@ namespace dr::dfs {
 		if (index >= P) {
 			index -= P;
 			if (index / P >= P)
-				return TooBig;
+				return std::FsErrors.TooBig;
 			levels = 2;
 			top = &node->dindirect;
 			path[0] = index / P;
@@ -767,19 +732,19 @@ namespace dr::dfs {
 	sub free_tree(var vol: Volume*, var block: u32, var depth: u32, var start: u32) -> i32 {
 		var P: u32 = vol->layout.pointers_per_block;
 		var size: u32 = vol->layout.block_size;
-		var r: i32 = Ok;
+		var r: i32 = std::Ok;
 		var entries: u8* = null;
 		var first: u32 = start;
 		if (depth == 1) {
 			if (start >= P)
-				return Ok;
+				return std::Ok;
 			entries = read_pointer_block(vol, block, false, &r);
 			if (r < 0) return r;
 		}
 		else {
 			first = start / P;
 			if (first >= P)
-				return Ok;
+				return std::Ok;
 			entries = read_pointer_block(vol, block, true, &r);
 			if (r < 0) return r;
 			if (start % P != 0) {
@@ -819,10 +784,10 @@ namespace dr::dfs {
 	// buf_ind, buf_ind2, buf_data, buf_meta, buf_inode.
 	sub truncate(var vol: Volume*, var ino: u32, var node: Inode*, var new_size: u32) -> i32 {
 		if (vol->read_only)
-			return ReadOnly;
+			return std::FsErrors.ReadOnly;
 		var l: Layout* = &vol->layout;
 		var P: u32 = l->pointers_per_block;
-		var r: i32 = Ok;
+		var r: i32 = std::Ok;
 		if (new_size >= node->size) {
 			// Growing: the new bytes are a hole.
 			node->size = new_size;
@@ -931,13 +896,13 @@ namespace dr::dfs {
 	sub inode_write(var vol: Volume*, var ino: u32, var node: Inode*, var offset: u32, var buffer: u8*, var size: u32) -> i32 {
 		var l: Layout* = &vol->layout;
 		if (vol->read_only)
-			return ReadOnly;
+			return std::FsErrors.ReadOnly;
 		if (size > 0x7FFFFFFF)
-			return Invalid;
+			return std::FsErrors.Invalid;
 		if (offset + size < offset)
-			return TooBig;
+			return std::FsErrors.TooBig;
 		var done: u32 = 0;
-		var r: i32 = Ok;
+		var r: i32 = std::Ok;
 		while (done < size) {
 			var pos: u32 = offset + done;
 			var in_block: u32 = pos & l->block_mask;
@@ -963,7 +928,7 @@ namespace dr::dfs {
 			}
 			if (r < 0)
 				break;
-			r = Ok;
+			r = std::Ok;
 			done += n;
 			if (pos + n > node->size)
 				node->size = pos + n;
@@ -992,7 +957,7 @@ namespace dr::dfs {
 	sub dir_find(var vol: Volume*, var dir: Inode*, var index: u32*, var match: u32, var name: u8*, var name_len: u32, var out_block: u32*, var out_offset: u32*) -> i32 {
 		var l: Layout* = &vol->layout;
 		if ((dir->size & l->block_mask) != 0)
-			return Corrupt;
+			return std::FsErrors.Corrupt;
 		var count: u32 = dir->size / l->dirent_size;
 		var loaded: u32 = 0xFFFFFFFF;
 		var block: u32 = 0;
@@ -1002,7 +967,7 @@ namespace dr::dfs {
 				var r: i32 = bmap(vol, dir, file_block, false, &block);
 				if (r < 0) return r;
 				if (block == 0)
-					return Corrupt;		// directories have no holes
+					return std::FsErrors.Corrupt;		// directories have no holes
 				r = read_block(vol, block, vol->buf_dir);
 				if (r < 0) return r;
 				loaded = file_block;
@@ -1026,11 +991,11 @@ namespace dr::dfs {
 				*index = i;
 				*out_block = block;
 				*out_offset = offset;
-				return Ok;
+				return std::Ok;
 			}
 		}
 		*index = count;
-		return NotFound;
+		return std::FsErrors.NotFound;
 	}
 
 	sub touch_dir(var vol: Volume*, var dir_ino: u32, var dir: Inode*) -> i32 {
@@ -1046,36 +1011,36 @@ namespace dr::dfs {
 		var r: i32 = dir_find(vol, dir, &index, MatchName, name, name_len, &block, &offset);
 		if (r < 0) return r;
 		*out_ino = get32(vol->buf_dir + offset + DirEntInode);
-		return Ok;
+		return std::Ok;
 	}
 
 	sub dir_add(var vol: Volume*, var dir_ino: u32, var dir: Inode*, var name: u8*, var name_len: u32, var ino: u32, var mode: u16) -> i32 {
 		var l: Layout* = &vol->layout;
 		if (name_len == 0)
-			return Invalid;
+			return std::FsErrors.Invalid;
 		if (name_len > MaxNameLength)
-			return NameTooLong;
+			return std::FsErrors.NameTooLong;
 		for (var i: u32 = 0; i < name_len; i++) {
 			if (name[i] == '/' or name[i] == 0)
-				return Invalid;
+				return std::FsErrors.Invalid;
 		}
 		var index: u32 = 0;
 		var block: u32 = 0;
 		var offset: u32 = 0;
 		var r: i32 = dir_find(vol, dir, &index, MatchName, name, name_len, &block, &offset);
-		if (r == Ok)
-			return Exists;
-		if (r != NotFound)
+		if (r == std::Ok)
+			return std::FsErrors.Exists;
+		if (r != std::FsErrors.NotFound)
 			return r;
 		index = 0;
 		r = dir_find(vol, dir, &index, MatchEmpty, name, name_len, &block, &offset);
-		if (r == Ok) {
+		if (r == std::Ok) {
 			fill_dir_entry(vol->buf_dir + offset, l->dirent_size, ino, name, name_len, mode);
 			r = write_block(vol, block, vol->buf_dir);
 			if (r < 0) return r;
 			return touch_dir(vol, dir_ino, dir);
 		}
-		if (r != NotFound)
+		if (r != std::FsErrors.NotFound)
 			return r;
 		// Full: append a block (inode_write writes the inode).
 		std::memset(vol->buf_dir, 0, l->block_size);
@@ -1083,8 +1048,8 @@ namespace dr::dfs {
 		r = inode_write(vol, dir_ino, dir, dir->size, vol->buf_dir, l->block_size);
 		if (r < 0) return r;
 		if (cast<u32>(r) != l->block_size)
-			return NoSpace;
-		return Ok;
+			return std::FsErrors.NoSpace;
+		return std::Ok;
 	}
 
 	sub dir_remove(var vol: Volume*, var dir_ino: u32, var dir: Inode*, var name: u8*, var name_len: u32, var out_ino: u32*) -> i32 {
@@ -1112,7 +1077,7 @@ namespace dr::dfs {
 	}
 
 	// Fills out with the entry at or after *cursor (start at 0) and moves the cursor past it.
-	// NotFound at the end.
+	// std::FsErrors.NotFound at the end.
 	sub dir_next(var vol: Volume*, var dir: Inode*, var cursor: u32*, var out: DirEntry*) -> i32 {
 		var block: u32 = 0;
 		var offset: u32 = 0;
@@ -1123,11 +1088,11 @@ namespace dr::dfs {
 		out->type = entry[DirEntType];
 		out->name_len = entry[DirEntNameLen];
 		if (out->name_len > MaxNameLength)
-			return Corrupt;
+			return std::FsErrors.Corrupt;
 		std::memcpy(out->name, entry + DirEntName, out->name_len);
 		out->name[out->name_len] = 0;
 		*cursor = *cursor + 1;
-		return Ok;
+		return std::Ok;
 	}
 
 	// 1 when only . and .. are left, 0 if not.
@@ -1136,9 +1101,9 @@ namespace dr::dfs {
 		var block: u32 = 0;
 		var offset: u32 = 0;
 		var r: i32 = dir_find(vol, dir, &index, MatchNotDot, null, 0, &block, &offset);
-		if (r == Ok)
+		if (r == std::Ok)
 			return 0;
-		if (r == NotFound)
+		if (r == std::FsErrors.NotFound)
 			return 1;
 		return r;
 	}
@@ -1148,7 +1113,7 @@ namespace dr::dfs {
 	// ============================================================================
 	sub walk(var vol: Volume*, var path: u8*, var parent: bool, var out_ino: u32*, var out_name: u8**, var out_name_len: u32*) -> i32 {
 		if (path == null or path[0] != '/')
-			return Invalid;
+			return std::FsErrors.Invalid;
 		var ino: u32 = RootInode;
 		var node: Inode;
 		var p: u8* = path;
@@ -1157,34 +1122,34 @@ namespace dr::dfs {
 				p++;
 			if (*p == 0) {
 				if (parent)
-					return Invalid;		// "/" has no parent
+					return std::FsErrors.Invalid;		// "/" has no parent
 				*out_ino = ino;
-				return Ok;
+				return std::Ok;
 			}
 			var name: u8* = p;
 			var len: u32 = 0;
 			while (p[len] != 0 and p[len] != '/')
 				len++;
 			if (len > MaxNameLength)
-				return NameTooLong;
+				return std::FsErrors.NameTooLong;
 			var next: u8* = p + len;
 			while (*next == '/')
 				next++;
 			var r: i32 = read_inode(vol, ino, &node);
 			if (r < 0) return r;
 			if (not is_dir(&node))
-				return NotDir;
+				return std::FsErrors.NotDir;
 			if (parent and *next == 0) {
 				*out_ino = ino;
 				*out_name = name;
 				*out_name_len = len;
-				return Ok;
+				return std::Ok;
 			}
 			r = dir_lookup(vol, &node, name, len, &ino);
 			if (r < 0) return r;
 			p = next;
 		}
-		return Invalid;
+		return std::FsErrors.Invalid;
 	}
 
 	sub resolve(var vol: Volume*, var path: u8*, var out_ino: u32*) -> i32 {
@@ -1212,7 +1177,7 @@ namespace dr::dfs {
 
 	sub make_node(var vol: Volume*, var path: u8*, var mode: u16, var out_ino: u32*) -> i32 {
 		if (vol->read_only)
-			return ReadOnly;
+			return std::FsErrors.ReadOnly;
 		var parent: u32 = 0;
 		var ino: u32 = 0;
 		var name: u8* = null;
@@ -1224,13 +1189,13 @@ namespace dr::dfs {
 		r = read_inode(vol, parent, &parent_node);
 		if (r < 0) return r;
 		r = dir_lookup(vol, &parent_node, name, name_len, &ino);
-		if (r == Ok)
-			return Exists;
-		if (r != NotFound)
+		if (r == std::Ok)
+			return std::FsErrors.Exists;
+		if (r != std::FsErrors.NotFound)
 			return r;
 		var dir: bool = ((mode & ModeTypeMask) == ModeDir);
 		if (dir and parent_node.links == 0xFFFF)
-			return TooManyLinks;
+			return std::FsErrors.TooManyLinks;
 
 		r = alloc_inode(vol, &ino);
 		if (r < 0) return r;
@@ -1239,7 +1204,7 @@ namespace dr::dfs {
 			make_dir_block(vol, ino, parent);
 			r = inode_write(vol, ino, &node, 0, vol->buf_dir, vol->layout.block_size);
 			if (r >= 0 and cast<u32>(r) != vol->layout.block_size)
-				r = NoSpace;
+				r = std::FsErrors.NoSpace;
 		}
 		else
 			r = write_inode(vol, ino, &node);
@@ -1256,7 +1221,7 @@ namespace dr::dfs {
 		}
 		if (out_ino != null)
 			*out_ino = ino;
-		return Ok;
+		return std::Ok;
 	}
 
 	sub create(var vol: Volume*, var path: u8*, var perm: u16, var out_ino: u32* = null) -> i32 {
@@ -1280,7 +1245,7 @@ namespace dr::dfs {
 
 	sub unlink(var vol: Volume*, var path: u8*) -> i32 {
 		if (vol->read_only)
-			return ReadOnly;
+			return std::FsErrors.ReadOnly;
 		var parent: u32 = 0;
 		var ino: u32 = 0;
 		var name_len: u32 = 0;
@@ -1290,7 +1255,7 @@ namespace dr::dfs {
 		var r: i32 = lookup_entry(vol, path, &parent, &parent_node, &name, &name_len, &ino, &node);
 		if (r < 0) return r;
 		if (is_dir(&node))
-			return IsDir;
+			return std::FsErrors.IsDir;
 		r = dir_remove(vol, parent, &parent_node, name, name_len, &ino);
 		if (r < 0) return r;
 		if (node.links > 0)
@@ -1303,7 +1268,7 @@ namespace dr::dfs {
 
 	sub rmdir(var vol: Volume*, var path: u8*) -> i32 {
 		if (vol->read_only)
-			return ReadOnly;
+			return std::FsErrors.ReadOnly;
 		var parent: u32 = 0;
 		var ino: u32 = 0;
 		var name_len: u32 = 0;
@@ -1313,13 +1278,13 @@ namespace dr::dfs {
 		var r: i32 = lookup_entry(vol, path, &parent, &parent_node, &name, &name_len, &ino, &node);
 		if (r < 0) return r;
 		if (is_dot_name(name, name_len))
-			return Invalid;
+			return std::FsErrors.Invalid;
 		if (not is_dir(&node))
-			return NotDir;
+			return std::FsErrors.NotDir;
 		r = dir_is_empty(vol, &node);
 		if (r < 0) return r;
 		if (r == 0)
-			return NotEmpty;
+			return std::FsErrors.NotEmpty;
 		r = dir_remove(vol, parent, &parent_node, name, name_len, &ino);
 		if (r < 0) return r;
 		if (parent_node.links > 0)
@@ -1332,7 +1297,7 @@ namespace dr::dfs {
 	// The destination must not exist; a directory can't move into itself.
 	sub rename(var vol: Volume*, var from: u8*, var to: u8*) -> i32 {
 		if (vol->read_only)
-			return ReadOnly;
+			return std::FsErrors.ReadOnly;
 		var src_parent: u32 = 0;
 		var ino: u32 = 0;
 		var src_len: u32 = 0;
@@ -1349,7 +1314,7 @@ namespace dr::dfs {
 		r = resolve_parent(vol, to, &dst_parent, &dst_name, &dst_len);
 		if (r < 0) return r;
 		if (is_dot_name(src_name, src_len) or is_dot_name(dst_name, dst_len))
-			return Invalid;
+			return std::FsErrors.Invalid;
 		var dst: Inode* = &src_node;		// the same directory: one copy of its inode
 		if (dst_parent != src_parent) {
 			r = read_inode(vol, dst_parent, &dst_node);
@@ -1357,9 +1322,9 @@ namespace dr::dfs {
 			dst = &dst_node;
 		}
 		r = dir_lookup(vol, dst, dst_name, dst_len, &other);
-		if (r == Ok)
-			return Exists;
-		if (r != NotFound)
+		if (r == std::Ok)
+			return std::FsErrors.Exists;
+		if (r != std::FsErrors.NotFound)
 			return r;
 		var moving_dir: bool = (is_dir(&node) and dst_parent != src_parent);
 		if (moving_dir) {
@@ -1368,19 +1333,19 @@ namespace dr::dfs {
 			var walk_node: Inode;
 			for (var steps: u32 = 0; current != RootInode; steps++) {
 				if (current == ino)
-					return Invalid;
+					return std::FsErrors.Invalid;
 				if (steps >= vol->layout.inode_count)
-					return Corrupt;
+					return std::FsErrors.Corrupt;
 				r = read_inode(vol, current, &walk_node);
 				if (r < 0) return r;
 				r = dir_lookup(vol, &walk_node, "..", 2, &current);
 				if (r < 0) return r;
 			}
 			if (dst->links == 0xFFFF)
-				return TooManyLinks;
+				return std::FsErrors.TooManyLinks;
 		}
 		if (node.links == 0xFFFF)
-			return TooManyLinks;
+			return std::FsErrors.TooManyLinks;
 
 		// One more link while both entries exist (a crash can only leak it).
 		node.links++;
@@ -1411,7 +1376,7 @@ namespace dr::dfs {
 
 	sub link(var vol: Volume*, var existing: u8*, var new_path: u8*) -> i32 {
 		if (vol->read_only)
-			return ReadOnly;
+			return std::FsErrors.ReadOnly;
 		var ino: u32 = 0;
 		var parent: u32 = 0;
 		var name_len: u32 = 0;
@@ -1423,9 +1388,9 @@ namespace dr::dfs {
 		r = read_inode(vol, ino, &node);
 		if (r < 0) return r;
 		if (is_dir(&node))
-			return IsDir;
+			return std::FsErrors.IsDir;
 		if (node.links == 0xFFFF)
-			return TooManyLinks;
+			return std::FsErrors.TooManyLinks;
 		r = resolve_parent(vol, new_path, &parent, &name, &name_len);
 		if (r < 0) return r;
 		r = read_inode(vol, parent, &parent_node);
@@ -1454,7 +1419,7 @@ namespace dr::dfs {
 
 	sub chmod(var vol: Volume*, var path: u8*, var perm: u16) -> i32 {
 		if (vol->read_only)
-			return ReadOnly;
+			return std::FsErrors.ReadOnly;
 		var ino: u32 = 0;
 		var node: Inode;
 		var r: i32 = stat(vol, path, &node, &ino);
@@ -1466,7 +1431,7 @@ namespace dr::dfs {
 
 	sub chown(var vol: Volume*, var path: u8*, var uid: u16, var gid: u16) -> i32 {
 		if (vol->read_only)
-			return ReadOnly;
+			return std::FsErrors.ReadOnly;
 		var ino: u32 = 0;
 		var node: Inode;
 		var r: i32 = stat(vol, path, &node, &ino);
@@ -1486,7 +1451,7 @@ namespace dr::dfs {
 		var r: i32 = stat(vol, path, &node);
 		if (r < 0) return r;
 		if (is_dir(&node))
-			return IsDir;
+			return std::FsErrors.IsDir;
 		return inode_read(vol, &node, 0, buffer, size);
 	}
 
@@ -1495,14 +1460,14 @@ namespace dr::dfs {
 		var ino: u32 = 0;
 		var node: Inode;
 		var r: i32 = stat(vol, path, &node, &ino);
-		if (r == NotFound) {
+		if (r == std::FsErrors.NotFound) {
 			r = create(vol, path, perm, &ino);
 			if (r < 0) return r;
 			r = read_inode(vol, ino, &node);
 		}
-		else if (r == Ok and is_dir(&node))
-			return IsDir;
-		else if (r == Ok)
+		else if (r == std::Ok and is_dir(&node))
+			return std::FsErrors.IsDir;
+		else if (r == std::Ok)
 			r = truncate(vol, ino, &node, 0);
 		if (r < 0) return r;
 		return inode_write(vol, ino, &node, 0, buffer, size);
@@ -1519,7 +1484,7 @@ namespace dr::dfs {
 
 	sub disk_transfer(var part: DiskPartition*, var mode: u8, var offset: u32, var buffer: u8*, var size: u32) -> i32 {
 		if (offset > part->size or size > part->size - offset)
-			return IOError;
+			return std::FsErrors.IOError;
 		var ddd: DiskDriverData;
 		ddd.mode = mode;
 		ddd.disk = part->disk;
@@ -1527,7 +1492,7 @@ namespace dr::dfs {
 		ddd.dataSize = size;
 		ddd.memoryAddress = cast<u32>(buffer);
 		raise_interrupt(0x20, INT20_LOAD_FROM_DDD_BLOCKING, cast<u32>(&ddd));
-		return Ok;
+		return std::Ok;
 	}
 
 	sub disk_read(var user: void*, var offset: u32, var buffer: u8*, var size: u32) -> i32 {

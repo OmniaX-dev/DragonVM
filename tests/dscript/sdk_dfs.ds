@@ -15,13 +15,13 @@ var g_reads: u32 = 0;		// device reads (the pointer cache)
 
 sub ram_read(var user: void*, var offset: u32, var buffer: u8*, var size: u32) -> i32 {
 	g_reads++;
-	if (offset > DiskSize or size > DiskSize - offset) return dr::dfs::IOError;
+	if (offset > DiskSize or size > DiskSize - offset) return std::FsErrors.IOError;
 	std::memcpy(buffer, g_disk + offset, size);
 	return 0;
 }
 
 sub ram_write(var user: void*, var offset: u32, var buffer: u8*, var size: u32) -> i32 {
-	if (offset > DiskSize or size > DiskSize - offset) return dr::dfs::IOError;
+	if (offset > DiskSize or size > DiskSize - offset) return std::FsErrors.IOError;
 	std::memcpy(g_disk + offset, buffer, size);
 	return 0;
 }
@@ -87,20 +87,20 @@ sub main() -> i32 {
 	// Directories, paths, names.
 	check(20, dr::dfs::mkdir(g_vol, "/d", 0x1ED) == 0);
 	check(21, dr::dfs::mkdir(g_vol, "//d///e", 0x1ED) == 0);
-	check(22, dr::dfs::mkdir(g_vol, "/d", 0x1ED) == dr::dfs::Exists);
-	check(23, dr::dfs::create(g_vol, "/nope/x", 0x1A4) == dr::dfs::NotFound);
-	check(24, dr::dfs::create(g_vol, "/a.txt/x", 0x1A4) == dr::dfs::NotDir);
+	check(22, dr::dfs::mkdir(g_vol, "/d", 0x1ED) == std::FsErrors.Exists);
+	check(23, dr::dfs::create(g_vol, "/nope/x", 0x1A4) == std::FsErrors.NotFound);
+	check(24, dr::dfs::create(g_vol, "/a.txt/x", 0x1A4) == std::FsErrors.NotDir);
 	check(25, dr::dfs::create(g_vol, "/12345678901234567890123456789012345678901234567890123456", 0x1A4) == 0);
-	check(26, dr::dfs::create(g_vol, "/123456789012345678901234567890123456789012345678901234567", 0x1A4) == dr::dfs::NameTooLong);
+	check(26, dr::dfs::create(g_vol, "/123456789012345678901234567890123456789012345678901234567", 0x1A4) == std::FsErrors.NameTooLong);
 	check(27, count_entries("/") == 5 and count_entries("/d") == 3);
 	check(28, dr::dfs::stat(g_vol, "/", &node) == 0 and node.links == 3);	// . .. and /d's ..
 
 	// Links, rename, unlink, rmdir.
 	check(30, dr::dfs::link(g_vol, "/a.txt", "/d/e/b.txt") == 0);
 	check(31, dr::dfs::stat(g_vol, "/a.txt", &node) == 0 and node.links == 2);
-	check(32, dr::dfs::rmdir(g_vol, "/d") == dr::dfs::NotEmpty);
-	check(33, dr::dfs::unlink(g_vol, "/d") == dr::dfs::IsDir);
-	check(34, dr::dfs::rename(g_vol, "/d", "/d/e/f") == dr::dfs::Invalid);	// into itself
+	check(32, dr::dfs::rmdir(g_vol, "/d") == std::FsErrors.NotEmpty);
+	check(33, dr::dfs::unlink(g_vol, "/d") == std::FsErrors.IsDir);
+	check(34, dr::dfs::rename(g_vol, "/d", "/d/e/f") == std::FsErrors.Invalid);	// into itself
 	check(35, dr::dfs::rename(g_vol, "/d/e", "/e2") == 0);
 	var dotdot: u32 = 0;
 	check(36, dr::dfs::stat(g_vol, "/e2", &node) == 0 and dr::dfs::dir_lookup(g_vol, &node, "..", 2, &dotdot) == 0 and dotdot == 1);
@@ -133,13 +133,13 @@ sub main() -> i32 {
 	check(51, dr::dfs::unmount(g_vol) == 0);
 	check(52, dr::dfs::mount(g_vol, &dev, true) == 0 and g_vol->sb.state == dr::dfs::StateClean);
 	check(53, g_vol->sb.free_blocks == free0 - 1 and g_vol->sb.mount_count == 3);
-	check(54, dr::dfs::create(g_vol, "/x", 0x1A4) == dr::dfs::ReadOnly);
+	check(54, dr::dfs::create(g_vol, "/x", 0x1A4) == std::FsErrors.ReadOnly);
 	check(55, dr::dfs::read_file(g_vol, "/keep", part, 8) == 4 and part[0] == 'k' and part[3] == 't');
 	check(56, dr::dfs::unmount(g_vol) == 0 and g_disk[0] == 0xAB and g_disk[31] == 0xAB);
 
 	// Not a DFS partition.
 	g_disk[0x20] = 0;
-	check(60, dr::dfs::mount(g_vol, &dev, false) == dr::dfs::Unsupported);
-	check(61, std::strlen(dr::dfs::error_name(dr::dfs::NotEmpty)) == 19);
+	check(60, dr::dfs::mount(g_vol, &dev, false) == std::FsErrors.Unsupported);
+	check(61, std::strlen(std::error_name(std::FsErrors.NotEmpty)) == 19);
 	return result();
 }

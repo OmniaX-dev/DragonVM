@@ -25,18 +25,10 @@ var drake_load_addr: u32 = 0;
 var drake_size: u32 = 0;
 var kernel_size: u32 = 0;
 var kernel_load_addr: u32 = 0;
-
-// load_kernel0's own errors (below dr::dfs's, which go from -1 to -14).
-const KernelNotAFile: i32 = -100;
-const KernelEmpty: i32 = -101;
-const KernelTooBig: i32 = -102;
-const UnableToMount: i32 = -103;
-const KernelNoRoom: i32 = -104;
-const KernelInvalidDrx: i32 = -105;
+var kernel_partition_n: u32 = 0;
 
 const KERNEL0_PATH = "/boot/kernel0";	// the kernel on a DFS partition
 const MAX_KERNEL0_SIZE: u32 = 1024*1024*10; // 10 MiB
-
 
 // argv[0] = Load address for Drake
 // argv[1] = Drake size
@@ -178,12 +170,14 @@ sub execute_selected_entry() {
 				hlt
 			}
 		}
-		const argc: u32 = 2;
+		const argc: u32 = 3;
 		var argv: u8*[argc];
 		argv[0] = dr::bios_alloc(11);
 		argv[1] = dr::bios_alloc(11);
+		argv[2] = dr::bios_alloc(3);
 		std::utoa(cast<u32>(kernel_load_addr), argv[0]);
 		std::utoa(cast<u32>(kernel_size), argv[1]);
+		std::utoa(cast<u32>(kernel_partition_n), argv[2]);
 		dr::drx::run(load_addr, argc, argv);
 		low { hlt }
 	}
@@ -193,16 +187,6 @@ inline sub cleanup() {
 	dr::clear_interrupt_vector_entry(dr::HardwareInterrupts.KeyPressed);
 	dr::clear_interrupt_vector_entry(dr::HardwareInterrupts.VSync);
 	console.clear(dr::DefaultPaletteText16.Black)->xy(0, 0)->present()->destroy();
-}
-
-sub kernel_error_name(var error: i32) -> string {
-	if (error == KernelNotAFile) return "not a file";
-	if (error == KernelEmpty) return "empty file";
-	if (error == KernelTooBig) return "too big";
-	if (error == UnableToMount) return "unable to mount dfs volume";
-	if (error == KernelNoRoom) return "not enough memory between Drake and the heap";
-	if (error == KernelInvalidDrx) return "invalid DRX file";
-	return dr::dfs::error_name(error);
 }
 
 // Loads the partition's kernel, the first that works of: /boot/kernel0 as a DRX (at a random
@@ -217,7 +201,7 @@ sub load_kernel0(var part: dr::DPTPartitionBlock*, var out_load_addr: u32*) -> b
 	dr::dfs::dpt_partition(&disk, part);
 	if (not fs.mount_partition(&disk, true))
 	{
-		if (fs.last_error() == dr::dfs::Unsupported)
+		if (fs.last_error() == std::FsErrors.Unsupported)
 		{
 			// Not DFS: the raw kernel block after the boot header, at its fixed address.
 			load_kernel0_legacy(part);
@@ -235,24 +219,24 @@ sub load_kernel0(var part: dr::DPTPartitionBlock*, var out_load_addr: u32*) -> b
 	}
 	if (info.type != dr::fs::Type.File)
 	{
-		boot_error = kernel_error_name(KernelNotAFile);
+		boot_error = std::error_name(std::ExecErrors.NotAFile);
 		return false;
 	}
 	if (info.size == 0)
 	{
-		boot_error = kernel_error_name(KernelEmpty);
+		boot_error = std::error_name(std::ExecErrors.Empty);
 		return false;
 	}
 	if (info.size > MAX_KERNEL0_SIZE)
 	{
-		boot_error = kernel_error_name(KernelTooBig);
+		boot_error = std::error_name(std::ExecErrors.TooBig);
 		return false;
 	}
 	const KASLR_ALIGN: u32 = 0x10000; // 64 KiB slots (a power of 2)
 	var first: u32 = (drake_load_addr + drake_size + KASLR_ALIGN - 1) & ~(KASLR_ALIGN - 1); // round up
 	var heap_start: u32 = dr::read_cmos(dr::CMOSRegisters.HeapStart);
 	if (heap_start < first or heap_start - first < info.size) {
-		boot_error = kernel_error_name(KernelNoRoom);
+		boot_error = std::error_name(std::ExecErrors.NoRoom);
 		return false;
 	}
 	var last: u32 = (heap_start - info.size) & ~(KASLR_ALIGN - 1);  // round down
@@ -267,33 +251,34 @@ sub load_kernel0(var part: dr::DPTPartitionBlock*, var out_load_addr: u32*) -> b
 	}
 	var entry_addr: u32 = 0;
 	r = dr::drx::load(load_addr, info.size, load_addr, heap_start - cast<u32>(load_addr), &entry_addr);
-	if (r == dr::drx::Errors.InvalidMagic or r == dr::drx::Errors.FileTooSmall)
+	if (r == std::ExecErrors.InvalidMagic or r == std::ExecErrors.FileTooSmall)
 	{
 		// Not a DRX: a raw kernel, at its fixed address.
 		r = load_kernel0_dfs_fixed(part);
 		if (r < 0)
 		{
-			boot_error = kernel_error_name(r);
+			boot_error = std::error_name(r);
 			return false;
 		}
 		*out_load_addr = 0;
 		return true;
 	}
-	if (r != dr::drx::Errors.NoError)
+	if (r != std::Ok)
 	{
-		boot_error = kernel_error_name(KernelInvalidDrx);
+		boot_error = std::error_name(r);
 		return false;
 	}
 	*out_load_addr = entry_addr;
 	kernel_size = info.size;
 	kernel_load_addr = cast<u32>(load_addr);
+	kernel_partition_n = (cast<u32>(part) - cast<u32>(&dpt_block.entries[0])) / sizeof(dr::DPTPartitionBlock) + 1;
 	return true;
 }
 
 sub load_kernel0_dfs_fixed(var part: dr::DPTPartitionBlock*) -> i32 {
 	var vol: dr::dfs::Volume* = cast<dr::dfs::Volume*>(dr::bios_alloc(sizeof(dr::dfs::Volume)));
 	if (not vol)
-		return dr::dfs::NoSpace;
+		return std::SystemErrors.NoMemory;
 	defer dr::bios_free(vol);
 	var disk: dr::dfs::DiskPartition;
 	var dev: dr::dfs::Device;
@@ -308,15 +293,15 @@ sub load_kernel0_dfs_fixed(var part: dr::DPTPartitionBlock*) -> i32 {
 	if (r < 0)
 		return r;
 	if ((node.mode & dr::dfs::ModeTypeMask) != dr::dfs::ModeFile)
-		return KernelNotAFile;
+		return std::ExecErrors.NotAFile;
 	if (node.size == 0)
-		return KernelEmpty;
+		return std::ExecErrors.Empty;
 	if (node.size > dr::DPTBootPartStructure.CodeSize)
-		return KernelTooBig;
+		return std::ExecErrors.TooBig;
 	r = dr::dfs::inode_read(vol, &node, 0, cast<u8*>(dr::DPTBootPartStructure.CodeLoadAddr), node.size);
 	if (r < 0)
 		return r;
-	return dr::dfs::Ok;
+	return std::Ok;
 }
 
 // The kernel of a partition that isn't DFS: the raw block after its boot header.

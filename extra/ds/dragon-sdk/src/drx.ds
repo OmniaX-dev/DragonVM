@@ -5,18 +5,8 @@ namespace dr::drx {
 	const Magic: u32 = 0x44525831;	// "DRX1"
 	const HeaderSize: u32 = 32;
 
-	enum Errors: i32 {
-		NoError = 0,
-		FileTooSmall = -1,
-		InvalidMagic = -2,
-		TruncatedFile = -3,
-		NullOutputPtr = -4,
-		RelocationOutOfRange = -5,
-		InvalidAllocation = -6,
-		ImageTooBig = -7,			// load: the image doesn't fit in capacity
-		Overlap = -8,				// load: the destination overlaps the file
-		EntryOutOfRange = -9,		// the entry isn't in the image
-	};
+	// Errors: std::ExecErrors (libcore), plus std::SystemErrors.InvalidArgument (a null out
+	// pointer) and NoMemory (read).
 
 	struct Program
 	{
@@ -33,7 +23,7 @@ namespace dr::drx {
 	sub __writeU32(var ptr: u8*, var v: u32) { ptr[0] = cast<u8>(v >> 24); ptr[1] = cast<u8>(v >> 16); ptr[2] = cast<u8>(v >> 8); ptr[3] = cast<u8>(v); }
 
 
-	// The header's fields, checked against the file: Errors.NoError or an error.
+	// The header's fields, checked against the file: std::Ok or an error.
 	struct Header
 	{
 		var header_size: u32 = 0;
@@ -68,9 +58,9 @@ namespace dr::drx {
 	}
 
 	sub read_header(var file_bytes: u8*, var file_size: u32, var out: Header*) -> i32 {
-		if (not file_bytes or not out) return Errors.NullOutputPtr;
-		if (file_size < HeaderSize) return Errors.FileTooSmall;
-		if (__readU32(file_bytes) != Magic) return Errors.InvalidMagic;
+		if (not file_bytes or not out) return std::SystemErrors.InvalidArgument;
+		if (file_size < HeaderSize) return std::ExecErrors.FileTooSmall;
+		if (__readU32(file_bytes) != Magic) return std::ExecErrors.InvalidMagic;
 		out->header_size = __readU32(&file_bytes[0x04]);
 		out->image_size = __readU32(&file_bytes[0x08]);
 		out->entry = __readU32(&file_bytes[0x0C]);
@@ -79,47 +69,47 @@ namespace dr::drx {
 		out->id_hi = __readU32(&file_bytes[0x18]);
 		out->id_lo = __readU32(&file_bytes[0x1C]);
 		if (out->header_size < HeaderSize or out->header_size > file_size or out->image_size > file_size - out->header_size)
-			return Errors.TruncatedFile;
+			return std::ExecErrors.TruncatedFile;
 		if (out->reloc_offset > file_size or out->reloc_count > (file_size - out->reloc_offset) / 4)
-			return Errors.TruncatedFile;
+			return std::ExecErrors.TruncatedFile;
 		if (out->reloc_count > 0 and out->image_size < 4)
-			return Errors.RelocationOutOfRange;
+			return std::ExecErrors.RelocationOutOfRange;
 		if (out->entry >= out->image_size)
-			return Errors.EntryOutOfRange;
-		return Errors.NoError;
+			return std::ExecErrors.EntryOutOfRange;
+		return std::Ok;
 	}
 
 	// Copies the program out of the file (image and relocations in new memory: release them with
 	// free_program, also after an error).
 	sub read(var file_bytes: u8*, var file_size: u32, var outProgram: Program*) -> i32 {
-		if (not outProgram) return Errors.NullOutputPtr;
+		if (not outProgram) return std::SystemErrors.InvalidArgument;
 		var empty: Program;
 		*outProgram = empty;
 		var h: Header;
 		var r: i32 = read_header(file_bytes, file_size, &h);
-		if (r != Errors.NoError) return r;
+		if (r != std::Ok) return r;
 		outProgram->image = bios_alloc(h.image_size == 0 ? 1 : h.image_size);
 		if (not outProgram->image)
-			return Errors.InvalidAllocation;
+			return std::SystemErrors.NoMemory;
 		std::memcpy(outProgram->image, &file_bytes[h.header_size], h.image_size);
 		outProgram->image_size = h.image_size;
 		outProgram->entry = h.entry;
 		outProgram->id_hi = h.id_hi;
 		outProgram->id_lo = h.id_lo;
 		if (h.reloc_count == 0)
-			return Errors.NoError;
+			return std::Ok;
 		outProgram->relocations = bios_alloc(h.reloc_count * 4);
 		if (not outProgram->relocations)
-			return Errors.InvalidAllocation;
+			return std::SystemErrors.NoMemory;
 		for (var i: u32 = 0; i < h.reloc_count; i++)
 		{
 			var offset: u32 = __readU32(&file_bytes[h.reloc_offset + i * 4]);
 			if (offset > h.image_size - 4)
-				return Errors.RelocationOutOfRange;
+				return std::ExecErrors.RelocationOutOfRange;
 			outProgram->relocations[i] = offset;
 			outProgram->relocations_count++;
 		}
-		return Errors.NoError;
+		return std::Ok;
 	}
 
 	// Releases what read() allocated (the Program is empty afterwards).
@@ -145,26 +135,6 @@ namespace dr::drx {
 		}
 		if (base == cast<u32>(prog->image))
 			notify_loaded(base, prog->image_size, prog->id_hi, prog->id_lo);
-	}
-
-	// Copies words (4 bytes each) from src to dst, forward (dst may overlap src if it is at or
-	// below it). A dasm loop: about 7 instructions a word, against ~30 for the DScript loop.
-	sub __copy_words(var dst: u8*, var src: u8*, var words: u32) {
-		if (words == 0)
-			return;
-		low {
-			mov R1, $src
-			mov R2, $dst
-			mov R3, $words
-		__drx_copy_words_loop:
-			mov R4, *R1
-			mov *R2, R4
-			addip R1, 0x00000004
-			addip R2, 0x00000004
-			dec R3
-			mov ACC, R3
-			jne $__drx_copy_words_loop, 0x00000000
-		}
 	}
 
 	// Every offset in the table is at most last (unsigned). The CPU's conditional jumps compare
@@ -220,35 +190,34 @@ namespace dr::drx {
 	// In place: base can overlap the file if it is at or below the image in the file (e.g. base ==
 	// file_bytes: the file read where the program goes) and the image doesn't reach the
 	// relocation table (it is after the image in dsc's files): the image is copied forward, so
-	// every byte is read before it is overwritten. Other overlaps: Errors.Overlap.
+	// every byte is read before it is overwritten. Other overlaps: std::ExecErrors.Overlap.
 	sub load(var file_bytes: u8*, var file_size: u32, var base: u8*, var capacity: u32, var out_entry: u32* = null) -> i32 {
 		var h: Header;
 		var r: i32 = read_header(file_bytes, file_size, &h);
-		if (r != Errors.NoError) return r;
-		if (not base) return Errors.NullOutputPtr;
-		if (h.image_size > capacity) return Errors.ImageTooBig;
+		if (r != std::Ok) return r;
+		if (not base) return std::SystemErrors.InvalidArgument;
+		if (h.image_size > capacity) return std::ExecErrors.ImageTooBig;
 		var b: u32 = cast<u32>(base);
 		var f: u32 = cast<u32>(file_bytes);
 		if (b < f + file_size and f < b + h.image_size) {
 			var t: u32 = f + h.reloc_offset;
 			if (b > f + h.header_size or (b < t + h.reloc_count * 4 and t < b + h.image_size))
-				return Errors.Overlap;
+				return std::ExecErrors.Overlap;
 		}
 		// The machine is big endian like the file, and takes unaligned words: the offsets and the
 		// addresses are read and written as u32s.
 		var table: u32* = cast<u32*>(&file_bytes[h.reloc_offset]);
 		if (not __check_relocations(table, h.reloc_count, h.image_size - 4))
-			return Errors.RelocationOutOfRange;
-		// Forward (in place: the destination is never ahead of the source), a word at a time.
+			return std::ExecErrors.RelocationOutOfRange;
+		// std::memcpy copies forward, 8 words a round: right in place too, since the destination
+		// is never ahead of the source (checked above). Already in place: nothing to copy.
 		var src: u8* = &file_bytes[h.header_size];
-		var words: u32 = h.image_size / 4;
-		__copy_words(base, src, words);
-		for (var i: u32 = words * 4; i < h.image_size; i++)
-			base[i] = src[i];
+		if (base != src)
+			std::memcpy(base, src, h.image_size);
 		__relocate(base, table, h.reloc_count);
 		notify_loaded(b, h.image_size, h.id_hi, h.id_lo);	// (h: read before the file was overwritten)
 		if (out_entry) *out_entry = b + h.entry;
-		return Errors.NoError;
+		return std::Ok;
 	}
 
 	// Starts a loaded program (load()'s out_entry) the way loaders do: with argc / argv, or with

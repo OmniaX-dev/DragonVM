@@ -23,6 +23,24 @@ namespace dragon
 
 
 
+	String DragonRuntime::formatFrequency(f64 hz)
+	{
+		if (hz < 0.0)
+			hz = 0.0;
+		const char* units[] = { "Hz", "kHz", "MHz", "GHz" };
+		u8 unit = 0;
+		// (what would round up to 1000 is shown in the next unit: 999.97 kHz as 1.00 MHz)
+		while (unit < 3 && hz >= (unit == 0 ? 999.5 : 999.95))
+		{
+			hz /= 1000.0;
+			unit++;
+		}
+		if (unit == 0)
+			return String("").add(cast<u64>(hz + 0.5)).add(" Hz");
+		const u8 decimals = (hz < 10.0 ? 2 : 1);
+		return String("").add(hz, decimals).add(" ").add(units[unit]);
+	}
+
 	void DragonRuntime::processErrors(void)
 	{
 		auto& out = output();

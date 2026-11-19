@@ -745,9 +745,9 @@ namespace dragon
 		status.add("   depth ").add(m_debugger.getCallDepth());
 		status.add("   speed ");
 		if (m_debugger.isRunning())
-			status.add(cast<u64>(m_debugger.getMeasuredSpeed())).add(" Hz");
+			status.add(DragonRuntime::formatFrequency(m_debugger.getMeasuredSpeed()));
 		else
-			status.add(m_debugger.isMaxSpeed() ? String("max") : String("").add(cast<u64>(m_debugger.getClockRate())).add(" Hz"));
+			status.add(m_debugger.isMaxSpeed() ? String("max") : DragonRuntime::formatFrequency(m_debugger.getClockRate()));
 		if (m_debugger.isHistoryEnabled())
 		{
 			status.add("   history ").add(history.getPosition() - history.getFirstPosition()).add(" / ").add(history.getLastPosition() - history.getFirstPosition());

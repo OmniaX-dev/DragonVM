@@ -36,14 +36,15 @@ sub main() {
 
 	__print_machine_info(stack_size + heap_size);
 
-	// dr::time::sleep(2000); //This is just for show
+	dr::time_sleep(3000); //This is just for show
 
 	var r: i32 = __boot_init_part(init_part);
 	if (r != 0)
 	{
 		debug_print("Failed to boot init partition: ");
-		var buff: u8[10];
-		debug_print(std::itoa(r, buff));
+		debug_print(std::error_group_name(r));
+		debug_print(": ");
+		debug_print(std::error_name(r));
 		low { hlt }
 	} //TODO: Error
 }
@@ -75,20 +76,20 @@ sub __boot_init_part(var init_part: dr::DPTPartitionBlock*) -> i32 {
 	var disk: dr::dfs::DiskPartition;
 	dr::dfs::dpt_partition(&disk, init_part);
 	if (not fs.mount_partition(&disk, true))
-		return -1;
+		return fs.last_error();
 	defer fs.unmount();
 	var info: dr::fs::Info;
 	if (not fs.info(BOOTLOADER_PATH, &info))
-		return -2;
+		return fs.last_error();
 	if (info.size > MAX_BOOTLOADER_SIZE)
-		return -3;
+		return std::ExecErrors.TooBig;
 	var load_addr: u8* = cast<u8*>(dr::MemoryLayout.RAM);
 	var r: i32 = fs.read_all(BOOTLOADER_PATH, load_addr, info.size);
-	if (r < 0) return r - 1000;
+	if (r < 0) return r;
 	var entry_addr: u32 = 0;
 	r = dr::drx::load(load_addr, info.size, load_addr, MAX_BOOTLOADER_SIZE, &entry_addr);
-	if (r != dr::drx::Errors.NoError)
-		return r - 2000;
+	if (r != std::Ok)
+		return r;
 	fs.unmount();
 	// The boot loader runs in supervisor mode, as the BIOS (and so does the kernel it loads).
 	const argc: u32 = 2;

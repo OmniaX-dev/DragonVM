@@ -3,9 +3,10 @@
 
 namespace std {
 	// Copies size bytes from src to dst, forward (as a byte loop would: dst may overlap src at or
-	// below it, and dst 1 - 3 bytes above src repeats the first bytes, as before). A word at a time
-	// (a dasm loop, ~7 instructions per 4 bytes; the machine takes unaligned words), the last 0 - 3
-	// bytes one by one.
+	// below it, and dst 1 - 3 bytes above src repeats the first bytes, as before). 8 words per round
+	// (~2.6 instructions per 4 bytes) when dst isn't 1 - 31 bytes above src (a round reads its 8
+	// words before writing them), then a word at a time (~7 per 4 bytes; the machine takes
+	// unaligned words), the last 0 - 3 bytes one by one.
 	sub memcpy(var dst: void*, var src: void*, var size: u32) -> void* {
 		var d: u8* = cast<u8*>(dst);
 		var s: u8* = cast<u8*>(src);
@@ -13,6 +14,42 @@ namespace std {
 		var words: u32 = size / 4;
 		if (gap >= 1 and gap <= 3)
 			words = 0;		// a word would read bytes this copy has to write first
+		var rounds: u32 = words / 8;
+		if (gap >= 1 and gap <= 31)
+			rounds = 0;		// a round would read bytes it has to write first
+		if (rounds > 0) {
+			low {
+				mov R1, $s
+				mov R2, $d
+				mov R3, $rounds
+			__mem_memcpy_loop8:
+				movo R4, *R1, 0x00
+				movo R5, *R1, 0x04
+				movo R6, *R1, 0x08
+				movo R7, *R1, 0x0C
+				movo R8, *R1, 0x10
+				movo R9, *R1, 0x14
+				movo R10, *R1, 0x18
+				movo R11, *R1, 0x1C
+				omov *R2, R4, 0x00
+				omov *R2, R5, 0x04
+				omov *R2, R6, 0x08
+				omov *R2, R7, 0x0C
+				omov *R2, R8, 0x10
+				omov *R2, R9, 0x14
+				omov *R2, R10, 0x18
+				omov *R2, R11, 0x1C
+				addip R1, 0x00000020
+				addip R2, 0x00000020
+				dec R3
+				mov ACC, R3
+				jne $__mem_memcpy_loop8, 0x00000000
+			}
+			d = d + rounds * 32;
+			s = s + rounds * 32;
+			size = size - rounds * 32;
+			words = words - rounds * 8;
+		}
 		if (words > 0) {
 			low {
 				mov R1, $s
@@ -40,12 +77,37 @@ namespace std {
 		return dst;
 	}
 
-	// Sets size bytes at dst to value: a word at a time (a dasm loop), the last 0 - 3 bytes one by one.
+	// Sets size bytes at dst to value: 8 words per round (~1.5 instructions per 4 bytes), then a
+	// word at a time, the last 0 - 3 bytes one by one.
 	sub memset(var dst: void*, var value: u8, var size: u32) -> void* {
 		var d: u8* = cast<u8*>(dst);
 		var words: u32 = size / 4;
+		var fill: u32 = cast<u32>(value) * 0x01010101;
+		var rounds: u32 = words / 8;
+		if (rounds > 0) {
+			low {
+				mov R1, $d
+				mov R2, $fill
+				mov R3, $rounds
+			__mem_memset_loop8:
+				omov *R1, R2, 0x00
+				omov *R1, R2, 0x04
+				omov *R1, R2, 0x08
+				omov *R1, R2, 0x0C
+				omov *R1, R2, 0x10
+				omov *R1, R2, 0x14
+				omov *R1, R2, 0x18
+				omov *R1, R2, 0x1C
+				addip R1, 0x00000020
+				dec R3
+				mov ACC, R3
+				jne $__mem_memset_loop8, 0x00000000
+			}
+			d = d + rounds * 32;
+			size = size - rounds * 32;
+			words = words - rounds * 8;
+		}
 		if (words > 0) {
-			var fill: u32 = cast<u32>(value) * 0x01010101;
 			low {
 				mov R1, $d
 				mov R2, $fill

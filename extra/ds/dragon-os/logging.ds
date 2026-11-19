@@ -2,6 +2,18 @@
 
 #include(syscall.ds)
 
-inline sub kernel_log(var str: string) {
-	kernel_print(str);
+// TODO: These right now are wrappers for kenrel_print, but eventually they will be able to log to a file
+// 		 once the kernel switches logging to a file instead of the screen
+inline sub kernel_log(var str: string, var nl: bool = true) {
+	vga::kernel_print(str, nl);
+}
+
+inline sub kernel_log(var i: i32, var base: u8 = 10, var nl: bool = true) {
+	var buff: u8[12];
+	vga::kernel_print(std::itoa(i, buff, base), nl);
+}
+
+inline sub kernel_log(var i: u32, var base: u8 = 10, var nl: bool = true) {
+	var buff: u8[12];
+	vga::kernel_print(std::utoa(i, buff, base), nl);
 }

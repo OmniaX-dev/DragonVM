@@ -57,6 +57,10 @@ namespace dragon
 			// Incremented by every resetMachine(): lets the views (the window's display) notice.
 			inline static u32 getResetCount(void) { return s_resetCount; }
 
+			// A clock rate for people: "850 Hz", "12.3 kHz", "280.4 kHz", "4.02 MHz", "1.20 GHz" (the
+			// unit chosen by the size; 2 decimals under 10, 1 above).
+			static String formatFrequency(f64 hz);
+
 			inline static bool hasError(void) { return data::ErrorHandler::hasError(); }
 			// Where the runtime prints (loading info, errors): the terminal by default; the
 			// debugger sends it to its console.

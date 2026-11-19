@@ -77,20 +77,20 @@ sub main() -> i32 {
 	expect(5, load_at(512, 412, &entry) == 0 and dr::drx::run(entry) == 113);
 	expect(6, load_at(512, 512 + 32, &entry) == 0 and dr::drx::run(entry) == 113);
 	// Past the image's start in the file: refused, the destination untouched.
-	expect(7, load_at(512, 512 + 33, &entry) == dr::drx::Errors.Overlap);
+	expect(7, load_at(512, 512 + 33, &entry) == std::ExecErrors.Overlap);
 	expect(8, std::memcmp(&area[512], Child, sizeof(Child)) == 0);
 	// A relocation table the image would cover (moved into the image): refused in place, fine apart.
 	std::memcpy(&area[512], Child, sizeof(Child));
 	area[512 + 0x14] = 0; area[512 + 0x15] = 0; area[512 + 0x16] = 0; area[512 + 0x17] = 100;
-	expect(9, dr::drx::load(&area[512], sizeof(Child), &area[512], 1024, &entry) == dr::drx::Errors.Overlap);
+	expect(9, dr::drx::load(&area[512], sizeof(Child), &area[512], 1024, &entry) == std::ExecErrors.Overlap);
 	// A relocation past the image (the last word starts at image size - 4 = 287), also one that is
 	// negative as an i32: refused, the destination untouched.
 	std::memcpy(&area[1024], Child, sizeof(Child));
 	area[1024 + 323] = 0; area[1024 + 324] = 0; area[1024 + 325] = 0x01; area[1024 + 326] = 0x20;	// 288
 	area[0] = 0x5A;
-	expect(10, dr::drx::load(&area[1024], sizeof(Child), &area[0], 1024, &entry) == dr::drx::Errors.RelocationOutOfRange and area[0] == 0x5A);
+	expect(10, dr::drx::load(&area[1024], sizeof(Child), &area[0], 1024, &entry) == std::ExecErrors.RelocationOutOfRange and area[0] == 0x5A);
 	area[1024 + 323] = 0xFF; area[1024 + 324] = 0xFF; area[1024 + 325] = 0xFF; area[1024 + 326] = 0xF0;
-	expect(11, dr::drx::load(&area[1024], sizeof(Child), &area[0], 1024, &entry) == dr::drx::Errors.RelocationOutOfRange and area[0] == 0x5A);
+	expect(11, dr::drx::load(&area[1024], sizeof(Child), &area[0], 1024, &entry) == std::ExecErrors.RelocationOutOfRange and area[0] == 0x5A);
 	area[1024 + 325] = 0x01; area[1024 + 326] = 0x1F;		// 287: the last word, fine
 	area[1024 + 323] = 0; area[1024 + 324] = 0;
 	expect(12, dr::drx::load(&area[1024], sizeof(Child), &area[0], 1024, &entry) == 0);

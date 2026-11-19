@@ -5,9 +5,12 @@
   In the stdlib: `std::syscall4(function, a, b, c, d)` (unused arguments are 0, pointers go as
   `cast<u32>(p)`); each typed wrapper is one line on top of it.
 - The result: RV >= 0 success (an fd, a byte count, a pid, ...), RV < 0 an error code.
-- Error codes: in libcore, shared by the kernel and the stdlib (with `error_name`). The file
-  system calls pass the `dr::dfs` / `dr::fs` codes through; general ones too: `BadAddress` (a
-  pointer check failed), `BadHandle`, `InvalidArgument`, `NoMemory`, `TooMany`, `WouldBlock`.
+- Error codes: libcore's `errors.ds`, shared by everything (`std::error_name` describes any of
+  them). Every code is unique, so the file system calls pass `std::FsErrors` / `std::FileErrors`
+  through unchanged. The argument checks use `std::SystemErrors` (`BadAddress`: a pointer check
+  failed, `BadHandle`, `InvalidArgument`, `NoMemory`, `TooMany`, `TooLong`, `WouldBlock`,
+  `NoSuchCall`), processes `std::ProcessErrors` (`NoChild`, `NoProcess`), Spawn
+  `std::ExecErrors`. A new kind of error: a new group there (see the comment at its top).
 - Pointers from the process are checked, never trusted:
   - a `string`: copied into a kernel buffer (at most `MaxPath`, 256), checking each new page with
     `proc::user_readable`;

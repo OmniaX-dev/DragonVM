@@ -4,6 +4,8 @@
 #include(syscall.ds)
 #include(panic.ds)
 
+const USER_MODE_BASE_FAULT = 128;
+
 sub fault_name(var v: u8) -> string {
 	if (v == dr::cpu::Faults.DivisionByZero) return "division by zero";
 	if (v == dr::cpu::Faults.InvalidInstruction) return "invalid instruction";
@@ -15,26 +17,25 @@ sub fault_name(var v: u8) -> string {
 }
 
 sub dump_frame(var f: TrapFrame*) {
-	kernel_print("IP=", false); kernel_print(f->ip, 16, false);
-	kernel_print(" SP=", false); kernel_print(f->sp, 16, false);
-	kernel_print(" FP=", false); kernel_print(f->fp, 16, false);
-	kernel_print(" FL=", false); kernel_print(f->fl, 16, false);
-	kernel_print(" mode=", false); kernel_print(f->mode == 0 ? "user" : "kernel", true);
+	kernel_log("IP=", false); kernel_log(f->ip, 16, false);
+	kernel_log(" SP=", false); kernel_log(f->sp, 16, false);
+	kernel_log(" FP=", false); kernel_log(f->fp, 16, false);
+	kernel_log(" FL=", false); kernel_log(f->fl, 16, false);
+	kernel_log(" mode=", false); kernel_log(f->mode == 0 ? "user" : "kernel", true);
 	for (var n: u32 = 1; n <= 20; n++)
 	{
-		kernel_print("R", false); kernel_print(n, 10, false); kernel_print("=", false); kernel_print(f->regs.R(n), 16, false);
-		if (n % 4 == 0) kernel_print(""); else kernel_print("  ", false);
+		kernel_log("R", false); kernel_log(n, 10, false); kernel_log("=", false); kernel_log(f->regs.R(n), 16, false);
+		if (n % 4 == 0) kernel_log(""); else kernel_log("  ", false);
 	}
-	kernel_print("ACC=", false); kernel_print(f->acc, 16, false);
-	kernel_print(" RV=", false); kernel_print(f->rv, 16);
+	kernel_log("ACC=", false); kernel_log(f->acc, 16, false);
+	kernel_log(" RV=", false); kernel_log(f->rv, 16);
 }
 
 sub backtrace(var fp: u32) {
-	kernel_print("backtrace:");
+	kernel_log("backtrace:");
 	for (var depth: u32 = 0; depth < 16 and fp != 0; depth++) {
-		// TODO: sanity check: stop if fp leaves the kernel stack (a corrupted chain must not fault again)
 		var w: u32* = cast<u32*>(fp);
-		kernel_print("  ", false); kernel_print(w[3], 16);
+		kernel_log("  ", false); kernel_log(w[3], 16);
 		fp = w[2];
 	}
 }
@@ -47,13 +48,14 @@ namespace __internal {
 		var f: TrapFrame* = current_trap_frame();
 
 		if (f->mode == 0) {
-			// TODO: log "process X killed: <fault> at <addr>", end it, schedule the next one
-			panic_begin("user fault, but no processes exist yet");
+			kernel_log("process <", false); kernel_log(proc::g_current->pid, 10, false); kernel_log("> was killed: ", false);
+			kernel_log(fault_name(vector)); kernel_log(" at address ", false); kernel_log(addr, 16, true);
+			proc::process_exit(proc::g_current, USER_MODE_BASE_FAULT + vector);
 		} else {
 			panic_begin(fault_name(vector));
 		}
-		kernel_print("address=", false); kernel_print(addr, 16, false);
-		kernel_print(" ip=", false); kernel_print(ip, 16);
+		kernel_log("address=", false); kernel_log(addr, 16, false);
+		kernel_log(" ip=", false); kernel_log(ip, 16);
 		dump_frame(f);
 		backtrace(f->fp);
 		halt_forever();

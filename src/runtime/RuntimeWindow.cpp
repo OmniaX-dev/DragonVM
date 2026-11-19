@@ -48,12 +48,32 @@ namespace dragon
 		bool running = true;
 		u8 screenRedrawRate = DragonRuntime::vCMOS.read8(data::CMOSRegisters::ScreenRedrawRate);
 		f64 cycleUPS = (DragonRuntime::machine_config.fixed_clock ? DragonRuntime::machine_config.clock_rate_sec : -1.0);
+		u64 speedCycles = 0;
 		ostd::StepTimer cycleTimer(cycleUPS, [&](f64 dt) {
 			mainLoop();
 			running = cpu.execute() && isRunning();
 			disk.cycleStep();
 			timer.cycleStep();
+			speedCycles++;
 		});
+		// The measured speed in the title bar, twice a second: "DragonVM - 3.98 MHz (set: 4.00 MHz)",
+		// or "DragonVM - 25.3 MHz (uncapped)".
+		const String baseTitle = getTitle();
+		const String clockText = (cycleUPS > 0.0 ? String("set: ").add(DragonRuntime::formatFrequency(cycleUPS)) : String("uncapped"));
+		auto speedTime = std::chrono::steady_clock::now();
+		u32 speedChecks = 0;
+		auto update_speed = [&](void) {
+			if ((++speedChecks & 0x3FF) != 0)		// the clock every 1024 loops: cheap at any speed
+				return;
+			const auto now = std::chrono::steady_clock::now();
+			const f64 elapsed = std::chrono::duration<f64>(now - speedTime).count();
+			if (elapsed < 0.5)
+				return;
+			const f64 speed = cast<f64>(speedCycles) / elapsed;
+			setTitle(String(baseTitle).add(" - ").add(DragonRuntime::formatFrequency(speed)).add(" (").add(clockText).add(")"));
+			speedCycles = 0;
+			speedTime = now;
+		};
 		ostd::StepTimer screenTimer(screenRedrawRate, [&](f64 dt) {
 			m_display.vsync();
 		});
@@ -61,6 +81,7 @@ namespace dragon
 		{
 			cycleTimer.update();
 			screenTimer.update();
+			update_speed();
 			if (dragon::data::ErrorHandler::hasError())
 			{
 				DragonRuntime::processErrors();

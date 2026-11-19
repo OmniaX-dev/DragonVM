@@ -1,8 +1,20 @@
 #import(<dragon-sdk>)
 
 #include(memory.ds)
+#include(process.ds)
+#include(filesystem.ds)
 
 sub kernel_main() {
 	init_heap();
-	// panic("Reached the end of kernel_main().");
+	proc::init_trampoline();
+	init_root_filesystem();
+	var err: i32 = 0;
+	if (not proc::process_start("/boot/dinit", 0, null, 0, &err))
+	{
+		kernel_log(std::error_group_name(err), false); kernel_log(": ", false); kernel_log(std::error_name(err));
+		panic("Unable to start init process");
+	}
+	dr::set_interrupt_interval(proc::TICK_MS);
+	proc::schedule();
+	panic("Reached the end of kernel_main().");
 }

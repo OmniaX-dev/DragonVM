@@ -1,0 +1,77 @@
+// dr::fs::FileSystem::partition_number: the number given to mount (the boot disk's DPT), 0 when
+// not mounted or mounted another way (mount_device, mount_partition). The boot disk's partitions
+// are only mounted read-only (nothing is written); it needs at least one DFS partition (the
+// DragonOS one). Needs the BIOS (the heap).
+// drun-flags: --boot
+// expect-rv: 0
+#include(check.ds)
+#import(<dragon-sdk>)
+
+const DiskSize: u32 = 64 * 1024;
+var g_disk: u8* = null;
+
+sub ram_read(var user: void*, var offset: u32, var buffer: u8*, var size: u32) -> i32 {
+	if (offset > DiskSize or size > DiskSize - offset) return std::FsErrors.IOError;
+	std::memcpy(buffer, g_disk + offset, size);
+	return 0;
+}
+
+sub ram_write(var user: void*, var offset: u32, var buffer: u8*, var size: u32) -> i32 {
+	if (offset > DiskSize or size > DiskSize - offset) return std::FsErrors.IOError;
+	std::memcpy(g_disk + offset, buffer, size);
+	return 0;
+}
+
+sub main() -> i32 {
+	var fs: dr::fs::FileSystem;
+	check(1, fs.partition_number() == 0);
+
+	// No such partition: nothing mounted, still 0.
+	check(2, not fs.mount(0, true) and fs.last_error() == std::FileErrors.NoPartition and fs.partition_number() == 0);
+	check(3, not fs.mount(1000, true) and fs.last_error() == std::FileErrors.NoPartition and fs.partition_number() == 0);
+
+	// The boot disk: each DFS partition mounts with its own number.
+	var dpt: dr::DPTBlock;
+	check(4, dr::dpt_load_block(&dpt) and dpt.partitionCount > 0);
+	var mounted: u32 = 0;
+	var last: u32 = 0;
+	var part: dr::dfs::DiskPartition;
+	for (var n: u32 = 1; n <= dpt.partitionCount and n <= dr::DPTStructure.MaxPartitions; n++) {
+		if (not fs.mount(n, true))
+			continue;
+		check(10, fs.partition_number() == n and fs.is_read_only());
+		// Already mounted: the failed mount keeps the number.
+		check(11, not fs.mount(n, true) and fs.last_error() == std::FileErrors.AlreadyMounted and fs.partition_number() == n);
+		check(12, fs.unmount() and fs.partition_number() == 0);
+		mounted++;
+		last = n;
+	}
+	check(13, mounted > 0);
+
+	// The same partition by place (mount_partition): no number.
+	if (last > 0) {
+		dr::dfs::dpt_partition(&part, &dpt.entries[last - 1]);
+		check(20, fs.mount_partition(&part, true) and fs.partition_number() == 0);
+		check(21, fs.unmount());
+		// mount after mount_partition: the number again; and the other way around.
+		check(22, fs.mount(last, true) and fs.partition_number() == last and fs.unmount());
+		check(23, fs.mount_partition(&part, true) and fs.partition_number() == 0 and fs.unmount());
+	}
+
+	// A RAM disk (mount_device): no number either, also right after a numbered mount.
+	g_disk = cast<u8*>(dr::bios_alloc(DiskSize));
+	check(30, g_disk != null);
+	if (g_disk == null) return result();
+	var dev: dr::dfs::Device;
+	dev.user = null;
+	dev.read = ram_read;
+	dev.write = ram_write;
+	dev.now = null;
+	check(31, fs.format_device(&dev, DiskSize, "ram", 1024));
+	if (last > 0)
+		check(32, fs.mount(last, true) and fs.unmount());
+	check(33, fs.mount_device(&dev) and fs.partition_number() == 0);
+	check(34, fs.unmount() and fs.partition_number() == 0);
+	dr::bios_free(g_disk);
+	return result();
+}

@@ -317,14 +317,17 @@ namespace dragon
 		}
 
 		// The machine's clock: the debugger counts cycles, so the screen is redrawn at the
-		// same cycles whatever the speed the machine runs at.
+		// same cycles whatever the speed the machine runs at. The config's debug_clock_rate_sec
+		// (clock_rate_sec when not set) is the clock here: the programs see it too (the CMOS).
 		auto& config = DragonRuntime::machine_config;
-		m_clockRate = std::max<f64>(1.0, cast<f64>(config.clock_rate_sec));
+		const i32 clockRate = std::max<i32>(1, config.debugClockRate());
+		m_clockRate = cast<f64>(clockRate);
 		m_maxSpeed = m_data.args.max_speed || !config.fixed_clock;
-		m_cyclesPerRedraw = std::max<u64>(1, cast<u64>(config.clock_rate_sec) / std::max<u64>(1, config.screen_redraw_rate_per_second));
+		m_cyclesPerRedraw = std::max<u64>(1, cast<u64>(clockRate) / std::max<u64>(1, config.screen_redraw_rate_per_second));
+		DragonRuntime::vCMOS.write32(data::CMOSRegisters::ClockSpeed, clockRate);
 		// Machine time (cycles / clock rate), like the redraws: stepping, max speed and the
 		// history all see the same, reproducible time.
-		DragonRuntime::vTimer.setTimeSource(hw::VirtualTimer::eTimeSource::MachineTime, config.clock_rate_sec);
+		DragonRuntime::vTimer.setTimeSource(hw::VirtualTimer::eTimeSource::MachineTime, clockRate);
 		display.enableAutoRedraw(false);
 
 		DragonRuntime::cpu.setDebugPrintHandler([this](const std::string& text) { debug_print(text); });
@@ -1751,7 +1754,7 @@ namespace dragon
 				setMaxSpeed(true);
 			else if (args == "" || args == "default")
 			{
-				m_clockRate = std::max<f64>(1.0, cast<f64>(DragonRuntime::machine_config.clock_rate_sec));
+				m_clockRate = std::max<f64>(1.0, cast<f64>(DragonRuntime::machine_config.debugClockRate()));
 				setMaxSpeed(false);
 			}
 			else if (Utils::parseValue(args, rate) && rate > 0)

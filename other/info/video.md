@@ -221,7 +221,7 @@ __redraw_screen():
 |---|---|
 | `RuntimeWindow::runMachine()` | a `StepTimer` at `ScreenRedrawRate` per second (CMOS 0x18, from `screen_redraw_rate_per_second` in the `.dvm`; 30 in the test machine). It only **requests** one, plus the VSync interrupt (`vsync()` sets `m_redrawScreen` and `m_vsyncPending`). |
 | the widget's `onUpdate()` | at the window's frame rate (60 fps). With auto redraw on (the runtime's default), it calls `update()`, which redraws if one was requested. |
-| `Debugger::step_machine()` | every `clock_rate_sec / screen_redraw_rate_per_second` **cycles** (machine time, not wall time, so stepping is reproducible). Auto redraw is off; it calls `update()` itself after every cycle. |
+| `Debugger::step_machine()` | every `debug_clock_rate_sec / screen_redraw_rate_per_second` **cycles** (`clock_rate_sec` when the config doesn't set it) (machine time, not wall time, so stepping is reproducible). Auto redraw is off; it calls `update()` itself after every cycle. |
 | signals 0x10, 0x12, 0xE2 (16 color mode) | immediately |
 | signal 0xE1 (16 color mode), `apply_video_mode()` | request |
 

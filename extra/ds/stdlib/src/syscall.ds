@@ -7,9 +7,46 @@ namespace std {
 		Exit = 0x0010,
 		Print = 0x0011,
 
+		GetPid = 0x0100,
+		GetParentPid = 0x0101,
+		Yield = 0x0102,
+		Spawn = 0x0103,
+		Wait = 0x0104,
+		Sleep = 0x0105,
+		Kill = 0x0106,
+
+		AllocPages = 0x0200,
+		FreePages = 0x0201,
+
+		ReadKey = 0x0300,
+		ConsoleClear = 0x0301,
+		ConsoleSetColor = 0x0302,
+		ConsoleSetCursor = 0x0303,
+
+		Open = 0x0400,
+		Close = 0x0401,
+		Read = 0x0402,
+		Write = 0x0403,
+		Seek = 0x0404,
+		Truncate = 0x0405,
+		FStat = 0x0406,
+		Stat = 0x0407,
+
+		OpenDir = 0x0500,
+		ReadDir = 0x0501,
+		MakeDir = 0x0502,
+		Remove = 0x0503,
+		Rename = 0x0504,
+		Link = 0x0505,
+		StatFs = 0x0506,
+
+		SysInfo = 0x0600,
+		ProcessList = 0x0601,
+
 		Random = 0x1000,
 		RandomF32 = 0x1001,
 		SeedRandom = 0x1002,
+		RandomRangeInclusive = 0x1003,
 
 		TimeMillis = 0x1100,
 		TimeCycles = 0x1101,
@@ -34,6 +71,23 @@ namespace std {
 		return rv;
 	}
 
+	inline sub wait(var pid: i32 = -1, var out_code: i32* = null) -> i32 {
+		return syscall4(SystemCalls.Wait, cast<u32>(pid), cast<u32>(out_code));
+	}
+
+	inline sub spawn(var path: string, var argc: u32 = 0, var argv: string* = null) -> i32 {
+        return syscall4(SystemCalls.Spawn, cast<u32>(path), argc, cast<u32>(argv));
+	}
+
+	inline sub print(var path: string, var nl: bool = true) -> i32 {
+    	return syscall4(SystemCalls.Print, cast<u32>(path), (nl ? 1 : 0));
+	}
+
+	inline sub sleep(var ms: u32) -> i32 {
+   		return syscall4(SystemCalls.Sleep, ms);
+	}
+
+	// TODO: out_rv should be i32*
 	sub syscall(var function: u32, var out_rv: u32*, ...typed) -> bool {
 		var l_is_simple_call = sub(var fn: u32) -> bool {
 			return fn == SystemCalls.Random or
@@ -55,50 +109,9 @@ namespace std {
 			}
 			return true;
 		}
-		else if (function == SystemCalls.Print) //TODO: Eventually put each branch in an __internal:: dedicated function
-		{
-			if (args.count == 0) return false;
-			else {
-				if (args.type_of(0) != VaTypes.String) return false;
-				var str: u8* = args.get_string(0);
-				var nl: u32 = 0;
-				if (args.count > 1 and args.get_bool(1))
-					nl = 1;
-				low {
-					mov R9, $function
-					mov R8, $str
-					mov R7, $nl
-					int 0x40
-				}
-				*out_rv = 0;
-				return true;
-			}
-		}
-		else if (function == SystemCalls.Exit)
-		{
-			// The process ends: the exit code (default 0) goes to the kernel. Doesn't return.
-			var code: i32 = 0;
-			if (args.count > 0)
-				code = args.get_i32(0);
-			low {
-				mov R9, $function
-				mov R8, $code
-				int 0x40
-			}
-			return false;		// (only if the kernel didn't end the process)
-		}
-		else if (function == SystemCalls.SeedRandom)
-		{
-			if (args.count == 0) return false;
-			var seed: i32 = args.get_i32(0);
-			low {
-				mov R9, $function
-				mov R8, $seed
-				int 0x40
-			}
-			*out_rv = 0;
-			return true;
-		}
-		return false;
+		if (args.count <= 4)
+			*out_rv = syscall4(function, args.get_u32(0), args.get_u32(1), args.get_u32(2), args.get_u32(3));
+		else return false; // TODO: Add cases when new syscalls with more than 4 parameter exist
+		return true;
 	}
 }

@@ -159,11 +159,12 @@ Most programs only need L1 and L7, plus `inode_read`/`inode_write` or the helper
 
 There are no exceptions in DScript. Every sub that can fail returns an `i32`:
 - **`>= 0`** means success, or a useful value (`inode_read` returns the number of bytes read).
-- **`< 0`** means an error: `dr::dfs::NotFound` (-1), `Exists`, `NoSpace`, `NotDir`, `IsDir`, `NotEmpty`, `Invalid`,
+- **`< 0`** means an error: `std::FsErrors.NotFound` (-1), `Exists`, `NoSpace`, `NotDir`, `IsDir`, `NotEmpty`, `Invalid`,
   `IOError`, `Corrupt`, `TooBig`, `NameTooLong`, `ReadOnly`, `Unsupported` (-13, "not a DFS partition") or
-  `TooManyLinks`.
+  `TooManyLinks`. The codes live in libcore (`errors.ds`), with every other error code of the system: each one is
+  unique, so a DFS error can be passed up through any layer unchanged.
 
-`dr::dfs::error_name(r)` gives a description ("not found"). Results bigger than a number go through out pointers:
+`std::error_name(r)` gives a description ("not found"). Results bigger than a number go through out pointers:
 `stat(vol, path, &node)` fills `node`. The usual pattern:
 
 ```
@@ -249,10 +250,10 @@ things it holds `startAddress` (where the partition begins on the disk) and `siz
 ```
 	var vol: dr::dfs::Volume* = cast<dr::dfs::Volume*>(dr::bios_alloc(sizeof(dr::dfs::Volume)));
 	if (not vol)
-		return dr::dfs::NoSpace;
+		return std::SystemErrors.NoMemory;
 ```
 These lines allocate the Volume (about 28 KiB) on the BIOS heap. It doesn't need to be cleared: `mount` sets
-everything it uses. If the heap is full, they return an error instead of crashing.
+everything it uses. If the heap is full, they return `NoMemory` instead of crashing.
 
 ---
 
@@ -351,22 +352,22 @@ The possible errors:
 
 ```
 	if ((node.mode & dr::dfs::ModeTypeMask) != dr::dfs::ModeFile)
-		return KernelNotAFile;
+		return std::ExecErrors.NotAFile;
 ```
 `node.mode` holds the type in its top 4 bits (`ModeTypeMask` = 0xF000) and the permissions in the other 12.
 `/boot/kernel0` must be a regular file (`ModeFile`, 0x8000), not a directory.
 
-`KernelNotAFile` (like `KernelEmpty` and `KernelTooBig` below) is one of Drake's own error codes. They are -100 and
-below, so they can't clash with `dr::dfs`'s (-1 to -14). Drake's `kernel_error_name` turns them into "not a file",
-"empty file" and "bigger than 1 MiB", and passes any other code to `dr::dfs::error_name`.
+`std::ExecErrors.NotAFile` (like `Empty` and `TooBig` below) is one of the program loading errors in libcore. Every
+error code in the system is unique (DFS's are -1 to -14, the program loading ones -129 and below), so Drake returns
+DFS errors and its own the same way, and `std::error_name` describes any of them.
 
 ---
 
 ```
 	if (node.size == 0)
-		return KernelEmpty;
+		return std::ExecErrors.Empty;
 	if (node.size > dr::DPTBootPartStructure.CodeSize)
-		return KernelTooBig;
+		return std::ExecErrors.TooBig;
 ```
 `node.size` is the file's size in bytes. An empty file is refused, because there would be nothing to jump to. The
 kernel area at 0x01410000 is 1 MiB (`CodeSize`), and a bigger file would overwrite whatever comes after it.
@@ -404,7 +405,7 @@ For the 1 MiB kernel that makes 256 data block reads, plus one read of the indir
 ---
 
 ```
-	return dr::dfs::Ok;
+	return std::Ok;
 }
 ```
 The kernel is in memory. On the way out the defers run: `unmount(vol)`, then `free(vol)`. Back in
@@ -466,11 +467,11 @@ sub list(var vol: dr::dfs::Volume*, var path: string) -> i32 {
 		return r;
 	var cursor: u32 = 0;
 	var entry: dr::dfs::DirEntry;
-	while (dr::dfs::dir_next(vol, &dir, &cursor, &entry) == dr::dfs::Ok) {
+	while (dr::dfs::dir_next(vol, &dir, &cursor, &entry) == std::Ok) {
 		print(entry.name);                  // null terminated; entry.inode, entry.type (mode >> 12)
 		print("\n");
 	}
-	return dr::dfs::Ok;
+	return std::Ok;
 }
 ```
 (`print` stands for whatever text output the program uses: `dr::TextSingle`, a `Text16Console`, ...)
@@ -482,7 +483,7 @@ You don't need to load a whole file:
 ```
 var node: dr::dfs::Inode;
 var ino: u32 = 0;
-if (dr::dfs::stat(vol, "/data/level3.map", &node, &ino) == dr::dfs::Ok) {
+if (dr::dfs::stat(vol, "/data/level3.map", &node, &ino) == std::Ok) {
 	var header: u8[64];
 	var n: i32 = dr::dfs::inode_read(vol, &node, 0, header, 64);     // n < 64 if the file is shorter
 	...
@@ -548,9 +549,9 @@ r = dr::dfs::mkfs(vol, &dev, &params);                                   // byte
 ### Errors
 
 Subs return `true`/`false`, or a count with -1 for errors. The reason is in `last_error()` (on the FileSystem, the
-File or the Dir), and `error_text()` describes it. The codes are `dr::dfs`'s, plus a few of `dr::fs`'s own:
-`NotMounted`, `AlreadyMounted`, `NoPartition`, `NoMemory`, `NotOpen`, `NotReadable`, `NotWritable`, `PathTooLong`
-and `BadMode`. `dr::fs::error_name(code)` describes any of them.
+File or the Dir), and `error_text()` describes it. The codes are DFS's (`std::FsErrors`), plus `std::FileErrors`:
+`NotMounted`, `AlreadyMounted`, `NoPartition`, `NotOpen`, `NotReadable`, `NotWritable`, `PathTooLong` and `BadMode`,
+and `std::SystemErrors.NoMemory`. `std::error_name(code)` describes any of them.
 
 ### A tour
 

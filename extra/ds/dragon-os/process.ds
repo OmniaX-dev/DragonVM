@@ -7,6 +7,8 @@ namespace proc {
 	const MAX_PROCESSES: u32 = 32;
 	const KSTACK_PAGES: u32 = 2;                    // 8 KiB: traps and syscalls only
 	const USTACK_PAGES: u32 = 16;                   // 64 KiB
+	const FRAME_WORDS: u32 = 34;
+	const PROC_NAME_MAX_LEN: u32 = 32;
 
 	enum RegionKind: u8 { Image, Stack, Heap, Shared }
 	struct Region {
@@ -23,17 +25,20 @@ namespace proc {
 		var count: u32;
 	};
 
+	enum BlockReason: u8 { None, Sleep, Wait, Key }
 	enum ProcessState: u8 {
 		Free,           // an unused slot
+		New,            // taken by process_start, being built: not runnable yet
 		Ready,          // can run, waiting for its turn
 		Running,        // the one on the CPU (g_current)
 		Blocked,        // waiting for something (a key, the disk, a child): later
-		Zombie          // ended; its kernel stack and slot are not freed yet (see "end process")
+		Zombie,         // ended; its kernel stack and slot are not freed yet (see "end process")
+		Dead            // collected: reap_dead frees its kernel stack and its slot
 	}
 	struct Process {
 		var pid: u32;
 		var state: ProcessState;
-		var name: u8[32];
+		var name: u8[PROC_NAME_MAX_LEN];
 		var parent: u32;                        // the pid that started it (for wait / the exit code, later)
 		var exit_code: i32;
 
@@ -45,11 +50,19 @@ namespace proc {
 		var kernel_stack: u32;                  // the pages (KSTACK_PAGES), for freeing
 		var kernel_top: u32;                    // for set_kernel_stack: where its traps land
 		var frame: u32;                         // its saved trap frame (an address on its kernel stack), while it isn't running
+
+		var slot: u32;
+		var rv: u32;
+		var block: BlockReason;
+		var wake_time: u32;
+		var wait_pid: i32;
+		var wait_out: u32;
 	};
 
 	var g_processes: Process[MAX_PROCESSES];
 	var g_current: Process* = null;
 	var g_next_pid: u32 = 1;
+	var g_trampoline: u32 = 0;
 
 	// false: no memory for the map
 	sub as_create(var as: AddressSpace*) -> bool {
@@ -107,17 +120,193 @@ namespace proc {
 	inline sub user_writable(var as: proc::AddressSpace*, var ptr: u32, var size: u32) -> bool { return __internal::as_check_user_permission(as, ptr, size, dr::cpu::Permissions.Write); }
 
 	sub switch_to(var p: Process*) {                                // never returns
+		dr::disable_interrupts();
 		g_current = p;
 		p->state = ProcessState.Running;
 		dr::cpu::set_permission_map(p->as.map);
 		dr::cpu::set_user_stack(p->user_stack_top, p->user_stack_size);
 		var frame: u32 = p->frame;
+		var rv: u32 = p->rv;
 		dr::cpu::set_kernel_stack(p->kernel_top, KSTACK_PAGES * PAGE_SIZE);     // last: see below
 		low {
 			mov R1, $frame
+			mov RV, $rv
 			mov FP, R1
+			mov SP, R1
+			sflg $dr::CPUFlags.InterruptsEnabled
 			rti
 		}
+	}
+
+	sub init_trampoline() {
+		var start: u32 = 0;
+		var end: u32 = 0;
+		__internal::trampoline_code(&start, &end);
+		kernel_assert(end > start and end - start <= PAGE_SIZE, "The trampoline doesn't fit a page.");
+		g_trampoline = g_pages.alloc(1);
+		kernel_assert(g_trampoline != 0, "No page for the trampoline.");
+		std::memset(cast<void*>(g_trampoline), 0, PAGE_SIZE);
+		std::memcpy(cast<void*>(g_trampoline), cast<void*>(start), end - start);
+	}
+
+	// The frame process p starts from: rti "returns" to the trampoline, in user mode, on its stack.
+	sub build_start_frame(var p: Process*, var argc: u32, var argv: u32, var user_sp: u32) {
+		var fp: u32 = p->kernel_top - FRAME_WORDS * 4;          // f[34] is kernel_top itself
+		var f: u32* = cast<u32*>(fp);
+		std::memset(f, 0, (FRAME_WORDS + 1) * 4);               // f[0] .. f[34]; everything else is 0
+		f[1] = 9 * 4;                                           // the frame size bookkeeping (as the CPU writes it)
+		f[2] = 0;                                               // FP 0: the program's backtraces stop at the trampoline
+		f[3] = g_trampoline;                                    // IP: where rti goes
+		f[25] = p->entry;                                       // R1: the DRX entry
+		f[24] = argc;                                           // R2
+		f[23] = argv;                                           // R3: the argv copy in the process's memory
+		f[27] = 0x48574952;                                     // the marker: FL, OFFSET, S2, S1, RV saved above
+		f[28] = 1 << dr::CPUFlags.InterruptsEnabled;    		// FL: interrupts on in the process
+		f[33] = 0;                                              // the mode rti returns to: user
+		f[34] = user_sp;                                        // the SP rti returns to
+		p->frame = fp;
+	}
+
+	// A Free slot of the table, reset (everything 0) and taken (New), with its pid and slot index.
+	// null: the table is full.
+	sub alloc_slot() -> Process* {
+		for (var i: u32 = 0; i < MAX_PROCESSES; i++) {
+			var p: Process* = &g_processes[i];
+			if (p->state != ProcessState.Free)
+				continue;
+			std::memset(p, 0, sizeof(Process));     // nothing left over from the slot's last process
+			p->slot = i;
+			p->pid = g_next_pid++;                  // never reused (pid 0: none / the idle process)
+			p->state = ProcessState.New;
+			return p;
+		}
+		return null;
+	}
+
+	// Gives a slot back: a Zombie collected by Wait, or a New one process_start gave up on.
+	// Its pages must be freed already (as_destroy, the kernel stack).
+	sub free_slot(var p: Process*) {
+		std::memset(p, 0, sizeof(Process));         // state 0 = Free
+	}
+
+	sub process_start(var path: string, var argc: u32, var argv: u8**, var parent: u32, var out_err: i32*) -> Process* {
+		// TODO: switch asserts/panics to undo
+		var __discardError: i32 = 0;
+		if (not out_err) out_err = &__discardError;
+		var p: Process* = alloc_slot();
+		if (not p) {
+			*out_err = std::SystemErrors.TooMany;
+			return null;
+		}
+
+		var info: dr::fs::Info;
+		if (not g_root_fs.info(path, &info)) {
+			*out_err = g_root_fs.last_error();
+			proc::free_slot(p);
+			return null;
+		}
+		if (info.type != dr::fs::Type.File) {
+			*out_err = std::ExecErrors.NotAFile;
+			proc::free_slot(p);
+			return null;
+		}
+
+		var image_pages: u32 = PageAllocator::pages_for(info.size);
+		if (image_pages == 0) {
+			*out_err = std::ExecErrors.Empty;
+			proc::free_slot(p);
+			return null;
+		}
+		var image: u8* = cast<u8*>(g_pages.alloc(image_pages));
+		if (not image) {
+			*out_err = std::SystemErrors.NoMemory;
+			proc::free_slot(p);
+			return null;
+		}
+		var r: i32 = g_root_fs.read_all(path, image, info.size);
+		if (r < 0) {
+			*out_err = g_root_fs.last_error();
+			g_pages.free(cast<u32>(image), image_pages);
+			proc::free_slot(p);
+			return null;
+		}
+		var entry_addr: u32 = 0;
+		r = dr::drx::load(image, info.size, image, image_pages * PAGE_SIZE, &entry_addr);
+		if (r != std::Ok) {
+			*out_err = r;
+			g_pages.free(cast<u32>(image), image_pages);
+			proc::free_slot(p);
+			return null;
+		}
+
+		__internal::path_basename(path, p->name, PROC_NAME_MAX_LEN);
+		p->parent = parent;
+		p->entry = entry_addr;
+		if (not proc::as_create(&p->as)) {
+			*out_err = std::SystemErrors.NoMemory;
+			g_pages.free(cast<u32>(image), image_pages);
+			proc::free_slot(p);
+			return null;
+		}
+
+		// 2. The image: zero the rest of the last page (the pages held whatever was there before),
+		//    then let the process read, write and run it.
+		std::memset(image + info.size, 0, image_pages * PAGE_SIZE - info.size);
+		if (not proc::as_map(&p->as, cast<u32>(image), image_pages, dr::cpu::Permissions.ReadWrite, proc::RegionKind.Image, true)) {
+			*out_err = std::SystemErrors.NoMemory;
+			proc::as_destroy(&p->as);
+			g_pages.free(cast<u32>(image), image_pages);
+			proc::free_slot(p);
+			return null;
+		}
+
+		// 3. The user stack: a guard page (stays None: running off the stack is an access
+		//    violation) and USTACK_PAGES under it.
+		var stack: u32 = g_pages.alloc(1 + proc::USTACK_PAGES);
+		if (stack == 0) {
+			*out_err = std::SystemErrors.NoMemory;
+			proc::as_destroy(&p->as);
+			proc::free_slot(p);
+			return null;
+		}
+
+		std::memset(cast<void*>(stack), 0, (1 + proc::USTACK_PAGES) * PAGE_SIZE);
+		if (not proc::as_map(&p->as, stack, 1 + proc::USTACK_PAGES, dr::cpu::Permissions.ReadWrite, proc::RegionKind.Stack, true)) {
+			*out_err = std::SystemErrors.NoMemory;
+			g_pages.free(stack, 1 + proc::USTACK_PAGES);
+			proc::as_destroy(&p->as);
+			proc::free_slot(p);
+			return null;
+		}
+		dr::cpu::set_page_permissions(p->as.map, stack, PAGE_SIZE, dr::cpu::Permissions.None);   // the guard
+		p->user_stack_top = stack + (1 + proc::USTACK_PAGES) * PAGE_SIZE - 4;           // the top word
+		p->user_stack_size = proc::USTACK_PAGES * PAGE_SIZE;
+
+		// 4. The kernel stack: the process's traps land here. Not in its map: None for it.
+		p->kernel_stack = g_pages.alloc(proc::KSTACK_PAGES);
+		if (p->kernel_stack == 0) {
+			*out_err = std::SystemErrors.NoMemory;
+			proc::as_destroy(&p->as);
+			proc::free_slot(p);
+			return null;
+		}
+
+		p->kernel_top = p->kernel_stack + proc::KSTACK_PAGES * PAGE_SIZE - 4;
+
+		// 5. The trampoline: read and execute only, shared (not freed with the process).
+		if (not proc::as_map(&p->as, proc::g_trampoline, 1, dr::cpu::Permissions.Read, proc::RegionKind.Shared, false)) {
+			*out_err = std::SystemErrors.NoMemory;
+			g_pages.free(p->kernel_stack, proc::KSTACK_PAGES);
+			proc::as_destroy(&p->as);
+			proc::free_slot(p);
+			return null;
+		}
+
+		var argv_addr: u32 = 0;
+		var user_sp: u32 = __internal::push_args(p, argc, argv, &argv_addr);
+		build_start_frame(p, argc, argv_addr, user_sp);
+		p->state = ProcessState.Ready;
+		return p;
 	}
 
 	namespace __internal {
@@ -133,6 +322,45 @@ namespace proc {
 				page += PAGE_SIZE;
 			}
 			return true;
+		}
+
+		sub trampoline_code(var out_start: u32*, var out_end: u32*) {
+			var start: u32 = 0;
+			var end: u32 = 0;
+			low {
+				mov R1, $__trampoline_start
+				mov R2, $__trampoline_end
+				mov $start, R1
+				mov $end, R2
+				jmp $__trampoline_end
+			__trampoline_start:                 ## the process starts here: R1 = entry, R2 = argc, R3 = argv
+				push R2                         ## argc
+				push R3                         ## argv
+				push 0x00000002                 ## the argument count (the DRX entry convention)
+				call R1                         ## __ds_start → main(argc, argv); main's value in RV
+				mov R8, RV                      ## the exit code
+				mov R9, 0x00000010              ## Exit
+				int 0x40                        ## doesn't return
+				hlt                             ## (if it does: a privileged instruction fault, the kernel ends it)
+			__trampoline_end:
+			}
+			*out_start = start;
+			*out_end = end;
+		}
+
+		// TODO: This should go in a new std::path filesystem, kind of like a simpler version of std::filesystem in C++
+		sub path_basename(var path: string, var out: u8*, var capacity: u32) {
+			var start: u32 = 0;
+			for (var i: u32 = 0; path[i] != 0; i++) {
+				if (path[i] == '/')
+					start = i + 1;
+			}
+			var n: u32 = 0;
+			while (path[start + n] != 0 and n < capacity - 1) {
+				out[n] = path[start + n];
+				n++;
+			}
+			out[n] = 0;
 		}
 	}
 }

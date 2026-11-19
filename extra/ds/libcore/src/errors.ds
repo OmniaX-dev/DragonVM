@@ -1,0 +1,156 @@
+// Errors: one set of codes for everything (the libraries, the BIOS, Drake, the kernel and its
+// system calls, the programs).
+//
+// The convention: a sub that can fail returns an i32, >= 0 for success (or a value: a count, an
+// fd, a pid, ...) and < 0 for an error. std::Ok (0) is "no error".
+//
+// Every error code is unique in the whole system, so an error can be passed up through any number
+// of layers unchanged (a file system error out of a system call, out of the stdlib, into a
+// program) and std::error_name always knows what it means. No layer needs its own name function,
+// and nobody needs to add offsets (r - 1000) to tell layers apart.
+//
+// The codes are organized in groups of 32: group g owns the codes -(32 * g + 1) .. -(32 * g + 31).
+// Each group is a const struct (the codes, used as std::FsErrors.NotFound) and a names array in
+// the same order (__internal::<group>Names). The first code of a group is its first name, the
+// second code its second name, and so on.
+//
+// Adding an error to a group: a new member with the next code, and its name at the end of the
+// group's names array (never reuse or renumber a code: programs may compare against it).
+// Adding a group: the next free group number, a const struct and a names array as below, and one
+// line for it in __internal::error_group.
+
+namespace std {
+	const Ok: i32 = 0;
+	const ErrorGroupSize: u32 = 32;
+	alias ErrCode = i32;
+
+	// Group 0: the file system on disk (DFS: dr::dfs, the same numbers as the C++ DfsCore).
+	const FsErrors: struct {
+		var NotFound: i32 = -1;
+		var Exists: i32 = -2;
+		var NoSpace: i32 = -3;
+		var NotDir: i32 = -4;
+		var IsDir: i32 = -5;
+		var NotEmpty: i32 = -6;
+		var Invalid: i32 = -7;				// an argument DFS can't use (a bad name, block size, ...)
+		var IOError: i32 = -8;
+		var Corrupt: i32 = -9;
+		var TooBig: i32 = -10;				// past the largest file DFS can address
+		var NameTooLong: i32 = -11;
+		var ReadOnly: i32 = -12;
+		var Unsupported: i32 = -13;			// not DFS (or a version this code doesn't know)
+		var TooManyLinks: i32 = -14;
+	};
+
+	// Group 1: files and mounts (dr::fs, and later the kernel's file system calls).
+	const FileErrors: struct {
+		var NotMounted: i32 = -33;			// the FileSystem isn't mounted
+		var AlreadyMounted: i32 = -34;		// mount / format on a mounted FileSystem
+		var NoPartition: i32 = -35;			// no DPT, or no partition with that number
+		var NotOpen: i32 = -36;				// a closed File / Dir (or its FileSystem was unmounted)
+		var NotReadable: i32 = -37;			// reading a File opened without OpenMode.Read
+		var NotWritable: i32 = -38;			// writing a File opened without OpenMode.Write
+		var PathTooLong: i32 = -39;			// longer than dr::fs::MaxPath - 1
+		var BadMode: i32 = -40;				// an OpenMode combination that makes no sense
+	};
+
+	// Group 2: general errors (any layer; the system calls' argument checks).
+	const SystemErrors: struct {
+		var NoMemory: i32 = -65;			// an allocation failed
+		var InvalidArgument: i32 = -66;		// an argument out of its range (a null out pointer, ...)
+		var BadAddress: i32 = -67;			// a pointer from a process failed its check
+		var BadHandle: i32 = -68;			// not an open handle (fd, ...)
+		var TooMany: i32 = -69;				// a full table (processes, arguments, fds, ...)
+		var TooLong: i32 = -70;				// a string argument longer than its limit
+		var WouldBlock: i32 = -71;			// nothing there yet, and the call was asked not to wait
+		var NoSuchCall: i32 = -72;			// an unknown system call number
+	};
+
+	// Group 3: processes.
+	const ProcessErrors: struct {
+		var NoChild: i32 = -97;				// Wait: no such child (or no children at all)
+		var NoProcess: i32 = -98;			// no process with that pid
+	};
+
+	// Group 4: loading a program (a DRX file: dr::drx, the BIOS, Drake, the kernel's Spawn).
+	const ExecErrors: struct {
+		var NotAFile: i32 = -129;			// the path is a directory (or another non-file type)
+		var Empty: i32 = -130;
+		var TooBig: i32 = -131;				// over the loader's size limit
+		var NoRoom: i32 = -132;				// no free memory where it would be loaded
+		var FileTooSmall: i32 = -133;		// shorter than a DRX header
+		var InvalidMagic: i32 = -134;		// not a DRX file
+		var TruncatedFile: i32 = -135;		// the header promises more than the file has
+		var RelocationOutOfRange: i32 = -136;
+		var ImageTooBig: i32 = -137;		// the image doesn't fit the place given to load it
+		var Overlap: i32 = -138;			// the load destination overlaps the file the wrong way
+		var EntryOutOfRange: i32 = -139;	// the entry point isn't in the image
+	};
+
+	// The error's description ("not found"); "ok" for Ok (and for the values >= 0 that some subs
+	// return on success).
+	sub error_name(var error: i32) -> string {
+		if (error >= 0)
+			return "ok";
+		var n: u32 = cast<u32>(-error) - 1;
+		var count: u32 = 0;
+		var names: string* = __internal::error_group(n / ErrorGroupSize, &count, null);
+		var index: u32 = n % ErrorGroupSize;
+		if (names == null or index >= count)
+			return "unknown error";
+		return names[index];
+	}
+
+	// The name of the error's group ("file system", "process", ...); "ok" for values >= 0.
+	// Together with error_name: "<group>: <name>" says exactly what failed and where.
+	sub error_group_name(var error: i32) -> string {
+		if (error >= 0)
+			return "ok";
+		var group: string = "unknown";
+		__internal::error_group((cast<u32>(-error) - 1) / ErrorGroupSize, null, &group);
+		return group;
+	}
+
+	namespace __internal {
+		// The names of each group, in the order of its codes.
+		const FsErrorNames: string[] = {
+			"not found", "already exists", "no space left", "not a directory", "is a directory",
+			"directory not empty", "invalid argument", "I/O error", "corrupted file system",
+			"file too big", "name too long", "read only file system", "unsupported file system",
+			"too many links"
+		};
+		const FileErrorNames: string[] = {
+			"not mounted", "already mounted", "no such partition", "not open", "not open for reading",
+			"not open for writing", "path too long", "invalid open mode"
+		};
+		const SystemErrorNames: string[] = {
+			"out of memory", "invalid argument", "bad address", "bad handle", "too many",
+			"argument too long", "would block", "no such system call"
+		};
+		const ProcessErrorNames: string[] = {
+			"no such child", "no such process"
+		};
+		const ExecErrorNames: string[] = {
+			"not a file", "empty file", "too big", "no room to load it", "too small for a DRX file",
+			"not a DRX file", "truncated DRX file", "relocation out of range",
+			"image too big for its place", "image overlaps its file", "entry point outside the image"
+		};
+
+		// Group number → its names (and their count) and the group's own name. null: no such group.
+		sub error_group(var group: u32, var out_count: u32*, var out_group_name: string*) -> string* {
+			var names: string* = null;
+			var count: u32 = 0;
+			var group_name: string = "unknown";
+			if (group == 0) { names = FsErrorNames; count = sizeof(FsErrorNames) / sizeof(string); group_name = "file system"; }
+			else if (group == 1) { names = FileErrorNames; count = sizeof(FileErrorNames) / sizeof(string); group_name = "files"; }
+			else if (group == 2) { names = SystemErrorNames; count = sizeof(SystemErrorNames) / sizeof(string); group_name = "system"; }
+			else if (group == 3) { names = ProcessErrorNames; count = sizeof(ProcessErrorNames) / sizeof(string); group_name = "process"; }
+			else if (group == 4) { names = ExecErrorNames; count = sizeof(ExecErrorNames) / sizeof(string); group_name = "program loading"; }
+			if (out_count)
+				*out_count = count;
+			if (out_group_name)
+				*out_group_name = group_name;
+			return names;
+		}
+	}
+}

@@ -8,11 +8,11 @@ sub panic_begin(var title: string) {
 	dr::disable_interrupts();
 	if (g_panicking)
 		halt_forever();
-	init_video();
+	vga::init_video();
 	g_panicking = true;
-	kernel_print("", true);
-	kernel_print("*** KERNEL PANIC: ", false);
-	kernel_print(title, true);
+	kernel_log("", true);
+	kernel_log("*** KERNEL PANIC: ", false);
+	kernel_log(title, true);
 }
 
 sub halt_forever() {
@@ -31,13 +31,13 @@ inline sub kernel_assert(var cond: bool, var msg: string) {
 // A failed assert(...) in the kernel: the panic screen, with where and what.
 sub __assert_fail(var file: string, var line: u32, var condition: string, var message: string) {
 	panic_begin("assertion failed");
-	kernel_print(condition, false);
-	kernel_print(" (", false);
-	kernel_print(file, false);
-	kernel_print(":", false);
-	kernel_print(line, 10, false);
-	kernel_print(")", true);
+	kernel_log(condition, false);
+	kernel_log(" (", false);
+	kernel_log(file, false);
+	kernel_log(":", false);
+	kernel_log(line, 10, false);
+	kernel_log(")", true);
 	if (message[0] != 0)
-		kernel_print(message, true);
+		kernel_log(message, true);
 	halt_forever();
 }

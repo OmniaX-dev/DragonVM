@@ -4,8 +4,12 @@ CMOS = dragon/cmos.dr
 
 cpuext = extmov, extalu, extfpu
 fixed_clock = true
-clock_rate_sec = 180000
-ram_size_kb = 65536
+clock_rate_sec = 4500000
+# The clock in the debugger (ddb), which runs far slower: its time is cycles / this rate,
+# so a rate it can reach keeps its milliseconds (time_sleep, the timer) close to real ones.
+# Leave it out to use clock_rate_sec.
+debug_clock_rate_sec = 250000
+ram_size_kb = 262144
 # Bytes the disk interface copies per cycle (default 1024)
 disk_block_size = 1024
 

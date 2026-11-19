@@ -1,0 +1,252 @@
+#include(process.ds)
+
+namespace proc {
+	const TICK_MS: u32 = 10;                 		// dr::set_interrupt_interval(TICK_MS)
+    const SLICE_TICKS: u32 = 3;              		// a turn: 30 ms (≈ 5400 cycles at 180k/s)
+    const MAX_PATH: u32 = 256;
+	const MAX_ARGS: u32 = 16;
+	const ARGS_BYTES: u32 = 1024;
+
+	var g_idle: Process* = null;
+    var g_slice_left: u32 = SLICE_TICKS;
+    var g_spawn_path: u8[MAX_PATH];
+	var g_spawn_strings: u8[ARGS_BYTES];
+	var g_spawn_argv: u8*[MAX_ARGS];
+	var g_reap_pending: bool = false;     // a Zombie or Dead process is waiting for reap_dead
+	var g_sleepers: u32 = 0;              // processes blocked in Sleep (++ when one blocks, -- in wake)
+
+    // THE policy: the first Ready process after the current one (round robin).
+    // Priorities, a ready queue, ... later: only this function changes.
+    sub pick_next() -> Process* {
+        var start: u32 = 0;
+        if (g_current and g_current != g_idle)
+            start = g_current->slot + 1;
+        for (var i: u32 = 0; i < MAX_PROCESSES; i++) {
+            var p: Process* = &g_processes[(start + i) % MAX_PROCESSES];
+            if (p->state == ProcessState.Ready)
+                return p;
+        }
+        return g_idle;
+    }
+
+    // Wakers: a blocked process becomes Ready with its system call's result.
+    sub wake(var p: Process*, var rv: u32) {
+    	if (p->block == BlockReason.Sleep)
+            g_sleepers--;
+        p->rv = rv;
+        p->block = BlockReason.None;
+        p->state = ProcessState.Ready;
+    }
+
+    sub wake_sleepers() {
+    	if (g_sleepers == 0) return;
+        var now: u32 = dr::time_get_millis();
+        for (var i: u32 = 0; i < MAX_PROCESSES; i++) {
+            var p: Process* = &g_processes[i];
+            if (p->state == ProcessState.Blocked and p->block == BlockReason.Sleep and cast<i32>(now - p->wake_time) >= 0)
+                wake(p, 0);
+        }
+    }
+
+    // Never returns. The caller has saved g_current->frame and set its new state.
+    sub schedule() {
+    	reap_dead();
+        wake_sleepers();
+        g_slice_left = SLICE_TICKS;
+        var next: Process* = pick_next();
+        kernel_assert(next != null, "Nothing to run (no idle process yet).");
+        switch_to(next);
+    }
+
+    // From a system call handler: the process waits here; a waker's rv is its result.
+    sub block_current(var reason: BlockReason) {
+        g_current->block = reason;
+        g_current->state = ProcessState.Blocked;
+        schedule();
+    }
+
+    // The process with this pid (not a free or collected slot), or null.
+    sub find_process(var pid: u32) -> Process* {
+        if (pid == 0)
+            return null;
+        for (var i: u32 = 0; i < MAX_PROCESSES; i++) {
+            var p: Process* = &g_processes[i];
+            if (p->state != ProcessState.Free and p->state != ProcessState.Dead and p->pid == pid)
+                return p;
+        }
+        return null;
+    }
+
+    // parent is blocked in a Wait that child's end answers (wait_pid -1: any child).
+    inline sub wait_matches(var parent: Process*, var child: Process*) -> bool {
+        return parent->state == ProcessState.Blocked and parent->block == BlockReason.Wait
+            and (parent->wait_pid == -1 or cast<u32>(parent->wait_pid) == child->pid);
+    }
+
+    // Gives the ended child's code to its waiting parent and wakes it (its Wait returns the pid).
+    sub deliver(var parent: Process*, var child: Process*) {
+        if (parent->wait_out != 0)
+            *cast<i32*>(parent->wait_out) = child->exit_code;     // checked when Wait was called
+        child->state = ProcessState.Dead;
+        g_reap_pending = true;
+        wake(parent, child->pid);
+    }
+
+    // Ends p: the current process (Exit, a fault) or another one (Kill, later). For the current
+    // one it doesn't return.
+    sub process_exit(var p: Process*, var code: i32) {
+        if (p->pid == 1) {
+            kernel_log("init exited with code ", false);
+            kernel_log(cast<u32>(code));
+            panic("init exited");
+        }
+        if (p->state == ProcessState.Blocked and p->block == BlockReason.Sleep)
+            g_sleepers--;
+        // TODO: (later: close its files)
+        as_destroy(&p->as);                 // its pages and map (supervisor mode doesn't use the map)
+        p->exit_code = code;
+        p->state = ProcessState.Zombie;
+        g_reap_pending = true;
+
+        // Its children go to init. One that already ended may be what init is waiting for.
+        var init: Process* = find_process(1);
+        for (var i: u32 = 0; i < MAX_PROCESSES; i++) {
+            var c: Process* = &g_processes[i];
+            if (c->state == ProcessState.Free or c->state == ProcessState.Dead or c->parent != p->pid)
+                continue;
+            c->parent = 1;
+            if (c->state == ProcessState.Zombie and init and wait_matches(init, c))
+                deliver(init, c);
+        }
+
+        // Its parent may be waiting for it.
+        var parent: Process* = find_process(p->parent);
+        if (parent and wait_matches(parent, p))
+            deliver(parent, p);
+
+        if (p == g_current)
+            schedule();
+    }
+
+    // At the start of schedule(): the kernel stacks of ended processes and the slots of collected
+    // ones. Never g_current's: schedule() is running on that stack.
+    sub reap_dead() {
+    	if (not g_reap_pending) return;
+        g_reap_pending = false;
+        for (var i: u32 = 0; i < MAX_PROCESSES; i++) {
+            var p: Process* = &g_processes[i];
+            if (p == g_current) {
+                if (p->state == ProcessState.Zombie or p->state == ProcessState.Dead)
+                    g_reap_pending = true;          // its turn comes at the next schedule
+                continue;
+            }
+            if ((p->state == ProcessState.Zombie or p->state == ProcessState.Dead) and p->kernel_stack != 0) {
+                g_pages.free(p->kernel_stack, KSTACK_PAGES);
+                p->kernel_stack = 0;
+            }
+            if (p->state == ProcessState.Dead)
+                free_slot(p);
+        }
+    }
+
+	// sys_wait(pid, out_code): pid -1 = any child. The child's pid; out_code (if not 0) gets its code.
+	sub sys_wait(var pid: i32, var out_code: u32) -> i32 {
+            if (out_code != 0 and not proc::user_writable(&proc::g_current->as, out_code, 4))
+                return std::SystemErrors.BadAddress;
+            var has_child: bool = false;
+            for (var i: u32 = 0; i < proc::MAX_PROCESSES; i++) {
+                var c: proc::Process* = &proc::g_processes[i];
+                if (c->state == proc::ProcessState.Free or c->state == proc::ProcessState.Dead or c->parent != proc::g_current->pid)
+                    continue;
+                if (pid != -1 and c->pid != cast<u32>(pid))
+                    continue;
+                has_child = true;
+                if (c->state == proc::ProcessState.Zombie) {          // already ended: no need to block
+                    if (out_code != 0)
+                        *cast<i32*>(out_code) = c->exit_code;
+                    c->state = proc::ProcessState.Dead;                // reap_dead frees it
+                    g_reap_pending = true;
+                    return cast<i32>(c->pid);
+                }
+            }
+            if (not has_child)
+                return std::ProcessErrors.NoChild;
+            proc::g_current->wait_pid = pid;
+            proc::g_current->wait_out = out_code;
+            proc::block_current(proc::BlockReason.Wait);                    // doesn't return: deliver() sets its rv
+            return 0;
+	}
+
+	// Spawn(path: string, argc, argv: string*): the new process's pid. The caller keeps running.
+	sub sys_spawn(var path: u32, var argc: u32, var argv: u32) -> i32 {
+        var as: AddressSpace* = &g_current->as;
+        var r: i32 = __internal::copy_user_string(as, path, g_spawn_path, MAX_PATH);
+        if (r == std::SystemErrors.TooLong) return std::FileErrors.PathTooLong;
+        if (r < 0)
+            return r;
+        if (argc > MAX_ARGS)
+            return std::SystemErrors.TooMany;
+        if (argc > 0 and not user_readable(as, argv, argc * 4))
+            return std::SystemErrors.BadAddress;
+        var used: u32 = 0;
+        for (var i: u32 = 0; i < argc; i++) {
+            r = __internal::copy_user_string(as, *cast<u32*>(argv + i * 4), &g_spawn_strings[used], ARGS_BYTES - used);
+            if (r < 0)
+                return r;
+            g_spawn_argv[i] = &g_spawn_strings[used];
+            used += cast<u32>(r) + 1;
+        }
+        var err: i32 = 0;
+        var child: Process* = process_start(g_spawn_path, argc, g_spawn_argv, g_current->pid, &err);
+        if (not child)
+            return err;
+        return cast<i32>(child->pid);
+	}
+
+	// Sleep(ms): the process waits at least ms milliseconds. 0 when it wakes.
+	sub sys_sleep(var ms: u32) -> i32 {
+	    if (ms == 0)
+	        return std::Ok;                                   // nothing to wait for (later: a yield)
+	    if (ms > 0x7FFFFFFF)
+	        ms = 0x7FFFFFFF;                                  // ~24.8 days: wake_sleepers compares the times signed
+	    g_current->wake_time = dr::time_get_millis() + ms;
+	    g_sleepers++;
+	    block_current(BlockReason.Sleep);                     // doesn't return: wake() sets its rv
+	    return std::Ok;
+	}
+
+	namespace __internal {
+		// Copies a 0-terminated string from the process into buffer (capacity bytes, with the 0),
+		// checking each page it reaches. Its length, or an error.
+		sub copy_user_string(var as: AddressSpace*, var src: u32, var buffer: u8*, var capacity: u32) -> i32 {
+	        for (var i: u32 = 0; i < capacity; i++) {
+		        var a: u32 = src + i;
+		        if ((i == 0 or (a & (PAGE_SIZE - 1)) == 0) and not user_readable(as, a, 1))
+		            return std::SystemErrors.BadAddress; // (checked once per page)
+		        buffer[i] = *cast<u8*>(a);
+		        if (buffer[i] == 0)
+	            	return cast<i32>(i);
+		    }
+		    return std::SystemErrors.TooLong;
+		}
+
+		// argv's strings and the pointer array (ending with a 0, as in C) at the top of p's user stack:
+		// in its own memory, where its main reads them. The SP it starts with.
+		sub push_args(var p: Process*, var argc: u32, var argv: u8**, var out_argv: u32*) -> u32 {
+	        var sp: u32 = p->user_stack_top + 4;              // the end of the stack
+	        var ptrs: u32[MAX_ARGS + 1];
+	        for (var i: u32 = 0; i < argc; i++) {
+                var len: u32 = std::strlen(argv[i]) + 1;
+                sp -= len;
+                std::memcpy(cast<void*>(sp), argv[i], len);
+                ptrs[i] = sp;
+	        }
+	        ptrs[argc] = 0;
+	        sp &= ~3;                                          // the array: word-aligned
+	        sp -= (argc + 1) * 4;
+	        std::memcpy(cast<void*>(sp), ptrs, (argc + 1) * 4);
+	        *out_argv = sp;
+	        return sp - 4;                                     // SP is the next free word
+		}
+	}
+}

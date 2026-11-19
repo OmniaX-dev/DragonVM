@@ -27,8 +27,8 @@
 //     '/'. A whole path is at most MaxPath - 1 bytes where dr::fs has to build one (make_dirs,
 //     remove_all).
 //   - Subs that can fail return a bool (or a count, -1 on errors). The reason is in
-//     last_error() (a dr::dfs error, or one of the dr::fs ones below), and error_text()
-//     describes it.
+//     last_error() (a std::FsErrors, std::FileErrors or std::SystemErrors code), and
+//     error_text() describes it (std::error_name).
 //   - The BIOS must have run (the heap, the disk interrupt): Drake, a kernel, or drun --boot.
 //   - Nothing is cached or buffered here: every call reaches the disk when it returns.
 //   - Not thread or interrupt safe: don't use the same FileSystem from an interrupt handler.
@@ -38,30 +38,8 @@ namespace dr::fs {
 	const MaxPath: u32 = 256;			// the longest path dr::fs builds itself, with its 0
 	const MaxName: u32 = 56;			// the longest name in a directory
 
-	// dr::fs's own errors (dr::dfs's go from -1 to -14).
-	const NotMounted: i32 = -20;		// the FileSystem isn't mounted
-	const AlreadyMounted: i32 = -21;	// mount / format on a mounted FileSystem
-	const NoPartition: i32 = -22;		// no DPT, or no partition with that number
-	const NoMemory: i32 = -23;			// dr::bios_alloc failed
-	const NotOpen: i32 = -24;			// a closed File / Dir (or its FileSystem was unmounted)
-	const NotReadable: i32 = -25;		// reading a File opened without OpenMode.Read
-	const NotWritable: i32 = -26;		// writing a File opened without OpenMode.Write
-	const PathTooLong: i32 = -27;		// longer than MaxPath - 1
-	const BadMode: i32 = -28;			// an OpenMode combination that makes no sense
-
-	// The description of any error dr::fs returns (its own and dr::dfs's).
-	sub error_name(var error: i32) -> string {
-		if (error == NotMounted) return "not mounted";
-		if (error == AlreadyMounted) return "already mounted";
-		if (error == NoPartition) return "no such partition";
-		if (error == NoMemory) return "out of memory";
-		if (error == NotOpen) return "not open";
-		if (error == NotReadable) return "not open for reading";
-		if (error == NotWritable) return "not open for writing";
-		if (error == PathTooLong) return "path too long";
-		if (error == BadMode) return "invalid open mode";
-		return dr::dfs::error_name(error);
-	}
+	// Errors: std::FileErrors and std::FsErrors (libcore; dr::fs passes dr::dfs's on), plus
+	// std::SystemErrors.NoMemory. std::error_name describes any of them.
 
 	enum Type: u8 {
 		None,							// doesn't exist
@@ -171,6 +149,7 @@ namespace dr::fs {
 		priv var m_dev: dr::dfs::Device;
 		priv var m_error: i32 = 0;
 		priv var m_generation: u32 = 0;		// counts the mounts: Files / Dirs of an older mount are closed
+		priv var m_number: u32 = 0;			// the partition number given to mount (0: mount_partition / mount_device)
 
 		// ---- Mounting ----
 
@@ -181,14 +160,18 @@ namespace dr::fs {
 			var part: dr::dfs::DiskPartition;
 			if (not this->find_partition(number, &part))
 				return false;
-			return this->mount_partition(&part, read_only);
+			if (not this->mount_partition(&part, read_only))
+				return false;
+			this->m_number = number;
+			return true;
 		}
 
 		// Mounts the partition at an explicit place (any disk).
 		sub mount_partition(var part: dr::dfs::DiskPartition*, var read_only: bool = false) -> bool {
 			if (this->m_vol != null)
-				return this->fail(AlreadyMounted);
+				return this->fail(std::FileErrors.AlreadyMounted);
 			this->m_part = *part;
+			this->m_number = 0;
 			dr::dfs::disk_device(&this->m_dev, &this->m_part);
 			return this->open_volume(read_only);
 		}
@@ -196,8 +179,9 @@ namespace dr::fs {
 		// Mounts DFS on any device (a RAM disk, ...). The device's user data must outlive the mount.
 		sub mount_device(var dev: dr::dfs::Device*, var read_only: bool = false) -> bool {
 			if (this->m_vol != null)
-				return this->fail(AlreadyMounted);
+				return this->fail(std::FileErrors.AlreadyMounted);
 			this->m_dev = *dev;
+			this->m_number = 0;
 			return this->open_volume(read_only);
 		}
 
@@ -217,7 +201,7 @@ namespace dr::fs {
 		// sync, a crash loses nothing that was already written.
 		sub sync() -> bool {
 			if (this->m_vol == null)
-				return this->fail(NotMounted);
+				return this->fail(std::FileErrors.NotMounted);
 			return this->check(dr::dfs::sync(this->m_vol));
 		}
 
@@ -236,18 +220,18 @@ namespace dr::fs {
 		// Formats a device (size bytes) with DFS.
 		sub format_device(var dev: dr::dfs::Device*, var size: u32, var label: string = null, var block_size: u32 = 0) -> bool {
 			if (this->m_vol != null)
-				return this->fail(AlreadyMounted);
+				return this->fail(std::FileErrors.AlreadyMounted);
 			var log2: u32 = 0;
 			if (block_size != 0) {
 				log2 = 9;
 				while (log2 < 12 and (cast<u32>(1) << log2) != block_size)
 					log2++;
 				if ((cast<u32>(1) << log2) != block_size)
-					return this->fail(dr::dfs::Invalid);
+					return this->fail(std::FsErrors.Invalid);
 			}
 			var vol: dr::dfs::Volume* = cast<dr::dfs::Volume*>(dr::bios_alloc(sizeof(dr::dfs::Volume)));
 			if (vol == null)
-				return this->fail(NoMemory);
+				return this->fail(std::SystemErrors.NoMemory);
 			var params: dr::dfs::MkfsParams = { size, log2, 0, label, null };
 			var r: i32 = dr::dfs::mkfs(vol, dev, &params);
 			dr::bios_free(vol);
@@ -259,26 +243,29 @@ namespace dr::fs {
 		inline sub is_mounted() -> bool { return this->m_vol != null; }
 		sub is_read_only() -> bool { return this->m_vol != null and this->m_vol->read_only; }
 
-		// The last error (0 after a success): a dr::fs or dr::dfs error code.
+		// The last error (std::Ok after a success): a std::FsErrors / FileErrors / SystemErrors code.
 		inline sub last_error() -> i32 { return this->m_error; }
 		// Its description ("not found").
-		sub error_text() -> string { return error_name(this->m_error); }
+		sub error_text() -> string { return std::error_name(this->m_error); }
 
 		// The partition's numbers (0 when not mounted).
 		sub block_size() -> u32 { return this->m_vol == null ? 0 : this->m_vol->layout.block_size; }
 		sub total_bytes() -> u32 { return this->m_vol == null ? 0 : this->m_vol->layout.total_blocks << this->m_vol->layout.block_size_log2; }
 		sub free_bytes() -> u32 { return this->m_vol == null ? 0 : this->m_vol->sb.free_blocks << this->m_vol->layout.block_size_log2; }
+		// The boot disk partition number given to mount (1 = the first): 0 when not mounted, or
+		// mounted with mount_partition / mount_device.
+		inline sub partition_number() -> u32 { return this->m_vol == null ? 0 : this->m_number; }
 		// How many more files and directories fit.
 		sub free_inodes() -> u32 { return this->m_vol == null ? 0 : this->m_vol->sb.free_inodes; }
 		// The label given to format (up to 16 bytes) into buffer (17 bytes are always enough).
 		sub label(var buffer: u8*, var capacity: u32) -> bool {
 			if (this->m_vol == null)
-				return this->fail(NotMounted);
+				return this->fail(std::FileErrors.NotMounted);
 			var len: u32 = 0;
 			while (len < 16 and this->m_vol->sb.label[len] != 0)
 				len++;
 			if (len + 1 > capacity)
-				return this->fail(dr::dfs::NameTooLong);
+				return this->fail(std::FsErrors.NameTooLong);
 			std::memcpy(buffer, this->m_vol->sb.label, len);
 			buffer[len] = 0;
 			return this->ok();
@@ -325,7 +312,7 @@ namespace dr::fs {
 		// A file bigger than capacity gives its first capacity bytes.
 		sub read_all(var path: string, var buffer: u8*, var capacity: u32) -> i32 {
 			if (this->m_vol == null)
-				return this->fail_count(NotMounted);
+				return this->fail_count(std::FileErrors.NotMounted);
 			return this->count(dr::dfs::read_file(this->m_vol, path, buffer, capacity));
 		}
 
@@ -337,12 +324,12 @@ namespace dr::fs {
 			if (not this->stat_path(path, &node, null))
 				return null;
 			if (type_from_mode(node.mode) != Type.File) {
-				this->fail(dr::dfs::IsDir);
+				this->fail(std::FsErrors.IsDir);
 				return null;
 			}
 			var data: u8* = cast<u8*>(dr::bios_alloc(node.size + 1));
 			if (data == null) {
-				this->fail(NoMemory);
+				this->fail(std::SystemErrors.NoMemory);
 				return null;
 			}
 			var r: i32 = dr::dfs::inode_read(this->m_vol, &node, 0, data, node.size);
@@ -361,10 +348,10 @@ namespace dr::fs {
 		// Creates the file, or replaces its content, with size bytes of data.
 		sub write_all(var path: string, var data: void*, var size: u32) -> bool {
 			if (this->m_vol == null)
-				return this->fail(NotMounted);
+				return this->fail(std::FileErrors.NotMounted);
 			var r: i32 = dr::dfs::write_file(this->m_vol, path, cast<u8*>(data), size);
 			if (r >= 0 and cast<u32>(r) != size)
-				r = dr::dfs::NoSpace;
+				r = std::FsErrors.NoSpace;
 			return this->check(r);
 		}
 
@@ -382,7 +369,7 @@ namespace dr::fs {
 			var error: i32 = file.last_error();
 			file.close();
 			if (r < 0 or cast<u32>(r) != size)
-				return this->fail(error != 0 ? error : dr::dfs::NoSpace);
+				return this->fail(error != 0 ? error : std::FsErrors.NoSpace);
 			return this->ok();
 		}
 
@@ -396,7 +383,7 @@ namespace dr::fs {
 		// something with that name.
 		sub make_dir(var path: string) -> bool {
 			if (this->m_vol == null)
-				return this->fail(NotMounted);
+				return this->fail(std::FileErrors.NotMounted);
 			return this->check(dr::dfs::mkdir(this->m_vol, path, 0x1ED));		// 0755
 		}
 
@@ -404,10 +391,10 @@ namespace dr::fs {
 		// exists as a directory.
 		sub make_dirs(var path: string) -> bool {
 			if (this->m_vol == null)
-				return this->fail(NotMounted);
+				return this->fail(std::FileErrors.NotMounted);
 			var buffer: u8[256];
 			if (not copy_string(buffer, MaxPath, path))
-				return this->fail(PathTooLong);
+				return this->fail(std::FileErrors.PathTooLong);
 			var len: u32 = std::strlen(buffer);
 			// Each prefix ending before a '/', then the whole path.
 			for (var i: u32 = 1; i <= len; i++) {
@@ -418,9 +405,9 @@ namespace dr::fs {
 				var saved: u8 = buffer[i];
 				buffer[i] = 0;
 				var r: i32 = dr::dfs::mkdir(this->m_vol, buffer, 0x1ED);
-				if (r == dr::dfs::Exists) {
+				if (r == std::FsErrors.Exists) {
 					if (this->type_of(buffer) != Type.Directory)
-						return this->fail(dr::dfs::NotDir);
+						return this->fail(std::FsErrors.NotDir);
 				}
 				else if (r < 0)
 					return this->fail(r);
@@ -432,7 +419,7 @@ namespace dr::fs {
 		// Removes a file, or an empty directory.
 		sub remove(var path: string) -> bool {
 			if (this->m_vol == null)
-				return this->fail(NotMounted);
+				return this->fail(std::FileErrors.NotMounted);
 			var node: dr::dfs::Inode;
 			if (not this->stat_path(path, &node, null))
 				return false;
@@ -445,7 +432,7 @@ namespace dr::fs {
 		// is emptied). Careful: nothing asks for confirmation.
 		sub remove_all(var path: string) -> bool {
 			if (this->m_vol == null)
-				return this->fail(NotMounted);
+				return this->fail(std::FileErrors.NotMounted);
 			var node: dr::dfs::Inode;
 			var ino: u32 = 0;
 			if (not this->stat_path(path, &node, &ino))
@@ -459,7 +446,7 @@ namespace dr::fs {
 			var child: u8[256];
 			while (dir.next(&entry)) {
 				if (not join_path(child, MaxPath, path, entry.name))
-					return this->fail(PathTooLong);
+					return this->fail(std::FileErrors.PathTooLong);
 				if (not this->remove_all(child))
 					return false;
 			}
@@ -474,7 +461,7 @@ namespace dr::fs {
 		// Renames or moves a file or directory. The destination must not exist.
 		sub rename(var from: string, var to: string) -> bool {
 			if (this->m_vol == null)
-				return this->fail(NotMounted);
+				return this->fail(std::FileErrors.NotMounted);
 			return this->check(dr::dfs::rename(this->m_vol, from, to));
 		}
 
@@ -485,7 +472,7 @@ namespace dr::fs {
 			if (not this->info(from, &a))
 				return false;
 			if (a.type != Type.File)
-				return this->fail(dr::dfs::IsDir);
+				return this->fail(std::FsErrors.IsDir);
 			if (this->info(to, &b) and b.inode == a.inode)
 				return this->ok();					// the same file (or a hard link to it)
 			var src: File;
@@ -498,7 +485,7 @@ namespace dr::fs {
 			defer dst.close();
 			var chunk: u8* = cast<u8*>(dr::bios_alloc(4096));
 			if (chunk == null)
-				return this->fail(NoMemory);
+				return this->fail(std::SystemErrors.NoMemory);
 			defer dr::bios_free(chunk);
 			while (true) {
 				var n: i32 = src.read(chunk, 4096);
@@ -508,7 +495,7 @@ namespace dr::fs {
 					break;
 				var w: i32 = dst.write(chunk, cast<u32>(n));
 				if (w != n)
-					return this->fail(dst.last_error() != 0 ? dst.last_error() : dr::dfs::NoSpace);
+					return this->fail(dst.last_error() != 0 ? dst.last_error() : std::FsErrors.NoSpace);
 			}
 			return this->ok();
 		}
@@ -517,7 +504,7 @@ namespace dr::fs {
 		// one keeps the other). Not for directories.
 		sub link(var existing: string, var new_path: string) -> bool {
 			if (this->m_vol == null)
-				return this->fail(NotMounted);
+				return this->fail(std::FileErrors.NotMounted);
 			return this->check(dr::dfs::link(this->m_vol, existing, new_path));
 		}
 
@@ -529,7 +516,7 @@ namespace dr::fs {
 			if (not this->stat_path(path, &node, &ino))
 				return false;
 			if (type_from_mode(node.mode) != Type.File)
-				return this->fail(dr::dfs::IsDir);
+				return this->fail(std::FsErrors.IsDir);
 			return this->check(dr::dfs::truncate(this->m_vol, ino, &node, size));
 		}
 
@@ -537,12 +524,12 @@ namespace dr::fs {
 		// enforcing them is up to the OS.
 		sub set_permissions(var path: string, var permissions: u16) -> bool {
 			if (this->m_vol == null)
-				return this->fail(NotMounted);
+				return this->fail(std::FileErrors.NotMounted);
 			return this->check(dr::dfs::chmod(this->m_vol, path, permissions));
 		}
 		sub set_owner(var path: string, var uid: u16, var gid: u16) -> bool {
 			if (this->m_vol == null)
-				return this->fail(NotMounted);
+				return this->fail(std::FileErrors.NotMounted);
 			return this->check(dr::dfs::chown(this->m_vol, path, uid, gid));
 		}
 
@@ -575,28 +562,28 @@ namespace dr::fs {
 		sub open(var path: string, var mode: u32, var out: File*) -> bool {
 			out->reset();
 			if (this->m_vol == null)
-				return this->fail(NotMounted);
+				return this->fail(std::FileErrors.NotMounted);
 			var needs_write: u32 = OpenMode.Create | OpenMode.Truncate | OpenMode.Append;
 			if ((mode & (OpenMode.Read | OpenMode.Write)) == 0 or ((mode & needs_write) != 0 and (mode & OpenMode.Write) == 0))
-				return this->fail(BadMode);
+				return this->fail(std::FileErrors.BadMode);
 			if ((mode & OpenMode.Write) != 0 and this->m_vol->read_only)
-				return this->fail(dr::dfs::ReadOnly);
+				return this->fail(std::FsErrors.ReadOnly);
 			var node: dr::dfs::Inode;
 			var ino: u32 = 0;
 			var r: i32 = dr::dfs::stat(this->m_vol, path, &node, &ino);
-			if (r == dr::dfs::NotFound and (mode & OpenMode.Create) != 0) {
+			if (r == std::FsErrors.NotFound and (mode & OpenMode.Create) != 0) {
 				r = dr::dfs::create(this->m_vol, path, 0x1A4, &ino);		// 0644
 				if (r < 0) return this->fail(r);
 				r = dr::dfs::read_inode(this->m_vol, ino, &node);
 			}
-			else if (r == dr::dfs::Ok and (mode & OpenMode.Create) != 0 and (mode & OpenMode.Exclusive) != 0)
-				return this->fail(dr::dfs::Exists);
+			else if (r == std::Ok and (mode & OpenMode.Create) != 0 and (mode & OpenMode.Exclusive) != 0)
+				return this->fail(std::FsErrors.Exists);
 			if (r < 0)
 				return this->fail(r);
 			if (type_from_mode(node.mode) == Type.Directory)
-				return this->fail(dr::dfs::IsDir);
+				return this->fail(std::FsErrors.IsDir);
 			if (type_from_mode(node.mode) != Type.File)
-				return this->fail(dr::dfs::Invalid);
+				return this->fail(std::FsErrors.Invalid);
 			if ((mode & OpenMode.Truncate) != 0 and node.size != 0) {
 				r = dr::dfs::truncate(this->m_vol, ino, &node, 0);
 				if (r < 0) return this->fail(r);
@@ -613,7 +600,7 @@ namespace dr::fs {
 			if (not this->stat_path(path, &node, &ino))
 				return false;
 			if (type_from_mode(node.mode) != Type.Directory)
-				return this->fail(dr::dfs::NotDir);
+				return this->fail(std::FsErrors.NotDir);
 			out->attach(this, ino);
 			return true;
 		}
@@ -622,10 +609,10 @@ namespace dr::fs {
 
 		priv sub find_partition(var number: u32, var out: dr::dfs::DiskPartition*) -> bool {
 			if (this->m_vol != null)
-				return this->fail(AlreadyMounted);
+				return this->fail(std::FileErrors.AlreadyMounted);
 			var dpt: dr::DPTBlock;
 			if (not dr::dpt_load_block(&dpt) or number < 1 or number > dpt.partitionCount or number > dr::DPTStructure.MaxPartitions)
-				return this->fail(NoPartition);
+				return this->fail(std::FileErrors.NoPartition);
 			dr::dfs::dpt_partition(out, &dpt.entries[number - 1]);
 			return true;
 		}
@@ -633,7 +620,7 @@ namespace dr::fs {
 		priv sub open_volume(var read_only: bool) -> bool {
 			var vol: dr::dfs::Volume* = cast<dr::dfs::Volume*>(dr::bios_alloc(sizeof(dr::dfs::Volume)));
 			if (vol == null)
-				return this->fail(NoMemory);
+				return this->fail(std::SystemErrors.NoMemory);
 			var r: i32 = dr::dfs::mount(vol, &this->m_dev, read_only);
 			if (r < 0) {
 				dr::bios_free(vol);
@@ -646,7 +633,7 @@ namespace dr::fs {
 
 		priv sub stat_path(var path: string, var node: dr::dfs::Inode*, var ino: u32*) -> bool {
 			if (this->m_vol == null)
-				return this->fail(NotMounted);
+				return this->fail(std::FileErrors.NotMounted);
 			return this->check(dr::dfs::stat(this->m_vol, path, node, ino));
 		}
 
@@ -698,7 +685,7 @@ namespace dr::fs {
 			if (not this->load(&node))
 				return -1;
 			if ((this->m_mode & OpenMode.Read) == 0)
-				return this->fail_count(NotReadable);
+				return this->fail_count(std::FileErrors.NotReadable);
 			var r: i32 = dr::dfs::inode_read(this->m_fs->volume(), &node, this->m_pos, cast<u8*>(buffer), size);
 			if (r < 0)
 				return this->fail_count(r);
@@ -712,7 +699,7 @@ namespace dr::fs {
 		// of the file or on errors. A longer line is returned in pieces of capacity - 1 bytes.
 		sub read_line(var buffer: u8*, var capacity: u32) -> i32 {
 			if (capacity < 2)
-				return this->fail_count(dr::dfs::Invalid);
+				return this->fail_count(std::FsErrors.Invalid);
 			var start: u32 = this->m_pos;
 			var n: i32 = this->read(buffer, capacity - 1);
 			if (n <= 0)
@@ -736,14 +723,14 @@ namespace dr::fs {
 			if (not this->load(&node))
 				return -1;
 			if ((this->m_mode & OpenMode.Write) == 0)
-				return this->fail_count(NotWritable);
+				return this->fail_count(std::FileErrors.NotWritable);
 			if ((this->m_mode & OpenMode.Append) != 0)
 				this->m_pos = node.size;
 			var r: i32 = dr::dfs::inode_write(this->m_fs->volume(), this->m_ino, &node, this->m_pos, cast<u8*>(data), size);
 			if (r < 0)
 				return this->fail_count(r);
 			this->m_pos += cast<u32>(r);
-			this->m_error = (cast<u32>(r) == size ? 0 : dr::dfs::NoSpace);
+			this->m_error = (cast<u32>(r) == size ? 0 : std::FsErrors.NoSpace);
 			return r;
 		}
 
@@ -765,7 +752,7 @@ namespace dr::fs {
 			else if (from == SeekFrom.End)
 				base = cast<i32>(node.size);
 			if (base + offset < 0)
-				return this->fail(dr::dfs::Invalid);
+				return this->fail(std::FsErrors.Invalid);
 			this->m_pos = cast<u32>(base + offset);
 			this->m_error = 0;
 			return true;
@@ -796,7 +783,7 @@ namespace dr::fs {
 			if (not this->load(&node))
 				return false;
 			if ((this->m_mode & OpenMode.Write) == 0)
-				return this->fail(NotWritable);
+				return this->fail(std::FileErrors.NotWritable);
 			var r: i32 = dr::dfs::truncate(this->m_fs->volume(), this->m_ino, &node, size);
 			if (r < 0)
 				return this->fail(r);
@@ -818,7 +805,7 @@ namespace dr::fs {
 
 		inline sub is_open() -> bool { return this->m_fs != null; }
 		inline sub last_error() -> i32 { return this->m_error; }
-		sub error_text() -> string { return error_name(this->m_error); }
+		sub error_text() -> string { return std::error_name(this->m_error); }
 
 		// ---- Inside (FileSystem.open uses these) ----
 		sub reset() {
@@ -835,15 +822,15 @@ namespace dr::fs {
 			this->m_generation = fs->generation();
 			this->m_error = 0;
 		}
-		// The inode as it is now; false (NotOpen, NotFound, ...) if the File can't be used.
+		// The inode as it is now; false (std::FileErrors.NotOpen, NotFound, ...) if the File can't be used.
 		priv sub load(var node: dr::dfs::Inode*) -> bool {
 			if (this->m_fs == null or not this->m_fs->is_mounted() or this->m_fs->generation() != this->m_generation)
-				return this->fail(NotOpen);
+				return this->fail(std::FileErrors.NotOpen);
 			var r: i32 = dr::dfs::read_inode(this->m_fs->volume(), this->m_ino, node);
 			if (r < 0)
 				return this->fail(r);
 			if (type_from_mode(node->mode) != Type.File)
-				return this->fail(dr::dfs::NotFound);		// removed meanwhile
+				return this->fail(std::FsErrors.NotFound);		// removed meanwhile
 			return true;
 		}
 		priv sub fail(var error: i32) -> bool {
@@ -881,7 +868,7 @@ namespace dr::fs {
 		// error.
 		sub next(var out: Entry*) -> bool {
 			if (this->m_fs == null or not this->m_fs->is_mounted() or this->m_fs->generation() != this->m_generation) {
-				this->m_error = NotOpen;
+				this->m_error = std::FileErrors.NotOpen;
 				return false;
 			}
 			var vol: dr::dfs::Volume* = this->m_fs->volume();
@@ -894,7 +881,7 @@ namespace dr::fs {
 			var entry: dr::dfs::DirEntry;
 			while (true) {
 				r = dr::dfs::dir_next(vol, &dir, &this->m_cursor, &entry);
-				if (r == dr::dfs::NotFound) {
+				if (r == std::FsErrors.NotFound) {
 					this->m_error = 0;
 					return false;
 				}
@@ -910,7 +897,7 @@ namespace dr::fs {
 			out->type = type_from_mode(cast<u16>(cast<u32>(entry.type) << 12));
 			out->size = 0;
 			var node: dr::dfs::Inode;
-			if (dr::dfs::read_inode(vol, entry.inode, &node) == dr::dfs::Ok)
+			if (dr::dfs::read_inode(vol, entry.inode, &node) == std::Ok)
 				out->size = node.size;
 			this->m_error = 0;
 			return true;
@@ -922,7 +909,7 @@ namespace dr::fs {
 		sub close() { this->reset(); }
 		inline sub is_open() -> bool { return this->m_fs != null; }
 		inline sub last_error() -> i32 { return this->m_error; }
-		sub error_text() -> string { return error_name(this->m_error); }
+		sub error_text() -> string { return std::error_name(this->m_error); }
 
 		// ---- Inside (FileSystem.open_dir uses these) ----
 		sub reset() {

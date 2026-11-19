@@ -9,6 +9,11 @@ namespace std::rand {
 		syscall(SystemCalls.Random, &n);
 		return n;
 	}
+	sub next_in_range(var min_inclusive: i32, var max_inclusive: i32) -> i32 {
+		if (min_inclusive == max_inclusive) return min_inclusive;
+		if (min_inclusive > max_inclusive) return next_in_range(max_inclusive, min_inclusive);
+		return min_inclusive + cast<u32>(next()) / (cast<u32>(std::INT32_MAX) / (cast<u32>(max_inclusive) - cast<u32>(min_inclusive) + 1) + 1);
+	}
 	sub next_float() -> f32 {
 		var n: u32 = 0;
 		syscall(SystemCalls.RandomF32, &n);

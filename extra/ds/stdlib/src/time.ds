@@ -28,13 +28,9 @@ namespace std::time {
 		return n;
 	}
 
-	// Waits ms milliseconds, by the timer: right at any clock speed (also uncapped). Interrupts
-	// keep running meanwhile (their handlers' time counts as part of the wait).
-	sub sleep(var ms: i32) {
-		if (ms <= 0)
-			return;
-		var start: u32 = millis();
-		while (millis() - start < cast<u32>(ms));
+	inline sub sleep(var ms: i32) {
+		if (ms <= 0) return;
+		std::sleep(ms);
 	}
 
 	struct Timer {

@@ -136,7 +136,8 @@
               writable in supervisor mode: the only writable register)
         0x14: NextInterrupt: the time (milliseconds) of the next one (4 bytes)
         (dvm: real time, right at any clock speed, also uncapped; ddb and drun: machine time,
-        cycles / clock_rate_sec, so runs and the debugger's history are reproducible)
+        cycles / clock_rate_sec (ddb: debug_clock_rate_sec when the config sets it), so runs
+        and the debugger's history are reproducible)
     0x0100069F
     -------
     0x010006A0 RANDOM (16 Bytes) (random numbers from the host's generator, seeded from the host clock at start)

@@ -1,0 +1,12 @@
+#import(<dragon-sdk>)
+
+#include(fault.ds)
+#include(args.ds)
+
+var g_root_fs: dr::fs::FileSystem;
+
+sub init_root_filesystem() {
+	var part_n: u32 = 0;
+	kernel_assert(std::atou(g_argv[2], &part_n), "Invalid partition number for root filesystem");
+	kernel_assert(g_root_fs.mount(part_n, false), "Failed to mount root partition");
+}

@@ -45,8 +45,8 @@ sub print_logo() {
 
 sub main(var argc: i32, var argv: string*) -> i32 {
 	init_interrupt_vector();
-	init_video();
-	kernel_assert(argc > 1, "Missing arguments to load the kernel.");
+	vga::init_video();
+	kernel_assert(argc > 2, "Missing arguments to load the kernel.");
 	print_logo();
 	init_allocator(argc, argv);
 	copy_args(g_heap, argc, argv);

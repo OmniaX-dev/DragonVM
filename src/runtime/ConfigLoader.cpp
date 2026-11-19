@@ -83,6 +83,13 @@ namespace dragon
 				if (!lineEdit.isNumeric()) continue; //TODO: Error
 				config.clock_rate_sec = lineEdit.toInt();
 			}
+			else if (lineEdit == "debug_clock_rate_sec")
+			{
+				lineEdit = tokens.next();
+				lineEdit.trim().toLower();
+				if (!lineEdit.isNumeric()) continue; //TODO: Error
+				config.debug_clock_rate_sec = lineEdit.toInt();
+			}
 			else if (lineEdit == "fixed_clock")
 			{
 				lineEdit = tokens.next();

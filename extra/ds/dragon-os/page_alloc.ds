@@ -27,17 +27,34 @@ struct PageAllocator {
 		std::memset(storage, 0xFF, PageAllocator::bitmap_bytes(base, end));
 	}
 
-	// The whole pages inside [addr, addr + size) become free (rounded inwards).
+	// The whole pages inside [addr, addr + size) become free (rounded inwards). The pages at the
+	// ends one by one, the whole bitmap words between them (32 pages each) at once.
 	sub add_free(var addr: u32, var size: u32) {
 		var first: u32 = 0;
 		var last: u32 = 0;              // (one past)
 		if (not this->__inner(addr, size, &first, &last))
 			return;
-		for (var p: u32 = first; p < last; p++) {
-			if (this->__used(p)) {
-				this->__set(p, false);
-				this->_free++;
+		var p: u32 = first;
+		while (p < last and (p & 31) != 0) {        // up to a word boundary: one by one
+			this->__free_one(p);
+			p++;
+		}
+		while (p + 32 <= last) {                    // whole words: 32 pages at once
+			var w: u32 = this->bits[p >> 5];
+			if (w == 0xFFFFFFFF)
+				this->_free += 32;                  // (the usual case: all used)
+			else {
+				while (w != 0) {                    // count the used ones (clears the lowest set bit)
+					w = w & (w - 1);
+					this->_free++;
+				}
 			}
+			this->bits[p >> 5] = 0;
+			p += 32;
+		}
+		while (p < last) {                          // the rest: one by one
+			this->__free_one(p);
+			p++;
 		}
 	}
 
@@ -94,20 +111,42 @@ struct PageAllocator {
 		return true;
 	}
 
+	// The pages that hold bytes (rounded up): 0 for 0 bytes.
+    static inline sub pages_for(var bytes: u32) -> u32 {
+    	return (bytes >> PAGE_SHIFT) + ((bytes & (PAGE_SIZE - 1)) != 0 ? 1 : 0);
+    }
+
+    // Enough contiguous pages for bytes: their address, 0 if there is no such run (or bytes is 0).
+    inline sub alloc_bytes(var bytes: u32) -> u32 {
+        return this->alloc(PageAllocator::pages_for(bytes));
+    }
+
+    // Gives back what alloc_bytes(bytes) returned (the same bytes).
+    inline sub free_bytes(var addr: u32, var bytes: u32) -> bool {
+        return this->free(addr, PageAllocator::pages_for(bytes));
+    }
+
 	sub free_pages() -> u32 { return this->_free; }
 	sub total_pages() -> u32 { return this->count; }
 
 	// ===== The implementation =====
 
-	priv sub __used(var p: u32) -> bool {
+	priv inline sub __used(var p: u32) -> bool {
 		return ((this->bits[p >> 5] >> (p & 31)) & 1) != 0;
 	}
-	priv sub __set(var p: u32, var used: bool) {
+	priv inline sub __set(var p: u32, var used: bool) {
 		var mask: u32 = cast<u32>(1) << (p & 31);
 		if (used)
 			this->bits[p >> 5] = this->bits[p >> 5] | mask;
 		else
 			this->bits[p >> 5] = this->bits[p >> 5] & ~mask;
+	}
+
+	priv inline sub __free_one(var p: u32) {
+		if (this->__used(p)) {
+			this->__set(p, false);
+			this->_free++;
+		}
 	}
 
 	// The first run of n free pages in [from, to): its first page, or 0xFFFFFFFF.

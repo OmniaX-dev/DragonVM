@@ -1,18 +1,57 @@
 #import(<dragon-sdk>)
 
 #include(fault.ds)
+#include(sched.ds)
+const MAX_PRINT_LEN = 512;
+const SYSCALL: u32 										= 0x40;
 
-const SYSCALL: u32 = 0x40;
-const SYSCALL_EXIT: u32 = 0x00_10;
-const SYSCALL_PRINT: u32 = 0x00_11;
+const SYSCALL_EXIT: u32 								= 0x00_10;
+const SYSCALL_PRINT: u32 								= 0x00_11;
 
-const SYSCALL_RANDOM: u32 = 0x10_00;
-const SYSCALL_RANDOM_F32: u32 = 0x10_01;
-const SYSCALL_SEED_RANDOM: u32 = 0x10_02;
+// const SYSCALL_GET_PID: u32 								= 0x01_00;
+// const SYSCALL_GET_PARENT_PID: u32 						= 0x01_01;
+// const SYSCALL_YIELD: u32 								= 0x01_02;
+const SYSCALL_SPAWN: u32 								= 0x01_03;
+const SYSCALL_WAIT: u32 								= 0x01_04;
+const SYSCALL_SLEEP: u32 								= 0x01_05;
+// const SYSCALL_KILL: u32 								= 0x01_06;
 
-const SYSCALL_TIME_MILLIS: u32 = 0x11_00;
-const SYSCALL_TIME_CYCLES: u32 = 0x11_01;
-const SYSCALL_TIME_UNIX: u32 = 0x11_02;
+// const SYSCALL_ALLOC_PAGES: u32							= 0x02_00;
+// const SYSCALL_FREE_PAGES: u32							= 0x02_01;
+
+// const SYSCALL_READ_KEY: u32 							= 0x03_00;
+// const SYSCALL_CONSOLE_CLEAR: u32						= 0x03_01;
+// const SYSCALL_CONSOLE_SET_COLOR: u32					= 0x03_02;
+// const SYSCALL_CONSOLE_SET_CURSOR: u32					= 0x03_03;
+
+// const SYSCALL_OPEN: u32 								= 0x04_00;
+// const SYSCALL_CLOSE: u32 								= 0x04_01;
+// const SYSCALL_READ: u32 								= 0x04_02;
+// const SYSCALL_WRITE: u32 								= 0x04_03;
+// const SYSCALL_SEEK: u32 								= 0x04_04;
+// const SYSCALL_TRUNCATE: u32 							= 0x04_05;
+// const SYSCALL_FSTAT: u32 								= 0x04_06;
+// const SYSCALL_STAT: u32 								= 0x04_07;
+
+// const SYSCALL_OPEN_DIR: u32 							= 0x05_00;
+// const SYSCALL_READ_DIR: u32 							= 0x05_01;
+// const SYSCALL_MAKE_DIR: u32 							= 0x05_02;
+// const SYSCALL_REMOVE: u32 								= 0x05_03;
+// const SYSCALL_RENAME: u32 								= 0x05_04;
+// const SYSCALL_LINK: u32 								= 0x05_05;
+// const SYSCALL_STAT_FS: u32 								= 0x05_06;
+
+// const SYSCALL_SYS_INFO: u32 							= 0x06_00;
+// const SYSCALL_PROCESS_LIST: u32 						= 0x06_01;
+
+const SYSCALL_RANDOM: u32 								= 0x10_00;
+const SYSCALL_RANDOM_F32: u32 							= 0x10_01;
+const SYSCALL_SEED_RANDOM: u32 							= 0x10_02;
+// const SYSCALL_RANDOM_RANGE_INCLUSIVE: u32 				= 0x10_03;
+
+const SYSCALL_TIME_MILLIS: u32 							= 0x11_00;
+const SYSCALL_TIME_CYCLES: u32 							= 0x11_01;
+const SYSCALL_TIME_UNIX: u32 							= 0x11_02;
 
 struct SavedRegisters {
 	var r: u32[20];              // r[0] = R20 ... r[19] = R1   →  Rn = r[20 - n]
@@ -55,55 +94,84 @@ inline sub current_syscall_frame() -> SyscallFrame* { return cast<SyscallFrame*>
 namespace __internal {
 	interrupt sub on_fault() { __on_fault(); }
 
-	interrupt sub on_timer() {}
+	interrupt sub on_timer() {
+        var frame: u32 = dr::cpu::trap_frame();
+        if (proc::g_slice_left > 0) proc::g_slice_left--;        // every tick counts, in user mode or not
+        if (proc::g_slice_left > 0) return;
+        if (not dr::cpu::trap_from_user(frame)) return;       // the kernel isn't preempted
+        proc::g_current->frame = frame;
+        if (proc::g_current != proc::g_idle)
+            proc::g_current->state = proc::ProcessState.Ready;
+        proc::schedule();
+	}
 
 	interrupt sub on_syscall() {
+		proc::g_current->frame = dr::cpu::trap_frame();
 		var f: SyscallFrame* = current_syscall_frame();
 		var function: u32 = f->regs.R(9);
-		if (function == SYSCALL_PRINT)
+		var rv: i32 = std::Ok;
+// ===========================================================================
+		if (function == SYSCALL_EXIT)
 		{
-			on_print(f->regs.R(8), f->regs.R(7));
+        	proc::process_exit(proc::g_current, cast<i32>(f->regs.R(8))); // doesn't return
 		}
+		else if (function == SYSCALL_PRINT)
+		{
+			rv = vga::sys_print(cast<string>(f->regs.R(8)), f->regs.R(7) != 0);
+		}
+// ===========================================================================
+		else if (function == SYSCALL_SPAWN)
+		{
+			rv = proc::sys_spawn(f->regs.R(8), f->regs.R(7), f->regs.R(6));
+		}
+		else if (function == SYSCALL_WAIT)
+		{
+			rv = proc::sys_wait(cast<i32>(f->regs.R(8)), f->regs.R(7));      // R8 = pid, R7 = out_code
+		}
+		else if (function == SYSCALL_SLEEP)
+		{
+			rv = proc::sys_sleep(f->regs.R(8));
+		}
+// ===========================================================================
 		else if (function == SYSCALL_RANDOM)
 		{
-			var value: u32 = *cast<u32*>(dr::RandomRegisters.Int);
-			low { mov RV, $value }
+			rv = *cast<u32*>(dr::RandomRegisters.Int);
 		}
 		else if (function == SYSCALL_RANDOM_F32)
 		{
-			var value: u32 = *cast<u32*>(dr::RandomRegisters.Float);
-			low { mov RV, $value }
+			rv = *cast<u32*>(dr::RandomRegisters.Float);
 		}
 		else if (function == SYSCALL_SEED_RANDOM)
 		{
+			// TODO: lets any process reseed the one shared random generator, which changes every other process’s numbers
+			// and makes them predictable. That’s fine for now. Eventually the seed should be kernel-only, or each process
+			// should get its own generator state.
 			*cast<u32*>(dr::RandomRegisters.Seed) = f->regs.R(8);
 		}
+// ===========================================================================
 		else if (function == SYSCALL_TIME_MILLIS)
 		{
-			var value: u32 = *cast<u32*>(dr::TimerRegisters.Milliseconds);
-			low { mov RV, $value }
+			rv = *cast<u32*>(dr::TimerRegisters.Milliseconds);
 		}
 		else if (function == SYSCALL_TIME_CYCLES)
 		{
-			var value: u32 = *cast<u32*>(dr::TimerRegisters.CyclesLow);
-			low { mov RV, $value }
+			rv = *cast<u32*>(dr::TimerRegisters.CyclesLow);
 		}
 		else if (function == SYSCALL_TIME_UNIX)
 		{
-			var value: u32 = *cast<u32*>(dr::TimerRegisters.UnixTime);
-			low { mov RV, $value }
+			rv = *cast<u32*>(dr::TimerRegisters.UnixTime);
 		}
-	}
-
-	sub on_print(var param1: u32, var param2: u32) {
-		if (dr::vga_is_textSingle())
+// ===========================================================================
+		else
 		{
-			// param1 = u8* string
-			// param2 = new_line
-			dr::TextSingle.print(cast<u8*>(param1)); // TODO: Check the entire string is accessible by the calling process
-			if (param2 != 0)
-				dr::TextSingle.new_line();
+			rv = std::SystemErrors.NoSuchCall;
 		}
+		if (proc::g_slice_left == 0) {                           // the turn ran out during the call
+		    proc::g_current->rv = cast<u32>(rv);                 // switch_to puts it in RV when it runs again
+		    proc::g_current->state = proc::ProcessState.Ready;
+		    proc::schedule();                                    // doesn't return
+		}
+		low { mov RV, $rv }
 	}
 }
 
