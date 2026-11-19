@@ -1,4 +1,4 @@
-// A library with value templates (templates_library.ds): the template is in its interface (as written).
+// A library with value templates (templates_values_library.ds): the template is in its interface (as written).
 namespace sz {
 	struct Limits { var lo: i32; var hi: i32; };
 	constexpr PERCENT: Limits = { 0, 100 };

@@ -1,0 +1,13 @@
+// Value templates through a library (libs/sized.ds): a default, a struct value argument, a sub
+// that exists because of the library's if constexpr.
+// dsc-lib: libs/sized.ds
+// expect-rv: 0
+#import("sized")
+sub main() -> i32 {
+	var r: sz::Ring<u16>;
+	var big: sz::Ring<u8, 16>;
+	if (r.capacity() != 4 or big.capacity() != 16 or sizeof(big) != 20) return 1;
+	if (sz::clamp<sz::PERCENT>(150) != 100 or sz::clamp<sz::PERCENT>(-5) != 0) return 2;
+	if (sz::limits_size() != 8) return 3;
+	return 0;
+}
