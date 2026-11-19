@@ -23,17 +23,43 @@ namespace dscript
 		struct Node* count { nullptr };		// Array (a constant expression; nullptr: [], the size of the value)
 		std::vector<TypeSyntax*> params;	// Function
 		int variadic { 0 };					// Function: 1 ... (more arguments), 2 ...typed (with their types)
+		std::vector<TypeSyntax*> args;		// Named: a template's arguments (Array<u32>)
+		Type* fixed { nullptr };			// a template parameter in an instance: the type it stands for (name: the parameter)
+	};
+
+	// template(T1, optional T2) where (condition) { structs and subs }: kept as tokens, each struct /
+	// sub instantiated on use with the parameters replaced by types (CodeGen::instantiate).
+	struct TemplateEntity
+	{
+		std::string name;					// as declared (Array)
+		bool isStruct { false };
+		size_t first { 0 }, last { 0 };		// its tokens in TemplateDef::tokens: [first, last)
+		size_t nameToken { 0 };				// the token of its name
+	};
+	struct TemplateDef
+	{
+		std::vector<std::string> params;
+		size_t required { 0 };				// the parameters before 'optional'
+		struct Node* where { nullptr };		// nullptr: none
+		std::vector<std::string> whereParts;	// the source of each part of a top-level 'and' (for errors)
+		std::vector<Token> tokens;			// the body (inside the braces)
+		std::vector<Token> source;			// the whole template (a library's interface writes it)
+		std::vector<TemplateEntity> entities;
+		std::string scope;					// where it is (a namespace, or the struct of a method template)
+		struct Node* owner { nullptr };		// the struct of a method template
+		SourcePos pos;
+		int external { 0 };					// from a library's interface
 	};
 
 	enum class NodeKind
 	{
 		// Declarations
-		Program, NamespaceDecl, StructDecl, EnumDecl, EnumMember, ConstDecl, AliasDecl, VarDecl, FuncDecl,
+		Program, NamespaceDecl, StructDecl, EnumDecl, EnumMember, ConstDecl, AliasDecl, VarDecl, FuncDecl, TemplateDecl,
 		// Statements
 		Block, If, While, DoWhile, For, ForIn, Return, Break, Continue, ExprStmt, LowBlock, Assert, DebugPrint, Defer,
 		// Expressions
 		IntLit, FloatLit, StrLit, BoolLit, Null, Ident, Unary, Binary, Assign, Ternary, Call, Index,
-		Member, Cast, SizeofType, SizeofExpr, PreInc, PreDec, PostInc, PostDec, InitList
+		Member, Cast, SizeofType, SizeofExpr, PreInc, PreDec, PostInc, PostDec, InitList, TypeArg
 	};
 
 	// One node type for the whole tree: the fields used depend on the kind (see Parser.cpp).
@@ -78,6 +104,12 @@ namespace dscript
 		std::vector<Token> bodyTokens;
 		// Block: the body of an atomic block (interrupts disabled; see Parser::atomicBlock).
 		bool atomic { false };
+		// If: if constexpr (only the branch the condition chooses is generated).
+		bool isConstexpr { false };
+		// Ident / Member: a template's arguments (max<u32>, Array<u32>.make, x.map<f32>).
+		std::vector<TypeSyntax*> templateArgs;
+		// TemplateDecl: the template. (TypeArg: a type given to a condition's built-in, in typeSyntax.)
+		TemplateDef* tmpl { nullptr };
 
 		// Filled in by the code generator.
 		Type* type { nullptr };

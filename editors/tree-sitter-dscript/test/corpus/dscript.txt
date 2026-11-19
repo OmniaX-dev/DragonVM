@@ -1047,3 +1047,114 @@ sub f() {
         (identifier)
         (primitive_type)
         (number_literal)))))
+
+================================================================================
+Templates
+================================================================================
+
+template(T, optional U) where is_integer(T) and sizeof(T) == 4 {
+	struct Array { var data: T*; };
+	sub max(var a: T, var b: T) -> T { return a; }
+}
+struct S {
+	template(T) { sub add(var v: T) { } }
+}
+sub f() {
+	var a: Array<Array<u32>>;
+	var m = max<u32>(1, 2);
+	x.add<u8>(1);
+	if constexpr (is_pointer_to(T, u8*)) { }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (template_declaration
+    (template_parameter
+      (type_identifier))
+    (template_parameter
+      (type_identifier))
+    (binary_expression
+      (call_expression
+        (identifier)
+        (argument_list
+          (identifier)))
+      (binary_expression
+        (sizeof_expression
+          (type_identifier))
+        (number_literal)))
+    (template_body
+      (struct_declaration
+        (type_identifier)
+        (field_list
+          (field_declaration
+            (field_identifier)
+            (pointer_type
+              (type_identifier)))))
+      (function_declaration
+        (identifier)
+        (parameter_list
+          (parameter
+            (identifier)
+            (type_identifier))
+          (parameter
+            (identifier)
+            (type_identifier)))
+        (type_identifier)
+        (block
+          (return_statement
+            (identifier))))))
+  (struct_declaration
+    (type_identifier)
+    (field_list
+      (template_declaration
+        (template_parameter
+          (type_identifier))
+        (template_body
+          (function_declaration
+            (identifier)
+            (parameter_list
+              (parameter
+                (identifier)
+                (type_identifier)))
+            (block))))))
+  (function_declaration
+    (identifier)
+    (parameter_list)
+    (block
+      (variable_declaration
+        (identifier)
+        (generic_type
+          (type_identifier)
+          (template_arguments
+            (generic_type
+              (type_identifier)
+              (template_arguments
+                (primitive_type))))))
+      (variable_declaration
+        (identifier)
+        (call_expression
+          (generic_expression
+            (identifier)
+            (template_arguments
+              (primitive_type)))
+          (argument_list
+            (number_literal)
+            (number_literal))))
+      (expression_statement
+        (call_expression
+          (member_expression
+            (identifier)
+            (field_identifier)
+            (template_arguments
+              (primitive_type)))
+          (argument_list
+            (number_literal))))
+      (if_statement
+        (call_expression
+          (identifier)
+          (argument_list
+            (identifier)
+            (pointer_type
+              (primitive_type))))
+        (block)))))

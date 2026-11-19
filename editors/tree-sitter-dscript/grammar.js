@@ -35,12 +35,18 @@ module.exports = grammar({
 	conflicts: $ => [
 		[$._expression, $._type],
 		[$.scoped_identifier, $.scoped_type_identifier],
+		// (Name<...>: a template's arguments or a comparison: the parse that works wins)
+		[$.member_expression],
+		[$._expression, $.generic_expression],
+		[$.generic_type, $.generic_expression],
+		[$.generic_type, $._expression, $.generic_expression],
 	],
 
 	rules: {
 		source_file: $ => repeat($._top_level),
 
 		_top_level: $ => choice(
+			$.template_declaration,
 			$.namespace_declaration,
 			$.struct_declaration,
 			$.enum_declaration,
@@ -95,7 +101,19 @@ module.exports = grammar({
 		),
 		// Fields and methods (subs in a struct, called as x.m() / p->m(), with this).
 		// Nested structs / enums (Outer::Inner; priv: only usable in the struct).
-		field_list: $ => seq('{', repeat(choice($.field_declaration, $.function_declaration, $.nested_type_declaration)), '}'),
+		field_list: $ => seq('{', repeat(choice($.field_declaration, $.function_declaration, $.nested_type_declaration, $.template_declaration)), '}'),
+
+		// template(T1, optional T2) where <condition> { structs and subs }
+		template_declaration: $ => seq(
+			'template', '(', commaSep1($.template_parameter), ')',
+			optional(seq('where', field('condition', $._expression))),
+			field('body', $.template_body),
+			optional(';'),
+		),
+		template_parameter: $ => seq(optional('optional'), field('name', alias($.identifier, $.type_identifier))),
+		template_body: $ => seq('{', repeat(choice($.struct_declaration, $.function_declaration)), '}'),
+		// <u32, Point*> after a template's name (in a type or an expression)
+		template_arguments: $ => prec.dynamic(1, seq('<', commaSep1($._type), '>')),
 		nested_type_declaration: $ => seq(
 			optional($.priv_modifier),
 			choice($.struct_declaration, $.enum_declaration),
@@ -212,6 +230,7 @@ module.exports = grammar({
 			$.primitive_type,
 			alias($.identifier, $.type_identifier),
 			$.scoped_type_identifier,
+			$.generic_type,
 			$.pointer_type,
 			$.array_type,
 			$.function_type,
@@ -223,6 +242,11 @@ module.exports = grammar({
 			optional(field('scope', alias($.identifier, $.namespace_identifier))),
 			'::',
 			field('name', choice(alias($.identifier, $.type_identifier), $.scoped_type_identifier)),
+		),
+		// Array<u32>, Ns::Map<u32, Point*>
+		generic_type: $ => seq(
+			field('name', choice(alias($.identifier, $.type_identifier), $.scoped_type_identifier)),
+			field('arguments', $.template_arguments),
 		),
 		primitive_type: _ => choice('i8', 'u8', 'i16', 'u16', 'i32', 'u32', 'f32', 'bool', 'char', 'string', 'int', 'uint', 'float', 'void'),
 		pointer_type: $ => prec(2, seq(field('type', $._type), '*')),
@@ -283,7 +307,7 @@ module.exports = grammar({
 		debug_print_statement: $ => seq('debug_print', '(', field('value', $._expression), ')', ';'),
 
 		if_statement: $ => prec.right(seq(
-			'if', '(', field('condition', $._expression), ')',
+			'if', optional('constexpr'), '(', field('condition', $._expression), ')',
 			field('consequence', $._statement),
 			optional(seq('else', field('alternative', $._statement))),
 		)),
@@ -331,6 +355,7 @@ module.exports = grammar({
 			$.update_expression,
 			$.cast_expression,
 			$.sizeof_expression,
+			$.generic_expression,
 			$.lambda_expression,
 			$.call_expression,
 			$.index_expression,
@@ -408,7 +433,14 @@ module.exports = grammar({
 		),
 
 		call_expression: $ => prec(PREC.POSTFIX, seq(field('function', $._expression), field('arguments', $.argument_list))),
-		argument_list: $ => seq('(', commaSep($._expression), ')'),
+		// (the built-ins of compile-time conditions take types: is_type(T, u32), is_pointer_to(T, u8*))
+		argument_list: $ => seq('(', commaSep(choice($._expression, $.primitive_type, $.pointer_type, $.generic_type)), ')'),
+
+		// max<u32>, Array<u32> (before (...) or .name): a template's instance
+		generic_expression: $ => seq(
+			field('name', choice($.identifier, $.scoped_identifier)),
+			field('arguments', $.template_arguments),
+		),
 
 		index_expression: $ => prec(PREC.POSTFIX, seq(field('array', $._expression), '[', field('index', $._expression), ']')),
 
@@ -416,6 +448,7 @@ module.exports = grammar({
 			field('object', $._expression),
 			field('operator', choice('.', '->')),
 			field('member', alias($.identifier, $.field_identifier)),
+			optional(field('arguments', $.template_arguments)),		// x.map<f32>(...)
 		)),
 
 		parenthesized_expression: $ => seq('(', $._expression, ')'),

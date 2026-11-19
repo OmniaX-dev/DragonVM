@@ -1,4 +1,6 @@
 #include "CodeGen.hpp"
+#include "Parser.hpp"
+#include "ConditionBuiltins.hpp"
 #include <cmath>
 #include <bit>
 #include <cstdio>
@@ -47,14 +49,33 @@ namespace dscript
 
 	// The dasm symbol of a global: local constants and statics are named <sub>::<name>, the
 	// globals of a namespace <namespace>::<name>.
+	// A name as a dasm symbol: ':' -> '_', and the characters of template instances
+	// (Array<u32*, Point>): < _L, > _R, , _C, * _P, [ ] _A, others _.
+	static std::string symbolChars(const std::string& name)
+	{
+		std::string s;
+		for (char c : name)
+		{
+			if (std::isalnum((unsigned char)c) || c == '_') s += c;
+			else if (c == ':') s += '_';
+			else if (c == '<') s += "_L";
+			else if (c == '>') s += "_R";
+			else if (c == ',') s += "_C";
+			else if (c == '*') s += "_P";
+			else if (c == '[') s += "_A";
+			else if (c == ' ' || c == ']') ;
+			else s += '_';
+		}
+		return s;
+	}
+
+	static bool plainName(const std::string& name) { return name.find_first_of(":<>,*[] ()") == std::string::npos; }
+
 	static std::string dataSymbol(const std::string& name, bool isStatic)
 	{
-		if (name.find(':') == std::string::npos)
+		if (plainName(name))
 			return name;
-		std::string s = isStatic ? "__static_" : "__ns_";
-		for (char c : name)
-			s += (c == ':' ? '_' : c);
-		return s;
+		return std::string(isStatic ? "__static_" : "__ns_") + symbolChars(name);
 	}
 
 	// An identifier in a low block ($name): letters, digits, _ and the :: of local constants /
@@ -126,12 +147,9 @@ namespace dscript
 	// The dasm label of a sub (methods: <Struct>::<name>; namespaces: <namespace>::<name>).
 	static std::string codeLabel(const std::string& name, bool method)
 	{
-		if (name.find(':') == std::string::npos)
+		if (plainName(name))
 			return name;
-		std::string s = method ? "__method_" : "__ns_";
-		for (char c : name)
-			s += (c == ':' ? '_' : c);
-		return s;
+		return std::string(method ? "__method_" : "__ns_") + symbolChars(name);
 	}
 
 	static std::string comment(const std::vector<std::string>& notes)
@@ -303,6 +321,7 @@ namespace dscript
 
 	CodeGen::CodeGen(const CodeGenOptions& options) : m_options(options)
 	{
+		m_notGiven = new Type();		// (not interned: no type is it)
 	}
 
 	std::string CodeGen::imm(int64_t value)
@@ -353,7 +372,15 @@ namespace dscript
 				return candidate;
 			if (s.empty())
 				return qualifyThroughAlias(written, scope);
-			const size_t sep = s.rfind("::");
+			// The scope around s (its last '::' outside a template's arguments: Ns::Array<Ns::Point>).
+			size_t sep = std::string::npos;
+			int angles = 0;
+			for (size_t i = s.size(); i-- > 1; )
+			{
+				if (s[i] == '>') angles++;
+				else if (s[i] == '<') angles--;
+				else if (angles == 0 && s[i] == ':' && s[i - 1] == ':') { sep = i - 1; break; }
+			}
 			s = (sep == std::string::npos) ? "" : s.substr(0, sep);
 		}
 	}
@@ -433,7 +460,7 @@ namespace dscript
 					for (Node* f : d->list)
 						resolveNames(f, f->scope);
 				}
-				else if (d->kind != NodeKind::LowBlock && d->kind != NodeKind::NamespaceDecl)
+				else if (d->kind != NodeKind::LowBlock && d->kind != NodeKind::NamespaceDecl && d->kind != NodeKind::TemplateDecl)
 					resolveNames(d, d->scope);
 			});
 		}
@@ -445,6 +472,8 @@ namespace dscript
 			return;
 		if (n->typeSyntax != nullptr)
 			resolveTypeNames(n->typeSyntax, scope);
+		for (TypeSyntax* t : n->templateArgs)
+			resolveTypeNames(t, scope);
 		if (n->kind == NodeKind::Ident && !n->resolved)
 		{
 			// (an alias of a struct / enum: that struct / enum, for Enum.Member and Struct.sub())
@@ -474,6 +503,8 @@ namespace dscript
 		switch (ts->kind)
 		{
 			case TypeSyntax::Kind::Named:
+				if (ts->fixed != nullptr)
+					break;		// (a template parameter in an instance)
 				if (!ts->resolved)
 				{
 					if (ts->written.empty())
@@ -482,6 +513,8 @@ namespace dscript
 					ts->resolved = true;
 					checkTypeAccess(ts->name, scope, ts->pos);
 				}
+				for (TypeSyntax* a : ts->args)
+					resolveTypeNames(a, scope);
 			break;
 			case TypeSyntax::Kind::Pointer:
 				resolveTypeNames(ts->base, scope);
@@ -589,6 +622,9 @@ namespace dscript
 					case NodeKind::LowBlock:
 						m_topLows.push_back(d);
 					break;
+					case NodeKind::TemplateDecl:
+						registerTemplate(d);
+					break;
 					default:
 						error(d->pos, "unexpected declaration");
 				}
@@ -607,7 +643,23 @@ namespace dscript
 		{
 			case TypeSyntax::Kind::Named:
 			{
+				if (ts->fixed != nullptr)
+				{
+					if (ts->fixed == m_notGiven)
+						error(ts->pos, "the template parameter " + ts->name + " is not given here (it is optional: is_given(" + ts->name + ") tells)");
+					return ts->fixed;
+				}
 				const std::string& written = ts->written.empty() ? ts->name : ts->written;
+				if (!ts->args.empty() || m_templates.count(ts->name) > 0)
+				{
+					// Name<args>: the template's instance (a struct).
+					if (ts->args.empty())
+						error(ts->pos, written + " is a template: give its types (" + written + "<...>)");
+					std::vector<Type*> args;
+					for (TypeSyntax* a : ts->args)
+						args.push_back(resolveType(a));
+					return m_types.structType(m_structs[instantiate(ts->name, args, nullptr, nullptr, ts->pos, true)]);
+				}
 				if (Type* t = m_types.builtin(ts->name))
 				{
 					if (m_options.index != nullptr)
@@ -1436,6 +1488,7 @@ namespace dscript
 	{
 		e->var = nullptr;
 		e->func = nullptr;
+		resolveTemplateIdent(e);
 		if (VarInfo* v = lookupVar(e->name))
 		{
 			if (m_options.index != nullptr && !m_discarding)
@@ -1472,6 +1525,7 @@ namespace dscript
 				e->func = funcs[0];
 			else if (expected && expected->isFunction())
 				e->func = functionForType(funcs, expected);
+			markUsed(e->func);
 			e->type = e->func ? e->func->type : nullptr;
 			if (e->func)
 				checkSubAccess(e->func, e->pos);
@@ -1785,6 +1839,8 @@ namespace dscript
 	{
 		Node* callee = e->a;
 		Node* obj = callee->a;
+		if (obj->kind == NodeKind::Ident)
+			resolveTemplateIdent(obj);		// Array<u32>.make(), T.make()
 		// Enum.Member and Constant.field are not methods.
 		if (obj->kind == NodeKind::Ident && lookupVar(obj->name) == nullptr && (m_enums.count(obj->name) > 0 || m_consts.count(obj->name) > 0))
 			return;
@@ -1800,6 +1856,21 @@ namespace dscript
 		if (obj->kind == NodeKind::Ident && callee->value == 0 && lookupVar(obj->name) == nullptr && m_structs.count(obj->name) > 0)
 		{
 			StructInfo* info = m_structs[obj->name];
+			if (m_funcs.count(obj->name + "::" + callee->name) == 0 && m_templates.count(obj->name + "::" + callee->name) > 0)
+			{
+				// A static method template: Struct.make<T>(...).
+				for (Node* arg : e->list)
+					check(arg);
+				std::vector<Type*> explicitArgs;
+				for (TypeSyntax* ta : callee->templateArgs)
+				{
+					resolveTypeNames(ta, m_func != nullptr ? m_func->decl->scope : std::string());
+					explicitArgs.push_back(resolveType(ta));
+				}
+				const std::string inst = instantiate(obj->name + "::" + callee->name, explicitArgs, &e->list, info, callee->namePos, false);
+				callee->name = inst.substr(obj->name.size() + 2);
+				callee->templateArgs.clear();
+			}
 			const std::string method = obj->name + "::" + callee->name;
 			if (m_funcs.count(method) == 0)
 				error(callee->namePos, "struct " + obj->name + " has no static sub '" + callee->name + "'");
@@ -1833,6 +1904,21 @@ namespace dscript
 		resolveStruct(info, callee->pos);
 		if (info->field(callee->name) != nullptr)
 			return;		// a sub pointer field
+		if (m_funcs.count(info->name + "::" + callee->name) == 0 && m_templates.count(info->name + "::" + callee->name) > 0)
+		{
+			// A method template: its instance for the arguments (x.map<f32>(...), or deduced).
+			for (Node* arg : e->list)
+				check(arg);
+			std::vector<Type*> explicitArgs;
+			for (TypeSyntax* ta : callee->templateArgs)
+			{
+				resolveTypeNames(ta, m_func != nullptr ? m_func->decl->scope : std::string());
+				explicitArgs.push_back(resolveType(ta));
+			}
+			const std::string inst = instantiate(info->name + "::" + callee->name, explicitArgs, &e->list, info, callee->namePos, false);
+			callee->name = inst.substr(info->name.size() + 2);
+			callee->templateArgs.clear();
+		}
 		const std::string method = info->name + "::" + callee->name;
 		if (m_funcs.count(method) == 0)
 			error(callee->namePos, (info->anonymous ? info->displayName() : "struct " + info->name) + " has no field or method '" + callee->name + "'");
@@ -1880,6 +1966,21 @@ namespace dscript
 			e->type = m_types.u32();
 			return;
 		}
+		if (callee->kind == NodeKind::Ident && lookupVar(callee->name) == nullptr && m_funcs.count(callee->name) == 0 && m_templates.count(callee->name) > 0)
+		{
+			// A template's sub: its instance for the arguments (explicit max<u32>(...), the others
+			// deduced from the arguments' types).
+			for (Node* arg : e->list)
+				check(arg);
+			std::vector<Type*> explicitArgs;
+			for (TypeSyntax* t : callee->templateArgs)
+			{
+				resolveTypeNames(t, m_func != nullptr ? m_func->decl->scope : std::string());
+				explicitArgs.push_back(resolveType(t));
+			}
+			callee->name = instantiate(callee->name, explicitArgs, &e->list, nullptr, callee->pos, false);
+			callee->templateArgs.clear();
+		}
 		if (callee->kind == NodeKind::Ident && lookupVar(callee->name) == nullptr && m_funcs.count(callee->name) > 0)
 		{
 			// The subs get their types after the declarations (constants, enum values, array
@@ -1891,7 +1992,13 @@ namespace dscript
 			}
 			for (Node* arg : e->list)
 				check(arg);
+			for (FuncInfo* g : m_funcs[callee->name])
+			{
+				if (g->broken)
+					throw g->brokenError;		// (a template instance whose signature doesn't work for its types)
+			}
 			FuncInfo* f = resolveOverload(callee->name, e->list, e->pos);
+			markUsed(f);
 			// (A for-in may use a range's priv begin / end / next / get: its cursors only come from
 			// begin and next, so an unchecked get is safe there.)
 			if (!callee->isPrivate)
@@ -2421,6 +2528,626 @@ namespace dscript
 		outer->list.push_back(loop);
 		s->list.push_back(outer);
 		return outer;
+	}
+
+	// ======================================= Templates ======================================
+	// template(T1, optional T2) where (condition) { structs and subs }: each struct / sub is an
+	// entity, instantiated on use (Array<u32> as a type, max<u32>(...) or max(a, b) with its types
+	// deduced, x.map<f32>(...)): its tokens parsed again, the parameters standing for types (an
+	// optional one not given: m_notGiven, an error where it is used), its name Array<u32>. Its
+	// declarations are then registered like the program's; its subs are generated if used.
+
+	void CodeGen::registerTemplate(Node* d)
+	{
+		TemplateDef* def = d->tmpl;
+		if (def->where != nullptr)
+			resolveNames(def->where, def->scope);
+		for (size_t i = 0; i < def->entities.size(); i++)
+		{
+			const TemplateEntity& e = def->entities[i];
+			const std::string full = def->scope.empty() ? e.name : def->scope + "::" + e.name;
+			auto& list = m_templates[full];
+			if (list.empty())
+				declareName(full, def->pos, "a template");
+			else if (list[0].def->entities[list[0].entity].isStruct != e.isStruct)
+				error(def->pos, "'" + full + "' is a template struct and a template sub: one name, one kind");
+			list.push_back({ def, i });
+			m_templateShortNames.insert(e.name);
+		}
+	}
+
+	void CodeGen::markUsed(FuncInfo* f)
+	{
+		if (f != nullptr && f->broken)
+			throw f->brokenError;
+		if (f != nullptr && !m_discarding)
+			f->used = true;
+	}
+
+	void CodeGen::resolveTemplateIdent(Node* e)
+	{
+		if (e->typeSyntax != nullptr && e->typeSyntax->fixed != nullptr)
+		{
+			// T in an instance, as a value: the struct it stands for (T.make()).
+			Type* t = resolveType(e->typeSyntax);
+			if (t->kind == Type::Kind::Struct)
+				e->name = t->structInfo->name;
+			return;
+		}
+		if (e->templateArgs.empty() || lookupVar(e->name) != nullptr)
+			return;
+		auto it = m_templates.find(e->name);
+		if (it == m_templates.end())
+			error(e->pos, (e->text.empty() ? e->name : e->text) + " is not a template");
+		std::vector<Type*> args;
+		for (TypeSyntax* t : e->templateArgs)
+			args.push_back(resolveType(t));
+		const bool isStruct = it->second[0].def->entities[it->second[0].entity].isStruct;
+		e->name = instantiate(e->name, args, nullptr, nullptr, e->pos, isStruct);
+		e->templateArgs.clear();
+	}
+
+	// A sub entity parsed as written (T as an unknown name): its parameters' types, to deduce the
+	// template's arguments from a call's.
+	Node* CodeGen::genericHead(const TemplateDef* def, size_t entity)
+	{
+		auto key = std::make_pair(def, entity);
+		auto it = m_genericHeads.find(key);
+		if (it != m_genericHeads.end())
+			return it->second;
+		const TemplateEntity& e = def->entities[entity];
+		std::vector<Token> tokens(def->tokens.begin() + (std::ptrdiff_t)e.first, def->tokens.begin() + (std::ptrdiff_t)e.last);
+		Token end;
+		end.kind = TokenKind::End;
+		end.pos = tokens.empty() ? def->pos : tokens.back().pos;
+		tokens.push_back(end);
+		Parser p(tokens);
+		p.addTemplateNames(m_templateShortNames);
+		Node* head = nullptr;
+		for (Node* n : p.parseInstance(*def, entity, def->owner))
+		{
+			if (n->kind == NodeKind::FuncDecl && n->shortName == e.name)
+				head = n;
+		}
+		m_genericHeads[key] = head;
+		return head;
+	}
+
+	bool CodeGen::unify(TypeSyntax* p, Type* actual, const TemplateDef* def, std::vector<Type*>& args, bool fromLiteral, std::string& why)
+	{
+		if (p == nullptr || actual == nullptr)
+			return true;
+		switch (p->kind)
+		{
+			case TypeSyntax::Kind::Named:
+			{
+				if (!p->args.empty())
+				{
+					// Array<T> and an instance of Array: its arguments.
+					if (actual->kind != Type::Kind::Struct)
+						return true;
+					auto origin = m_instanceOrigin.find(actual->structInfo->name);
+					if (origin == m_instanceOrigin.end())
+						return true;
+					const std::string& templ = origin->second.templ;
+					const size_t sep = templ.rfind("::");
+					if ((sep == std::string::npos ? templ : templ.substr(sep + 2)) != p->name.substr(p->name.rfind(':') == std::string::npos ? 0 : p->name.rfind(':') + 1))
+						return true;
+					for (size_t i = 0; i < p->args.size() && i < origin->second.args.size(); i++)
+					{
+						if (!unify(p->args[i], origin->second.args[i], def, args, fromLiteral, why))
+							return false;
+					}
+					return true;
+				}
+				const std::string& name = p->written.empty() ? p->name : p->written;
+				for (size_t i = 0; i < def->params.size(); i++)
+				{
+					if (def->params[i] != name)
+						continue;
+					if (args[i] == nullptr)
+						args[i] = actual;
+					else if (args[i] != actual && !fromLiteral)
+					{
+						why = name + " is " + args[i]->name() + " from one argument and " + actual->name() + " from another";
+						return false;
+					}
+					return true;
+				}
+				return true;
+			}
+			case TypeSyntax::Kind::Pointer:
+				if (actual->kind == Type::Kind::Pointer || actual->kind == Type::Kind::Array)
+					return unify(p->base, actual->base, def, args, fromLiteral, why);
+				return true;
+			case TypeSyntax::Kind::Array:
+				if (actual->kind == Type::Kind::Array)
+					return unify(p->base, actual->base, def, args, fromLiteral, why);
+				return true;
+			case TypeSyntax::Kind::Function:
+				if (actual->kind == Type::Kind::Pointer && actual->base != nullptr && actual->base->kind == Type::Kind::Function)
+					actual = actual->base;
+				if (actual->kind != Type::Kind::Function)
+					return true;
+				for (size_t i = 0; i < p->params.size() && i < actual->params.size(); i++)
+				{
+					if (!unify(p->params[i], actual->params[i], def, args, fromLiteral, why))
+						return false;
+				}
+				return unify(p->base, actual->base, def, args, fromLiteral, why);
+		}
+		return true;
+	}
+
+	// The arguments a call gives a template's sub: from its parameters' types (args: the explicit
+	// ones first). A literal (5, 1.5, null) only decides a parameter no typed argument decided.
+	bool CodeGen::deduce(const TemplateDef* def, size_t entity, std::vector<Type*>& args, std::vector<Node*>& callArgs, bool method, std::string& why)
+	{
+		Node* head = genericHead(def, entity);
+		if (head == nullptr)
+			return true;
+		std::vector<Node*> params(head->list.begin(), head->list.end());
+		if (method && (head->value & 8) == 0 && !params.empty())
+			params.erase(params.begin());		// (this)
+		for (int pass = 0; pass < 2; pass++)
+		{
+			for (size_t i = 0; i < params.size() && i < callArgs.size(); i++)
+			{
+				Node* a = callArgs[i];
+				const bool literal = a->kind == NodeKind::IntLit || a->kind == NodeKind::FloatLit || a->kind == NodeKind::Null || a->kind == NodeKind::BoolLit;
+				if (literal != (pass == 1) || a->type == nullptr)
+					continue;
+				if (!unify(params[i]->typeSyntax, a->type, def, args, literal, why))
+					return false;
+			}
+		}
+		return true;
+	}
+
+	std::string CodeGen::instantiate(const std::string& name, std::vector<Type*> args, std::vector<Node*>* callArgs, StructInfo* owner,
+		const SourcePos& pos, bool wantStruct)
+	{
+		struct Depth { int& d; Depth(int& x) : d(x) { d++; } ~Depth() { d--; } } depth(m_instanceDepth);
+		if (m_instanceDepth > 64)
+			error(pos, "templates instantiated in each other too deep (64 levels): " + name);
+		auto it = m_templates.find(name);
+		if (it == m_templates.end())
+			error(pos, name + " is not a template");
+		auto l_display = [&](const std::vector<Type*>& a) {
+			std::string s;
+			for (Type* t : a)
+			{
+				if (t != nullptr)
+					s += (s.empty() ? "" : ", ") + t->name();
+			}
+			return s.empty() ? name : name + "<" + s + ">";
+		};
+		struct Match { TemplateCandidate c; std::vector<Type*> args; };
+		std::vector<Match> matches;
+		std::vector<std::string> reasons;
+		for (const TemplateCandidate& c : it->second)
+		{
+			const TemplateDef* def = c.def;
+			const TemplateEntity& ent = def->entities[c.entity];
+			const std::string where = " (template at " + posString(def->pos) + ")";
+			if (ent.isStruct != wantStruct)
+			{
+				reasons.push_back(l_display(args) + ": " + std::string(ent.isStruct ? "a struct template, not a sub" : "a sub template, not a type") + where);
+				continue;
+			}
+			if (args.size() > def->params.size())
+			{
+				reasons.push_back(l_display(args) + ": " + "it takes " + std::to_string(def->params.size()) + " type" + (def->params.size() == 1 ? "" : "s") + ", not " + std::to_string(args.size()) + where);
+				continue;
+			}
+			std::vector<Type*> a = args;
+			a.resize(def->params.size(), nullptr);
+			std::string why;
+			if (callArgs != nullptr && !deduce(def, c.entity, a, *callArgs, owner != nullptr, why))
+			{
+				reasons.push_back(l_display(a.empty() ? args : a) + ": " + why + where);
+				continue;
+			}
+			bool ok = true;
+			for (size_t i = 0; i < def->required && ok; i++)
+			{
+				if (a[i] == nullptr)
+				{
+					reasons.push_back(l_display(a.empty() ? args : a) + ": " + "can't tell " + def->params[i] + (callArgs != nullptr ? " from the arguments: give it (" + name + "<...>(...))" :
+						": " + name + " needs " + std::to_string(def->required) + " type" + (def->required == 1 ? "" : "s")) + where);
+					ok = false;
+				}
+			}
+			for (size_t i = def->required; i < a.size() && ok; i++)
+			{
+				if (a[i] == nullptr)
+					continue;
+				bool mentioned = false;
+				for (size_t k = ent.first; k < ent.last && !mentioned; k++)
+					mentioned = def->tokens[k].kind == TokenKind::Identifier && def->tokens[k].text == def->params[i];
+				if (!mentioned)
+				{
+					reasons.push_back(l_display(a.empty() ? args : a) + ": " + ent.name + " doesn't use " + def->params[i] + ": leave it out" + where);
+					ok = false;
+				}
+			}
+			if (!ok)
+				continue;
+			if (def->where != nullptr)
+			{
+				Bindings b;
+				for (size_t i = 0; i < a.size(); i++)
+					b[def->params[i]] = a[i];
+				if (evalCondition(def->where, &b) == 0)
+				{
+					// Which part of the condition is false (the parts of a top-level 'and').
+					std::string part;
+					std::vector<Node*> conj;
+					std::function<void(Node*)> l_flatten = [&](Node* n) {
+						if (n->kind == NodeKind::Binary && n->name == "&&") { l_flatten(n->a); l_flatten(n->b); }
+						else conj.push_back(n);
+					};
+					l_flatten(def->where);
+					if (conj.size() > 1 && conj.size() == def->whereParts.size())
+					{
+						for (size_t k = 0; k < conj.size() && part.empty(); k++)
+						{
+							if (evalCondition(conj[k], &b) == 0)
+								part = def->whereParts[k];
+						}
+					}
+					if (part.empty())
+					{
+						for (size_t k = 0; k < def->whereParts.size(); k++)
+							part += (k > 0 ? " and " : "") + def->whereParts[k];
+					}
+					reasons.push_back(l_display(a.empty() ? args : a) + ": " + "its where is false: " + part + where);
+					continue;
+				}
+			}
+			matches.push_back({ c, a });
+		}
+		if (matches.empty())
+		{
+			if (reasons.size() == 1)
+				error(pos, reasons[0]);
+			std::string all;
+			for (const auto& r : reasons)
+				all += "\n  " + r;
+			error(pos, l_display(args) + ": no template fits:" + all);
+		}
+		if (matches.size() > 1)
+		{
+			std::string all;
+			for (const auto& m : matches)
+				all += "\n  template at " + posString(m.c.def->pos);
+			error(pos, l_display(matches[0].args) + ": more than one template fits (their where conditions overlap):" + all);
+		}
+		const Match& m = matches[0];
+		const TemplateDef* def = m.c.def;
+		const TemplateEntity& ent = def->entities[m.c.entity];
+		std::string shortName = ent.name + "<";
+		{
+			bool first = true;
+			for (Type* t : m.args)
+			{
+				if (t == nullptr)
+					continue;
+				shortName += (first ? "" : ", ") + t->name();
+				first = false;
+			}
+			shortName += ">";
+		}
+		const std::string full = def->scope.empty() ? shortName : def->scope + "::" + shortName;
+		if (m_instances.count(full) > 0)
+			return full;
+		m_instances[full] = full;
+		// Its tokens: the parameters standing for their types, its name the instance's.
+		std::vector<Token> tokens(def->tokens.begin() + (std::ptrdiff_t)ent.first, def->tokens.begin() + (std::ptrdiff_t)ent.last);
+		for (Token& t : tokens)
+		{
+			if (t.kind != TokenKind::Identifier)
+				continue;
+			for (size_t i = 0; i < def->params.size(); i++)
+			{
+				if (t.text == def->params[i])
+					t.fixedType = m.args[i] != nullptr ? m.args[i] : m_notGiven;
+			}
+		}
+		tokens[ent.nameToken - ent.first].text = shortName;
+		tokens[ent.nameToken - ent.first].fixedType = nullptr;
+		Token end;
+		end.kind = TokenKind::End;
+		end.pos = tokens.back().pos;
+		tokens.push_back(end);
+		const std::string note = " (in " + full + ", instantiated at " + posString(pos) + ")";
+		auto l_withNote = [&](const std::function<void()>& fn) {
+			try
+			{
+				fn();
+			}
+			catch (CompileError& err)
+			{
+				if (err.message.find(" (in ") == std::string::npos)
+					err.message += note;
+				throw;
+			}
+		};
+		Parser parser(tokens);
+		parser.addTemplateNames(m_templateShortNames);
+		Node* program = new Node();
+		program->kind = NodeKind::Program;
+		program->pos = pos;
+		l_withNote([&] { program->list = parser.parseInstance(*def, m.c.entity, def->owner); });
+		const size_t funcsBefore = m_funcList.size();
+		const size_t globalsBefore = m_globalDecls.size();
+		m_instanceOrigin[full] = { name, m.args };
+		l_withNote([&] {
+			collect(program);
+			resolveNames(program);
+		});
+		for (size_t i = funcsBefore; i < m_funcList.size(); i++)
+		{
+			FuncInfo* f = m_funcList[i];
+			f->instance = true;
+			f->instanceNote = note;
+			try
+			{
+				l_withNote([&] { resolveFunction(f); });
+			}
+			catch (CompileError& err)
+			{
+				// (raised if something uses it: see markUsed)
+				f->broken = true;
+				f->brokenError = err;
+				f->paramNames.clear();
+				f->defaults.clear();
+				f->requiredParams = 0;
+				f->type = m_types.function({}, m_types.voidType());
+			}
+			f->label = codeLabel(f->name, (f->decl->value & 4) != 0);
+		}
+		if (wantStruct)
+		{
+			auto info = m_structs.find(full);
+			if (info == m_structs.end())
+				error(pos, "internal error: no struct " + full);
+			l_withNote([&] { resolveStruct(info->second, pos); });
+		}
+		if (m_globalDecls.size() > globalsBefore && m_globalsTyped > 0)
+			l_withNote([&] { genGlobalTypes(m_globalsTyped); });
+		(void)owner;
+		return full;
+	}
+
+	// The type a condition names: a template parameter (from bindings; nullptr: an optional one
+	// not given), or any type.
+	Type* CodeGen::conditionType(TypeSyntax* ts, const Bindings* bindings)
+	{
+		switch (ts->kind)
+		{
+			case TypeSyntax::Kind::Named:
+				if (ts->fixed == m_notGiven)
+					return nullptr;		// (an optional parameter not given, in an instance)
+				if (ts->fixed == nullptr && bindings != nullptr && ts->args.empty())
+				{
+					auto it = bindings->find(ts->written.empty() ? ts->name : ts->written);
+					if (it != bindings->end())
+						return it->second;
+				}
+				if (!ts->args.empty() && bindings != nullptr)
+				{
+					std::vector<Type*> args;
+					for (TypeSyntax* a : ts->args)
+					{
+						Type* t = conditionType(a, bindings);
+						if (t == nullptr)
+							error(a->pos, "an optional template parameter that is not given");
+						args.push_back(t);
+					}
+					return m_types.structType(m_structs[instantiate(ts->name, args, nullptr, nullptr, ts->pos, true)]);
+				}
+				return resolveType(ts);
+			case TypeSyntax::Kind::Pointer:
+			{
+				Type* base = conditionType(ts->base, bindings);
+				if (base == nullptr)
+					error(ts->pos, "an optional template parameter that is not given");
+				return m_types.pointer(base);
+			}
+			case TypeSyntax::Kind::Array:
+			{
+				Type* base = conditionType(ts->base, bindings);
+				if (base == nullptr || ts->count == nullptr)
+					error(ts->pos, "an array type in a condition needs its element type and size");
+				return m_types.array(base, (uint32_t)constExpr(ts->count, "an array size"));
+			}
+			default:
+				return resolveType(ts);
+		}
+	}
+
+	// The built-ins of conditions: name, arguments (T a type, N a name, * repeats), what they compute.
+	// Adding one: one entry here (the parser and the language server see it through
+	// findConditionBuiltin).
+	struct ConditionEval
+	{
+		typedef int64_t (*Fn)(CodeGen& cg, const std::vector<Type*>& t, const std::vector<std::string>& n, const SourcePos& pos);
+		struct Entry { ConditionBuiltin spec; Fn fn; };
+
+		static Type* structOf(Type* t) { return (t->kind == Type::Kind::Pointer && t->base != nullptr && t->base->kind == Type::Kind::Struct) ? t->base : t; }
+
+		static const std::vector<Entry>& table(void)
+		{
+			static const std::vector<Entry> entries = {
+				{ { "is_given", "T", "one type parameter: was it given (an optional one)" }, [](CodeGen&, const auto& t, const auto&, const auto&) -> int64_t { return t[0] != nullptr; } },
+				{ { "is_integer", "T", "one type" }, [](CodeGen&, const auto& t, const auto&, const auto&) -> int64_t { return t[0]->isInteger() && t[0]->kind != Type::Kind::Bool; } },
+				{ { "is_signed", "T", "one type" }, [](CodeGen&, const auto& t, const auto&, const auto&) -> int64_t { return t[0]->isSigned(); } },
+				{ { "is_unsigned", "T", "one type" }, [](CodeGen&, const auto& t, const auto&, const auto&) -> int64_t { return t[0]->isInteger() && !t[0]->isSigned() && t[0]->kind != Type::Kind::Bool; } },
+				{ { "is_float", "T", "one type" }, [](CodeGen&, const auto& t, const auto&, const auto&) -> int64_t { return t[0]->isFloat(); } },
+				{ { "is_decimal", "T", "one type" }, [](CodeGen&, const auto& t, const auto&, const auto&) -> int64_t { return t[0]->isFloat(); } },
+				{ { "is_numeric", "T", "one type" }, [](CodeGen&, const auto& t, const auto&, const auto&) -> int64_t { return (t[0]->isInteger() && t[0]->kind != Type::Kind::Bool) || t[0]->isFloat(); } },
+				{ { "is_bool", "T", "one type" }, [](CodeGen&, const auto& t, const auto&, const auto&) -> int64_t { return t[0]->kind == Type::Kind::Bool; } },
+				{ { "is_pointer", "T", "one type" }, [](CodeGen&, const auto& t, const auto&, const auto&) -> int64_t { return t[0]->kind == Type::Kind::Pointer; } },
+				{ { "is_array", "T", "one type" }, [](CodeGen&, const auto& t, const auto&, const auto&) -> int64_t { return t[0]->kind == Type::Kind::Array; } },
+				{ { "is_struct", "T", "one type" }, [](CodeGen&, const auto& t, const auto&, const auto&) -> int64_t { return t[0]->kind == Type::Kind::Struct; } },
+				{ { "is_sub", "T", "one type (a sub pointer type)" }, [](CodeGen&, const auto& t, const auto&, const auto&) -> int64_t { return t[0]->isFunction(); } },
+				{ { "is_scalar", "T", "one type (fits a register: integers, floats, pointers, sub pointers)" }, [](CodeGen&, const auto& t, const auto&, const auto&) -> int64_t { return t[0]->isScalar(); } },
+				{ { "is_builtin", "T", "one type (i8 ... u32, f32, bool, void)" }, [](CodeGen&, const auto& t, const auto&, const auto&) -> int64_t { return t[0]->kind <= Type::Kind::F32; } },
+				{ { "is_type", "TT", "two types (are they the same)" }, [](CodeGen&, const auto& t, const auto&, const auto&) -> int64_t { return t[0] == t[1]; } },
+				{ { "is_one_of", "TT*", "a type, then the types it may be" }, [](CodeGen&, const auto& t, const auto&, const auto&) -> int64_t {
+					for (size_t i = 1; i < t.size(); i++) if (t[0] == t[i]) return 1;
+					return 0; } },
+				{ { "is_pointer_to", "TT", "two types (is the first a pointer to the second)" }, [](CodeGen&, const auto& t, const auto&, const auto&) -> int64_t { return t[0]->kind == Type::Kind::Pointer && t[0]->base == t[1]; } },
+				{ { "is_convertible", "TT", "two types (does a value of the first convert to the second)" }, [](CodeGen& cg, const auto& t, const auto&, const auto&) -> int64_t {
+					Node value;
+					value.kind = NodeKind::TypeArg;
+					value.type = t[0];
+					return cg.conversionCost(&value, t[1]) >= 0; } },
+				{ { "has_method", "TN", "a struct type and a method name" }, [](CodeGen& cg, const auto& t, const auto& n, const auto&) -> int64_t {
+					Type* st = structOf(t[0]);
+					if (st->kind != Type::Kind::Struct) return 0;
+					const std::string m = st->structInfo->name + "::" + n[0];
+					return cg.m_funcs.count(m) > 0 || cg.m_templates.count(m) > 0; } },
+				{ { "has_field", "TN", "a struct type and a field name" }, [](CodeGen& cg, const auto& t, const auto& n, const auto& pos) -> int64_t {
+					Type* st = structOf(t[0]);
+					if (st->kind != Type::Kind::Struct) return 0;
+					cg.resolveStruct(st->structInfo, pos);
+					return st->structInfo->field(n[0]) != nullptr; } },
+				{ { "is_range", "T", "one type (a for-in can loop over it: an array, or a struct with begin() and end())" }, [](CodeGen& cg, const auto& t, const auto&, const auto&) -> int64_t {
+					if (t[0]->kind == Type::Kind::Array) return 1;
+					Type* st = structOf(t[0]);
+					if (st->kind != Type::Kind::Struct) return 0;
+					return cg.m_funcs.count(st->structInfo->name + "::begin") > 0 && cg.m_funcs.count(st->structInfo->name + "::end") > 0; } },
+				{ { "size_of", "T", "one type (its size in bytes, like sizeof)" }, [](CodeGen& cg, const auto& t, const auto&, const auto& pos) -> int64_t {
+					if (t[0]->kind == Type::Kind::Struct) cg.resolveStruct(t[0]->structInfo, pos);
+					return t[0]->size(); } },
+				{ { "array_count", "T", "one type (an array's element count; 0 for other types)" }, [](CodeGen&, const auto& t, const auto&, const auto&) -> int64_t { return t[0]->kind == Type::Kind::Array ? t[0]->count : 0; } },
+			};
+			return entries;
+		}
+	};
+
+	const ConditionBuiltin* findConditionBuiltin(const std::string& name)
+	{
+		for (const auto& e : ConditionEval::table())
+		{
+			if (name == e.spec.name)
+				return &e.spec;
+		}
+		return nullptr;
+	}
+
+	int64_t CodeGen::evalCondition(Node* e, const Bindings* bindings)
+	{
+		auto l_bound = [&](const std::string& name) -> const Type* const* {
+			if (bindings == nullptr) return nullptr;
+			auto it = bindings->find(name);
+			return it == bindings->end() ? nullptr : &it->second;
+		};
+		switch (e->kind)
+		{
+			case NodeKind::IntLit:
+			case NodeKind::BoolLit:
+				return e->value;
+			case NodeKind::Unary:
+			{
+				const int64_t v = evalCondition(e->a, bindings);
+				if (e->name == "!") return v == 0;
+				if (e->name == "-") return -v;
+				if (e->name == "~") return ~v;
+				break;
+			}
+			case NodeKind::Binary:
+			{
+				const std::string& op = e->name;
+				if (op == "&&") return evalCondition(e->a, bindings) != 0 && evalCondition(e->b, bindings) != 0;
+				if (op == "||") return evalCondition(e->a, bindings) != 0 || evalCondition(e->b, bindings) != 0;
+				const int64_t a = evalCondition(e->a, bindings), b = evalCondition(e->b, bindings);
+				if (op == "==") return a == b;
+				if (op == "!=") return a != b;
+				if (op == "<") return a < b;
+				if (op == "<=") return a <= b;
+				if (op == ">") return a > b;
+				if (op == ">=") return a >= b;
+				if (op == "+") return a + b;
+				if (op == "-") return a - b;
+				if (op == "*") return a * b;
+				if ((op == "/" || op == "%") && b == 0) error(e->pos, "division by zero in a condition");
+				if (op == "/") return a / b;
+				if (op == "%") return a % b;
+				if (op == "&") return a & b;
+				if (op == "|") return a | b;
+				if (op == "^") return a ^ b;
+				if (op == "<<") return a << b;
+				if (op == ">>") return a >> b;
+				break;
+			}
+			case NodeKind::Call:
+			{
+				if (e->a->kind != NodeKind::Ident)
+					break;
+				const ConditionEval::Entry* entry = nullptr;
+				for (const auto& x : ConditionEval::table())
+				{
+					if (e->a->name == x.spec.name)
+						entry = &x;
+				}
+				if (entry == nullptr)
+					break;
+				std::vector<Type*> types;
+				std::vector<std::string> names;
+				const std::string spec = entry->spec.args;
+				const bool variadic = !spec.empty() && spec.back() == '*';
+				const size_t fixed = variadic ? spec.size() - 1 : spec.size();
+				if (variadic ? e->list.size() < fixed : e->list.size() != fixed)
+					error(e->pos, std::string(entry->spec.name) + " takes " + entry->spec.help);
+				for (Node* arg : e->list)
+				{
+					if (arg->kind == NodeKind::TypeArg)
+					{
+						Type* t = conditionType(arg->typeSyntax, bindings);
+						if (t == nullptr && std::string(entry->spec.name) != "is_given")
+							error(arg->pos, arg->typeSyntax->name + " is an optional template parameter that is not given here (check is_given(" + arg->typeSyntax->name + ") first)");
+						if (t == m_notGiven)
+							t = nullptr;
+						types.push_back(t);
+					}
+					else
+						names.push_back(arg->text);
+				}
+				return entry->fn(*this, types, names, e->pos);
+			}
+			case NodeKind::SizeofType:
+			{
+				Type* t = conditionType(e->typeSyntax, bindings);
+				if (t == nullptr || t == m_notGiven)
+					error(e->pos, "sizeof of an optional template parameter that is not given");
+				if (t->kind == Type::Kind::Struct)
+					resolveStruct(t->structInfo, e->pos);
+				return t->size();
+			}
+			case NodeKind::SizeofExpr:
+				if (e->a != nullptr && e->a->kind == NodeKind::Ident)
+				{
+					if (const Type* const* t = l_bound(e->a->text.empty() ? e->a->name : e->a->text))
+					{
+						if (*t == nullptr)
+							error(e->pos, "sizeof of an optional template parameter that is not given");
+						if ((*t)->kind == Type::Kind::Struct)
+							resolveStruct((*t)->structInfo, e->pos);
+						return (*t)->size();
+					}
+				}
+				break;
+			case NodeKind::Ident:
+				if (l_bound(e->text.empty() ? e->name : e->text) != nullptr)
+					error(e->pos, "'" + (e->text.empty() ? e->name : e->text) + "' is a type: use it in a built-in (is_integer(T), is_type(T, u32), sizeof(T), ...)");
+				break;
+			default:
+				break;
+		}
+		return constExpr(e, "a compile-time condition (constants, sizeof, comparisons, and / or / not, the built-ins: is_integer(T), ...)");
 	}
 
 	bool CodeGen::isSharedData(const VarInfo* v) const
@@ -3926,6 +4653,16 @@ namespace dscript
 			break;
 			case NodeKind::If:
 			{
+				if (s->isConstexpr)
+				{
+					// if constexpr: only the branch the condition chooses is generated (the other is
+					// not even checked: in a template instance, it can use what this instance lacks).
+					if (evalCondition(s->a, nullptr) != 0)
+						genStatement(s->b);
+					else if (s->c)
+						genStatement(s->c);
+					break;
+				}
 				check(s->a);
 				if (!decay(s->a->type)->isScalar())
 					error(s->a->pos, "the condition must be an integer or a pointer");
@@ -4996,11 +5733,12 @@ namespace dscript
 			bytes[offset + i] = (uint8_t)((uint64_t)value >> (8 * (size - 1 - i)));
 	}
 
-	void CodeGen::genGlobals(void)
+	void CodeGen::genGlobalTypes(size_t from)
 	{
 		// Types first (subs can use any global).
-		for (Node* d : m_globalDecls)
+		for (size_t gi = from; gi < m_globalDecls.size(); gi++)
 		{
+			Node* d = m_globalDecls[gi];
 			const bool ok = attempt([&] {
 				VarInfo* v = m_globals[d->name];
 				if (m_options.rom && !v->readOnly && v->isStatic && !v->external)
@@ -5032,13 +5770,23 @@ namespace dscript
 			if (!ok)
 				m_globals[d->name]->type = m_types.i32();
 		}
+		m_globalsTyped = m_globalDecls.size();
+	}
+
+	// Their values (from: the ones not generated yet: the static locals of template instances come
+	// later).
+	void CodeGen::genGlobalValues(size_t from)
+	{
 		// Values: constants go in the data, the rest is done by __ds_init (which has locals
 		// when an initializer calls an inline sub).
+		std::vector<std::string>* outerOut = m_out;
+		const int32_t outerCursor = m_localCursor, outerMin = m_localMin;
 		m_out = &m_initCode;
-		m_localCursor = 4;
-		m_localMin = 4;
-		for (Node* d : m_globalDecls)
+		m_localCursor = m_initLocalMin;
+		m_localMin = m_initLocalMin;
+		for (size_t gi = from; gi < m_globalDecls.size(); gi++)
 		{
+			Node* d = m_globalDecls[gi];
 			attempt([&] {
 				VarInfo* v = m_globals[d->name];
 				if (v->external)
@@ -5177,6 +5925,11 @@ namespace dscript
 					genConstructor(v, d);
 			});
 		}
+		m_globalsGenerated = m_globalDecls.size();
+		m_initLocalMin = std::min(m_initLocalMin, m_localMin);
+		m_out = outerOut;
+		m_localCursor = outerCursor;
+		m_localMin = outerMin;
 	}
 
 	// ===================================== Analysis =====================================
@@ -5618,8 +6371,8 @@ namespace dscript
 		std::vector<std::string> out;
 		for (FuncInfo* f : m_funcList)
 		{
-			if (!f->external && f->decl->name.rfind("__lambda_", 0) != 0 && !f->label.empty())
-				out.push_back(f->label);	// (inline subs without code: not in the image)
+			if (!f->external && !f->instance && f->decl->name.rfind("__lambda_", 0) != 0 && !f->label.empty())
+				out.push_back(f->label);	// (inline subs without code: not in the image; template instances: each user has its own)
 		}
 		for (const auto& g : m_globals)
 		{
@@ -5811,6 +6564,29 @@ namespace dscript
 			}
 			l_line(indent + "}");
 		};
+		// A template, as written (its tokens, one line per line of its source: errors in an
+		// instance point at the library's sources).
+		auto l_template = [&](Node* d, const std::string& indent) {
+			std::string text;
+			SourcePos linePos;
+			int line = -1;
+			for (const Token& t : d->tmpl->source)
+			{
+				if (t.pos.line != line && !text.empty())
+				{
+					l_line(indent + text, &linePos, indent.size());
+					text.clear();
+				}
+				if (text.empty())
+				{
+					line = t.pos.line;
+					linePos = t.pos;
+				}
+				text += (text.empty() ? "" : " ") + l_token(t);
+			}
+			if (!text.empty())
+				l_line(indent + text, &linePos, indent.size());
+		};
 		std::function<void(Node*, const std::string&)> l_struct = [&](Node* d, const std::string& indent) {
 			StructInfo* info = m_structs[d->name];
 			const std::string head = indent + (d->isPrivate ? "priv " : "") + "struct ";
@@ -5833,6 +6609,8 @@ namespace dscript
 					if (FuncInfo* f = l_func(n))
 						l_sub(f, indent + "\t");
 				}
+				else if (n->kind == NodeKind::TemplateDecl)
+					l_template(n, indent + "\t");		// (a method template)
 			}
 			l_line(indent + "}");
 		};
@@ -5875,6 +6653,7 @@ namespace dscript
 			{
 				case NodeKind::StructDecl: l_struct(d, indent); break;
 				case NodeKind::EnumDecl: l_enum(d, indent); break;
+				case NodeKind::TemplateDecl: l_template(d, indent); break;
 				case NodeKind::FuncDecl: l_sub(l_func(d), indent); break;
 				case NodeKind::AliasDecl:
 				{
@@ -5968,8 +6747,11 @@ namespace dscript
 					a.second.type = m_types.i32();
 			}
 		}
-		for (FuncInfo* f : m_funcList)
+		for (size_t fi = 0; fi < m_funcList.size(); fi++)		// (instantiating a template adds subs)
 		{
+			FuncInfo* f = m_funcList[fi];
+			if (f->instance)
+				continue;		// (resolved when instantiated)
 			if (!attempt([&] { resolveFunction(f); }))
 			{
 				// As a sub without parameters (calls to it will report the arguments).
@@ -6067,8 +6849,8 @@ namespace dscript
 			});
 		}
 
-		genGlobals();
-		const int32_t initLocalMin = m_localMin;
+		genGlobalTypes(0);
+		genGlobalValues(0);
 		for (Node* low : m_topLows)
 		{
 			std::vector<std::string> lowCode;
@@ -6078,35 +6860,68 @@ namespace dscript
 			m_code.push_back("");
 			m_code.insert(m_code.end(), lowCode.begin(), lowCode.end());
 		}
-		for (FuncInfo* f : m_funcList)
-		{
+		// A sub's code; an instance's errors say which instance it is.
+		auto l_gen = [&](FuncInfo* f) {
 			attempt([&] {
+				f->generated = true;
+				try
+				{
+					genFunction(f);
+				}
+				catch (CompileError& err)
+				{
+					if (!f->instanceNote.empty() && err.message.find(f->instanceNote) == std::string::npos)
+						err.message += f->instanceNote;
+					throw;
+				}
+			});
+		};
+		for (size_t i = 0; i < m_funcList.size(); i++)
+		{
+			FuncInfo* f = m_funcList[i];
+			if (f->instance)
+				continue;		// (below: only if something uses it)
+			if (!attempt([&] {
 				if (!f->defined)
 					error(f->decl->pos, "sub '" + f->name + "' is declared but not defined");
-				if (!f->isInline && !f->external)
-					genFunction(f);
-			});
+			}))
+				continue;
+			if (!f->isInline && !f->external)
+				l_gen(f);
 		}
 		if (m_options.noInline)
 			checkInlineRecursion();
-		// Inline subs get real code only if they are used as sub pointers (which the generated
-		// code can make true for more of them); the others are only checked.
+		// Until nothing new: the template instances something uses (generating one can use more),
+		// the static locals they bring (their values), and the inline subs used as sub pointers
+		// (real code; the other inline subs are only checked, below).
 		std::set<FuncInfo*> kept;
 		for (bool more = true; more; )
 		{
 			more = false;
-			for (FuncInfo* f : m_funcList)
+			for (size_t i = 0; i < m_funcList.size(); i++)
 			{
-				if (f->isInline && f->addressTaken && f->defined && kept.insert(f).second)
+				FuncInfo* f = m_funcList[i];
+				if (f->instance && f->used && !f->generated && !f->isInline && f->defined)
 				{
-					attempt([&] { genFunction(f); });
+					l_gen(f);
 					more = true;
 				}
+				else if (f->isInline && f->addressTaken && f->defined && kept.insert(f).second)
+				{
+					l_gen(f);
+					more = true;
+				}
+			}
+			if (m_globalsGenerated < m_globalDecls.size())
+			{
+				genGlobalTypes(m_globalsTyped);
+				genGlobalValues(m_globalsGenerated);
+				more = true;
 			}
 		}
 		for (FuncInfo* f : m_funcList)
 		{
-			if (!f->isInline || kept.count(f) || !f->defined)
+			if (!f->isInline || kept.count(f) || !f->defined || f->instance)
 				continue;
 			const size_t codeSize = m_code.size();
 			const auto strings = m_strings;
@@ -6224,10 +7039,10 @@ namespace dscript
 		{
 			out.push_back("");
 			out.push_back("__ds_init:");
-			if (initLocalMin < 4)
+			if (m_initLocalMin < 4)
 			{
 				out.push_back(std::string("\tmov ") + ScratchCounter + ", SP");
-				out.push_back(std::string("\tsubip ") + ScratchCounter + ", " + imm(4 - initLocalMin));
+				out.push_back(std::string("\tsubip ") + ScratchCounter + ", " + imm(4 - m_initLocalMin));
 				out.push_back(std::string("\tmov SP, ") + ScratchCounter);
 			}
 			out.insert(out.end(), m_initCode.begin(), m_initCode.end());

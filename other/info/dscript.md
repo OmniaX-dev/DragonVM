@@ -618,9 +618,106 @@ Not checked: low blocks (raw dasm), and writes through pointers to the program's
 ### Statements
 `var` declarations (locals: scalars are not initialized unless given a value; structs are zeroed
 and get their default values), `if` / `else`, `while`, `do ... while (...);`,
-`for (init; condition; step)`, `for (auto x in range)`, `break`, `continue`, `return`, blocks,
+`for (init; condition; step)`, `for (auto x in range)`, `if constexpr`, `break`, `continue`, `return`, blocks,
 expression statements, `low { ... }`, `assert(...)`, `debug_print(...)`, `defer ...`,
 `atomic { ... }`.
+
+### Templates
+`template(T) { ... }` holds structs and subs written for any type `T`; each use with types makes
+an instance of them, compiled like the code you would have written for those types.
+```
+template(T) {
+    struct Array {
+        var data: T[16];
+        var count: u32;
+        sub push(var v: T) { this->data[this->count] = v; this->count++; }
+        inline sub begin() -> u32 { return 0; }        // a range (for-in): see below
+        inline sub end() -> u32 { return this->count; }
+        inline sub next(var i: u32) -> u32 { return i + 1; }
+        inline sub get(var i: u32) -> T* { return &this->data[i]; }
+    };
+    sub max(var a: T, var b: T) -> T { if (a > b) return a; return b; }
+}
+
+var a: Array<u32>;                  // the instance Array<u32>
+a.push(5);
+for (auto v in a) { }               // v: u32
+var m = max(3, 7);                  // T deduced from the arguments: max<i32>
+var n = max<u32>(10, 4);            // or given
+var nested: Array<Array<u32>*>;
+```
+- An instance is made the first time it is used, once for each set of types (`Array<u32>` is one
+  struct wherever it appears). Its subs and methods are compiled only if something calls them (or
+  takes their address): a method that doesn't work for some type is fine as long as nothing calls
+  it (its error appears where it is called).
+- A template's body is checked for each instance (as in C++): an error in it says where the
+  instance was made (`... (in Array<Point>, instantiated at main.ds:12:5)`).
+- The types of a sub template's call are deduced from its arguments (`T`, `T*`, `T[N]`,
+  `Array<T>*`, sub types); a typed argument decides over a literal (`max(x_u32, 5)`: `T = u32`).
+  Types it can't tell are given: `make<u32>()`.
+- One `template` block shares its parameters with everything in it. It can be in a namespace, and
+  in a struct: method templates (`template(T) { sub add(var v: T) { ... } }`), called as
+  `s.add(1)` / `s.add<u8>(1)` (also `static`: `Struct.make<T>()`), also in a struct template.
+- `Name<...>` is a template's types wherever the name is a template's (the compiler collects the
+  names of every template first); `>>` closes two of them.
+- In a library, the templates are in its interface (as source, like inline subs): a program makes
+  its own instances. The instances are never exported (each user has its own copy).
+
+**Optional parameters**: `template(K, optional V)`: `optional` once, the parameters after it are
+optional too. An instance gives the types it needs:
+```
+template(K, optional V) {
+    struct Entry { var key: K; var value: V; };     // Entry<u32, i8>
+    struct Key { var key: K; };                     // Key<u32>
+}
+var e: Entry<u32>;      // error where V is used: "V is not given here"
+var k: Key<u32, i8>;    // error: Key doesn't use V
+```
+`is_given(V)` tells if it was given (in a `where` or an `if constexpr`).
+
+**Conditions**: `template(T) where <condition> { ... }`: an instance is made only if the condition
+holds for its types; otherwise the error names the part that is false
+(`four<u8>: its where is false: sizeof(T) == 4`). Several templates can declare the same struct /
+sub with different conditions: the one whose condition holds is used (more than one: an error).
+```
+template(T) where is_integer(T) { sub describe(var v: T) -> u32 { return 1; } }
+template(T) where is_pointer(T) { sub describe(var v: T) -> u32 { return 2; } }
+template(T1, T2) where (is_numeric(T1) and not is_integer(T2)) or sizeof(T1) == 4 or is_one_of(T2, u8, u32, std::I64) { ... }
+```
+A condition is an expression computed while compiling: `and` / `or` / `not` (`&&` / `||` / `!`),
+comparisons, `+ - * / % & | ^ << >>`, constants, `sizeof(T)`, and these built-ins (their type
+arguments are types: `T*`, `Array<u32>`, `u8`):
+
+| built-in | true when |
+|---|---|
+| `is_given(T)` | an optional parameter was given |
+| `is_integer(T)`, `is_signed(T)`, `is_unsigned(T)` | an integer (not `bool`), signed, unsigned |
+| `is_float(T)` / `is_decimal(T)`, `is_numeric(T)`, `is_bool(T)` | `f32`; an integer or `f32`; `bool` |
+| `is_pointer(T)`, `is_array(T)`, `is_struct(T)`, `is_sub(T)` | the kind of type (`is_sub`: a sub pointer type) |
+| `is_scalar(T)`, `is_builtin(T)` | fits a register; `i8` ... `u32`, `f32`, `bool`, `void` |
+| `is_type(T, U)`, `is_one_of(T, A, B, ...)` | the same type; one of them |
+| `is_pointer_to(T, U)`, `is_convertible(T, U)` | `T` is a `U*`; a `T` converts to a `U` |
+| `has_method(T, name)`, `has_field(T, name)` | a struct (or a pointer to one) with that method (or method template) / field |
+| `is_range(T)` | an array, or a struct with `begin()` and `end()` (a for-in works on it) |
+| `size_of(T)` (= `sizeof(T)`), `array_count(T)` | numbers: the size; an array's element count (0 otherwise) |
+
+(Adding a built-in is one entry in the table of `CodeGen.cpp`: `ConditionEval`.)
+
+**if constexpr**: `if constexpr (condition) { ... } else { ... }` decides while compiling: only the
+branch it chooses is compiled (the other one is not even checked: in a template it can use what
+this instance doesn't have). The same conditions as `where`; it works outside templates too
+(`if constexpr (sizeof(Point) == 8)`).
+```
+template(K, optional V) {
+    sub kind() -> u32 {
+        if constexpr (is_given(V)) {
+            if constexpr (is_type(V, u8)) return 30;
+            return 20;
+        }
+        return 10;
+    }
+}
+```
 
 ### for-in loops
 `for (auto x in range) body` runs the body for every element of the range, `x` being a copy of

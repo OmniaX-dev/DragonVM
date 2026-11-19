@@ -1,4 +1,5 @@
 #include "Parser.hpp"
+#include "ConditionBuiltins.hpp"
 #include <cstdio>
 #include <set>
 
@@ -44,8 +45,244 @@
 
 namespace dscript
 {
+	static std::string describe(const Token& t);
+
 	Parser::Parser(const std::vector<Token>& tokens) : m_tokens(tokens)
 	{
+		// The templates' names: the struct / sub names inside every template { ... } (so that
+		// Name<...> can be told from a comparison anywhere, also before the template).
+		for (size_t i = 0; i < m_tokens.size(); i++)
+		{
+			if (m_tokens[i].kind != TokenKind::Keyword || m_tokens[i].text != "template")
+				continue;
+			size_t j = i + 1;
+			int parens = 0;
+			while (j < m_tokens.size() && !(parens == 0 && m_tokens[j].kind == TokenKind::Punct && m_tokens[j].text == "{"))
+			{
+				if (m_tokens[j].kind == TokenKind::Punct && m_tokens[j].text == "(") parens++;
+				else if (m_tokens[j].kind == TokenKind::Punct && m_tokens[j].text == ")") parens--;
+				j++;
+			}
+			int depth = 0;
+			for (; j < m_tokens.size(); j++)
+			{
+				const Token& t = m_tokens[j];
+				if (t.kind == TokenKind::Punct && t.text == "{") depth++;
+				else if (t.kind == TokenKind::Punct && t.text == "}" && --depth == 0) break;
+				else if (depth == 1 && t.kind == TokenKind::Keyword && (t.text == "struct" || t.text == "sub") && j + 1 < m_tokens.size()
+						 && m_tokens[j + 1].kind == TokenKind::Identifier)
+					m_templateNames.insert(m_tokens[j + 1].text);
+			}
+		}
+	}
+
+	bool Parser::isTemplateName(const std::string& name) const
+	{
+		const size_t sep = name.rfind("::");
+		return m_templateNames.count(sep == std::string::npos ? name : name.substr(sep + 2)) > 0;
+	}
+
+	void Parser::expectCloseAngle(void)
+	{
+		// (Array<Array<u32>>: the lexer made '>>' of the two; '>=' / '>>=' after the arguments too)
+		Token& t = m_tokens[std::min(m_pos, m_tokens.size() - 1)];
+		if (t.kind == TokenKind::Punct && (t.text == ">>" || t.text == ">=" || t.text == ">>="))
+		{
+			t.text = t.text.substr(1);
+			t.pos.column++;
+			return;
+		}
+		expectPunct(">", "after the template's arguments");
+	}
+
+	void Parser::parseTemplateArgs(std::vector<TypeSyntax*>& out)
+	{
+		expectPunct("<", "");
+		while (true)
+		{
+			out.push_back(parseType());
+			if (!acceptPunct(","))
+				break;
+		}
+		expectCloseAngle();
+	}
+
+	Node* Parser::parseCondition(void)
+	{
+		const bool outer = m_condition;
+		m_condition = true;
+		Node* e = parseExpression();
+		m_condition = outer;
+		return e;
+	}
+
+	// template(T1, optional T2, ...) where <condition> { structs and subs }: the parameters, the
+	// condition (parsed now) and the body's tokens (parsed for each instance); each struct / sub
+	// in it is an entity, found with its tokens. In a struct's body (owner): only subs (methods).
+	Node* Parser::parseTemplate(Node* owner)
+	{
+		const size_t start = m_pos;
+		Node* n = make(NodeKind::TemplateDecl, next().pos);
+		TemplateDef* def = new TemplateDef();
+		n->tmpl = def;
+		def->pos = n->pos;
+		def->scope = m_scope;
+		def->owner = owner;
+		def->external = m_external;
+		n->owner = owner;
+		n->scope = m_scope;
+		n->external = m_external;
+		expectPunct("(", "after 'template' (template(T) { ... })");
+		bool optional = false;
+		while (true)
+		{
+			if (peek().kind == TokenKind::Identifier && peek().text == "optional" && peek(1).kind == TokenKind::Identifier)
+			{
+				if (optional)
+					error(peek().pos, "'optional' is written once: the parameters after it are optional too");
+				optional = true;
+				next();
+			}
+			const std::string param = expectIdentifier("(a template parameter)");
+			for (const auto& p : def->params)
+			{
+				if (p == param)
+					error(lastPos(), "template parameter '" + param + "' is there twice");
+			}
+			def->params.push_back(param);
+			if (!optional)
+				def->required = def->params.size();
+			if (!acceptPunct(","))
+				break;
+		}
+		expectPunct(")", "after the template's parameters");
+		if (peek().kind == TokenKind::Identifier && peek().text == "where")
+		{
+			next();
+			const size_t from = m_pos;
+			def->where = parseCondition();
+			// The parts of a top-level 'and' (to say which one is false).
+			std::string part;
+			int depth = 0;
+			for (size_t i = from; i < m_pos; i++)
+			{
+				const Token& t = m_tokens[i];
+				if (t.kind == TokenKind::Punct && (t.text == "(" || t.text == "[")) depth++;
+				if (t.kind == TokenKind::Punct && (t.text == ")" || t.text == "]")) depth--;
+				if (depth == 0 && ((t.kind == TokenKind::Keyword && t.text == "and") || (t.kind == TokenKind::Punct && t.text == "&&")))
+				{
+					def->whereParts.push_back(part);
+					part.clear();
+					continue;
+				}
+				// (as written: no space inside parentheses, before ',' or a call's '(')
+				const std::string text = (t.kind == TokenKind::String ? "\"" + t.text + "\"" : t.text);
+				const bool tight = part.empty() || part.back() == '(' || part.back() == '[' || part.back() == '!'
+					|| (t.kind == TokenKind::Punct && (t.text == ")" || t.text == "]" || t.text == ","))
+					|| (t.kind == TokenKind::Punct && t.text == "(" && i > from && (m_tokens[i - 1].kind == TokenKind::Identifier || m_tokens[i - 1].kind == TokenKind::Keyword));
+				part += (tight ? "" : " ") + text;
+			}
+			def->whereParts.push_back(part);
+		}
+		const SourcePos open = peek().pos;
+		expectPunct("{", "to start the template's body");
+		const size_t bodyStart = m_pos;
+		int depth = 1;
+		while (true)
+		{
+			if (peek().kind == TokenKind::End)
+				error(open, "'}' missing at the end of the template");
+			if (isPunct("{")) depth++;
+			else if (isPunct("}") && --depth == 0) break;
+			next();
+		}
+		def->tokens.assign(m_tokens.begin() + (std::ptrdiff_t)bodyStart, m_tokens.begin() + (std::ptrdiff_t)m_pos);
+		next();		// }
+		acceptPunct(";");
+		def->source.assign(m_tokens.begin() + (std::ptrdiff_t)start, m_tokens.begin() + (std::ptrdiff_t)m_pos);
+		// The entities: [priv | inline | static | atomic ...] sub name ... / struct name { ... }.
+		const auto& tk = def->tokens;
+		auto l_is = [&](size_t i, TokenKind kind, const char* text) { return i < tk.size() && tk[i].kind == kind && tk[i].text == text; };
+		size_t i = 0;
+		while (i < tk.size())
+		{
+			TemplateEntity e;
+			e.first = i;
+			while (i < tk.size() && tk[i].kind == TokenKind::Keyword && (tk[i].text == "priv" || tk[i].text == "inline" || tk[i].text == "static" || tk[i].text == "atomic"))
+				i++;
+			if (!(l_is(i, TokenKind::Keyword, "sub") || (l_is(i, TokenKind::Keyword, "struct") && owner == nullptr)) || i + 1 >= tk.size() || tk[i + 1].kind != TokenKind::Identifier)
+				error(i < tk.size() ? tk[i].pos : open, owner != nullptr ? "a template in a struct holds methods (sub ...)" : "a template holds structs and subs (struct ... / sub ...), found " + describe(i < tk.size() ? tk[i] : peek()));
+			e.isStruct = tk[i].text == "struct";
+			e.nameToken = i + 1;
+			e.name = tk[i + 1].text;
+			i += 2;
+			// To its end: a struct's '}' (and ';'), a sub's ';' (a declaration) or the '}' of its body.
+			int parens = 0;
+			while (i < tk.size() && !(parens == 0 && tk[i].kind == TokenKind::Punct && (tk[i].text == "{" || tk[i].text == ";")))
+			{
+				if (tk[i].kind == TokenKind::Punct && tk[i].text == "(") parens++;
+				else if (tk[i].kind == TokenKind::Punct && tk[i].text == ")") parens--;
+				i++;
+			}
+			if (l_is(i, TokenKind::Punct, "{"))
+			{
+				int d = 0;
+				for (; i < tk.size(); i++)
+				{
+					if (tk[i].kind == TokenKind::Punct && tk[i].text == "{") d++;
+					else if (tk[i].kind == TokenKind::Punct && tk[i].text == "}" && --d == 0) break;
+				}
+			}
+			i++;
+			if (e.isStruct && l_is(i, TokenKind::Punct, ";"))
+				i++;
+			e.last = std::min(i, tk.size());
+			def->entities.push_back(e);
+			m_templateNames.insert(e.name);
+		}
+		if (def->entities.empty())
+			error(open, "an empty template");
+		return n;
+	}
+
+	std::vector<Node*> Parser::parseInstance(const TemplateDef& def, size_t entity, Node* owner)
+	{
+		m_scope = def.scope;
+		m_namespace = owner != nullptr ? owner->scope : def.scope;
+		m_external = 0;
+		std::vector<Node*> out;
+		if (owner != nullptr)
+		{
+			// A method: priv / static / inline / atomic, then the sub.
+			int flags = 0;
+			while (true)
+			{
+				if ((flags & 8) == 0 && acceptKeyword("static")) flags |= 8;
+				else if ((flags & 2) == 0 && acceptKeyword("inline")) flags |= 2;
+				else if ((flags & 16) == 0 && acceptKeyword("priv")) flags |= 16;
+				else if ((flags & 32) == 0 && acceptKeyword("atomic")) flags |= 32;
+				else break;
+			}
+			m_scope = owner->name;
+			m_lambdas.push_back(parseFunction(flags, owner));
+		}
+		else
+		{
+			const bool priv = acceptKeyword("priv");
+			Node* d = parseDeclaration();
+			d->isPrivate = d->isPrivate || priv;
+			for (Node* h : m_hoisted)
+				out.push_back(h);
+			m_hoisted.clear();
+			out.push_back(d);
+		}
+		(void)entity;
+		for (auto* list : { &m_hoisted, &m_anonStructs, &m_nested, &m_lambdas })
+		{
+			out.insert(out.end(), list->begin(), list->end());
+			list->clear();
+		}
+		return out;
 	}
 
 	const Token& Parser::peek(int offset) const
@@ -253,6 +490,7 @@ namespace dscript
 
 	Node* Parser::parseDeclaration(void)
 	{
+		if (isKeyword("template")) return parseTemplate(nullptr);
 		if (isKeyword("struct")) return parseStruct();
 		if (isKeyword("enum")) return parseEnum();
 		if (isKeyword("const"))
@@ -370,6 +608,16 @@ namespace dscript
 			}
 			if (isKeyword("static") && isKeyword("var", 1))
 				error(peek(1).pos, "structs have no static fields: use a global (or a constant) next to the struct");
+			if (isKeyword("template"))
+			{
+				// Method templates: hidden top-level template declarations, owned by the struct.
+				if (priv)
+					error(peek().pos, "priv goes on the template's subs (template(T) { priv sub ... })");
+				if (decl->value != 0)
+					error(peek().pos, "method templates need a named struct (struct Name { ... })");
+				m_lambdas.push_back(parseTemplate(decl));
+				continue;
+			}
 			if (isKeyword("sub") || isKeyword("inline") || isKeyword("static") || isKeyword("priv") || isKeyword("atomic"))
 			{
 				// A method: a hidden top-level sub (added at the end of the program). static: no
@@ -767,6 +1015,8 @@ namespace dscript
 	bool Parser::startsType(void) const
 	{
 		const Token& t = peek();
+		if (t.fixedType != nullptr)
+			return true;
 		if (t.kind == TokenKind::Keyword)
 			return t.text == "void" || t.text == "sub" || t.text == "struct";
 		if (t.kind != TokenKind::Identifier)
@@ -832,12 +1082,21 @@ namespace dscript
 		}
 		else if (acceptKeyword("void"))
 			t->name = "void";
+		else if (peek().fixedType != nullptr)
+		{
+			// A template parameter in an instance: the type it stands for.
+			t->fixed = peek().fixedType;
+			t->name = next().text;
+			t->resolved = true;
+		}
 		else
 		{
 			bool global = false;
 			t->name = parseQualifiedName("(type)", global);
 			t->written = (global ? "::" : "") + t->name;
 			t->resolved = global;
+			if (isPunct("<") && isTemplateName(t->name))
+				parseTemplateArgs(t->args);
 		}
 		while (true)
 		{
@@ -1179,8 +1438,15 @@ namespace dscript
 		if (acceptKeyword("if"))
 		{
 			Node* n = make(NodeKind::If, pos);
+			// if constexpr (condition): decided while compiling (only the branch it chooses is
+			// generated; its built-ins: see ConditionBuiltins.hpp).
+			if (peek().kind == TokenKind::Identifier && peek().text == "constexpr" && isPunct("(", 1))
+			{
+				next();
+				n->isConstexpr = true;
+			}
 			expectPunct("(", "after 'if'");
-			n->a = parseExpression();
+			n->a = n->isConstexpr ? parseCondition() : parseExpression();
 			expectPunct(")", "after the condition");
 			n->b = parseStatement();
 			requireBlockFor(n->b, "if");
@@ -1445,6 +1711,8 @@ namespace dscript
 				n->a = expr;
 				n->name = expectIdentifier("(member name)");
 				n->namePos = lastPos();
+				if (isPunct("<") && isTemplateName(n->name))
+					parseTemplateArgs(n->templateArgs);		// x.map<f32>(...)
 				expr = n;
 			}
 			else if (acceptPunct("++"))
@@ -1493,6 +1761,67 @@ namespace dscript
 				n->text += next().text;
 			return n;
 		}
+		if (t.kind == TokenKind::Identifier && t.fixedType != nullptr)
+		{
+			// A template parameter as a value in an instance (T.make(): a static sub of the struct
+			// it stands for): the type, in typeSyntax.
+			Node* n = make(NodeKind::Ident, t.pos);
+			n->name = t.text;
+			n->resolved = true;
+			n->typeSyntax = new TypeSyntax();
+			n->typeSyntax->pos = t.pos;
+			n->typeSyntax->name = t.text;
+			n->typeSyntax->fixed = t.fixedType;
+			n->typeSyntax->resolved = true;
+			next();
+			return n;
+		}
+		if (m_condition && t.kind == TokenKind::Identifier && isPunct("(", 1))
+		{
+			if (const ConditionBuiltin* b = findConditionBuiltin(t.text))
+			{
+				// A built-in of a condition: its arguments are types (T: parsed as types) or names.
+				Node* n = make(NodeKind::Call, t.pos);
+				n->a = make(NodeKind::Ident, t.pos);
+				n->a->name = t.text;
+				n->a->resolved = true;
+				next();
+				next();		// (
+				const std::string spec = b->args;
+				size_t k = 0;
+				while (!isPunct(")"))
+				{
+					if (k >= spec.size() || spec[k] == '*')
+						error(peek().pos, std::string(b->name) + " takes " + b->help);
+					const char kind = (k + 1 < spec.size() && spec[k + 1] == '*') ? spec[k] : spec[k];
+					if (kind == 'T')
+					{
+						Node* arg = make(NodeKind::TypeArg, peek().pos);
+						arg->typeSyntax = parseType();
+						n->list.push_back(arg);
+					}
+					else if (peek().kind == TokenKind::String)
+					{
+						Node* arg = make(NodeKind::StrLit, peek().pos);
+						arg->text = next().text;
+						n->list.push_back(arg);
+					}
+					else
+					{
+						Node* arg = make(NodeKind::StrLit, peek().pos);
+						arg->text = expectIdentifier("(a name: " + std::string(b->name) + " takes " + b->help + ")");
+						n->list.push_back(arg);
+					}
+					if (!(k + 1 < spec.size() && spec[k + 1] == '*'))
+						k++;
+					if (!acceptPunct(","))
+						break;
+				}
+				expectPunct(")", std::string("after the arguments of ") + b->name);
+				// (the count: checked when it is evaluated)
+				return n;
+			}
+		}
 		if (t.kind == TokenKind::Identifier || (isPunct("::") && peek(1).kind == TokenKind::Identifier))
 		{
 			Node* n = make(NodeKind::Ident, t.pos);
@@ -1504,6 +1833,8 @@ namespace dscript
 				n->resolved = global;
 				if (global)
 					n->text = "::" + n->name;
+				if (isPunct("<") && isTemplateName(n->name))
+					parseTemplateArgs(n->templateArgs);
 				return n;
 			}
 			bool local = false;
@@ -1512,6 +1843,8 @@ namespace dscript
 			if (n->name != t.text)
 				n->text = t.text;
 			next();
+			if (!local && isPunct("<") && isTemplateName(n->name))
+				parseTemplateArgs(n->templateArgs);		// max<u32>(...), Array<u32>.make()
 			return n;
 		}
 		if (isKeyword("true") || isKeyword("false"))

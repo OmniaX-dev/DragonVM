@@ -1,0 +1,25 @@
+// A library with templates (templates_library.ds, templates_dynamic.ds): its interface carries them.
+namespace tl {
+	template(T) {
+		struct Stack {
+			var items: T[8];
+			var count: u32;
+			sub push(var v: T) { this->items[this->count] = v; this->count++; }
+			sub pop() -> T { this->count--; return this->items[this->count]; }
+			template(U) {
+				sub sum_as() -> U { var s: U = 0; for (auto i in 0..this->count) s += cast<U>(this->items[i]); return s; }
+			}
+		};
+	}
+	template(T) where is_integer(T) {
+		sub clamp(var v: T, var lo: T, var hi: T) -> T { if (v < lo) return lo; if (v > hi) return hi; return v; }
+	}
+	template(T, optional U) {
+		sub tag() -> u32 {
+			if constexpr (is_given(U)) return sizeof(T) + sizeof(U);
+			return sizeof(T);
+		}
+	}
+	sub library_uses() -> u32 { var s: Stack<u8>; s.count = 0; s.push(7); return s.pop(); }		// an instance inside the library
+	var calls: u32 = 0;
+}

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Types.hpp"
+#include "Common.hpp"
 #include "Index.hpp"
 #include "../tools/DLIB.hpp"
 #include <functional>
@@ -43,6 +44,15 @@ namespace dscript
 		bool addressTaken { false };	// used as a value (a sub pointer): an inline sub also needs real code
 		bool defined { false };
 		bool external { false };		// in a library (#import): its code is there (not the inline ones)
+		// A template's instance: generated only if something uses it (called, or its address taken).
+		bool instance { false };
+		bool used { false };
+		bool generated { false };
+		std::string instanceNote;		// " (in Array<u32>, instantiated at file:line)": added to its errors
+		// An instance's signature that doesn't work for these types (a method nothing calls must not
+		// make the struct unusable): the error, raised if something uses it.
+		bool broken { false };
+		CompileError brokenError;
 	};
 
 	struct CodeGenOptions
@@ -82,8 +92,12 @@ namespace dscript
 	//   .entry __ds_start; data (globals, string literals); code: __ds_start (calls __ds_init,
 	//   which runs the non-constant global initializers, then main, then hlt (raw) or ret),
 	//   the top-level low blocks, the subs, the runtime helpers that are used.
+	struct ConditionEval;
+
 	class CodeGen
 	{
+		friend struct ConditionEval;
+
 		public:
 			CodeGen(const CodeGenOptions& options);
 			std::vector<std::string> generate(Node* program);
@@ -250,6 +264,41 @@ namespace dscript
 			bool isSharedData(const VarInfo* v) const;
 			// A for-in loop as the for loop it means (built once, kept in s->list).
 			Node* forInLoop(Node* s);
+
+			// ===== Templates =====
+			// A template's struct / sub (by full name: Ns::Array, Struct::map): the templates that
+			// declare it (several: overloads chosen by their where).
+			struct TemplateCandidate { TemplateDef* def; size_t entity; };
+			std::map<std::string, std::vector<TemplateCandidate>> m_templates;
+			std::set<std::string> m_templateShortNames;
+			std::map<std::string, std::string> m_instances;		// Ns::Array<u32> -> the instance (the same name)
+			// An instance -> its template and arguments (to deduce T from an Array<T> parameter).
+			struct InstanceOrigin { std::string templ; std::vector<Type*> args; };
+			std::map<std::string, InstanceOrigin> m_instanceOrigin;
+			std::map<std::pair<const TemplateDef*, size_t>, Node*> m_genericHeads;	// a sub entity parsed as is (its parameters' types, for deduction)
+			Type* m_notGiven { nullptr };		// an optional parameter that was not given
+			int m_instanceDepth { 0 };
+			size_t m_globalsTyped { 0 }, m_globalsGenerated { 0 };
+			int32_t m_initLocalMin { 4 };
+			void registerTemplate(Node* d);
+			// The instance of the template `name` for these arguments (explicit, then deduced from
+			// callArgs for a sub; owner: the struct of a method template): its full name. Instantiates
+			// it the first time (its declarations registered; its subs generated if used).
+			std::string instantiate(const std::string& name, std::vector<Type*> args, std::vector<Node*>* callArgs, StructInfo* owner,
+				const SourcePos& pos, bool wantStruct);
+			bool deduce(const TemplateDef* def, size_t entity, std::vector<Type*>& args, std::vector<Node*>& callArgs, bool method, std::string& why);
+			bool unify(TypeSyntax* pattern, Type* actual, const TemplateDef* def, std::vector<Type*>& args, bool fromLiteral, std::string& why);
+			Node* genericHead(const TemplateDef* def, size_t entity);
+			// Name<args> / T (a parameter in an instance) in an expression: the struct / sub it is.
+			void resolveTemplateIdent(Node* e);
+			void markUsed(FuncInfo* f);
+			// A compile-time condition (where, if constexpr): its value. bindings: a template's
+			// parameters (nullptr: an optional one not given) while its where is checked.
+			typedef std::map<std::string, Type*> Bindings;
+			int64_t evalCondition(Node* e, const Bindings* bindings);
+			Type* conditionType(TypeSyntax* ts, const Bindings* bindings);
+			void genGlobalTypes(size_t from);
+			void genGlobalValues(size_t from);
 			void convert(const Reg& r, Type* from, Type* to);
 			void normalize(const Reg& r, Type* t);
 			void copyMemory(const Reg& dst, const Reg& src, uint32_t size);

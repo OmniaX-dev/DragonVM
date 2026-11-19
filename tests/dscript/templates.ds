@@ -1,0 +1,42 @@
+// Templates: a struct template (methods, a for-in over an instance, nested instances), a sub
+// template (deduced or explicit types), if constexpr outside templates too.
+// expect-rv: 0
+template(T) {
+	struct Array {
+		var data: T[8];
+		var count: u32;
+		sub push(var v: T) { this->data[this->count] = v; this->count++; }
+		sub at(var i: u32) -> T { return this->data[i]; }
+		inline sub begin() -> u32 { return 0; }
+		inline sub end() -> u32 { return this->count; }
+		inline sub next(var i: u32) -> u32 { return i + 1; }
+		inline sub get(var i: u32) -> T* { return &this->data[i]; }
+	};
+	sub max(var a: T, var b: T) -> T { if (a > b) return a; return b; }
+}
+struct Pt { var x: i32; var y: i32; };
+// A method whose signature doesn't work for Pt (structs are passed by pointer): fine while unused.
+template(T) { struct Holder { var item: T*; sub take(var v: T) { } }; }
+sub struct_check() { var h: Holder<Pt>; var p: Pt; h.item = &p; }
+
+sub main() -> i32 {
+	var a: Array<u32>;
+	a.count = 0;
+	a.push(5); a.push(9); a.push(2);
+	var s: u32 = 0;
+	for (auto v in a) s += v;
+	if (s != 16) return 1;
+	if (max(3, 7) != 7) return 2;
+	if (max<u32>(10u, 4u) != 10u) return 3;
+	var b: Array<i8>;
+	b.count = 0;
+	b.push(-3);
+	if (b.at(0) != -3) return 4;
+	var nested: Array<Array<u32>*>;
+	nested.count = 0;
+	nested.push(&a);
+	if (nested.at(0)->at(1) != 9u) return 5;
+	struct_check();
+	if constexpr (sizeof(Pt) == 8 and not is_integer(Pt)) { } else { return 6; }
+	return 0;
+}

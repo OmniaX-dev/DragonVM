@@ -36,7 +36,7 @@ namespace dscript
 	}
 
 	static const char* s_keywords[] = {
-		"var", "auto", "const", "sub", "struct", "enum", "alias", "return", "if", "else", "while", "do", "for",
+		"var", "auto", "const", "sub", "template", "struct", "enum", "alias", "return", "if", "else", "while", "do", "for",
 		"break", "continue", "null", "true", "false", "cast", "sizeof", "low", "interrupt", "inline", "static", "priv", "readonly",
 		"assert", "debug_print", "namespace", "defer", "atomic", "and", "or", "not", "void", nullptr
 	};

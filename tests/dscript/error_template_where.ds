@@ -1,0 +1,10 @@
+// The where condition is false: the part that is false is named.
+// expect-error: four<u8>: its where is false: sizeof(T) == 4
+template(K, optional V) { struct Entry { var key: K; var value: V; }; struct Key { var key: K; }; }
+template(T) where is_integer(T) and sizeof(T) == 4 { sub four(var v: T) -> T { return v; } }
+template(T) where is_numeric(T) { sub pick(var v: T) -> u32 { return 1; } }
+template(T) where is_integer(T) { sub pick(var v: T) -> u32 { return 2; } }
+template(T) { sub make() -> T { return cast<T>(0); } }
+struct Point { var x: i32; };
+template(T) { struct Holder { var item: T*; sub take(var v: T) { } }; }
+sub main() -> i32 { four(cast<u8>(1)); return 0; }

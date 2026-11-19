@@ -36,6 +36,10 @@
 	"do"
 	"for"
 	"in"
+	"template"
+	"where"
+	"optional"
+	"constexpr"
 	"break"
 	"continue"
 	"assert"
@@ -177,3 +181,9 @@
 	";"
 	":"
 ] @punctuation.delimiter
+
+; Templates: max<u32>(...), x.map<f32>(...)
+(call_expression
+	function: (generic_expression name: (identifier) @function))
+(call_expression
+	function: (generic_expression name: (scoped_identifier name: (identifier) @function)))

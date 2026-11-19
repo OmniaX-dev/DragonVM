@@ -17,6 +17,8 @@ namespace dscript
 		LowBlock		// the raw text of a low { ... } block (without the braces)
 	};
 
+	struct Type;
+
 	struct Token
 	{
 		TokenKind kind { TokenKind::End };
@@ -25,6 +27,7 @@ namespace dscript
 		SourcePos pos;
 		bool isChar { false };		// Integer written as a character literal
 		bool isUnsigned { false };	// Integer with the u / U suffix (123u, 0xFFu): a u32
+		Type* fixedType { nullptr };	// a template parameter in an instance's tokens: the type it stands for
 	};
 
 	// Splits a source text into tokens. Comments are dropped. Directive lines (a '#' as the

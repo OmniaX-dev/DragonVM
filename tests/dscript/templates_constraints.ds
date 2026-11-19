@@ -1,0 +1,78 @@
+// Templates: where conditions, overloads chosen by their where, optional parameters (is_given),
+// if constexpr in instances, method templates (also in a struct template, also static), deducing
+// T from a Box<T>* parameter.
+// expect-rv: 0
+// where + overloading by constraint
+template(T) where is_integer(T) {
+	sub describe(var v: T) -> u32 { return 1; }
+}
+template(T) where is_pointer(T) {
+	sub describe(var v: T) -> u32 { return 2; }
+}
+template(T) where is_float(T) {
+	sub describe(var v: T) -> u32 { return 3; }
+}
+template(T) where is_struct(T) and size_of(T) == 8 {
+	sub struct_bytes() -> u32 { return sizeof(T); }
+}
+struct Pair { var a: i32; var b: i32; };
+
+// optional parameters + if constexpr
+template(K, optional V) {
+	struct Entry {
+		var key: K;
+		var value: V;
+	};
+	struct Key {
+		var key: K;
+		sub doubled() -> K { return this->key * 2; }
+	};
+	sub kind() -> u32 {
+		if constexpr (is_given(V)) {
+			if constexpr (is_type(V, u8)) return 30;
+			return 20;
+		}
+		return 10;
+	}
+}
+
+// a method template, also in a struct template; deduction from Array<T>*
+template(T) {
+	struct Box {
+		var item: T;
+		template(U) {
+			sub convert(var u: U) -> U { return u + cast<U>(this->item); }
+		}
+	};
+	sub first(var b: Box<T>*) -> T { return b->item; }
+}
+struct Counter {
+	var n: u32;
+	template(T) {
+		sub add(var v: T) { this->n += cast<u32>(v); }
+		static sub zero() -> T { return cast<T>(0); }
+	}
+};
+
+sub main() -> i32 {
+	var x: i32 = 0;
+	var f: f32 = 1.5;
+	var p: Pair;
+	if (describe(5) != 1 or describe(&x) != 2 or describe(f) != 3 or struct_bytes<Pair>() != 8) return 1;
+	var e: Entry<u32, u8>;
+	e.key = 1; e.value = 2;
+	var k: Key<i32>;
+	k.key = 21;
+	if (k.doubled() != 42) return 2;
+	if (kind<u32>() != 10 or kind<u32, i16>() != 20 or kind<u32, u8>() != 30) return 3;
+	var box: Box<u32>;
+	box.item = 5;
+	if (box.convert(10) != 15 or box.convert<u16>(1) != 6) return 4;
+	if (first(&box) != 5u) return 5;
+	var c: Counter;
+	c.n = 0;
+	c.add(3); c.add(4u); c.add<u8>(1);
+	if (c.n != 8) return 6;
+	if (Counter.zero<i32>() != 0) return 7;
+	return 0;
+}

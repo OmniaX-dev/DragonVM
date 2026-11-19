@@ -3,6 +3,7 @@
 #include "Lexer.hpp"
 #include "AST.hpp"
 #include <map>
+#include <set>
 
 namespace dscript
 {
@@ -11,6 +12,14 @@ namespace dscript
 		public:
 			Parser(const std::vector<Token>& tokens);
 			Node* parseProgram(void);
+			// The names of the templates' structs and subs (found in the tokens before parsing: then
+			// Name<...> is a template's arguments, not a comparison).
+			const std::set<std::string>& templateNames(void) const { return m_templateNames; }
+			void addTemplateNames(const std::set<std::string>& names) { m_templateNames.insert(names.begin(), names.end()); }
+			// An instance (the parser's tokens: one entity of def, its parameters replaced by types and
+			// its name by the instance's): its declarations (the struct and its methods, or the sub,
+			// and what they hide at the top level). owner: the struct of a method template.
+			std::vector<Node*> parseInstance(const TemplateDef& def, size_t entity, Node* owner);
 
 		private:
 			const Token& peek(int offset = 0) const;
@@ -48,6 +57,14 @@ namespace dscript
 			void parseParams(Node* fn);
 			Node* parseLambda(void);
 			Node* parseLow(void);
+			// template(T1, optional T2) where (condition) { ... } (owner: in a struct's body).
+			Node* parseTemplate(Node* owner);
+			bool isTemplateName(const std::string& name) const;
+			// <type, ...> after a template's name; the closing '>' (also the first one of '>>').
+			void parseTemplateArgs(std::vector<TypeSyntax*>& out);
+			void expectCloseAngle(void);
+			// A compile-time condition (where, if constexpr): calls to its built-ins take types.
+			Node* parseCondition(void);
 			TypeSyntax* parseType(void);
 			bool startsType(void) const;
 			bool pointerTypeAhead(void) const;
@@ -78,6 +95,8 @@ namespace dscript
 			Node* parsePrimary(void);
 
 		private:
+			std::set<std::string> m_templateNames;
+			bool m_condition { false };		// parsing a compile-time condition
 			std::vector<Token> m_tokens;
 			size_t m_pos { 0 };
 			// Nameless structs (struct { ... } used as a type): hidden top-level StructDecls.
