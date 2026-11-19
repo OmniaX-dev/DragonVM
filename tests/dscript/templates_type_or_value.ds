@@ -1,0 +1,32 @@
+// A template parameter without a type takes a type or a value: is_value(T) tells which,
+// value_type(T) is a value's type (anywhere a type is: a variable's, a sub's return type, in
+// conditions); value_type(expression) in general.
+// expect-rv: 0
+struct Point { var x: i32; var y: i32; };
+constexpr ORIGIN: Point = { 3, 4 };
+constexpr LIMIT: u32 = 100;
+// T: a type or a value
+template(T) {
+	sub describe() -> u32 {
+		if constexpr (is_value(T)) {
+			if constexpr (is_type(value_type(T), Point)) return 30;
+			else if constexpr (is_type(value_type(T), u32)) return 20;
+			return 10;
+		}
+		return 1;
+	}
+	sub twice() -> value_type(T) { var v: value_type(T) = T; return v + v; }
+	struct Holder { if constexpr (is_value(T)) { var v: value_type(T); } else { var v: T; } };
+}
+template(T) where is_value(T) and is_integer(value_type(T)) { sub negate() -> value_type(T) { return -T; } }
+sub main() -> i32 {
+	if (describe<u8>() != 1 or describe<5>() != 10 or describe<LIMIT>() != 20 or describe<ORIGIN>() != 30) return 1;
+	if (twice<21>() != 42 or twice<LIMIT>() != 200) return 2;
+	var h: Holder<7u>;
+	var k: Holder<u8>;
+	if (sizeof(h) != 4 or sizeof(k) != 1) return 3;
+	if (negate<5>() != -5) return 4;
+	var x: value_type(LIMIT * 2) = 3;
+	static_assert(is_value(LIMIT) and not is_value(u32) and sizeof(value_type(ORIGIN)) == 8);
+	return cast<i32>(x) - 3;
+}

@@ -1356,6 +1356,8 @@ namespace dscript
 			return t.text == "void" || t.text == "sub" || t.text == "struct" || t.text == "const";
 		if (t.kind != TokenKind::Identifier)
 			return false;
+		if (t.text == "value_type" && isPunct("(", 1))
+			return true;		// value_type(N)
 		static const char* names[] = { "i8", "u8", "i16", "u16", "i32", "u32", "f32", "bool", "char", "string", "int", "uint", "float", nullptr };
 		for (int i = 0; names[i] != nullptr; i++)
 		{
@@ -1423,6 +1425,21 @@ namespace dscript
 		}
 		else if (acceptKeyword("void"))
 			t->name = "void";
+		else if (peek().kind == TokenKind::Identifier && peek().text == "value_type" && isPunct("(", 1))
+		{
+			// value_type(expression): the type of a value (value_type(T): of the value T was given).
+			next();
+			next();
+			t->kind = TypeSyntax::Kind::ValueType;
+			if (peek().fixedType != nullptr && isPunct(")", 1))
+			{
+				t->fixed = peek().fixedType;		// (a template parameter given a type: an error)
+				t->name = next().text;
+			}
+			else
+				t->value = parseExpression();
+			expectPunct(")", "after value_type(...)");
+		}
 		else if (peek().fixedType != nullptr)
 		{
 			// A template parameter in an instance: the type it stands for.

@@ -13,8 +13,9 @@ namespace dscript
 	// can be used before they are declared).
 	struct TypeSyntax
 	{
-		// Value: a template's value argument (Array<u32, 16>): the expression in value.
-		enum class Kind { Named, Pointer, Array, Function, Value };
+		// Value: a template's value argument (Array<u32, 16>): the expression in value. ValueType:
+		// value_type(expression), the type of a value (of a template parameter given one: value_type(T)).
+		enum class Kind { Named, Pointer, Array, Function, Value, ValueType };
 		Kind kind { Kind::Named };
 		SourcePos pos;
 		std::string name;					// Named (the full name once the code generator resolved it)
@@ -27,7 +28,7 @@ namespace dscript
 		int variadic { 0 };					// Function: 1 ... (more arguments), 2 ...typed (with their types)
 		std::vector<TypeSyntax*> args;		// Named: a template's arguments (Array<u32>)
 		Type* fixed { nullptr };			// a template parameter in an instance: the type it stands for (name: the parameter)
-		struct Node* value { nullptr };		// Value
+		struct Node* value { nullptr };		// Value, ValueType
 	};
 
 	// template(T1, optional T2) where (condition) { structs and subs }: kept as tokens, each struct /

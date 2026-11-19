@@ -834,6 +834,20 @@ count(&arr);                // N deduced from the array: 5
 - A value parameter deduced from a sub's arguments: from an array's size (`T[N]`), or from an
   instance's (`Ring<T, N>*`). The others are given (or have a default).
 - In a condition, a value parameter is its value: `where N > 0`, `if constexpr (C.width == 4)`.
+- A parameter without a type (`template(T)`) takes a type or a value (`describe<u8>()`,
+  `describe<5>()`, `describe<ORIGIN>()`): `is_value(T)` tells which, and `value_type(T)` is the
+  value's type (an error for a type). A value keeps its own type (`5` is an `i32`, `5u` a `u32`).
+  `value_type(expression)` is a type anywhere (`var v: value_type(T) = T;`, a sub's return type,
+  `is_type(value_type(T), u32)`, `sizeof(value_type(T))`):
+```
+template(T) {
+    sub twice() -> value_type(T) { return T + T; }
+    struct Holder { if constexpr (is_value(T)) { var v: value_type(T); } else { var v: T; } };
+}
+twice<21>();            // 42 (an i32)
+var h: Holder<7u>;      // v: u32
+var k: Holder<u8>;      // v: u8
+```
 
 **if constexpr around declarations**: at the top level, in a namespace, in a struct's body, and in
 a template's body, `if constexpr (condition) { declarations } else { ... }` keeps the declarations
@@ -880,6 +894,7 @@ arguments are types: `T*`, `Array<u32>`, `u8`):
 | built-in | true when |
 |---|---|
 | `is_given(T)` | an optional parameter was given |
+| `is_value(T)` | a parameter given a value (not a type), or a constant's name |
 | `is_integer(T)`, `is_signed(T)`, `is_unsigned(T)` | an integer (not `bool`), signed, unsigned |
 | `is_float(T)` / `is_decimal(T)`, `is_numeric(T)`, `is_bool(T)` | `f32`; an integer or `f32`; `bool` |
 | `is_pointer(T)`, `is_array(T)`, `is_struct(T)`, `is_sub(T)` | the kind of type (`is_sub`: a sub pointer type) |

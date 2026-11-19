@@ -531,6 +531,7 @@ namespace dscript
 				resolveTypeNames(ts->base, scope);
 			break;
 			case TypeSyntax::Kind::Value:
+			case TypeSyntax::Kind::ValueType:
 				resolveNames(ts->value, scope);
 			break;
 		}
@@ -711,6 +712,10 @@ namespace dscript
 					}
 					return a.type;
 				}
+				if (m_consts.count(ts->name) > 0 && m_consts[ts->name].decl->name.rfind("__tv_", 0) == 0)
+					error(ts->pos, "the value " + m_consts[ts->name].decl->text + " where a type is needed (a template parameter given a value: is_value(T) tells, value_type(T) is its type)");
+				if (m_consts.count(ts->name) > 0)
+					error(ts->pos, "'" + written + "' is a constant, not a type (value_type(" + written + ") is its type)");
 				error(ts->pos, "unknown type: " + written);
 			}
 			case TypeSyntax::Kind::Pointer:
@@ -731,6 +736,19 @@ namespace dscript
 			}
 			case TypeSyntax::Kind::Value:
 				error(ts->pos, "a value where a type is needed");
+			case TypeSyntax::Kind::ValueType:
+			{
+				if (ts->value == nullptr)
+					error(ts->pos, "value_type(" + ts->name + "): " + ts->name + " is a type here (" + (ts->fixed ? ts->fixed->name() : "?") + "), not a value");
+				check(ts->value);
+				Type* t = decay(ts->value->type);
+				if (t == nullptr || t->kind == Type::Kind::Void || t->kind == Type::Kind::Null)
+					error(ts->pos, "value_type(...) needs a value with a type");
+				// (an integer literal: i32, as var x = 5 would be)
+				if (t->isInteger() && ts->value->kind == NodeKind::IntLit && ts->value->name != "u" && ts->value->name != "char")
+					t = m_types.i32();
+				return t;
+			}
 			case TypeSyntax::Kind::Function:
 			{
 				std::vector<Type*> params;
@@ -3028,7 +3046,7 @@ namespace dscript
 		}
 		if (a->kind == TypeSyntax::Kind::Named && a->fixed == nullptr && a->args.empty() && !isTypeName(a->name) && m_globals.count(a->name) > 0)
 			error(a->pos, "'" + (a->written.empty() ? a->name : a->written) + "' is a variable: a template's value argument must be a compile-time constant");
-		return bindings != nullptr ? conditionType(a, bindings) : resolveType(a);
+		return conditionType(a, bindings);
 	}
 
 	// ===== if constexpr around declarations, static_assert =====
@@ -3234,6 +3252,9 @@ namespace dscript
 					return unify(p->base, actual->base, def, args, fromLiteral, why);
 				}
 				return true;
+			case TypeSyntax::Kind::Value:
+			case TypeSyntax::Kind::ValueType:
+				return true;		// (a value written in the pattern: Ring<T, 4>*: nothing to deduce)
 			case TypeSyntax::Kind::Function:
 				if (actual->kind == Type::Kind::Pointer && actual->base != nullptr && actual->base->kind == Type::Kind::Function)
 					actual = actual->base;
@@ -3341,11 +3362,6 @@ namespace dscript
 				if (a[i] != nullptr && valueParam && !a[i]->valueArg)
 				{
 					reasons.push_back(l_display(a) + ": " + def->params[i] + " is a value (" + def->params[i] + ": " + paramType->name() + "), not the type " + a[i]->name() + where);
-					ok = false;
-				}
-				else if (a[i] != nullptr && !valueParam && a[i]->valueArg)
-				{
-					reasons.push_back(l_display(a) + ": " + def->params[i] + " is a type, not the value " + a[i]->name() + where);
 					ok = false;
 				}
 				else if (a[i] != nullptr && valueParam && a[i]->base != paramType)
@@ -3630,6 +3646,21 @@ namespace dscript
 					error(ts->pos, "an array type in a condition needs its element type and size");
 				return m_types.array(base, (uint32_t)constExpr(ts->count, "an array size"));
 			}
+			case TypeSyntax::Kind::ValueType:
+				// value_type(N), N a template parameter (in a where: from its argument).
+				if (bindings != nullptr && ts->value != nullptr && ts->value->kind == NodeKind::Ident)
+				{
+					auto it = bindings->find(ts->value->text.empty() ? ts->value->name : ts->value->text);
+					if (it != bindings->end())
+					{
+						if (it->second == nullptr || it->second == m_notGiven)
+							error(ts->pos, "value_type(" + it->first + "): " + it->first + " is not given");
+						if (!it->second->valueArg)
+							error(ts->pos, "value_type(" + it->first + "): " + it->first + " is a type here (" + it->second->name() + "), not a value");
+						return it->second->base;
+					}
+				}
+				return resolveType(ts);
 			default:
 				return resolveType(ts);
 		}
@@ -3649,6 +3680,7 @@ namespace dscript
 		{
 			static const std::vector<Entry> entries = {
 				{ { "is_given", "T", "one type parameter: was it given (an optional one)" }, [](CodeGen&, const auto& t, const auto&, const auto&) -> int64_t { return t[0] != nullptr; } },
+				{ { "is_value", "T", "one template parameter (or constant): was it given a value (not a type)" }, [](CodeGen&, const auto& t, const auto&, const auto&) -> int64_t { return t[0] != nullptr && t[0]->valueArg; } },
 				{ { "is_integer", "T", "one type" }, [](CodeGen&, const auto& t, const auto&, const auto&) -> int64_t { return t[0]->isInteger() && t[0]->kind != Type::Kind::Bool; } },
 				{ { "is_signed", "T", "one type" }, [](CodeGen&, const auto& t, const auto&, const auto&) -> int64_t { return t[0]->isSigned(); } },
 				{ { "is_unsigned", "T", "one type" }, [](CodeGen&, const auto& t, const auto&, const auto&) -> int64_t { return t[0]->isInteger() && !t[0]->isSigned() && t[0]->kind != Type::Kind::Bool; } },
@@ -3805,7 +3837,11 @@ namespace dscript
 				{
 					if (arg->kind == NodeKind::TypeArg)
 					{
-						Type* t = conditionType(arg->typeSyntax, bindings);
+						Type* t = templateArgument(arg->typeSyntax, bindings);
+						const std::string builtin = entry->spec.name;
+						if (t != nullptr && t->valueArg && builtin != "is_given" && builtin != "is_value")
+							error(arg->pos, "'" + (arg->typeSyntax->written.empty() ? arg->typeSyntax->name : arg->typeSyntax->written) + "' is the value " + t->name() +
+								" here, not a type (is_value(T) tells which; value_type(T) is a value's type)");
 						if (t == nullptr && std::string(entry->spec.name) != "is_given")
 							error(arg->pos, arg->typeSyntax->name + " is an optional template parameter that is not given here (check is_given(" + arg->typeSyntax->name + ") first)");
 						if (t == m_notGiven)
