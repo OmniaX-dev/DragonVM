@@ -1,0 +1,4 @@
+// for-in over a struct that is not a range: what it needs.
+// expect-error: is not a range for for-in: it needs begin() -> C and end() -> C
+struct S { var x: i32; };
+sub main() -> i32 { var s: S; for (auto v in s) { } return 0; }

@@ -477,6 +477,63 @@ namespace dscript
 		return n;
 	}
 
+	// A for-in loop (after 'for ('): auto x in, auto& x in, or var x: T in. 'in' is not a keyword:
+	// only there it means something.
+	bool Parser::isForIn(void)
+	{
+		auto l_in = [&](size_t k) { return peek(k).kind == TokenKind::Identifier && peek(k).text == "in"; };
+		if (isKeyword("auto"))
+			return (peek(1).kind == TokenKind::Identifier && l_in(2)) || (isPunct("&", 1) && peek(2).kind == TokenKind::Identifier && l_in(3));
+		if (!isKeyword("var") || peek(1).kind != TokenKind::Identifier || !isPunct(":", 2))
+			return false;
+		// var x: <type> in: the type is parsed, then the parser goes back.
+		const size_t saved = m_pos;
+		next(); next(); next();
+		parseType();
+		const bool in = l_in(0);
+		m_pos = saved;
+		return in;
+	}
+
+	// for (auto x in range) body: value = 1 for auto& (x points at the element), a = the variable
+	// (a VarDecl: its type for var x: T), b = the range (or the start of a..b), d = the end of
+	// a..b (nullptr: not a number range), c = the body, text = the loop's number (its hidden
+	// variables). The code generator turns it into a for loop (CodeGen::forInLoop).
+	Node* Parser::parseForIn(const SourcePos& pos)
+	{
+		Node* n = make(NodeKind::ForIn, pos);
+		Node* v = make(NodeKind::VarDecl, peek().pos);
+		if (acceptKeyword("auto"))
+		{
+			if (acceptPunct("&"))
+				n->value = 1;
+			v->name = expectIdentifier("after 'auto'");
+		}
+		else
+		{
+			expectKeyword("var", "");
+			v->name = expectIdentifier("after 'var'");
+			expectPunct(":", "after the variable's name");
+			v->typeSyntax = parseType();
+		}
+		v->namePos = lastPos();
+		next();		// in
+		n->b = parseExpression();
+		if (acceptPunct(".."))
+		{
+			n->d = parseExpression();
+			if (n->value == 1)
+				error(v->namePos, "auto& points at the elements of a range: a range of numbers (a..b) has none (auto " + v->name + " in ...)");
+		}
+		expectPunct(")", "after the range");
+		n->a = v;
+		declareLocal(v->name);
+		n->text = std::to_string(++m_forInCount);
+		n->c = parseStatement();
+		requireBlockFor(n->c, "for");
+		return n;
+	}
+
 	Node* Parser::parseVarDecl(bool allowNoType)
 	{
 		Node* n = make(NodeKind::VarDecl, peek().pos);
@@ -1158,9 +1215,15 @@ namespace dscript
 		}
 		if (acceptKeyword("for"))
 		{
-			Node* n = make(NodeKind::For, pos);
 			expectPunct("(", "after 'for'");
 			pushScope();
+			if (isForIn())
+			{
+				Node* loop = parseForIn(pos);
+				popScope();
+				return loop;
+			}
+			Node* n = make(NodeKind::For, pos);
 			if (isKeyword("var") || isKeyword("auto"))
 			{
 				n->a = parseVarDecl();

@@ -1,0 +1,3 @@
+// a..b counts integers.
+// expect-error: a range of numbers (a..b) needs integers
+sub main() -> i32 { for (auto x in 0.5..2.5) { } return 0; }

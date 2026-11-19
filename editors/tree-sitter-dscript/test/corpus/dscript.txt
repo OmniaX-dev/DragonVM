@@ -997,3 +997,53 @@ sub f() {
         (update_expression
           (identifier))
         (block)))))
+
+================================================================================
+For-in loops
+================================================================================
+
+sub f() {
+	for (auto i in 0..10) { }
+	for (auto i in a..n) { }
+	for (auto v in list) { }
+	for (auto& v in list) { }
+	for (var x: u32 in items) { }
+	var in: i32 = 2.;
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    (identifier)
+    (parameter_list)
+    (block
+      (for_in_statement
+        (identifier)
+        (range_expression
+          (number_literal)
+          (number_literal))
+        (block))
+      (for_in_statement
+        (identifier)
+        (range_expression
+          (identifier)
+          (identifier))
+        (block))
+      (for_in_statement
+        (identifier)
+        (identifier)
+        (block))
+      (for_in_statement
+        (identifier)
+        (identifier)
+        (block))
+      (for_in_statement
+        (identifier)
+        (primitive_type)
+        (identifier)
+        (block))
+      (variable_declaration
+        (identifier)
+        (primitive_type)
+        (number_literal)))))

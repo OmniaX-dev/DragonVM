@@ -35,6 +35,7 @@
 	"while"
 	"do"
 	"for"
+	"in"
 	"break"
 	"continue"
 	"assert"
@@ -157,6 +158,7 @@
 	"--"
 	"->"
 	"."
+	".."
 	"::"
 	"?"
 ] @operator

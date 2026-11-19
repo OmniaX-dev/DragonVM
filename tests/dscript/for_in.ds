@@ -1,0 +1,75 @@
+// for-in loops: for (auto x in range), auto& x (a pointer to the element), var x: T / T*, over
+// numbers (a..b: b excluded), arrays, and structs with begin() / end() / next(c) / get(c)
+// (a cursor that points at the elements needs no next / get); break, continue, nesting, a
+// range through a pointer, a for-in in an inline sub (expanded twice); in is still a name.
+// expect-rv: 0
+struct IntList {
+	var items: i32[8];
+	var count: u32;
+	inline sub begin() -> u32 { return 0; }
+	inline sub end() -> u32 { return this->count; }
+	inline sub next(var i: u32) -> u32 { return i + 1; }
+	inline sub get(var i: u32) -> i32* { return &this->items[i]; }
+};
+struct Node { var value: u32; var next: Node*; };
+struct Chain {
+	var head: Node*;
+	sub begin() -> Node* { return this->head; }
+	sub end() -> Node* { return null; }
+	sub next(var n: Node*) -> Node* { return n->next; }
+	sub get(var n: Node*) -> u32* { return &n->value; }
+};
+struct Span {				// a cursor that points at the elements: no next / get
+	var first: u16*;
+	var count: u32;
+	sub begin() -> u16* { return this->first; }
+	sub end() -> u16* { return this->first + this->count; }
+};
+inline sub sum_to(var n: u32) -> u32 { var s: u32 = 0; for (auto i in 0..n) s += i; return s; }
+
+sub main() -> i32 {
+	var sum: i32 = 0;
+	for (auto i in 0..5) sum += i;						// 10
+	if (sum != 10) return 1;
+	var n: u32 = 4;
+	var usum: u32 = 0;
+	for (auto i in 0..n) usum += i;						// i: u32
+	for (auto i in 3..3) return 2;						// empty
+	if (usum != 6) return 3;
+	var arr: i32[4] = { 1, 2, 3, 4 };
+	sum = 0;
+	for (auto v in arr) sum += v;
+	if (sum != 10) return 4;
+	for (auto& v in arr) *v *= 10;
+	if (arr[3] != 40) return 5;
+	var list: IntList;
+	list.count = 3;
+	list.items[0] = 5; list.items[1] = 6; list.items[2] = 7;
+	sum = 0;
+	for (auto v in list) sum += v;
+	if (sum != 18) return 6;
+	for (var p: i32* in list) *p = *p + 1;
+	if (list.items[2] != 8) return 7;
+	var lp: IntList* = &list;
+	sum = 0;
+	for (var v: i32 in lp) { if (v == 7) continue; sum += v; }	// 6 + 8 (7 skipped)
+	if (sum != 14) return 8;
+	var c: Node; var b: Node; var a: Node;
+	a.value = 1; a.next = &b; b.value = 2; b.next = &c; c.value = 3; c.next = null;
+	var chain: Chain; chain.head = &a;
+	usum = 0;
+	for (auto v in chain) { if (v == 3) break; usum += v; }
+	if (usum != 3) return 9;
+	var raw: u16[3] = { 100, 200, 300 };
+	var span: Span; span.first = raw; span.count = 3;
+	usum = 0;
+	for (auto x in span) usum += x;
+	if (usum != 600) return 10;
+	sum = 0;
+	for (auto i in 0..3) for (auto j in 0..3) sum += i * j;		// nested: 0+0+0+0+1+2+0+2+4 = 9
+	if (sum != 9) return 11;
+	if (sum_to(4) != 6 or sum_to(5) != 10) return 12;
+	var in: i32 = 3;							// not a keyword
+	if (in + 1 != 4) return 13;
+	return 0;
+}

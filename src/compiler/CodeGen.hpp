@@ -248,6 +248,8 @@ namespace dscript
 			void varAddress(const Reg& dst, VarInfo* v, bool taken = true);
 			// A shared library's writable global (its address comes from the process's table).
 			bool isSharedData(const VarInfo* v) const;
+			// A for-in loop as the for loop it means (built once, kept in s->list).
+			Node* forInLoop(Node* s);
 			void convert(const Reg& r, Type* from, Type* to);
 			void normalize(const Reg& r, Type* t);
 			void copyMemory(const Reg& dst, const Reg& src, uint32_t size);

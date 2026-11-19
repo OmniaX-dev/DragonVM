@@ -1,0 +1,3 @@
+// A range of numbers has no elements to point at.
+// expect-error: a range of numbers (a..b) has none
+sub main() -> i32 { for (auto& i in 0..3) { } return 0; }

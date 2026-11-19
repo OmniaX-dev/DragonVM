@@ -1,0 +1,9 @@
+// get() gives the element by its address.
+// expect-error: ::get() must return a pointer to the element
+struct R {
+	sub begin() -> u32 { return 0; }
+	sub end() -> u32 { return 3; }
+	sub next(var i: u32) -> u32 { return i + 1; }
+	sub get(var i: u32) -> u32 { return i; }
+};
+sub main() -> i32 { var r: R; for (auto v in r) { } return 0; }

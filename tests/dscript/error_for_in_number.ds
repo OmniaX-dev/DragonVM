@@ -1,0 +1,3 @@
+// A number is not a range (but 0..n is).
+// expect-error: for-in needs a range
+sub main() -> i32 { var n: u32 = 3; for (auto v in n) { } return 0; }

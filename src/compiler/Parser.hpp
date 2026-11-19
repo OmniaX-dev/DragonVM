@@ -38,6 +38,10 @@ namespace dscript
 			Node* parseEnum(const Node* owner = nullptr);
 			Node* parseConst(void);
 			Node* parseAlias(void);
+			// for (auto x in r) / (auto& x in r) / (var x: T in r) / (... in a..b), after 'for ('.
+			bool isForIn(void);
+			Node* parseForIn(const SourcePos& pos);
+			int m_forInCount { 0 };
 			Node* parseVarDecl(bool allowNoType = true);
 			Node* parseFunction(int flags, const Node* owner = nullptr);
 			bool acceptVariadicTyped(void);

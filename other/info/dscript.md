@@ -618,8 +618,53 @@ Not checked: low blocks (raw dasm), and writes through pointers to the program's
 ### Statements
 `var` declarations (locals: scalars are not initialized unless given a value; structs are zeroed
 and get their default values), `if` / `else`, `while`, `do ... while (...);`,
-`for (init; condition; step)`, `break`, `continue`, `return`, blocks, expression statements,
-`low { ... }`, `assert(...)`, `debug_print(...)`, `defer ...`, `atomic { ... }`.
+`for (init; condition; step)`, `for (auto x in range)`, `break`, `continue`, `return`, blocks,
+expression statements, `low { ... }`, `assert(...)`, `debug_print(...)`, `defer ...`,
+`atomic { ... }`.
+
+### for-in loops
+`for (auto x in range) body` runs the body for every element of the range, `x` being a copy of
+it; `for (auto& x in range)` makes `x` a pointer to the element (to change it: `*x = ...`,
+`x->field`). `for (var x: T in range)` / `for (var x: T* in range)` say the type.
+```
+for (auto i in 0..10) { }            // numbers: 0 to 9 (the end is excluded); i: i32
+for (auto i in 0..count) { }         // i: count's type (u32 here); a..b: both evaluated once
+for (auto v in values) { }           // an array (T[N]): v: T
+for (auto& v in values) *v *= 2;     // v: T*
+for (auto item in list) { }          // a struct that is a range (below), or a pointer to one
+```
+A struct is a range when it has these methods (a "cursor" `C` is any integer or pointer: an
+index, a node pointer, ...; `T` is the element's type, which gives `auto` its type):
+```
+sub begin() -> C            // the cursor of the first element
+sub end() -> C              // the cursor one past the last (compared with !=)
+sub next(var c: C) -> C     // the cursor after c
+sub get(var c: C) -> T*     // the element at c
+```
+```
+struct IntList {
+    var items: i32[16];
+    var count: u32;
+    inline sub begin() -> u32 { return 0; }
+    inline sub end() -> u32 { return this->count; }
+    inline sub next(var i: u32) -> u32 { return i + 1; }
+    inline sub get(var i: u32) -> i32* { return &this->items[i]; }
+};
+struct Chain {                       // a linked list: node pointers, null at the end
+    var head: Node*;
+    inline sub begin() -> Node* { return this->head; }
+    inline sub end() -> Node* { return null; }
+    inline sub next(var n: Node*) -> Node* { return n->next; }
+    inline sub get(var n: Node*) -> Item* { return &n->item; }
+};
+```
+- A cursor that points at the elements (`begin()` / `end()` return `T*`) needs no `next` / `get`:
+  they are `c + 1` and `c`.
+- The loop is a `for` loop over the cursor (`break` / `continue` work as usual): the range is
+  evaluated once, and so is `end()`. With `inline` methods it costs about what a hand written
+  loop does.
+- The range is a variable (or a field, or a pointer to the struct); `in` is not a keyword (it
+  means something only there).
 
 ### defer
 `defer <statement or block>` runs that code when the block it is in is left, on every way out:

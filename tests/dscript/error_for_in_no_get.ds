@@ -1,0 +1,8 @@
+// A cursor that is an index needs next(c) and get(c).
+// expect-error: needs get(c: u32) -> T* for for-in
+struct R {
+	sub begin() -> u32 { return 0; }
+	sub end() -> u32 { return 3; }
+	sub next(var i: u32) -> u32 { return i + 1; }
+};
+sub main() -> i32 { var r: R; for (auto v in r) { } return 0; }

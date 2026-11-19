@@ -257,6 +257,7 @@ module.exports = grammar({
 			$.while_statement,
 			$.do_statement,
 			$.for_statement,
+			$.for_in_statement,
 			$.return_statement,
 			$.break_statement,
 			$.continue_statement,
@@ -296,6 +297,25 @@ module.exports = grammar({
 			')',
 			field('body', $._statement),
 		),
+		// for (auto x in range) / for (auto& x in range) / for (var x: T in range) / ... in a..b
+		for_in_statement: $ => seq(
+			'for', '(',
+			choice(
+				seq('auto', optional(field('reference', '&')), field('name', $.identifier)),
+				seq('var', field('name', $.identifier), ':', field('type', $._type)),
+			),
+			'in',
+			field('range', choice($.range_expression, $._expression)),
+			')',
+			field('body', $._statement),
+		),
+		// a..b (b excluded). A number right before '..' is one token with it (0..10: the lexer can't
+		// tell "0." from "0" followed by "..", and "2." is a float).
+		range_expression: $ => choice(
+			seq(field('start', $._expression), '..', field('end', $._expression)),
+			seq(field('start', alias($._number_dotdot, $.number_literal)), field('end', $._expression)),
+		),
+		_number_dotdot: _ => token(prec(1, /[0-9][0-9_]*[uU]?\.\./)),
 		return_statement: $ => seq('return', optional($._expression), ';'),
 		break_statement: _ => seq('break', ';'),
 		continue_statement: _ => seq('continue', ';'),

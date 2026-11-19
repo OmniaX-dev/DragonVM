@@ -252,7 +252,7 @@ namespace dscript
 			}
 			if (isFloat)
 			{
-				if (std::isalnum((unsigned char)peek()) || peek() == '_' || peek() == '.')
+				if (std::isalnum((unsigned char)peek()) || peek() == '_' || (peek() == '.' && peek(1) != '.'))
 					error(t.pos, "invalid character in floating point literal");
 				errno = 0;
 				const float f = std::strtof(text.c_str(), nullptr);
@@ -272,7 +272,7 @@ namespace dscript
 			advance();
 			t.isUnsigned = true;
 		}
-		if (std::isalnum((unsigned char)peek()) || peek() == '.')
+		if (std::isalnum((unsigned char)peek()) || (peek() == '.' && peek(1) != '.'))		// (0..10: a range)
 			error(t.pos, peek() == '.' ? "invalid '.' after an integer literal" : "invalid character in integer literal");
 		t.value = (int64_t)value;
 		return t;
@@ -410,7 +410,7 @@ namespace dscript
 	{
 		Token t = makeToken(TokenKind::Punct);
 		static const char* puncts[] = {
-			"...", "<<=", ">>=", "->", "::", "++", "--", "<<", ">>", "<=", ">=", "==", "!=", "&&", "||",
+			"...", "..", "<<=", ">>=", "->", "::", "++", "--", "<<", ">>", "<=", ">=", "==", "!=", "&&", "||",
 			"+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=",
 			"+", "-", "*", "/", "%", "&", "|", "^", "~", "!", "<", ">", "=", "(", ")", "{", "}",
 			"[", "]", ";", ":", ",", ".", "?", nullptr

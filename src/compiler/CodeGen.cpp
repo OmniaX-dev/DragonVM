@@ -2255,6 +2255,169 @@ namespace dscript
 		}
 	}
 
+	// for (auto x in range) body -> a for loop, by the range's type:
+	//   a..b      { var __e = b; for (var x: T = a; x < __e; x++) body }   (T: the integer type of a and b)
+	//   T[N]      { var __a = range; for (var __i: u32 = 0; __i < N; __i++) { auto x = __a[__i]; body } }
+	//   a struct (or a pointer to one) with begin() / end() / next(c) / get(c):
+	//             { var __r = &range; var __end = __r->end();
+	//               for (var __c = __r->begin(); __c != __end; __c = __r->next(__c)) { auto x = *__r->get(__c); body } }
+	//             (a cursor that points at the elements: next is c + 1, get is c, if the struct has none)
+	// auto& x / var x: T* (T the element's type): x = the element's address instead of its value.
+	Node* CodeGen::forInLoop(Node* s)
+	{
+		if (!s->list.empty())
+			return s->list[0];
+		Node* var = s->a;
+		const SourcePos pos = s->pos;
+		const std::string tag = "__forin" + s->text + "_";
+		auto l_node = [&](NodeKind kind) { Node* n = new Node(); n->kind = kind; n->pos = pos; return n; };
+		auto l_ident = [&](const std::string& name) { Node* n = l_node(NodeKind::Ident); n->name = name; n->resolved = true; return n; };
+		auto l_unary = [&](const char* op, Node* a) { Node* n = l_node(NodeKind::Unary); n->name = op; n->a = a; return n; };
+		auto l_binary = [&](const char* op, Node* a, Node* b) { Node* n = l_node(NodeKind::Binary); n->name = op; n->a = a; n->b = b; return n; };
+		auto l_decl = [&](const std::string& name, TypeSyntax* type, Node* value) {
+			Node* n = l_node(NodeKind::VarDecl);
+			n->name = name;
+			n->namePos = (name == var->name) ? var->namePos : pos;
+			n->typeSyntax = type;
+			n->a = value;
+			return n;
+		};
+		auto l_method = [&](Node* object, const std::string& name, std::vector<Node*> args) {
+			Node* member = l_node(NodeKind::Member);
+			member->value = 1;		// ->
+			member->a = object;
+			member->name = name;
+			member->namePos = s->b->pos;
+			Node* call = l_node(NodeKind::Call);
+			call->a = member;
+			call->list = args;
+			return call;
+		};
+		auto l_named = [&](Type* t) { TypeSyntax* ts = new TypeSyntax(); ts->pos = pos; ts->name = t->name(); ts->resolved = true; return ts; };
+		// The body, after the variable's declaration (its own block: the variable is new each time).
+		auto l_body = [&](Node* first) {
+			Node* b = l_node(NodeKind::Block);
+			b->endPos = (s->c->kind == NodeKind::Block) ? s->c->endPos : pos;
+			b->list = { first, s->c };
+			return b;
+		};
+		// x from the element's address: its value, or the address (auto&, var x: T*).
+		auto l_element = [&](Node* address, Type* element) {
+			bool pointer = (s->value == 1);
+			if (var->typeSyntax != nullptr)
+			{
+				Type* t = resolveType(var->typeSyntax);
+				pointer = (t->kind == Type::Kind::Pointer && t->base == element && element->kind != Type::Kind::Void);
+			}
+			return l_decl(var->name, var->typeSyntax, pointer ? address : l_unary("*", address));
+		};
+		Node* outer = l_node(NodeKind::Block);
+		outer->endPos = (s->c->kind == NodeKind::Block) ? s->c->endPos : pos;
+		Node* loop = l_node(NodeKind::For);
+		if (s->d != nullptr)
+		{
+			// a..b: integers; the variable's type from both (the one of a typed side, else i32).
+			check(s->b);
+			check(s->d);
+			Type* ta = decay(s->b->type);
+			Type* tb = decay(s->d->type);
+			if (ta == nullptr || tb == nullptr || !ta->isInteger() || !tb->isInteger() || ta->kind == Type::Kind::Bool || tb->kind == Type::Kind::Bool)
+				error(s->b->pos, "a range of numbers (a..b) needs integers");
+			const bool litA = s->b->kind == NodeKind::IntLit && s->b->name != "u", litB = s->d->kind == NodeKind::IntLit && s->d->name != "u";
+			Type* t = (litA && !litB) ? tb : (litB && !litA) ? ta : (ta == tb) ? ta
+				: (ta->kind == Type::Kind::U32 || tb->kind == Type::Kind::U32) ? m_types.u32() : m_types.i32();
+			if (litA && litB)
+				t = m_types.i32();
+			outer->list.push_back(l_decl(tag + "end", l_named(t), s->d));
+			loop->a = l_decl(var->name, var->typeSyntax != nullptr ? var->typeSyntax : l_named(t), s->b);
+			loop->b = l_binary("<", l_ident(var->name), l_ident(tag + "end"));
+			loop->c = l_node(NodeKind::PostInc);
+			loop->c->a = l_ident(var->name);
+			loop->d = s->c;
+		}
+		else
+		{
+			check(s->b);
+			Type* rt = s->b->type;
+			if (rt != nullptr && rt->kind == Type::Kind::Array)
+			{
+				if (rt->count == 0)
+					error(s->b->pos, "for-in over an array needs its size");
+				outer->list.push_back(l_decl(tag + "a", nullptr, s->b));		// (decays: a pointer to the first element)
+				loop->a = l_decl(tag + "i", l_named(m_types.u32()), l_node(NodeKind::IntLit));
+				Node* count = l_node(NodeKind::IntLit);
+				count->value = rt->count;
+				count->name = "u";
+				loop->b = l_binary("<", l_ident(tag + "i"), count);
+				loop->c = l_node(NodeKind::PostInc);
+				loop->c->a = l_ident(tag + "i");
+				Node* index = l_node(NodeKind::Index);
+				index->a = l_ident(tag + "a");
+				index->b = l_ident(tag + "i");
+				loop->d = l_body(l_element(l_unary("&", index), rt->base));
+			}
+			else
+			{
+				Type* t = (rt != nullptr) ? decay(rt) : nullptr;
+				const bool viaPointer = t != nullptr && t->kind == Type::Kind::Pointer && t->base != nullptr && t->base->kind == Type::Kind::Struct;
+				Type* st = viaPointer ? t->base : t;
+				if (st == nullptr || st->kind != Type::Kind::Struct)
+					error(s->b->pos, "for-in needs a range: an array, a struct (or a pointer to one) with begin() and end() (and next(c), get(c)), "
+						"or numbers: a..b" + std::string(rt != nullptr ? " (this is " + rt->name() + ")" : ""));
+				StructInfo* info = st->structInfo;
+				resolveStruct(info, s->b->pos);
+				const std::string who = info->anonymous ? info->displayName() : info->name;
+				auto l_find = [&](const std::string& method) -> FuncInfo* {
+					auto it = m_funcs.find(info->name + "::" + method);
+					return (it == m_funcs.end() || it->second.empty()) ? nullptr : it->second[0];
+				};
+				FuncInfo* fBegin = l_find("begin");
+				FuncInfo* fEnd = l_find("end");
+				FuncInfo* fNext = l_find("next");
+				FuncInfo* fGet = l_find("get");
+				if (fBegin == nullptr || fEnd == nullptr)
+					error(s->b->pos, who + " is not a range for for-in: it needs begin() -> C and end() -> C (the cursors of the first element and of one past "
+						"the last), and next(c: C) -> C and get(c: C) -> T* (unless C points at the elements)");
+				Type* cursor = fBegin->type->base;
+				if (cursor == nullptr || !cursor->isScalar() || cursor->kind == Type::Kind::Void)
+					error(s->b->pos, who + "::begin() must return a cursor (an integer or a pointer), not " + (cursor ? cursor->name() : "void"));
+				if (fEnd->type->base != cursor)
+					error(s->b->pos, who + "::end() must return the cursor type of begin() (" + cursor->name() + "), not " + fEnd->type->base->name());
+				if ((fNext == nullptr || fGet == nullptr) && cursor->kind != Type::Kind::Pointer)
+					error(s->b->pos, who + " needs " + std::string(fNext == nullptr ? "next(c: " : "get(c: ") + cursor->name() + ")" +
+						(fNext == nullptr ? " -> " + cursor->name() : " -> T*") + " for for-in (only a cursor that points at the elements can do without)");
+				if (fNext != nullptr && fNext->type->base != cursor)
+					error(s->b->pos, who + "::next() must return the cursor type of begin() (" + cursor->name() + ")");
+				Type* element = (fGet != nullptr) ? fGet->type->base : cursor;
+				if (element == nullptr || element->kind != Type::Kind::Pointer)
+					error(s->b->pos, who + "::get() must return a pointer to the element (T*), not " + (element ? element->name() : "void"));
+				if (!viaPointer && !s->b->lvalue)
+					error(s->b->pos, "the range of a for-in must be a variable (or a pointer to one)");
+				outer->list.push_back(l_decl(tag + "r", nullptr, viaPointer ? s->b : l_unary("&", s->b)));
+				outer->list.push_back(l_decl(tag + "end", nullptr, l_method(l_ident(tag + "r"), "end", {})));
+				loop->a = l_decl(tag + "c", nullptr, l_method(l_ident(tag + "r"), "begin", {}));
+				loop->b = l_binary("!=", l_ident(tag + "c"), l_ident(tag + "end"));
+				Node* step = l_node(NodeKind::Assign);
+				step->name = "=";
+				step->a = l_ident(tag + "c");
+				if (fNext != nullptr)
+					step->b = l_method(l_ident(tag + "r"), "next", { l_ident(tag + "c") });
+				else
+				{
+					Node* one = l_node(NodeKind::IntLit);
+					one->value = 1;
+					step->b = l_binary("+", l_ident(tag + "c"), one);
+				}
+				loop->c = step;
+				Node* address = (fGet != nullptr) ? l_method(l_ident(tag + "r"), "get", { l_ident(tag + "c") }) : l_ident(tag + "c");
+				loop->d = l_body(l_element(address, element->base));
+			}
+		}
+		outer->list.push_back(loop);
+		s->list.push_back(outer);
+		return outer;
+	}
+
 	bool CodeGen::isSharedData(const VarInfo* v) const
 	{
 		return m_options.shared && v->storage == VarInfo::Storage::Global && !v->readOnly;
@@ -3803,6 +3966,9 @@ namespace dscript
 				label(lEnd);
 				m_loopDepth--;
 			}
+			break;
+			case NodeKind::ForIn:
+				genStatement(forInLoop(s));
 			break;
 			case NodeKind::For:
 			{
