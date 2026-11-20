@@ -115,11 +115,13 @@ namespace dr {
 		var NextInterrupt: u32					= MemoryLayout.Timer + 0x0014;	// when the next one comes (ms)
 	};
 	// Reading Int / Float (a word) gives a new random number; writing Seed seeds the generator
-	// (programs use int 0x20: see dr::random).
+	// (programs use int 0x20: see dr::random). Reading Entropy gives 32 new bits from the host's
+	// entropy (never affected by Seed): a seed for other generators.
 	const RandomRegisters: struct {
 		var Int: u32							= MemoryLayout.Random + 0x0000;	// a new i32 in 0..INT32_MAX
 		var Float: u32							= MemoryLayout.Random + 0x0004;	// a new f32 in [0, 1)
 		var Seed: u32							= MemoryLayout.Random + 0x0008;	// the last seed
+		var Entropy: u32						= MemoryLayout.Random + 0x000C;	// 32 new bits of the host's entropy
 	};
 	// The CPU's control registers (dr::cpu). Readable by everyone, writable in supervisor mode.
 	const CPUControlRegisters: struct {

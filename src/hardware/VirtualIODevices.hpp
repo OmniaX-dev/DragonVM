@@ -7,6 +7,7 @@
 #include <chrono>
 #include <ostd/math/Random.hpp>
 #include <unordered_map>
+#include <random>
 
 namespace dragon
 {
@@ -314,7 +315,9 @@ namespace dragon
 		// Random numbers from the host's generator. Reading Int (a word) gives a new number in
 		// 0..INT_MAX, reading Float a new f32 in [0, 1) (its bits); a byte read gives a byte of the
 		// last one. Writing a word to Seed seeds the generator: the numbers that follow are then
-		// always the same. Seeded from the host clock at start.
+		// always the same. Seeded from the host clock at start. Reading Entropy gives 32 new bits
+		// from the host's entropy source (std::random_device, mixed with the host clock): never
+		// affected by Seed, for seeding generators.
 		class VirtualRandom : public IMemoryDevice
 		{
 			public: struct tRegisters
@@ -322,6 +325,7 @@ namespace dragon
 				inline static constexpr u32 Int = 0x00;		// 4 bytes
 				inline static constexpr u32 Float = 0x04;	// 4 bytes
 				inline static constexpr u32 Seed = 0x08;	// 4 bytes
+				inline static constexpr u32 Entropy = 0x0C;	// 4 bytes
 			};
 
 			public:
@@ -331,6 +335,7 @@ namespace dragon
 				void autoSeed(void);
 				i32 nextInt(void);
 				f32 nextFloat(void);
+				u32 nextEntropy(void);
 
 				i8 read8(u32 addr) override;
 				i32 read32(u32 addr) override;
@@ -341,6 +346,8 @@ namespace dragon
 			private:
 				ostd::ByteStream m_data;
 				ostd::RandomGenerator m_rng { false };
+				std::random_device m_entropy;
+				u64 m_entropyCounter { 0 };
 		};
 
 		// The CPU's control registers (big endian words). Readable by everyone, writable in

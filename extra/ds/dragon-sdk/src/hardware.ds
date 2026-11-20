@@ -109,6 +109,8 @@ namespace dr {
 	inline sub random_get_next_int() -> i32 { return *cast<i32*>(dr::RandomRegisters.Int); }
 	sub random_get_next_float() -> f32 { low { mov RV, [$dr::RandomRegisters.Float] }; }
 	inline sub random_set_seed(var seed: u32) { *cast<u32*>(dr::RandomRegisters.Seed) = seed; }
+	// 32 bits of the host's entropy (a good seed: not affected by random_set_seed).
+	inline sub random_get_entropy() -> u32 { return *cast<u32*>(dr::RandomRegisters.Entropy); }
 
 	// The system heap through the BIOS (int 0x20): CMOS HeapStart's dr::Heap (the BIOS's, or the
 	// kernel's after dr::set_system_heap). Null / false: no room / not the heap's. A kernel calls

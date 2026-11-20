@@ -1,5 +1,6 @@
 // The random device (its registers, read directly): dr::random_get_next_int() in 0..INT32_MAX,
-// next_float() in [0, 1), and seed(): the same seed gives the same numbers after it.
+// next_float() in [0, 1), and seed(): the same seed gives the same numbers after it;
+// random_get_entropy(): 32 bits of the host's entropy, not affected by the seed.
 // drun-flags: --boot
 // expect-rv: 0
 #include(check.ds)
@@ -35,5 +36,20 @@ sub main() -> i32 {
 	check(4, *cast<u32*>(dr::RandomRegisters.Seed) == 1234);
 	dr::random_set_seed(99);
 	check(5, dr::random_get_next_int() != a1 or dr::random_get_next_int() != a2);
+
+	// Entropy: new bits at every read (the seed doesn't repeat them), all of them used.
+	dr::random_set_seed(1234);
+	var e1: u32 = dr::random_get_entropy();
+	dr::random_set_seed(1234);
+	var e2: u32 = dr::random_get_entropy();
+	check(6, e1 != e2);
+	var ones: u32 = 0;
+	var zeros: u32 = 0;
+	for (auto k in 0..64) {
+		const e = dr::random_get_entropy();
+		ones |= e;
+		zeros |= ~e;
+	}
+	check(7, ones == 0xFFFFFFFF and zeros == 0xFFFFFFFF);		// (every bit was 1 and 0 at least once)
 	return result();
 }

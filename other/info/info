@@ -144,6 +144,8 @@
         0x00: Int: reading a word gives a new random i32 in 0..INT_MAX (4 bytes)
         0x04: Float: reading a word gives a new random f32 in [0, 1), its bits (4 bytes)
         0x08: Seed: the last seed; writing a word seeds the generator (4 bytes)
+        0x0C: Entropy: reading a word gives 32 new bits of the host's entropy (std::random_device,
+              mixed with the host clock): never affected by Seed, for seeding generators (4 bytes)
         (a byte read gives a byte of the last value, without a new one; other writes are errors)
     0x010006AF
     -------

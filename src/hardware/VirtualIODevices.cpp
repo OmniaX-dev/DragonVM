@@ -385,6 +385,19 @@ namespace dragon
 			return value;
 		}
 
+		u32 VirtualRandom::nextEntropy(void)
+		{
+			// The host's entropy, mixed with the clock and a counter (splitmix64): random even where
+			// std::random_device is not (some toolchains make it deterministic).
+			u64 z = cast<u64>(std::chrono::high_resolution_clock::now().time_since_epoch().count()) + (++m_entropyCounter * 0x9E3779B97F4A7C15ull);
+			z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull;
+			z = (z ^ (z >> 27)) * 0x94D049BB133111EBull;
+			z ^= z >> 31;
+			const u32 value = cast<u32>(m_entropy()) ^ cast<u32>(z ^ (z >> 32));
+			bytes::write32(m_data, tRegisters::Entropy, cast<i32>(value));
+			return value;
+		}
+
 		i8 VirtualRandom::read8(u32 addr)
 		{
 			return stream_read8(m_data, addr, data::ErrorCodes::Random_InvalidAddress, "Random");
@@ -396,6 +409,8 @@ namespace dragon
 				nextInt();
 			else if (addr == tRegisters::Float)
 				nextFloat();
+			else if (addr == tRegisters::Entropy)
+				nextEntropy();
 			return stream_read32(m_data, addr, data::ErrorCodes::Random_InvalidAddress, "Random");
 		}
 
