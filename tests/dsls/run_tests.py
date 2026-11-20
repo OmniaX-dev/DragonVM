@@ -306,5 +306,23 @@ with tempfile.TemporaryDirectory() as tmp:
     c.request("shutdown", None)
     c.notify("exit", None)
     c.proc.wait(timeout=10)
+# Templates: their structs and subs are completed (ns::), an instance's methods too (b.).
+with tempfile.TemporaryDirectory() as tmp:
+    tpl = os.path.join(tmp, "tpl.ds")
+    tpl_text = ("namespace ns {\n\ttemplate(T) {\n\t\tstruct Box { var v: T; sub get() -> T { return this->v; } }\n"
+                "\t\tsub make(var v: T) -> Box<T> { var b: Box<T>; b.v = v; return b; }\n\t}\n}\n"
+                "sub main() -> i32 {\n\tvar b: ns::Box<i32>;\n\treturn 0;\n}\n")
+    with open(tpl, "w") as f:
+        f.write(tpl_text)
+    c = Client()
+    c.request("initialize", {"processId": None, "rootUri": uri(tmp), "capabilities": {}})
+    c.notify("initialized", {})
+    c.notify("textDocument/didOpen", {"textDocument": {"uri": uri(tpl), "languageId": "dscript", "version": 1, "text": tpl_text}})
+    c.sync()
+    completes("a namespace's templates (ns::)", tpl, tpl_text, 8, "\tns::|", ["Box", "make"])
+    completes("a template instance's methods (b.)", tpl, tpl_text, 8, "\tb.|", ["v", "get"])
+    c.request("shutdown", None)
+    c.notify("exit", None)
+    c.proc.wait(timeout=10)
 print("%d passed, %d failed" % (passed, failed))
 sys.exit(1 if failed else 0)

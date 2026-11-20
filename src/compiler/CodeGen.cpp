@@ -11120,9 +11120,97 @@ namespace dscript
 						out.members.push_back(c);
 				}
 				break;
+				case NodeKind::TemplateDecl:
+				{
+					// A template's structs / classes and subs (method templates: members of their
+					// struct), with the template's head in their hover.
+					const TemplateDef* def = d->tmpl;
+					if (def == nullptr)
+						continue;
+					std::string head = "template(";
+					for (size_t i = 0; i < def->params.size(); i++)
+						head += (i > 0 ? ", " : "") + std::string(i >= def->required ? "optional " : "") + def->params[i];
+					head += ")";
+					if (!def->whereParts.empty())
+					{
+						head += " where ";
+						for (size_t i = 0; i < def->whereParts.size(); i++)
+							head += (i > 0 ? " and " : "") + def->whereParts[i];
+					}
+					for (size_t at = head.find(" :: "); at != std::string::npos; at = head.find(" :: "))
+						head.replace(at, 4, "::");
+					for (const TemplateEntity& ent : def->entities)
+					{
+						if (ent.nameToken >= def->tokens.size())
+							continue;
+						CompletionSymbol t;
+						t.name = ent.name;
+						t.def = def->tokens[ent.nameToken].pos;
+						bool isStatic = false, priv = false;
+						for (size_t k = ent.first; k < ent.nameToken; k++)
+						{
+							isStatic = isStatic || def->tokens[k].text == "static";
+							priv = priv || def->tokens[k].text == "priv" || def->tokens[k].text == "prot";
+						}
+						t.isPrivate = priv;
+						// (its declaration as written: up to its body)
+						std::string decl;
+						for (size_t k = ent.first; k < ent.last && k < def->tokens.size(); k++)
+						{
+							const Token& tk = def->tokens[k];
+							if (tk.kind == TokenKind::Punct && (tk.text == "{" || tk.text == ";"))
+								break;
+							const bool tight = tk.kind == TokenKind::Punct && (tk.text == "(" || tk.text == ")" || tk.text == "," || tk.text == ":" || tk.text == "*" || tk.text == "<" || tk.text == ">" || tk.text == "::");
+							if (!decl.empty() && !tight && decl.back() != '(' && decl.back() != '<' && decl.back() != ' ' && decl.compare(decl.size() - std::min<size_t>(2, decl.size()), 2, "::") != 0)
+								decl += ' ';
+							decl += tk.kind == TokenKind::String ? "\"" + tk.text + "\"" : tk.text;
+							if (tk.kind == TokenKind::Punct && (tk.text == "," || tk.text == ":"))
+								decl += ' ';
+						}
+						t.hover = head + "\n" + decl;
+						if (ent.isStruct)
+						{
+							t.kind = CompletionSymbol::Struct;
+							t.parent = def->scope;
+							t.type = "s:" + (def->scope.empty() ? ent.name : def->scope + "::" + ent.name);
+							out.globals.push_back(t);
+						}
+						else if (def->owner != nullptr)
+						{
+							t.kind = isStatic ? CompletionSymbol::StaticSub : CompletionSymbol::Method;
+							t.parent = def->owner->name;
+							t.type = "f:v";
+							out.members.push_back(t);
+						}
+						else
+						{
+							t.kind = CompletionSymbol::Sub;
+							t.parent = def->scope;
+							t.type = "f:v";
+							out.globals.push_back(t);
+						}
+					}
+				}
+				continue;
 				default: continue;
 			}
 			out.globals.push_back(c);
+		}
+		// The methods of template instances (Box<u32>'s): members of the instance.
+		for (FuncInfo* f : m_funcList)
+		{
+			const Node* d = f->decl;
+			if (!f->instance || (d->value & 4) == 0 || d->owner == nullptr || m_instanceOrigin.count(d->owner->name) == 0 || f->broken || f->type == nullptr)
+				continue;
+			CompletionSymbol c;
+			c.name = d->shortName;
+			c.parent = d->owner->name;
+			c.kind = (d->value & 8) != 0 ? CompletionSymbol::StaticSub : CompletionSymbol::Method;
+			c.type = typeCode(f->type);
+			c.hover = hoverFunc(f);
+			c.def = d->namePos;
+			c.isPrivate = (d->value & (16 | 8192)) != 0;
+			out.members.push_back(c);
 		}
 		for (auto& s : m_structs)
 		{
