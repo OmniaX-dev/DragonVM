@@ -1400,9 +1400,11 @@ namespace dscript
 				error(d->namePos, "an operator works on a struct: it cannot be static (a top-level sub operator" + op + "(...) takes its operands as parameters)");
 			const size_t n = params.size() - (method ? 1 : 0);	// (the operands but this)
 			const bool unaryOnly = op == "!" || op == "~" || op == "++" || op == "--" || op == " post++" || op == " post--";
-			const bool either = op == "-" || op == "+";
-			const bool anyCount = op == "()" || op == " cast";
-			if (!method && (op == "()" || op == "[]" || op == "=" || op == " cast"))
+			const bool either = op == "-" || op == "+" || op == "*";		// (unary or binary: * is also a dereference)
+			const bool anyCount = op == "()" || op == " cast" || op == "->";
+			if (op == "->" && (n != 0 || ret->kind == Type::Kind::Void))
+				error(d->namePos, "operator-> takes no parameters and returns what -> goes on with: a pointer to a struct (or a struct with an operator->)");
+			if (!method && (op == "()" || op == "[]" || op == "=" || op == " cast" || op == "->"))
 				error(d->namePos, "operator" + op + " is a method (in the struct it works on)");
 			if (d->variadic != 0 && op != "()")
 				error(d->namePos, "an operator takes its operands (not ...)");
@@ -2309,8 +2311,9 @@ namespace dscript
 		Type* t = decay(e->a->type);
 		if (t == nullptr)
 			error(e->a->pos, "ambiguous overloaded sub");
-		if (t->kind == Type::Kind::Struct && op != "*")
+		if (t->kind == Type::Kind::Struct)
 		{
+			// (*x on a struct: its operator*, e.g. -> ref T)
 			if (userOperator(e, "operator" + op, { e->a }))
 				return;
 			UserConv u;
@@ -4375,6 +4378,23 @@ namespace dscript
 		return true;
 	}
 
+	// x-> with x a struct: its operator->, again while the result is a struct (C++ goes on the same
+	// way), until a pointer.
+	void CodeGen::arrowOperator(Node*& obj)
+	{
+		for (int depth = 0; obj->type != nullptr && obj->type->kind == Type::Kind::Struct; depth++)
+		{
+			if (depth >= 16)
+				error(obj->pos, "operator-> goes on more than 16 times (a struct whose operator-> gives itself?)");
+			Type* st = obj->type;
+			Node* call = new Node();
+			call->pos = obj->pos;
+			if (!userOperator(call, "operator->", { obj }, true))
+				error(obj->pos, "-> needs a pointer to a struct, or a struct with an operator-> (" + st->name() + " has none)");
+			obj = call;
+		}
+	}
+
 	// a OP b with a struct operand: its operator, or (none) != from ==, > / <= / >= from <.
 	void CodeGen::binaryOperator(Node* e)
 	{
@@ -4533,6 +4553,11 @@ namespace dscript
 			return;
 		}
 		check(obj);
+		if (callee->value == 1)
+		{
+			arrowOperator(callee->a);		// (s->m() on a struct: its operator->)
+			obj = callee->a;
+		}
 		Type* t = obj->type;
 		if (t == nullptr)
 			return;
@@ -4926,6 +4951,8 @@ namespace dscript
 		}
 	memberOfValue:
 		check(e->a);
+		if (e->value == 1)
+			arrowOperator(e->a);		// (s->x on a struct: its operator->)
 		Type* t = e->a->type;
 		if (t == nullptr)
 			error(e->a->pos, "not a struct");

@@ -226,6 +226,7 @@ namespace dscript
 			void rewriteMethodCall(Node* e);
 			bool userOperator(Node* e, const std::string& op, const std::vector<Node*>& operands, bool membersOnly = false);
 			void binaryOperator(Node* e);
+			void arrowOperator(Node*& obj);
 			bool insideStruct(const StructInfo* info);
 			void checkFieldAccess(const StructInfo* info, const StructField* f, const SourcePos& pos);
 			void checkSubAccess(FuncInfo* f, const SourcePos& pos);

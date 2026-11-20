@@ -1,0 +1,3 @@
+// expect-error: -> needs a pointer to a struct, or a struct with an operator-> (P has none)
+struct P { var x: i32; }
+sub main() -> i32 { var p: P; return p->x; }

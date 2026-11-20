@@ -1,0 +1,56 @@
+// expect-rv: 0
+// operator-> (p->x / p->m() on a struct: its operator->, again while the result is a struct,
+// until a pointer) and unary operator* (*p; with -> ref T: *p = v works), for smart pointers.
+// A binary operator* (a * b) is another sub (told apart by the operands).
+#include(check.ds)
+
+var g_dels: i32 = 0;
+
+struct Point {
+	var x: i32;
+	var y: i32;
+	readonly sub sum() -> i32 { return this->x + this->y; }
+}
+
+struct Owner {
+	var p: Point*;
+	sub new(var p: Point*) -> void { this->p = p; }
+	sub del() -> void { g_dels++; }
+	sub operator->() -> Point* { return this->p; }
+	sub operator*() -> ref Point { return *this->p; }
+	sub operator*(var k: i32) -> i32 { return this->p->x * k; }		// (binary: o * 3)
+}
+
+struct Handle {				// (-> gives a struct with its own ->: it goes on)
+	var o: Owner;
+	sub operator->() -> ref Owner { return this->o; }
+}
+
+class Shape { virt readonly sub sides() -> i32 { return 0; } }
+class Square ex Shape { override readonly sub sides() -> i32 { return 4; } }
+struct ShapeRef {
+	var s: Shape*;
+	sub operator->() -> Shape* { return this->s; }
+}
+
+sub main() -> i32 {
+	var pt: Point = { 1, 2 };
+	{
+		var o: Owner(&pt);
+		o->x = 10;
+		check(1, pt.x == 10 && o->y == 2 && o->sum() == 12);
+		var other: Point = { 5, 6 };
+		*o = other;
+		check(2, pt.x == 5 && pt.y == 6 && (*o).sum() == 11 && o * 3 == 15);
+		var h: Handle;
+		h.o.p = &pt;
+		h->x = 7;
+		check(3, pt.x == 7 && h->sum() == 13);
+	}
+	check(4, g_dels == 2);		// (o, and h's o)
+	var sq: Square;
+	var r: ShapeRef;
+	r.s = &sq;
+	check(5, r->sides() == 4);
+	return result();
+}

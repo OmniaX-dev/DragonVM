@@ -271,7 +271,7 @@ module.exports = grammar({
 		operator_name: _ => seq('operator', choice(
 			seq(optional('post'), choice('++', '--')),
 			'+', '-', '*', '/', '%', '&', '|', '^', '<<', '>>', '==', '!=', '<', '<=', '>', '>=', '!', '~',
-			'+=', '-=', '*=', '/=', '%=', '&=', '|=', '^=', '<<=', '>>=', '=', seq('[', ']'), seq('(', ')'), 'cast')),
+			'+=', '-=', '*=', '/=', '%=', '&=', '|=', '^=', '<<=', '>>=', '=', '->', seq('[', ']'), seq('(', ')'), 'cast')),
 		interrupt_modifier: _ => 'interrupt',
 		constexpr_modifier: _ => 'constexpr',
 		consteval_modifier: _ => 'consteval',

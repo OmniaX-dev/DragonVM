@@ -718,12 +718,20 @@ struct Vec {
     sub operator[](var i: u32) -> i32* { ... }           // a[i]: a pointer result, so a[i] = 5 works
     sub operator()(var t: i32) -> i32 { ... }            // a(t)
 }
+struct Owner {                                           // a smart pointer
+    var p: Point*;
+    sub operator->() -> Point* { return this->p; }       // o->x, o->sum()
+    sub operator*() -> ref Point { return *this->p; }    // *o (and *o = v)
+}
 sub operator*(var k: i32, var v: Vec) -> Vec { ... }     // 2 * v
 ```
 - Operators: `+ - * / % & | ^ << >> == != < <= > >= ! ~ ++ --`, the compound assignments,
-  `[]` and `()` (those two only as methods), `=` (see "Destructors, copies and moves") and
-  `cast` (see "Implicit conversions"); `-` and `+` with no operand are unary. `&&` / `||`,
-  `&` (address), `.`, `->`, `?:` and `sizeof` keep their meaning.
+  `[]`, `()` and `->` (those three only as methods), `=` (see "Destructors, copies and moves")
+  and `cast` (see "Implicit conversions"); `-`, `+` and `*` with no operand are unary (`*p`: a
+  dereference, usually `-> ref T`). `&&` / `||`, `&` (address), `.`, `?:` and `sizeof` keep their
+  meaning.
+- `operator->()` takes nothing and returns a pointer to a struct: `s->x` / `s->m()` on a struct
+  value call it, then go on with the result (a struct again: its `operator->`, and so on).
 - `a != b` is `!(a == b)` when there is no `operator!=`; with only `operator<`, `a > b` is
   `b < a`, `a <= b` is `!(b < a)`, `a >= b` is `!(a < b)`. `a += b` is only `operator+=` (not made
   from `+` and `=`).

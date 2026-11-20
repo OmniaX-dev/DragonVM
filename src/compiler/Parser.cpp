@@ -1492,7 +1492,7 @@ namespace dscript
 		if (t.kind != TokenKind::Punct)
 			error(t.pos, "an operator expected after 'operator' (+, ==, [], (), cast, ...), found " + describe(t));
 		static const std::set<std::string> ops { "+", "-", "*", "/", "%", "&", "|", "^", "<<", ">>", "==", "!=", "<", "<=", ">", ">=", "!", "~",
-			"++", "--", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>=", "=", "[", "(" };
+			"++", "--", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>=", "=", "[", "(", "->" };
 		if (t.text == "&&" || t.text == "||")
 			error(t.pos, "&& and || are not overloaded (they would not short-circuit any more)");
 		if (ops.count(t.text) == 0)
