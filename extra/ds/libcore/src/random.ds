@@ -1,0 +1,159 @@
+
+namespace std {
+	namespace random {
+		namespace engine {
+			struct Sfc32 {
+				priv var a: u32;
+				priv var b: u32;
+				priv var c: u32;
+				priv var d: u32;
+				sub seed(var s: u32) {
+					var sm: __internal::SplitMix32 = { s };
+					this->a = sm.next(); this->b = sm.next(); this->c = sm.next();
+					this->d = 1;
+					for (var i = 0; i < 12; ++i) this->next();
+				}
+				sub next() -> u32 {
+					var t: u32 = this->a + this->b + this->d++;
+					this->a = this->b ^ (this->b >> 9);
+					this->b = this->c + (this->c << 3);
+					this->c = __internal::rotl32(this->c, 21) + t;
+					return t;
+				}
+			};
+			struct Xoshiro128ss {
+				priv var s: u32[4];
+				sub seed(var s: u32) {
+					var sm: __internal::SplitMix32 = { s };
+					for (var i = 0; i < 4; ++i) this->s[i] = sm.next();
+				}
+				sub next() -> u32 {
+					var r: u32 = __internal::rotl32(this->s[1] * 5, 7) * 9;
+					var t: u32 = this->s[1] << 9;
+					this->s[2] ^= this->s[0];
+					this->s[3] ^= this->s[1];
+					this->s[1] ^= this->s[2];
+					this->s[0] ^= this->s[3];
+					this->s[2] ^= t;
+					this->s[3] = __internal::rotl32(this->s[3], 11);
+					return r;
+				}
+			};
+			struct MT19937 {
+				constexpr N: i32 = 624;
+				constexpr M: i32 = 397;
+				priv var mt: u32[N];
+				priv var idx: i32;
+				sub seed(var s: u32) {
+					this->mt[0] = s;
+					for (var i = 1; i < N; ++i)
+						this->mt[i] = 1812433253u * (this->mt[i - 1] ^ (this->mt[i - 1] >> 30)) + cast<u32>(i);
+					this->idx = N;
+				}
+				sub twist() {
+					for (var i = 0; i < N; ++i) {
+						var y: u32 = (this->mt[i] & 0x80000000u) | (this->mt[(i + 1) % N] & 0x7FFFFFFFu);
+						var v: u32 = this->mt[(i + M) % N] ^ (y >> 1);
+						if (y & 1) v ^= 0x9908B0DFu;
+						this->mt[i] = v;
+					}
+					this->idx = 0;
+				}
+				sub next() -> u32 {
+					if (this->idx >= N) this->twist();
+					var y: u32 = this->mt[this->idx++];
+					y ^= y >> 11;
+					y ^= (y << 7)  & 0x9D2C5680u;
+					y ^= (y << 15) & 0xEFC60000u;
+					y ^= y >> 18;
+					return y;
+				}
+			};
+		}
+
+		template(T) where (size_of(T) <= 4 and is_integer(T)) or is_type(T, f32) {
+			struct UniformDistribution {
+				if constexpr (is_type(T, f32))
+				{
+					priv var lo: f32;
+					priv var span: f32;
+				}
+				else
+				{
+					priv var base: u32;
+					priv var range: u32;
+					priv var mask: u32;
+				}
+
+				sub set(var lo: T, var hi: T) {
+					if constexpr (is_type(T, f32)) {
+						this->lo = lo;
+						this->span = hi - lo;
+					}
+					else
+					{
+						this->base  = cast<u32>(lo);
+						this->range = cast<u32>(hi) - this->base;
+						var m: u32 = this->range;
+						m |= m >> 1;  m |= m >> 2;  m |= m >> 4;
+						m |= m >> 8;  m |= m >> 16;
+						this->mask = m;
+					}
+				}
+				template(E) where has_method(E, next, sub() -> u32) {
+					if constexpr (is_type(T, f32)) { static sub unit(var rng: E*) -> T {
+						var bits: u32 = 0x3F800000u | (rng->next() >> 9);
+						var f: f32 = *cast<f32*>(&bits);
+						return f - 1.0f;
+					}}
+					readonly sub next(var rng: E*) -> T {
+						if constexpr (is_type(T, f32)) {
+							var hi: f32 = this->lo + this->span;
+							var x: f32;
+							do { x = this->lo + this->span * UniformDistribution::unit(rng); } while (x >= hi);
+							return x;
+						}
+						else
+						{
+							var r: u32;
+							do { r = rng->next() & this->mask; } while (r > this->range);
+							return cast<T>(this->base + r);
+						}
+					}
+				}
+			};
+		}
+
+		template(T, Seed: u32 = 0, E = engine::Sfc32) where
+				((size_of(T) <= 4 and is_integer(T)) or is_type(T, f32)) and
+				has_method(E, next, sub() -> u32) and has_method(E, seed, sub(u32)) {
+			sub uniform_distribution(var min: T, var max: T, var rng: E* = null) -> T {
+					if (not rng) {
+						static var _rng: E;
+						static var seeded: bool = false;
+						if (not seeded) { _rng.seed(Seed); seeded = true; }
+						rng = &_rng;
+					}
+					var dist: UniformDistribution<T>;
+					dist.set(min, max);
+					return dist.next(rng);
+			}
+		}
+
+		namespace __internal {
+			struct SplitMix32 {
+				var m_state: u32;
+
+				sub next() -> u32 {
+					var z: u32 = (this->m_state += 0x9E3779B9u);
+					z ^= z >> 16; z *= 0x21F0AAADu;
+					z ^= z >> 15; z *= 0x735A2D97u;
+					z ^= z >> 15;
+					return z;
+				}
+			};
+
+			constexpr sub rotl32(var x: u32, var k: i32) -> u32 { return (x << k) | (x >> (32 - k)); }
+		}
+	}
+}
