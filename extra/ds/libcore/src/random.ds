@@ -1,6 +1,6 @@
 
 namespace std {
-	namespace random {
+	namespace rand {
 		namespace engine {
 			struct Sfc32 {
 				priv var a: u32;
@@ -103,7 +103,7 @@ namespace std {
 				template(E) where has_method(E, next, sub() -> u32) {
 					if constexpr (is_type(T, f32)) { static sub unit(var rng: E*) -> T {
 						var bits: u32 = 0x3F800000u | (rng->next() >> 9);
-						var f: f32 = *cast<f32*>(&bits);
+						var f: f32 = bitcast<f32>(bits);
 						return f - 1.0f;
 					}}
 					readonly sub next(var rng: E*) -> T {
@@ -154,6 +154,42 @@ namespace std {
 			};
 
 			constexpr sub rotl32(var x: u32, var k: i32) -> u32 { return (x << k) | (x >> (32 - k)); }
+		}
+
+		template(E) where has_method(E, next, sub() -> u32) and has_method(E, seed, sub(u32)) {
+			struct RandomGenerator {
+				priv var m_seed: u32 = 0;
+				priv var m_rng: E;
+
+				sub new(var seed: u32) { this->seed(seed); }
+
+				inline sub seed(var seed: u32) { this->m_rng.seed(seed); this->m_seed = seed; }
+				inline sub get_seed() -> u32 { return this->m_seed; }
+
+				inline sub get_f32(var min: f32 = 0.0f, var max: f32 = 1.0f) -> f32 { return this->__get<f32>(min, max); }
+				inline sub get_i8(var min: i8 = std::INT8_MIN, var max: i8 = std::INT8_MAX) -> i8 { return this->__get<i8>(min, max); }
+				inline sub get_u8(var min: u8 = std::UINT8_MIN, var max: u8 = std::UINT8_MAX) -> u8 { return this->__get<u8>(min, max); }
+				inline sub get_i16(var min: i16 = std::INT16_MIN, var max: i16 = std::INT16_MAX) -> i16 { return this->__get<i16>(min, max); }
+				inline sub get_u16(var min: u16 = std::UINT16_MIN, var max: u16 = std::UINT16_MAX) -> u16 { return this->__get<u16>(min, max); }
+				inline sub get_i32(var min: i32 = std::INT32_MIN, var max: i32 = std::INT32_MAX) -> i32 { return this->__get<i32>(min, max); }
+				inline sub get_u32(var min: u32 = std::UINT32_MIN, var max: u32 = std::UINT32_MAX) -> u32 { return this->__get<u32>(min, max); }
+
+				inline sub get_bool(var true_percentage: f32 = 0.5f) -> bool { return this->get_f32() >= (1.0f - std::math::clamp(true_percentage, 0.0f, 1.0f)); }
+
+				template(T) where is_numeric(T) {
+					priv sub swap_if_first_is_bigger(var n1: T*, var n2: T*) {
+						if (*n1 <= *n2) return;
+						var n3: T = *n1;
+						*n1 = *n2;
+						*n2 = n3;
+					}
+					priv sub __get(var min: T, var max: T) -> T {
+						if (min == max) return min;
+						this->swap_if_first_is_bigger<T>(&min, &max);
+						return std::rand::uniform_distribution<T, 0, E>(min, max, &this->m_rng);
+					}
+				}
+			};// TODO: Eventually add get_from_vector, noise_gen, get_string, etc.
 		}
 	}
 }

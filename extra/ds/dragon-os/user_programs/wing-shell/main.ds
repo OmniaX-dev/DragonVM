@@ -1,15 +1,13 @@
 #import("stdlib")
 
 sub main(var argc: u32, var argv: u8**) -> i32 {
-	var cycles: u32 = 0;
-	std::syscall(std::SystemCalls.TimeCycles, &cycles);
-	std::syscall(std::SystemCalls.SeedRandom, null, cycles);
+	std::Random::auto_seed();
 	var r: i32 = 0;
     while (true) {
-    	r = std::rand::next_in_range(0, 100);
+    	r = std::Random::get_i32(0, 100);
     	if (r > 50)
      		break;
     }
     std::print(argv[0]);
-    return std::rand::next_in_range(0, 42);
+    return std::Random::get_i32(0, 42);
 }

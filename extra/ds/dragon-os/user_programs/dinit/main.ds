@@ -1,39 +1,31 @@
 #import("stdlib")
 
 sub main() -> i32 {
-
+	std::Random::auto_seed();
+	var argv: string[1];
+	var arg: u8[12];
+	argv[0] = arg;
+	std::strcpy(arg, "42");
+	std::spawn("/bin/wingsh", 1, argv);
+	std::strcpy(arg, "42");
+	std::spawn("/bin/wingsh", 1, argv);
 	var buff: u8[12];
-	for (auto i in 0..100) {
-		var r: i32 = std::random::uniform_distribution<i32, 8086, std::random::engine::MT19937>(-1000, 1000);
-		std::print(std::itoa(r, buff));
-	}
-	var code: i32;
-	var pid: i32 = std::wait(-1, &code);
-
-	// var argv: string[1];
-	// var arg: u8[12];
-	// argv[0] = arg;
-	// std::strcpy(arg, "42");
-	// std::spawn("/bin/wingsh", 1, argv);
-	// std::strcpy(arg, "42");
-	// std::spawn("/bin/wingsh", 1, argv);
-	// var buff: u8[12];
-	// var child_count: u32 = 2;
- //    while (true) {
- //        var code: i32;
- //        var pid: i32 = std::wait(-1, &code);    // any child
- //        if (child_count > 0) child_count--;
- //        if (pid > 0)
- //        {
-	//         std::print("Process ", false); std::print(std::itoa(pid, buff), false);
-	//         std::print(" exited with code ", false); std::print(std::itoa(code, buff));
- //        }
- //        var j: i32 = std::rand::next_in_range(0, 32 - child_count);
- //        for (var i: i32 = 0; i < j; i++)
- //        {
-	//         std::itoa(std::rand::next_in_range(0, 100), argv[0]);
-	//         var rv: i32 = std::spawn("/bin/wingsh", 1, argv);
-	// 		if (rv > 0) child_count++;
- //        }
- //    }
+	var child_count: u32 = 2;
+    while (true) {
+        var code: i32;
+        var pid: i32 = std::wait(-1, &code);    // any child
+        if (child_count > 0) child_count--;
+        if (pid > 0)
+        {
+	        std::print("Process ", false); std::print(std::itoa(pid, buff), false);
+	        std::print(" exited with code ", false); std::print(std::itoa(code, buff));
+        }
+        var j: i32 = std::Random::get_i32(0, 32 - child_count);
+        for (var i: i32 = 0; i < j; i++)
+        {
+	        std::itoa(std::Random::get_i32(0, 100), argv[0]);
+	        var rv: i32 = std::spawn("/bin/wingsh", 1, argv);
+			if (rv > 0) child_count++;
+        }
+    }
 }

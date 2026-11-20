@@ -1,10 +1,17 @@
 namespace std {
+	const INT8_MIN: i8 = -128;
 	const INT8_MAX: i8 = 127;
+	const UINT8_MIN: u8 = 0;
 	const UINT8_MAX: u8 = 255;
+	const INT16_MIN: i16 = -32768;
 	const INT16_MAX: i16 = 32767;
+	const UINT16_MIN: u16 = 0;
 	const UINT16_MAX: u16 = 65535;
+	const INT32_MIN: i32 = -2147483648;
 	const INT32_MAX: i32 = 2147483647;
+	const UINT32_MIN: u32 = 0;
 	const UINT32_MAX: u32 = 4294967295;
+	// TODO: Add INT64_MIN and UINT64_MIN
 	const INT64_MAX: I64 = { 0x7FFFFFFFu, 0xFFFFFFFFu }; // 9223372036854775807
 	const UINT64_MAX: U64 = { 0xFFFFFFFFu, 0xFFFFFFFFu };// 18446744073709551615;
 	// The operations both types share, on the words (I64 casts itself to U64*).

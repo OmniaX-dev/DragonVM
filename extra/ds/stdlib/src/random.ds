@@ -1,25 +1,21 @@
 #include(syscall.ds)
 
-// Random numbers from the machine's random device. The generator is
-// seeded from the host's clock at start; seed() makes the numbers that follow repeatable.
-namespace std::rand {
-	// A random number in 0..INT32_MAX (2147483647).
-	sub next() -> i32 {
-		var n: u32 = 0;
-		syscall(SystemCalls.Random, &n);
-		return n;
-	}
-	sub next_in_range(var min_inclusive: i32, var max_inclusive: i32) -> i32 {
-		if (min_inclusive == max_inclusive) return min_inclusive;
-		if (min_inclusive > max_inclusive) return next_in_range(max_inclusive, min_inclusive);
-		return min_inclusive + cast<u32>(next()) / (cast<u32>(std::INT32_MAX) / (cast<u32>(max_inclusive) - cast<u32>(min_inclusive) + 1) + 1);
-	}
-	sub next_float() -> f32 {
-		var n: u32 = 0;
-		syscall(SystemCalls.RandomF32, &n);
-		var value: f32 = 0;
-		low { mov $value, $n };
-		return value;
-	}
-	inline sub seed(var seed: u32) { syscall(SystemCalls.SeedRandom, null, seed); }
+namespace std {
+	struct Random {
+		priv static var m_rng: rand::RandomGenerator<std::rand::engine::Sfc32>(cast<i32>(std::random_entropy()));
+
+		inline static sub seed(var seed: i32) { m_rng.seed(seed); }
+		inline static sub auto_seed() { m_rng.seed(std::random_entropy()); }
+		inline static sub get_seed() -> i32 { return m_rng.get_seed(); }
+
+		inline static sub get_f32(var min: f32 = 0.0f, var max: f32 = 1.0f) -> f32 { return m_rng.get_f32(min, max); }
+		inline static sub get_i8(var min: i8 = std::INT8_MIN, var max: i8 = std::INT8_MAX) -> i8 { return m_rng.get_i8(min, max); }
+		inline static sub get_u8(var min: u8 = std::UINT8_MIN, var max: u8 = std::UINT8_MAX) -> u8 { return m_rng.get_u8(min, max); }
+		inline static sub get_i16(var min: i16 = std::INT16_MIN, var max: i16 = std::INT16_MAX) -> i16 { return m_rng.get_i16(min, max); }
+		inline static sub get_u16(var min: u16 = std::UINT16_MIN, var max: u16 = std::UINT16_MAX) -> u16 { return m_rng.get_u16(min, max); }
+		inline static sub get_i32(var min: i32 = std::INT32_MIN, var max: i32 = std::INT32_MAX) -> i32 { return m_rng.get_i32(min, max); }
+		inline static sub get_u32(var min: u32 = std::UINT32_MIN, var max: u32 = std::UINT32_MAX) -> u32 { return m_rng.get_u32(min, max); }
+
+		inline static sub get_bool(var true_percentage: f32 = 0.5f) -> bool { return m_rng.get_bool(true_percentage); }
+	};
 }

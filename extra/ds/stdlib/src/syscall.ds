@@ -46,7 +46,7 @@ namespace std {
 		Random = 0x1000,
 		RandomF32 = 0x1001,
 		SeedRandom = 0x1002,
-		RandomRangeInclusive = 0x1003,
+		RandomEntropy = 0x1003,
 
 		TimeMillis = 0x1100,
 		TimeCycles = 0x1101,
@@ -85,6 +85,10 @@ namespace std {
 
 	inline sub sleep(var ms: u32) -> i32 {
    		return syscall4(SystemCalls.Sleep, ms);
+	}
+
+	inline sub random_entropy() -> u32 {
+		return cast<u32>(syscall4(SystemCalls.RandomEntropy));
 	}
 
 	// TODO: out_rv should be i32*

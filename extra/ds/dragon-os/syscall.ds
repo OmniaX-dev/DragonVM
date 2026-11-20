@@ -47,7 +47,7 @@ const SYSCALL_SLEEP: u32 								= 0x01_05;
 const SYSCALL_RANDOM: u32 								= 0x10_00;
 const SYSCALL_RANDOM_F32: u32 							= 0x10_01;
 const SYSCALL_SEED_RANDOM: u32 							= 0x10_02;
-// const SYSCALL_RANDOM_RANGE_INCLUSIVE: u32 				= 0x10_03;
+const SYSCALL_RANDOM_ENTROPY: u32 						= 0x10_03;
 
 const SYSCALL_TIME_MILLIS: u32 							= 0x11_00;
 const SYSCALL_TIME_CYCLES: u32 							= 0x11_01;
@@ -147,6 +147,10 @@ namespace __internal {
 			// and makes them predictable. That’s fine for now. Eventually the seed should be kernel-only, or each process
 			// should get its own generator state.
 			*cast<u32*>(dr::RandomRegisters.Seed) = f->regs.R(8);
+		}
+		else if (function == SYSCALL_RANDOM_ENTROPY)
+		{
+			rv = *cast<u32*>(dr::RandomRegisters.Entropy);
 		}
 // ===========================================================================
 		else if (function == SYSCALL_TIME_MILLIS)
