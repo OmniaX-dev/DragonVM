@@ -82,6 +82,8 @@ namespace dscript
 	}
 
 	static bool boundReference(const Node* n);
+	static SourcePos templateParamPos(const TemplateDef* def, const std::string& name);
+	static std::string posKey(const SourcePos& p);
 
 	static bool plainName(const std::string& name) { return std::all_of(name.begin(), name.end(), [](char c) { return std::isalnum((unsigned char)c) || c == '_'; }); }
 
@@ -709,6 +711,8 @@ namespace dscript
 				{
 					if (ts->fixed == m_notGiven)
 						error(ts->pos, "the template parameter " + ts->name + " is not given here (it is optional: is_given(" + ts->name + ") tells)");
+					if (m_options.index != nullptr)
+						indexTemplateParam(ts->pos, ts->name);
 					return ts->fixed;
 				}
 				const std::string& written = ts->written.empty() ? ts->name : ts->written;
@@ -720,7 +724,10 @@ namespace dscript
 					std::vector<Type*> args;
 					for (TypeSyntax* a : ts->args)
 						args.push_back(templateArgument(a));
-					return m_types.structType(m_structs[instantiate(ts->name, args, nullptr, nullptr, ts->pos, true)]);
+					StructInfo* inst = m_structs[instantiate(ts->name, args, nullptr, nullptr, ts->pos, true)];
+					if (m_options.index != nullptr && !m_discarding)
+						indexName(ts->pos, written, inst->decl->namePos, hoverStruct(inst));
+					return m_types.structType(inst);
 				}
 				if (Type* t = m_types.builtin(ts->name))
 				{
@@ -2178,7 +2185,9 @@ namespace dscript
 					": it can only be used after it, in that sub (not in its lambdas, nor where a compile-time constant is needed)");
 			}
 			e->constValue = resolveConst(e->name, e->pos);
-			if (m_options.index != nullptr)
+			if (m_options.index != nullptr && e->name.rfind("__tv_", 0) == 0)
+				indexTemplateParam(e->pos, "");		// (a template's value parameter)
+			else if (m_options.index != nullptr)
 				indexName(e->pos, (e->text.empty() ? e->name : e->text), m_consts[e->name].decl->namePos, hoverConst(e->name));
 			if (m_consts[e->name].isString)
 			{
@@ -5361,6 +5370,16 @@ namespace dscript
 	void CodeGen::registerTemplate(Node* d)
 	{
 		TemplateDef* def = d->tmpl;
+		if (m_options.index != nullptr && d->external == 0)
+		{
+			for (size_t i = 0; i < def->params.size(); i++)
+			{
+				const SourcePos p = templateParamPos(def, def->params[i]);
+				if (!p.file.empty())
+					indexName(p, def->params[i], p, def->params[i] + comment({ std::string(def->paramTypes[i] != nullptr ? "template value parameter" : "template parameter") +
+						(i >= def->required ? " (optional)" : "") }));
+			}
+		}
 		if (def->where != nullptr)
 			resolveNames(def->where, def->scope);
 		for (size_t i = 0; i < def->params.size(); i++)
@@ -5391,6 +5410,179 @@ namespace dscript
 				error(def->pos, "'" + full + "' is a template struct and a template sub: one name, one kind");
 			list.push_back({ def, i });
 			m_templateShortNames.insert(e.name);
+		}
+	}
+
+	// ================================ Templates in analysis ================================
+	// The language server: a template's parameters (their declaration, their uses in instances),
+	// and the templates nothing instantiates, analyzed through an instance with stand-in arguments.
+
+	// Where a template's parameter is declared (in its head), or an empty position.
+	static SourcePos templateParamPos(const TemplateDef* def, const std::string& name)
+	{
+		const auto& src = def->source;
+		size_t i = 0;
+		while (i < src.size() && !(src[i].kind == TokenKind::Punct && src[i].text == "("))
+			i++;
+		int depth = 0;
+		bool expectName = true;
+		for (; i < src.size(); i++)
+		{
+			const Token& t = src[i];
+			if (t.kind == TokenKind::Punct && (t.text == "(" || t.text == "<" || t.text == "["))
+			{
+				if (++depth == 1)
+					expectName = true;
+				continue;
+			}
+			if (t.kind == TokenKind::Punct && (t.text == ")" || t.text == ">" || t.text == "]"))
+			{
+				if (--depth == 0)
+					break;
+				continue;
+			}
+			if (depth == 1 && t.kind == TokenKind::Punct && t.text == ",")
+			{
+				expectName = true;
+				continue;
+			}
+			if (depth == 1 && expectName && t.kind == TokenKind::Identifier)
+			{
+				if (t.text == "optional")
+					continue;
+				if (t.text == name)
+					return t.pos;
+				expectName = false;
+			}
+		}
+		return {};
+	}
+
+	static std::string posKey(const SourcePos& p)
+	{
+		return p.file + ":" + std::to_string(p.line) + ":" + std::to_string(p.column);
+	}
+
+	// A use of a template's parameter in an instance (pos: the token's): its hover and declaration.
+	void CodeGen::indexTemplateParam(const SourcePos& pos, const std::string& written)
+	{
+		auto it = m_paramUses.find(posKey(pos));
+		if (it == m_paramUses.end() || m_discarding)
+			return;
+		const std::string name = written.empty() ? it->second.name : written;
+		std::string types;
+		for (const std::string& t : it->second.types)
+			types += (types.empty() ? "" : ", ") + t;
+		indexName(pos, name, it->second.def, name + comment({ "template parameter", (it->second.probe ? "analyzed with " : "here: ") + types }));
+	}
+
+	// The stand-in arguments of a template nothing instantiates: the defaults, then for each type
+	// parameter the first type its where accepts (numbers, then the program's structs and classes);
+	// a value parameter: 1. nullptr: none fits.
+	bool CodeGen::probeArguments(const TemplateDef* def, std::vector<Type*>& args)
+	{
+		args.assign(def->params.size(), nullptr);
+		std::vector<Type*> candidates = { m_types.i32(), m_types.u32(), m_types.u8(), m_types.i16(), m_types.u16(), m_types.i8(), m_types.f32(), m_types.boolType() };
+		for (auto& s : m_structs)
+		{
+			if (!s.second->anonymous && !s.second->onlyPointer() && m_instanceOrigin.count(s.first) == 0 && s.second->complete)
+				candidates.push_back(m_types.structType(s.second));
+		}
+		auto l_holds = [&](const std::vector<Type*>& a) {
+			if (def->where == nullptr)
+				return true;
+			Bindings b;
+			for (size_t i = 0; i < a.size(); i++)
+				b[def->params[i]] = a[i] != nullptr ? a[i] : (i < def->required ? m_types.i32() : nullptr);
+			try { return evalCondition(def->where, &b) != 0; }
+			catch (CompileError&) { return false; }
+		};
+		for (size_t i = 0; i < def->required; i++)
+		{
+			if (def->paramTypes[i] != nullptr)
+			{
+				Type* t = nullptr;
+				try { t = resolveType(def->paramTypes[i]); }
+				catch (CompileError&) { return false; }
+				if (!t->isArithmetic())
+					return false;
+				args[i] = makeValueArg(t, 1, nullptr, def->pos);
+				continue;
+			}
+			for (Type* c : candidates)
+			{
+				args[i] = c;
+				if (l_holds(args))
+					break;
+				args[i] = nullptr;
+			}
+			if (args[i] == nullptr)
+				return false;
+		}
+		args.resize(def->required);
+		return true;
+	}
+
+	void CodeGen::analyzeTemplates(void)
+	{
+		for (Node* d : m_program->list)
+		{
+			if (d->kind != NodeKind::TemplateDecl || d->external != 0 || d->tmpl == nullptr)
+				continue;
+			const TemplateDef* def = d->tmpl;
+			bool pending = false;
+			for (size_t e = 0; e < def->entities.size(); e++)
+				pending = pending || m_instantiatedEntities.count({ def, e }) == 0;
+			if (!pending)
+				continue;
+			StructInfo* owner = nullptr;
+			if (def->owner != nullptr)
+			{
+				auto it = m_structs.find(def->owner->name);
+				if (it == m_structs.end())
+					continue;
+				owner = it->second;
+			}
+			std::vector<Type*> args;
+			bool fits = false;
+			attempt([&] { fits = probeArguments(def, args); });
+			if (!fits)
+				continue;
+			for (size_t e = 0; e < def->entities.size(); e++)
+			{
+				const TemplateEntity& ent = def->entities[e];
+				if (m_instantiatedEntities.count({ def, e }) > 0)
+					continue;		// (an instance of the program's has it analyzed)
+				const size_t funcsBefore = m_funcList.size();
+				const size_t errorsBefore = m_errors.size();
+				const size_t syntaxBefore = m_syntaxErrors.size();
+				m_probing = true;
+				m_probeEntity = { def, e };
+				attempt([&] {
+					struct Reset { std::pair<const TemplateDef*, size_t>& p; ~Reset() { p = { nullptr, 0 }; } } reset { m_probeEntity };
+					instantiate(def->scope.empty() ? ent.name : def->scope + "::" + ent.name, args, nullptr, owner, def->pos, ent.isStruct);
+				});
+				if (m_globalsTyped < m_globalDecls.size())
+					attempt([&] { genGlobalTypes(m_globalsTyped); });		// (its static locals)
+				for (size_t i = funcsBefore; i < m_funcList.size(); i++)
+				{
+					FuncInfo* f = m_funcList[i];
+					if (!f->defined || f->decl->a == nullptr || f->broken || f->generated || f->decl->constKind == 3)
+						continue;
+					f->used = true;
+					attempt([&] { f->generated = true; genFunction(f); });
+				}
+				m_probing = false;
+				// (only its syntax errors: the others may be about the stand-in arguments)
+				m_errors.resize(errorsBefore);
+				for (size_t q = syntaxBefore; q < m_syntaxErrors.size(); q++)
+				{
+					const CompileError& err = m_syntaxErrors[q];
+					const bool known = std::any_of(m_errors.begin(), m_errors.end(), [&](const CompileError& x) { return x.pos.line == err.pos.line && x.pos.column == err.pos.column && x.pos.file == err.pos.file; });
+					if (!known)
+						m_errors.push_back(err);
+				}
+			}
 		}
 	}
 
@@ -5647,7 +5839,10 @@ namespace dscript
 		Parser p(tokens);
 		p.addTemplateNames(m_templateShortNames);
 		Node* head = nullptr;
-		for (Node* n : p.parseInstance(*def, entity, def->owner))
+		std::vector<Node*> parsed;
+		try { parsed = p.parseInstance(*def, entity, def->owner); }
+		catch (CompileError& err) { m_templateSyntaxError = true; m_syntaxErrors.push_back(err); throw; }
+		for (Node* n : parsed)
 		{
 			if (n->kind == NodeKind::FuncDecl && n->shortName == e.name)
 				head = n;
@@ -5804,9 +5999,13 @@ namespace dscript
 		struct Match { TemplateCandidate c; std::vector<Type*> args; };
 		std::vector<Match> matches;
 		std::vector<std::string> reasons;
+		const std::pair<const TemplateDef*, size_t> only = m_probeEntity;
+		m_probeEntity = { nullptr, 0 };		// (only for this call, not the instances it makes)
 		for (const TemplateCandidate& c : it->second)
 		{
 			const TemplateDef* def = c.def;
+			if (only.first != nullptr && (def != only.first || c.entity != only.second))
+				continue;		// (the language server's probe: this entity)
 			const TemplateEntity& ent = def->entities[c.entity];
 			const std::string where = " (template at " + posString(def->pos) + ")";
 			if (ent.isStruct != wantStruct)
@@ -6002,6 +6201,7 @@ namespace dscript
 					error(as.pos, "static_assert failed: " + (as.message.empty() ? as.text : as.message) + " (in " + full + ", instantiated at " + posString(pos) + ")");
 			}
 		}
+		m_instantiatedEntities.insert({ def, m.c.entity });
 		// Its tokens: the parameters standing for their types, its name the instance's.
 		std::vector<Token> tokens(def->tokens.begin() + (std::ptrdiff_t)ent.first, def->tokens.begin() + (std::ptrdiff_t)ent.last);
 		for (Token& t : tokens)
@@ -6012,6 +6212,20 @@ namespace dscript
 			{
 				if (t.text != def->params[i])
 					continue;
+				if (m_options.index != nullptr)
+				{
+					// (the language server: what the parameter is here, where it is declared)
+					ParamUse& use = m_paramUses[posKey(t.pos)];
+					use.name = t.text;
+					use.def = templateParamPos(def, t.text);
+					use.probe = use.probe || (m_probing && use.types.empty());
+					if (!m_probing && use.probe)
+					{
+						use.probe = false;
+						use.types.clear();
+					}
+					use.types.insert(m.args[i] == nullptr ? std::string("(not given)") : m.args[i]->valueArg ? m.args[i]->valueText : m.args[i]->name());
+				}
 				if (m.args[i] != nullptr && m.args[i]->valueArg)
 					t.text = m.args[i]->valueConst;		// a value: its constant
 				else
@@ -6052,14 +6266,17 @@ namespace dscript
 		Node* program = new Node();
 		program->kind = NodeKind::Program;
 		program->pos = pos;
-		l_withNote([&] { program->list = parser.parseInstance(*def, m.c.entity, def->owner); });
+		l_withNote([&] {
+			try { program->list = parser.parseInstance(*def, m.c.entity, def->owner); }
+			catch (CompileError& err) { m_templateSyntaxError = true; m_syntaxErrors.push_back(err); throw; }
+		});
 		const size_t funcsBefore = m_funcList.size();
 		const size_t globalsBefore = m_globalDecls.size();
 		m_instanceOrigin[full] = { name, m.args };
 		l_withNote([&] {
 			collect(program);
+			applyGuards(program);		// (if constexpr around its methods, in its struct: declared before the names are looked up)
 			resolveNames(program);
-			applyGuards(program);		// (if constexpr around its methods, in its struct)
 		});
 		for (size_t i = funcsBefore; i < m_funcList.size(); i++)
 		{
@@ -11197,13 +11414,18 @@ namespace dscript
 			out.globals.push_back(c);
 		}
 		// The methods of template instances (Box<u32>'s): members of the instance.
+		std::set<std::string> instanceMembers;
 		for (FuncInfo* f : m_funcList)
 		{
 			const Node* d = f->decl;
-			if (!f->instance || (d->value & 4) == 0 || d->owner == nullptr || m_instanceOrigin.count(d->owner->name) == 0 || f->broken || f->type == nullptr)
+			if (!f->instance || (d->value & 4) == 0 || d->owner == nullptr || m_instanceOrigin.count(d->owner->name) == 0 || f->type == nullptr)
+				continue;
+			// (a method template's instance: the template's name; once)
+			const std::string name = d->shortName.find('<') != std::string::npos ? d->shortName.substr(0, d->shortName.find('<')) : d->shortName;
+			if (!instanceMembers.insert(d->owner->name + "::" + name + (name == d->shortName ? "/" + f->type->name() : "")).second)
 				continue;
 			CompletionSymbol c;
-			c.name = d->shortName;
+			c.name = name;
 			c.parent = d->owner->name;
 			c.kind = (d->value & 8) != 0 ? CompletionSymbol::StaticSub : CompletionSymbol::Method;
 			c.type = typeCode(f->type);
@@ -11933,6 +12155,7 @@ namespace dscript
 
 		if (m_options.index != nullptr)
 		{
+			analyzeTemplates();		// (the templates nothing instantiates: with stand-in arguments)
 			indexDeclarations();
 			indexCompletion(program);
 		}

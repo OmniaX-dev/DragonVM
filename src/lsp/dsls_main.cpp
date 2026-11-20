@@ -197,6 +197,7 @@ namespace
 		for (const auto& d : o.defines)
 			pp.define(d.first, d.second);
 		Node* program = nullptr;
+		bool templateSyntaxError = false;
 		try
 		{
 			std::vector<Token> tokens = pp.processFile(root);
@@ -227,6 +228,7 @@ namespace
 			}
 			for (const auto& e : gen.errors())
 				l_diag(e.pos, e.message, 1);
+			templateSyntaxError = gen.templateSyntaxError();
 
 			// Symbols: the top-level declarations (not the hidden ones), fields, enum members.
 			auto l_symbol = [&](const std::string& name, int kind, const SourcePos& pos, const std::string& container) {
@@ -272,8 +274,9 @@ namespace
 				}
 			}
 		}
-		// Completion: what the program declares (only when it could be parsed).
-		out["parsed"] = program != nullptr;
+		// Completion: what the program declares (only when it could be parsed: also a template's
+		// body).
+		out["parsed"] = program != nullptr && !templateSyntaxError;
 		if (program != nullptr)
 		{
 			const Completion& c = index.completion;

@@ -321,6 +321,26 @@ with tempfile.TemporaryDirectory() as tmp:
     c.sync()
     completes("a namespace's templates (ns::)", tpl, tpl_text, 8, "\tns::|", ["Box", "make"])
     completes("a template instance's methods (b.)", tpl, tpl_text, 8, "\tb.|", ["v", "get"])
+    # In the template: its parameter (here: i32), Box<i32> as a type, this-> while the line is broken.
+    hover_has(c, "a template's parameter in its body", tpl, tpl_text, 2, "T", "template parameter")
+    definition_is(c, "a template's parameter: its declaration", tpl, tpl_text, 2, "T", tpl, 1, "T")
+    hover_has(c, "a template struct's instance as a type", tpl, tpl_text, 7, "Box", "struct ns::Box<i32>")
+    # A template nothing instantiates: analyzed with stand-in arguments (its syntax errors reported).
+    lone = os.path.join(tmp, "lone.ds")
+    lone_text = ("template(T) where is_integer(T) {\n\tsub twice(var n: T) -> T {\n\t\tvar acc: T = n;\n\t\treturn acc + n;\n\t}\n"
+                 "\tstruct Pair {\n\t\tvar a: T;\n\t\tsub sum() -> T {\n\t\t\treturn this->a;\n\t\t}\n\t}\n}\n")
+    with open(lone, "w") as f:
+        f.write(lone_text)
+    c.notify("textDocument/didOpen", {"textDocument": {"uri": uri(lone), "languageId": "dscript", "version": 1, "text": lone_text}})
+    c.sync()
+    hover_has(c, "a template nothing instantiates: its locals", lone, lone_text, 3, "acc", "var acc: i32")
+    definition_is(c, "a template nothing instantiates: go to a local", lone, lone_text, 3, "acc", lone, 2, "acc")
+    completes("this-> in a template's method (a broken line)", lone, lone_text, 8, "\t\t\treturn this->|;", ["a", "sum"])
+    hover_has(c, "a template nothing instantiates: its parameter", lone, lone_text, 2, "T", "analyzed with i32")
+    broken = lone_text.replace("return acc + n;", "return acc +;")
+    c.notify("textDocument/didChange", {"textDocument": {"uri": uri(lone), "version": 2}, "contentChanges": [{"text": broken}]})
+    c.sync()
+    check("a template nothing instantiates: its syntax errors", len(c.diagnostics.get(uri(lone), [])) == 1, str(c.diagnostics.get(uri(lone))))
     c.request("shutdown", None)
     c.notify("exit", None)
     c.proc.wait(timeout=10)

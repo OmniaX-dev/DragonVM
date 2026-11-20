@@ -112,6 +112,9 @@ namespace dscript
 			std::vector<std::string> generate(Node* program);
 			// Analysis mode: the errors found.
 			const std::vector<CompileError>& errors(void) const { return m_errors; }
+			// Analysis: a template's body has a syntax error (found when instantiating it): the
+			// language server keeps its previous completion data, as for any syntax error.
+			bool templateSyntaxError(void) const { return m_templateSyntaxError; }
 			// A library (after generate()): the symbols the programs that import it can use (its
 			// subs and globals), and its declarations as DScript source (lines: where each line
 			// of it comes from).
@@ -413,6 +416,18 @@ namespace dscript
 			bool m_noUserConv { false };
 			// The label of a sub (an operator cast: by the type it gives, the same in every program).
 			std::string subLabelName(FuncInfo* f, const std::string& name);
+
+			// ===== Templates in analysis (the language server) =====
+			struct ParamUse { std::string name; SourcePos def; std::set<std::string> types; bool probe { false }; };
+			std::map<std::string, ParamUse> m_paramUses;		// "file:line:column" of a parameter's use in an instance
+			std::set<std::pair<const TemplateDef*, size_t>> m_instantiatedEntities;
+			bool m_templateSyntaxError { false };
+			std::vector<CompileError> m_syntaxErrors;
+			bool m_probing { false };
+			std::pair<const TemplateDef*, size_t> m_probeEntity { nullptr, 0 };	// (instantiate only this one)
+			void indexTemplateParam(const SourcePos& pos, const std::string& written);
+			bool probeArguments(const TemplateDef* def, std::vector<Type*>& args);
+			void analyzeTemplates(void);
 
 			// ===== Templates =====
 			// A template's struct / sub (by full name: Ns::Array, Struct::map): the templates that

@@ -1,0 +1,22 @@
+// expect-rv: 0
+// A struct template's sub in an if constexpr (its instance has it or not) called by the struct's
+// own name (Box::make, Box::half): declared before the instance's names are looked up.
+#include(check.ds)
+
+template(T) {
+	struct Box {
+		var v: T;
+		if constexpr (is_float(T)) { static sub half(var x: T) -> T { return x / 2.0f; } }
+		else { static sub half(var x: T) -> T { return x / 2; } }
+		sub halved() -> T { return Box::half(this->v); }
+	}
+}
+
+sub main() -> i32 {
+	var f: Box<f32>;
+	f.v = 3.0f;
+	var i: Box<i32>;
+	i.v = 9;
+	check(1, f.halved() == 1.5f && i.halved() == 4);
+	return result();
+}
