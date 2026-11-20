@@ -1,0 +1,4 @@
+// expect-error: operator[] is a method
+struct V { var x: i32; }
+sub operator[](var v: V, var i: i32) -> i32 { return 0; }
+sub main() -> i32 { return 0; }

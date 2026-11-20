@@ -3836,6 +3836,10 @@
           {
             "type": "identifier",
             "named": true
+          },
+          {
+            "type": "operator_name",
+            "named": true
           }
         ]
       },
@@ -5075,6 +5079,11 @@
         }
       ]
     }
+  },
+  {
+    "type": "operator_name",
+    "named": true,
+    "fields": {}
   },
   {
     "type": "parameter",
@@ -8341,6 +8350,10 @@
     "named": true
   },
   {
+    "type": "operator",
+    "named": false
+  },
+  {
     "type": "optional",
     "named": false
   },
@@ -8351,6 +8364,10 @@
   {
     "type": "override_modifier",
     "named": true
+  },
+  {
+    "type": "post",
+    "named": false
   },
   {
     "type": "preproc_directive",

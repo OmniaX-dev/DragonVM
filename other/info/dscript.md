@@ -629,6 +629,38 @@ var back = static_cast<Square*>(sh);        // back to the class (unchecked: it 
   Condition built-ins: `is_class(T)`, `is_interface(T)`, `is_abstract(T)`, `is_base_of(B, D)`;
   `has_method` and `is_range` see inherited subs.
 
+### Operators
+A struct (or a class) can give meaning to operators on its values: `sub operator<op>(...)` in
+it is a method whose first operand is `this`; a top-level `sub operator<op>(...)` takes all its
+operands (one of them a struct, or a pointer to one), for `2 * v`.
+```
+struct Vec {
+    var x: i32; var y: i32;
+    sub operator+(var o: Vec) -> Vec { ... }             // a + b
+    sub operator-(var o: const Vec*) -> Vec { ... }      // a - b (b by its address: no copy)
+    sub operator-() -> Vec { ... }                       // -a
+    readonly sub operator==(var o: Vec) -> bool { ... }  // a == b (and a != b)
+    readonly sub operator<(var o: Vec) -> bool { ... }   // a < b (and >, <=, >=)
+    sub operator+=(var o: Vec) { ... }                   // a += b
+    sub operator++() -> Vec* { ... }                     // ++a
+    sub operator post++() -> Vec { ... }                 // a++
+    sub operator[](var i: u32) -> i32* { ... }           // a[i]: a pointer result, so a[i] = 5 works
+    sub operator()(var t: i32) -> i32 { ... }            // a(t)
+}
+sub operator*(var k: i32, var v: Vec) -> Vec { ... }     // 2 * v
+```
+- Operators: `+ - * / % & | ^ << >> == != < <= > >= ! ~ ++ --`, the compound assignments,
+  `[]` and `()` (those two only as methods); `-` and `+` with no operand are unary. `&&` / `||`,
+  `&` (address), `.`, `->`, `?:` and `sizeof` keep their meaning.
+- `a != b` is `!(a == b)` when there is no `operator!=`; with only `operator<`, `a > b` is
+  `b < a`, `a <= b` is `!(b < a)`, `a >= b` is `!(a < b)`. `a += b` is only `operator+=` (not made
+  from `+` and `=`).
+- An operator is chosen as an overloaded sub is: the struct's (with those it inherits) and the
+  top-level ones visible from the code or from an operand's namespace. A parameter `T*` /
+  `const T*` takes a struct operand by its address (a variable, or a call's result).
+- Operators are subs like the others: `readonly`, `inline`, `constexpr`, `virt` / `override`
+  (`(*shape)()` calls the object's own), in templates and libraries; not `static`.
+
 ### Variadic subs
 A sub whose parameters end with `...` takes more arguments, of any scalar type; with
 `...typed`, each one's type is passed too. Three built-ins read them, in the sub itself:
@@ -1414,7 +1446,7 @@ optimized).
 - No `switch`, `goto`, unions, 64-bit floats.
 - Arrays are passed by pointer (structs by value).
 - Lambdas do not capture the variables of the sub around them.
-- Classes have no destructors yet (their tables reserve a slot for them); no operator overloading.
+- Classes have no destructors yet (their tables reserve a slot for them).
 - Uninitialized global arrays are stored in the program (zeroes).
 - The assembler replaces data symbols line by line: very big programs assemble slowly.
 

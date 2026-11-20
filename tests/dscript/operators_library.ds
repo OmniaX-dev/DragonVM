@@ -1,0 +1,14 @@
+// Operators of a library's struct (its methods and its top-level operators, inline ones too).
+// dsc-lib: libs/vecops.ds
+// expect-rv: 0
+#import("vecops")
+#include(check.ds)
+sub main() -> i32 {
+	var a: vm::V2 = { 1, 2 };
+	var b = a + a;
+	check(1, b == 2 * a && b != a && b[1] == 4);
+	b[0] = 9;
+	var old = b++;
+	check(2, old.x == 9 && b.x == 10);
+	return result();
+}

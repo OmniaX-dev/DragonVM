@@ -1,0 +1,3 @@
+// expect-error: no operator post++ for V (a++ is operator post++; ++a is operator++)
+struct V { var x: i32; sub operator++() -> void { this->x++; } }
+sub main() -> i32 { var v: V; v++; return 0; }

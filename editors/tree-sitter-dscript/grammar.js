@@ -262,11 +262,16 @@ module.exports = grammar({
 			repeat(choice($.atomic_modifier, $.interrupt_modifier, $.inline_modifier, $.static_modifier, $.priv_modifier, $.readonly_modifier,
 				$.constexpr_modifier, $.consteval_modifier, $.prot_modifier, $.virt_modifier, $.pure_modifier, $.override_modifier, $.final_modifier)),
 			'sub',
-			field('name', $.identifier),
+			field('name', choice($.identifier, $.operator_name)),
 			field('parameters', $.parameter_list),
 			optional(seq('->', field('return_type', $._type))),
 			choice(field('body', $.block), ';'),
 		),
+		// operator+, operator[], operator(), operator post++, operator cast
+		operator_name: _ => seq('operator', choice(
+			seq(optional('post'), choice('++', '--')),
+			'+', '-', '*', '/', '%', '&', '|', '^', '<<', '>>', '==', '!=', '<', '<=', '>', '>=', '!', '~',
+			'+=', '-=', '*=', '/=', '%=', '&=', '|=', '^=', '<<=', '>>=', '=', seq('[', ']'), seq('(', ')'), 'cast')),
 		interrupt_modifier: _ => 'interrupt',
 		constexpr_modifier: _ => 'constexpr',
 		consteval_modifier: _ => 'consteval',

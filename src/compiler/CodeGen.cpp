@@ -64,12 +64,24 @@ namespace dscript
 			else if (c == '*') s += "_P";
 			else if (c == '[') s += "_A";
 			else if (c == ' ' || c == ']') ;
+			else if (c == '+') s += "_pl";		// (operators: operator+ and operator- are not the same sub)
+			else if (c == '-') s += "_mi";
+			else if (c == '/') s += "_sl";
+			else if (c == '%') s += "_pc";
+			else if (c == '&') s += "_am";
+			else if (c == '|') s += "_vb";
+			else if (c == '^') s += "_ca";
+			else if (c == '=') s += "_eq";
+			else if (c == '!') s += "_ex";
+			else if (c == '~') s += "_ti";
+			else if (c == '(') s += "_op";
+			else if (c == ')') s += "_cp";
 			else s += '_';
 		}
 		return s;
 	}
 
-	static bool plainName(const std::string& name) { return name.find_first_of(":<>,*[] ()") == std::string::npos; }
+	static bool plainName(const std::string& name) { return std::all_of(name.begin(), name.end(), [](char c) { return std::isalnum((unsigned char)c) || c == '_'; }); }
 
 	static std::string dataSymbol(const std::string& name, bool isStatic)
 	{
@@ -1359,6 +1371,45 @@ namespace dscript
 		}
 		if (f->interrupt && (!params.empty() || d->variadic != 0 || ret->kind != Type::Kind::Void))
 			error(d->pos, "interrupt subs take no parameters and return void");
+		// An operator: on a struct (a method, its first operand this), or a top-level sub taking one.
+		if (d->shortName.rfind("operator", 0) == 0 && d->shortName.size() > 8 && !std::isalnum((unsigned char)d->shortName[8]) && d->shortName[8] != '_')
+		{
+			const std::string op = d->shortName.substr(8);
+			const bool method = (d->value & 4) != 0;
+			if ((d->value & 8) != 0)
+				error(d->namePos, "an operator works on a struct: it cannot be static (a top-level sub operator" + op + "(...) takes its operands as parameters)");
+			const size_t n = params.size() - (method ? 1 : 0);	// (the operands but this)
+			const bool unaryOnly = op == "!" || op == "~" || op == "++" || op == "--" || op == " post++" || op == " post--";
+			const bool either = op == "-" || op == "+";
+			const bool anyCount = op == "()" || op == " cast";
+			if (!method && (op == "()" || op == "[]" || op == "=" || op == " cast"))
+				error(d->namePos, "operator" + op + " is a method (in the struct it works on)");
+			if (d->variadic != 0 && op != "()")
+				error(d->namePos, "an operator takes its operands (not ...)");
+			if (op == " cast")
+			{
+				if (n != 0)
+					error(d->namePos, "operator cast takes no parameters (its type is what it returns: sub operator cast() -> T)");
+				if (ret->kind == Type::Kind::Void)
+					error(d->namePos, "operator cast returns the type it converts to (sub operator cast() -> T)");
+			}
+			else if (!anyCount)
+			{
+				const size_t want = unaryOnly ? 0 : 1;		// (as a method)
+				const size_t have = n - (method ? 0 : 1);
+				if (op == "[]" ? n < 1 : either ? (have > 1) : have != want)
+					error(d->namePos, "operator" + op + " takes " + (op == "[]" ? std::string("an index (or more)") : either ? (method ? "no operand (-a) or one (a - b)" : "one operand (-a) or two (a - b)") :
+						std::to_string(want + (method ? 0 : 1)) + " operand" + (want + (method ? 0 : 1) == 1 ? "" : "s") + (method ? " besides this" : "")));
+			}
+			if (!method)
+			{
+				bool structOperand = false;
+				for (Type* p : params)
+					structOperand = structOperand || p->kind == Type::Kind::Struct || (p->kind == Type::Kind::Pointer && p->base->kind == Type::Kind::Struct);
+				if (!structOperand)
+					error(d->namePos, "a top-level operator" + op + " needs a struct operand (a struct, or a pointer to one)");
+			}
+		}
 		// A constructor: sub new(...) in a struct, on the object being built (this).
 		if ((d->value & 4) != 0 && d->shortName == "new")
 		{
@@ -1693,6 +1744,29 @@ namespace dscript
 			{
 				check(e->a);
 				check(e->b);
+				if (e->a->type != nullptr && e->a->type->kind == Type::Kind::Struct)
+				{
+					// a[i]: operator[]; its result a pointer: what it points at (a[i] = x works).
+					Type* st = e->a->type;
+					Node* call = new Node();
+					call->kind = NodeKind::Index;
+					call->pos = e->pos;
+					if (!userOperator(call, "operator[]", { e->a, e->b }, true))
+						error(e->pos, "no operator[] for " + st->name() + " (a sub operator[](...) in the struct)");
+					if (call->type != nullptr && call->type->kind == Type::Kind::Pointer && call->type->base->kind != Type::Kind::Void)
+					{
+						const SourcePos pos = e->pos;
+						*e = Node();
+						e->kind = NodeKind::Unary;
+						e->name = "*";
+						e->pos = pos;
+						e->a = call;
+						check(e);
+					}
+					else
+						*e = *call;
+					break;
+				}
 				Type* ta = decay(e->a->type);
 				if (ta == nullptr || ta->kind != Type::Kind::Pointer)
 					error(e->a->pos, "only arrays and pointers can be indexed");
@@ -1881,6 +1955,17 @@ namespace dscript
 			case NodeKind::PreInc: case NodeKind::PreDec: case NodeKind::PostInc: case NodeKind::PostDec:
 			{
 				check(e->a);
+				if (e->a->type != nullptr && e->a->type->kind == Type::Kind::Struct)
+				{
+					// ++a: operator++, a++: operator post++
+					const bool inc = e->kind == NodeKind::PreInc || e->kind == NodeKind::PostInc;
+					const bool post = e->kind == NodeKind::PostInc || e->kind == NodeKind::PostDec;
+					const std::string op = std::string("operator") + (post ? " post" : "") + (inc ? "++" : "--");
+					Type* st = e->a->type;
+					if (!userOperator(e, op, { e->a }))
+						error(e->pos, "no " + op + " for " + st->name() + (post ? " (a++ is operator post++; ++a is operator++)" : ""));
+					break;
+				}
 				if (!e->a->lvalue || e->a->type->kind == Type::Kind::Array)
 					error(e->pos, "++ and -- need a variable");
 				if (e->a->readOnly)
@@ -2084,6 +2169,12 @@ namespace dscript
 		Type* t = decay(e->a->type);
 		if (t == nullptr)
 			error(e->a->pos, "ambiguous overloaded sub");
+		if (t->kind == Type::Kind::Struct && op != "*")
+		{
+			if (!userOperator(e, "operator" + op, { e->a }))
+				error(e->pos, "no operator" + op + " for " + t->name() + " (a sub operator" + op + "() in the struct, or a top-level one)");
+			return;
+		}
 		if (op == "*")
 		{
 			if (t->kind == Type::Kind::Null || t->kind != Type::Kind::Pointer)
@@ -2145,6 +2236,8 @@ namespace dscript
 		Type* tb = decay(e->b->type);
 		if (ta == nullptr || tb == nullptr)
 			error(e->pos, "ambiguous overloaded sub");
+		if ((ta->kind == Type::Kind::Struct || tb->kind == Type::Kind::Struct) && op != "&&" && op != "||")
+			return binaryOperator(e);		// (a struct's operator)
 		if (op == "&&" || op == "||")
 		{
 			if (!ta->isScalar() || !tb->isScalar())
@@ -2269,6 +2362,15 @@ namespace dscript
 	{
 		check(e->a);
 		Type* t = e->a->type;
+		if (t != nullptr && t->kind == Type::Kind::Struct && e->name != "=")
+		{
+			// a += b: operator+= (not derived from + and =)
+			check(e->b);
+			const std::string op = "operator" + e->name;
+			if (!userOperator(e, op, { e->a, e->b }))
+				error(e->pos, "no " + op + " for " + t->name() + " and " + (e->b->type ? e->b->type->name() : std::string("?")) + " (a sub " + op + "(...) in the struct, or a top-level one)");
+			return;
+		}
 		if (!e->a->lvalue && e->a->kind == NodeKind::Ident && m_consts.count(e->a->name) > 0)
 			error(e->a->pos, "'" + (e->a->text.empty() ? shownName(e->a->name) : e->a->text) + "' is a constant: it cannot change");
 		if (!e->a->lvalue)
@@ -3103,6 +3205,228 @@ namespace dscript
 		}
 	}
 
+	// ===================================== Operators =====================================
+	// An operator on a struct value (a + b, -a, a[i], a(x), a += b, ++a): the struct's
+	// operator<op> sub (a method: on the first operand), or a sub operator<op> found from here or
+	// from the operands' namespaces (the operands as its arguments). A pointer parameter (T*,
+	// const T*) takes a struct operand by its address. e becomes the call. false: there is none.
+	bool CodeGen::userOperator(Node* e, const std::string& op, const std::vector<Node*>& operands, bool membersOnly)
+	{
+		auto l_struct = [](Node* n) -> StructInfo* {
+			Type* t = n->type;
+			return (t != nullptr && t->kind == Type::Kind::Struct) ? t->structInfo : nullptr;
+		};
+		std::vector<FuncInfo*> members, frees;
+		if (StructInfo* s = l_struct(operands[0]))
+		{
+			resolveStruct(s, e->pos);
+			for (FuncInfo* f : methodsOf(s, op))
+			{
+				if ((f->decl->value & 8) == 0)
+					members.push_back(f);
+			}
+		}
+		if (!membersOnly)
+		{
+			// (from where the code is, and from each struct operand's namespace)
+			std::vector<std::string> scopes;
+			FuncInfo* cur = m_inline.empty() ? m_func : m_inline.back().func;
+			auto l_up = [&](std::string s) {
+				while (true)
+				{
+					if (std::find(scopes.begin(), scopes.end(), s) == scopes.end())
+						scopes.push_back(s);
+					if (s.empty())
+						break;
+					const size_t sep = s.rfind("::");
+					s = sep == std::string::npos ? "" : s.substr(0, sep);
+				}
+			};
+			l_up(cur != nullptr ? cur->decl->scope : "");
+			for (Node* o : operands)
+			{
+				if (StructInfo* s = l_struct(o))
+					l_up(s->decl->scope);
+			}
+			for (const std::string& s : scopes)
+			{
+				auto it = m_funcs.find(s.empty() ? op : s + "::" + op);
+				if (it == m_funcs.end())
+					continue;
+				for (FuncInfo* f : it->second)
+				{
+					if ((f->decl->value & 4) == 0)
+						frees.push_back(f);
+				}
+			}
+		}
+		if (members.empty() && frees.empty())
+			return false;
+		// The best one: each operand converted to its parameter (or its address taken).
+		auto l_cost = [&](Node* arg, Type* param, bool& address) -> int {
+			address = false;
+			const int c = conversionCost(arg, param);
+			if (c >= 0)
+				return c;
+			StructInfo* s = l_struct(arg);
+			int depth = 0;
+			if (s != nullptr && param->kind == Type::Kind::Pointer && param->base->kind == Type::Kind::Struct && derives(s, param->base->structInfo, nullptr, &depth))
+			{
+				const bool addressable = arg->lvalue || arg->kind == NodeKind::Call || (arg->kind == NodeKind::Ident && arg->var != nullptr);
+				if (!addressable || (arg->readOnly && !param->constTarget))
+					return -1;
+				address = true;
+				return depth;
+			}
+			return -1;
+		};
+		FuncInfo* best = nullptr;
+		bool bestMember = false, ambiguous = false;
+		std::vector<bool> bestAddress;
+		int bestCost = 0x7FFFFFFF;
+		auto l_try = [&](FuncInfo* f, bool member) {
+			if (f->type == nullptr)
+				resolveFunction(f);
+			const auto& params = f->type->params;
+			// (a method: params[0] is this, for operands[0])
+			const size_t args = operands.size();
+			if (params.size() < args || f->requiredParams > args || f->type->variadic != 0)
+				return;
+			int cost = 0;
+			std::vector<bool> address(args, false);
+			for (size_t i = 0; i < args; i++)
+			{
+				bool a = false;
+				const int c = (member && i == 0) ? 0 : l_cost(operands[i], params[i], a);
+				if (c < 0)
+					return;
+				cost += c;
+				address[i] = a;
+			}
+			if (cost < bestCost)
+			{
+				best = f;
+				bestMember = member;
+				bestAddress = address;
+				bestCost = cost;
+				ambiguous = false;
+			}
+			else if (cost == bestCost && best != f)
+				ambiguous = true;
+		};
+		for (FuncInfo* f : members)
+			l_try(f, true);
+		for (FuncInfo* f : frees)
+			l_try(f, false);
+		std::string types;
+		for (Node* o : operands)
+			types += (types.empty() ? "" : ", ") + (o->type != nullptr ? o->type->name() : std::string("?"));
+		if (best == nullptr)
+		{
+			std::string msg = "no " + op + " takes (" + types + "); candidates:";
+			for (FuncInfo* f : members)
+				msg += "\n    " + f->decl->name + f->type->name().substr(3) + " (" + posString(f->decl->pos) + ")";
+			for (FuncInfo* f : frees)
+				msg += "\n    " + f->decl->name + f->type->name().substr(3) + " (" + posString(f->decl->pos) + ")";
+			error(e->pos, msg);
+		}
+		if (ambiguous)
+			error(e->pos, "ambiguous " + op + " for (" + types + ")");
+		// The call (each operand as it is, or its address).
+		std::vector<Node*> args;
+		for (size_t i = bestMember ? 1 : 0; i < operands.size(); i++)
+		{
+			Node* a = operands[i];
+			if (bestAddress[i])
+			{
+				Node* addr = new Node();
+				addr->kind = NodeKind::Unary;
+				addr->name = "&";
+				addr->pos = a->pos;
+				addr->a = a;
+				a = addr;
+			}
+			args.push_back(a);
+		}
+		Node* callee = new Node();
+		callee->pos = e->pos;
+		callee->namePos = e->pos;
+		if (bestMember)
+		{
+			callee->kind = NodeKind::Member;
+			callee->a = operands[0];
+			callee->name = op;
+		}
+		else
+		{
+			callee->kind = NodeKind::Ident;
+			callee->name = best->decl->name;
+			callee->text = op;
+			callee->resolved = true;
+		}
+		const SourcePos pos = e->pos;
+		*e = Node();
+		e->kind = NodeKind::Call;
+		e->pos = pos;
+		e->a = callee;
+		e->list = args;
+		check(e);
+		return true;
+	}
+
+	// a OP b with a struct operand: its operator, or (none) != from ==, > / <= / >= from <.
+	void CodeGen::binaryOperator(Node* e)
+	{
+		const std::string op = e->name;
+		Node* a = e->a;
+		Node* b = e->b;
+		if (userOperator(e, "operator" + op, { a, b }))
+			return;
+		auto l_node = [&](NodeKind kind, const std::string& name, Node* x, Node* y) {
+			Node* n = new Node();
+			n->kind = kind;
+			n->name = name;
+			n->pos = e->pos;
+			n->a = x;
+			n->b = y;
+			return n;
+		};
+		auto l_not = [&](Node* inner) {
+			const SourcePos pos = e->pos;
+			*e = Node();
+			e->kind = NodeKind::Unary;
+			e->name = "!";
+			e->pos = pos;
+			e->a = inner;
+			check(e);
+		};
+		if (op == "!=")
+		{
+			Node* eq = l_node(NodeKind::Binary, "==", a, b);
+			if (userOperator(eq, "operator==", { a, b }))
+				return l_not(eq);
+		}
+		else if (op == ">" || op == "<=" || op == ">=")
+		{
+			// a > b: b < a; a <= b: !(b < a); a >= b: !(a < b)
+			Node* x = op == ">=" ? a : b;
+			Node* y = op == ">=" ? b : a;
+			if (op == ">")
+			{
+				if (userOperator(e, "operator<", { x, y }))
+					return;
+			}
+			else
+			{
+				Node* lt = l_node(NodeKind::Binary, "<", x, y);
+				if (userOperator(lt, "operator<", { x, y }))
+					return l_not(lt);
+			}
+		}
+		error(e->pos, "no operator" + op + " for " + a->type->name() + " and " + b->type->name() + " (a sub operator" + op + "(...) in the struct, or a top-level one)" +
+			(op == "!=" ? " (or operator==)" : op == ">" || op == "<=" || op == ">=" ? " (or operator<)" : ""));
+	}
+
 	// x.method(args) / p->method(args): Struct::method(&x / p, args) (the call is rewritten).
 	void CodeGen::rewriteMethodCall(Node* e)
 	{
@@ -3414,6 +3738,19 @@ namespace dscript
 		}
 		check(callee);
 		Type* t = callee->type;
+		if (t != nullptr && t->kind == Type::Kind::Struct)
+		{
+			// a(args) on a struct: operator()
+			std::vector<Node*> operands { callee };
+			for (Node* arg : e->list)
+			{
+				check(arg);
+				operands.push_back(arg);
+			}
+			if (!userOperator(e, "operator()", operands, true))
+				error(e->pos, "no operator() for " + t->name() + " (a sub operator()(...) in the struct)");
+			return;
+		}
 		if (t != nullptr && t->kind == Type::Kind::Pointer && t->base->isFunction())
 			t = t->base;
 		if (t == nullptr || !t->isFunction())

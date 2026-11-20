@@ -1392,7 +1392,7 @@ namespace dscript
 		if (n->constKind != 0 && (flags & 33) != 0)
 			error(n->pos, std::string((flags & 1) != 0 ? "interrupt" : "atomic") + " subs cannot be " + (n->constKind == 2 ? "constexpr" : "consteval") +
 				" (they are never evaluated when compiling)");
-		n->name = expectIdentifier("after 'sub'");
+		n->name = isKeyword("operator") ? parseOperatorName() : expectIdentifier("after 'sub'");
 		n->namePos = lastPos();
 		// Methods: <Struct>::<name> (the scope is the struct's); the others: in the namespace.
 		nameDeclaration(n);
@@ -1445,6 +1445,48 @@ namespace dscript
 		popScope();
 		m_currentFunc = outer;
 		return n;
+	}
+
+	// operator<op> (after 'sub'): the sub's name ("operator+", "operator[]", "operator()",
+	// "operator post++" (postfix), "operator cast" (a conversion: its type is its result's)).
+	std::string Parser::parseOperatorName(void)
+	{
+		const Token& kw = next();
+		if (isKeyword("cast"))
+		{
+			next();
+			return "operator cast";
+		}
+		bool post = false;
+		if (peek().kind == TokenKind::Identifier && peek().text == "post" && (isPunct("++", 1) || isPunct("--", 1)))
+		{
+			next();
+			post = true;
+		}
+		const Token& t = peek();
+		if (t.kind != TokenKind::Punct)
+			error(t.pos, "an operator expected after 'operator' (+, ==, [], (), cast, ...), found " + describe(t));
+		static const std::set<std::string> ops { "+", "-", "*", "/", "%", "&", "|", "^", "<<", ">>", "==", "!=", "<", "<=", ">", ">=", "!", "~",
+			"++", "--", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>=", "=", "[", "(" };
+		if (t.text == "&&" || t.text == "||")
+			error(t.pos, "&& and || are not overloaded (they would not short-circuit any more)");
+		if (ops.count(t.text) == 0)
+			error(t.pos, "'" + t.text + "' is not an operator a struct can have (+, ==, [], (), cast, ...)");
+		next();
+		std::string op = t.text;
+		if (op == "[")
+		{
+			expectPunct("]", "after 'operator['");
+			op = "[]";
+		}
+		else if (op == "(")
+		{
+			expectPunct(")", "after 'operator(' (operator()(...))");
+			op = "()";
+		}
+		if (post && op != "++" && op != "--")
+			error(kw.pos, "post is for ++ and -- (operator post++)");
+		return std::string("operator") + (post ? " post" : "") + op;
 	}
 
 	// After '...': 'typed' (written right after it: ...typed).

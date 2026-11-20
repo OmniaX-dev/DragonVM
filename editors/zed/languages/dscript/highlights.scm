@@ -92,6 +92,8 @@
 (function_declaration
 	name: (identifier) @function)
 
+(operator_name) @function
+
 ; A struct's constructor (sub new)
 (field_list
 	(function_declaration

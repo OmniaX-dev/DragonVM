@@ -1,0 +1,3 @@
+// expect-error: && and || are not overloaded
+struct V { sub operator&&(var o: V) -> bool { return true; } }
+sub main() -> i32 { return 0; }

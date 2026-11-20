@@ -219,6 +219,8 @@ namespace dscript
 			Type* varArgType(Type* t);
 			uint32_t varArgTypeCode(Type* t);
 			void rewriteMethodCall(Node* e);
+			bool userOperator(Node* e, const std::string& op, const std::vector<Node*>& operands, bool membersOnly = false);
+			void binaryOperator(Node* e);
 			bool insideStruct(const StructInfo* info);
 			void checkFieldAccess(const StructInfo* info, const StructField* f, const SourcePos& pos);
 			void checkSubAccess(FuncInfo* f, const SourcePos& pos);

@@ -60,6 +60,7 @@ namespace dscript
 			int m_forInCount { 0 };
 			Node* parseVarDecl(bool allowNoType = true);
 			Node* parseFunction(int flags, const Node* owner = nullptr);
+			std::string parseOperatorName(void);
 			bool acceptVariadicTyped(void);
 			void parseParams(Node* fn);
 			Node* parseLambda(void);

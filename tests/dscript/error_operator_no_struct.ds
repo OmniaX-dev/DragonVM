@@ -1,0 +1,3 @@
+// expect-error: a top-level operator+ needs a struct operand
+sub operator+(var a: i32, var b: i32) -> i32 { return 0; }
+sub main() -> i32 { return 0; }

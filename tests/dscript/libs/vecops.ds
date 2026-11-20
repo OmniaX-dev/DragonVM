@@ -1,0 +1,12 @@
+// Operators in a library (operators_library.ds).
+namespace vm {
+	struct V2 {
+		var x: i32;
+		var y: i32;
+		sub operator+(var o: V2) -> V2 { var r: V2 = { this->x + o.x, this->y + o.y }; return r; }
+		inline readonly sub operator==(var o: V2) -> bool { return this->x == o.x && this->y == o.y; }
+		sub operator[](var i: i32) -> i32* { return i == 0 ? &this->x : &this->y; }
+		sub operator post++() -> V2 { var old: V2 = *this; this->x++; return old; }
+	}
+	sub operator*(var k: i32, var v: V2) -> V2 { var r: V2 = { k * v.x, k * v.y }; return r; }
+}

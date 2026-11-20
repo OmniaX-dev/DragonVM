@@ -1,0 +1,78 @@
+// expect-rv: 0
+// Operators of structs and classes: sub operator<op>(...) in the struct (on its first operand)
+// or at the top level (the operands as parameters; a pointer parameter takes an operand by its
+// address): arithmetic, comparisons (!= from ==, > <= >= from <), unary, ++ / --, compound
+// assignments, [] (a pointer result: a[i] = x), (), virtual operators.
+#include(check.ds)
+
+struct Vec {
+	var x: i32;
+	var y: i32;
+	sub operator+(var o: Vec) -> Vec { var r: Vec = { this->x + o.x, this->y + o.y }; return r; }
+	sub operator-(var o: const Vec*) -> Vec { var r: Vec = { this->x - o->x, this->y - o->y }; return r; }
+	sub operator-() -> Vec { var r: Vec = { -this->x, -this->y }; return r; }
+	sub operator*(var k: i32) -> Vec { var r: Vec = { this->x * k, this->y * k }; return r; }
+	readonly sub operator==(var o: Vec) -> bool { return this->x == o.x && this->y == o.y; }
+	readonly sub operator<(var o: Vec) -> bool { return this->x * this->x + this->y * this->y < o.x * o.x + o.y * o.y; }
+	sub operator+=(var o: Vec) -> void { this->x += o.x; this->y += o.y; }
+	sub operator++() -> Vec* { this->x++; this->y++; return this; }
+	sub operator post++() -> Vec { var old: Vec = *this; this->x++; this->y++; return old; }
+	readonly sub operator!() -> bool { return this->x == 0 && this->y == 0; }
+}
+sub operator*(var k: i32, var v: Vec) -> Vec { return v * k; }		// (2 * v)
+
+namespace geo {
+	struct Grid {
+		var cells: i32[6];
+		var width: i32 = 3;
+		sub operator[](var i: i32) -> i32* { return &this->cells[i]; }
+		sub operator()(var x: i32, var y: i32) -> i32* { return &this->cells[y * this->width + x]; }
+	}
+	sub operator~(var g: const Grid*) -> i32 { return g->width; }		// (found from Grid's namespace)
+}
+
+class Shape {
+	virt readonly sub operator==(var o: const Shape*) -> bool { return false; }
+	virt sub operator()() -> i32 { return 1; }
+}
+class Circle ex Shape {
+	var r: i32;
+	override readonly sub operator==(var o: const Shape*) -> bool { return true; }
+	override sub operator()() -> i32 { return this->r; }
+}
+
+sub mk(var x: i32, var y: i32) -> Vec { var v: Vec = { x, y }; return v; }
+
+sub main() -> i32 {
+	var a = mk(1, 2);
+	var b = mk(10, 20);
+	var c = a + b;
+	check(1, c.x == 11 && c.y == 22);
+	check(2, (b - a).x == 9 && (-a).y == -2 && (a * 3).y == 6 && (2 * a).x == 2);
+	check(3, a + b == mk(11, 22) && a != b && !(a == b));
+	check(4, a < b && b > a && a <= b && b >= a && !(b < a) && a <= mk(2, 1));
+	a += b;
+	check(5, a.x == 11);
+	var p: Vec* = ++a;
+	check(6, p == &a && a.x == 12);
+	var old = a++;
+	check(7, old.x == 12 && a.x == 13);
+	var z: Vec;
+	check(8, !z && !(!a));
+	check(9, (mk(1, 1) + mk(2, 2) + mk(3, 3)).x == 6);		// (on call results)
+	var g: geo::Grid;
+	g[4] = 7;
+	*g(2, 1) = 9;
+	check(10, g[4] == 7 && g.cells[5] == 9 && ~g == 3);
+	g[0] += 5;
+	check(11, g[0] == 5);
+	var circle: Circle;
+	circle.r = 4;
+	var s: Shape* = &circle;
+	check(12, (*s)() == 4 && *s == s && circle() == 4);
+	if (a == b)
+		check(13, false);
+	while (a != a)
+		check(14, false);
+	return result();
+}
