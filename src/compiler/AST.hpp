@@ -77,7 +77,8 @@ namespace dscript
 		// if constexpr (a) around declarations (their guard; value: -1 not decided, 0 / 1), static_assert(a, text)
 		DeclIf, StaticAssert,
 		// Statements (SetVtables: a class constructor's own vtable pointers, see CodeGen::prepareConstructor)
-		Block, If, While, DoWhile, For, ForIn, Return, Break, Continue, ExprStmt, LowBlock, Assert, DebugPrint, Defer, SetVtables,
+		// Destroy: value 0, a destructor's fields (in reverse) and its base's part; 1, a variable (var).
+		Block, If, While, DoWhile, For, ForIn, Return, Break, Continue, ExprStmt, LowBlock, Assert, DebugPrint, Defer, SetVtables, Destroy,
 		// Expressions
 		IntLit, FloatLit, StrLit, BoolLit, Null, Ident, Unary, Binary, Assign, Ternary, Call, Index,
 		Member, Cast, SizeofType, SizeofExpr, PreInc, PreDec, PostInc, PostDec, InitList, TypeArg

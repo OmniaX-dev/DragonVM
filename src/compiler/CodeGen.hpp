@@ -141,7 +141,8 @@ namespace dscript
 			// deferDepth: the defer frames outside the loop (break / continue run the ones above).
 			struct Loop { std::string breakLabel; std::string continueLabel; size_t deferDepth { 0 }; };
 			// A defer: its statement, and the variables it sees (those declared before it).
-			struct Deferred { Node* body; std::vector<std::map<std::string, VarInfo*>> scopes; int atomic; };
+			// destroys: a local's destructor (skipped when a return moves the local out).
+			struct Deferred { Node* body; std::vector<std::map<std::string, VarInfo*>> scopes; int atomic; VarInfo* destroys { nullptr }; };
 			typedef std::string Reg;
 
 		private:
@@ -346,6 +347,53 @@ namespace dscript
 			// An interface, an abstract class: only pointers to it.
 			void requireValueType(Type* t, const SourcePos& pos, const std::string& what);
 			void collectDefaults(Type* type, int32_t offset, std::vector<std::pair<int32_t, const StructField*>>& out, std::vector<std::pair<int32_t, std::string>>* vptrs);
+
+			// ===== Destructors, copies, moves =====
+			// A struct with a destructor (sub del(); an implicit one when its fields or its base have
+			// one): its values are destroyed when their life ends. An array: of such structs.
+			bool destructible(Type* t);
+			FuncInfo* destructorOf(StructInfo* info);
+			void implicitDestructor(StructInfo* info);
+			// A destructor: its fields (in reverse) and its base's part when it ends (and its own tables
+			// while it runs), added once.
+			void prepareDestructor(FuncInfo* f);
+			std::set<Node*> m_preparedDtors;
+			// sub new(var o: const T*) (or T*), or nullptr.
+			FuncInfo* copyConstructorOf(StructInfo* info);
+			// Its own destructor or copy constructor (it owns something: copied by its copy
+			// constructor, assigned by destroying and copying).
+			bool ownsResources(StructInfo* info);
+			// Copied / assigned by more than its bytes (a copy constructor, operator=, a destructor, in it
+			// or in its fields / base).
+			bool customCopy(Type* t);
+			bool customAssign(Type* t);
+			// A type with its own destructor needs a copy constructor to be copied.
+			void requireCopyable(Type* t, const SourcePos& pos);
+			// The destructor of the value at addr + offset (arrays: each element, the last first).
+			void genDestroy(const Reg& addr, Type* t, int32_t offset);
+			void callMethod(FuncInfo* f, const Reg& self, int32_t offset, const std::string& arg = "");
+			// A copy into new storage (copy constructors, member by member, bytes), and an assignment.
+			void genCopy(const Reg& dst, const Reg& src, Type* t, const SourcePos& pos);
+			void genAssignValue(const Reg& dst, const Reg& src, Type* t, const SourcePos& pos);
+			// The value of src (an expression) into new storage at dst: moved from a call's result (its
+			// temporary is not destroyed), copied otherwise.
+			void genInitValue(const Reg& dst, Node* src, const Reg& value, Type* t);
+			// Temporaries with destructors (call results, values passed): destroyed when their full
+			// expression ends (a flag tells whether one made in a branch (&&, ||, ?:) exists).
+			struct Temp { int32_t offset; Type* type; int32_t flag; size_t codePos; bool consumed; Node* node; };
+			std::vector<Temp> m_temps;
+			std::vector<size_t> m_exprStarts;
+			int m_condDepth { 0 };
+			VarInfo* m_movedVar { nullptr };		// a return moving a local out: its destructor is not run
+			size_t beginExpr(void);
+			void endExpr(size_t mark);
+			void addTemp(int32_t offset, Type* t, Node* node);
+			bool consumeTemp(Node* n);
+			bool makesTemps(Node* e);
+			// A condition: its temporaries destroyed before the jump.
+			void genCondBranch(Node* e, const std::string& target, bool jumpIfTrue);
+			// The program's globals with destructors: destroyed after main (__ds_fini), the last first.
+			std::vector<std::vector<std::string>> m_finiChunks;
 
 			// ===== Templates =====
 			// A template's struct / sub (by full name: Ns::Array, Struct::map): the templates that

@@ -1,0 +1,22 @@
+// Globals (and static locals) with destructors: destroyed after main returns, the last built first;
+// main's result stays.
+// expect-output: main\nlocal\nstatic\nsecond\nfirst\n
+// expect-rv: 3
+
+struct Noisy {
+	var text: string;
+	sub new(var text: string) -> void { this->text = text; }
+	sub del() -> void { debug_print(this->text); }
+}
+
+var first: Noisy("first\n");
+var second: Noisy("second\n");
+
+sub once() -> void { static var s: Noisy("static\n"); }
+
+sub main() -> i32 {
+	once();
+	var local: Noisy("local\n");
+	debug_print("main\n");
+	return 3;
+}

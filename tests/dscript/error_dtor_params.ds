@@ -1,0 +1,3 @@
+// expect-error: a destructor is sub del() (no parameters, no result, not static)
+struct R { sub del(var x: i32) -> void { } }
+sub main() -> i32 { return 0; }

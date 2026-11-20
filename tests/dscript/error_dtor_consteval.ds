@@ -1,0 +1,5 @@
+// expect-error: values with destructors are not built when compiling
+struct R { var p: i32; sub del() -> void { } }
+consteval sub f() -> i32 { var r: R; return 1; }
+constexpr K = f();
+sub main() -> i32 { return K; }

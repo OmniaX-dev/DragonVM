@@ -1,0 +1,67 @@
+// expect-rv: 0
+// Copies and assignments of structs that own something: the copy constructor (new(var o: const
+// T*)), operator= (or: the old value destroyed, then a copy), member by member for the structs
+// holding them (and the classes extending them), arrays element by element.
+#include(check.ds)
+
+var g_copies: i32 = 0;
+var g_dels: i32 = 0;
+
+struct Buf {
+	var n: i32;
+	sub new(var n: i32) -> void { this->n = n; }
+	sub new(var o: const Buf*) -> void { this->n = o->n; g_copies++; }
+	sub del() -> void { g_dels++; }
+}
+
+struct Counted {
+	var v: i32;
+	var assigned: i32;
+	sub operator=(var o: const Counted*) -> void { this->v = o->v; this->assigned++; }
+	sub operator=(var x: i32) -> void { this->v = x; }		// (from another type)
+}
+
+struct Holder {
+	var id: i32;
+	var buf: Buf;			// (copied by its copy constructor: Holder is copied member by member)
+	var c: Counted;
+	var bufs: Buf[2];
+}
+
+class Shape {
+	var b: Buf;
+	virt sub kind() -> i32 { return 0; }
+}
+class Square ex Shape {
+	var side: i32;
+	override sub kind() -> i32 { return 4; }
+}
+
+sub main() -> i32 {
+	var h: Holder;
+	h.id = 7;
+	h.buf.new(3);
+	h.c.v = 5;
+	var h2: Holder = h;
+	check(1, g_copies == 3 && h2.id == 7 && h2.buf.n == 3 && h2.c.v == 5);		// (buf and the two bufs)
+	var c1: Counted;
+	var c2: Counted;
+	c1.v = 9;
+	c2 = c1;
+	check(2, c2.v == 9 && c2.assigned == 1);
+	c2 = 4;
+	check(3, c2.v == 4 && c2.assigned == 1);
+	g_copies = 0;
+	g_dels = 0;
+	h.buf.n = 8;
+	h2 = h;			// (member by member: buf destroyed then copied, c by its operator=)
+	check(4, h2.buf.n == 8 && g_copies == 3 && g_dels == 3 && h2.c.assigned == 1);
+	var sq: Square;
+	sq.side = 2;
+	sq.b.new(6);
+	g_copies = 0;
+	var sq2: Square = sq;
+	var s: Shape* = &sq2;
+	check(5, g_copies == 1 && sq2.b.n == 6 && sq2.side == 2 && s->kind() == 4);
+	return result();
+}

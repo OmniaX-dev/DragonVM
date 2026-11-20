@@ -1,0 +1,4 @@
+// expect-error: R has a destructor (it owns something): copying it needs a copy constructor
+struct R { var p: i32; sub del() -> void { } }
+sub take(var r: R) -> void { }
+sub main() -> i32 { var a: R; take(a); return 0; }

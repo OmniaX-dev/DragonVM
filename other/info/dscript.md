@@ -467,7 +467,9 @@ sub main() -> i32 {
 ```
 - A constructor only runs where it is written: `var p: Point;`, `{ ... }` lists, arrays and
   struct fields work as before (no hidden calls), and a variable with a constructor call
-  cannot also have a value.
+  cannot also have a value. (A destructor, if the struct has one, still runs for them: it must
+  accept a value that was only zeroed. A copy constructor is called for copies: see
+  "Destructors, copies and moves".)
 - The arguments see the names around the declaration (in `var x: Point(x);`, `x` is the outer
   one). `priv sub new` makes a struct that only its own subs can build; `new` is a method like
   the others (`p.new(3)` runs it again). It cannot be `static` or return a value.
@@ -620,14 +622,55 @@ var back = static_cast<Square*>(sh);        // back to the class (unchecked: it 
 - Layout: a class with virtual subs has its table pointer first (when its base has none, the
   base's fields follow it, 4 bytes on), then a table pointer for each interface it adds, then its
   fields. An interface is 4 bytes (its table pointer). A table (read-only data) holds the class's
-  type, the offset of its pointer in the object, a slot reserved for destructors, then a sub and a
-  `this` adjustment per slot. A type (for `dynamic_cast`): its name, its base's type and offset,
+  type, the offset of its pointer in the object, the destructor and its `this` adjustment, then a
+  sub and a `this` adjustment per slot. A type (for `dynamic_cast`): its name, its base's type and offset,
   and each interface's type and table pointer offset.
 - Templates can declare classes and interfaces (`class Box ex Base<T> impl Getter<T>`); classes
   work in libraries and shared libraries (a program can extend a library's class); constant
   values (`constexpr`, struct constants) and consteval subs cannot hold objects with tables.
   Condition built-ins: `is_class(T)`, `is_interface(T)`, `is_abstract(T)`, `is_base_of(B, D)`;
   `has_method` and `is_range` see inherited subs.
+
+### Destructors, copies and moves
+`sub del()` in a struct (or a class) is its destructor: it runs when a value's life ends. A
+struct that owns something (memory from a heap, a handle) frees it there.
+```
+struct Buffer {
+    var data: u8*;
+    var size: u32;
+    sub new(var size: u32) { this->data = alloc(size); this->size = size; }
+    sub new(var o: const Buffer*) { ... a copy of o's data ... }   // the copy constructor
+    sub del() { free(this->data); }
+}
+sub load() -> Buffer { var b: Buffer(64); ...; return b; }   // moved out: no copy
+sub main() {
+    var b = load();             // moved in: no copy
+    var c: Buffer = b;          // copied: new(&b)
+}                               // c then b destroyed
+```
+- When: a local when its scope ends (the end of its block, `return`, `break`, `continue`; the
+  last declared first); a temporary (a call's result, a value passed to a sub) when its statement
+  ends (in `&&`, `||`, `?:`: only if it was made); a global or a static local after `main` returns
+  (the last built first; not a library's); the fields of a struct after its destructor's body
+  (the last first), then a class's base's destructor; an array's elements (the last first).
+  Memory from elsewhere: `p->del()` (with `p->new(...)`).
+- A struct whose fields (or base) have destructors gets an implicit `del()` for them. Destructors
+  are not inherited (each struct has its own), are never static, and take nothing.
+- In a class with a table, `del` is virtual by itself (the table's destructor slot): `p->del()`
+  through a base pointer runs the object's own. While a base's destructor runs, the object is of
+  the base's class again.
+- Copies (a variable from another, a value passed, a value returned that is not a local of the
+  sub): the copy constructor `sub new(var o: const T*)` (or `T*`) if the struct has one; member by
+  member if its fields (or base) have one (each field by its own); its bytes otherwise. A struct
+  with its own destructor and no copy constructor cannot be copied (an error): moves still work.
+- Moves: a call's result (into a variable, passed by value, assigned), and a local returned by
+  its sub, are moved: their bytes taken, their destructor not run. No `&&`, no `move()`.
+- Assignment `a = b`: `operator=` if the struct has one (it can also take other types:
+  `sub operator=(var s: string)`); otherwise a struct with its own destructor or copy constructor
+  has its old value destroyed, then gets a copy (nothing when it is assigned itself; a call's
+  result is moved in); a struct holding such fields is assigned member by member. A class object
+  keeps its own table.
+- Constant values and compile-time evaluation have no destructors (an error).
 
 ### Operators
 A struct (or a class) can give meaning to operators on its values: `sub operator<op>(...)` in
@@ -1446,7 +1489,6 @@ optimized).
 - No `switch`, `goto`, unions, 64-bit floats.
 - Arrays are passed by pointer (structs by value).
 - Lambdas do not capture the variables of the sub around them.
-- Classes have no destructors yet (their tables reserve a slot for them).
 - Uninitialized global arrays are stored in the program (zeroes).
 - The assembler replaces data symbols line by line: very big programs assemble slowly.
 

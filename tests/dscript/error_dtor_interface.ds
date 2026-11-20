@@ -1,0 +1,3 @@
+// expect-error: interfaces have no destructor
+interface I { sub del() -> void; }
+sub main() -> i32 { return 0; }

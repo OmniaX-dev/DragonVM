@@ -869,6 +869,7 @@ namespace dscript
 		info->complete = true;
 		info->resolving = false;
 		implicitConstructor(info);
+		implicitDestructor(info);
 		for (Node* sa : asserts)
 			checkStaticAssert(sa, nullptr);		// (sizeof the struct works here)
 		// Default values: constants of the field's type.
@@ -1409,6 +1410,20 @@ namespace dscript
 				if (!structOperand)
 					error(d->namePos, "a top-level operator" + op + " needs a struct operand (a struct, or a pointer to one)");
 			}
+		}
+		// A destructor: sub del() in a struct (virtual by itself in a class with a table).
+		if ((d->value & 4) != 0 && d->shortName == "del")
+		{
+			if ((d->value & 8) != 0 || params.size() != 1 || d->variadic != 0 || ret->kind != Type::Kind::Void)
+				error(d->namePos, "a destructor is sub del() (no parameters, no result, not static): it ends the life of this");
+			if (d->owner != nullptr && d->owner->classKind == 2)
+				error(d->namePos, "interfaces have no destructor");
+			if ((d->value & (512 | 1024 | 2048 | 4096)) != 0)
+				error(d->namePos, "del is virtual by itself (in a class with a table): no virt, pure, override or final");
+			if (d->constKind == 3)
+				error(d->namePos, "a destructor cannot be consteval");
+			if (m_funcs.count(d->name) > 0 && m_funcs[d->name].size() > 1)
+				error(d->namePos, "a struct has one destructor");
 		}
 		// A constructor: sub new(...) in a struct, on the object being built (this).
 		if ((d->value & 4) != 0 && d->shortName == "new")
@@ -2383,6 +2398,13 @@ namespace dscript
 		if (t->kind == Type::Kind::Struct && hasConstFields(t, &constField))
 			error(e->pos, "cannot assign a whole " + t->name() + ": it has a const field (" + constField + "), set only when a struct is built "
 				"(initialize a new variable instead)");
+		if (e->name == "=" && t->kind == Type::Kind::Struct && m_funcs.count(t->structInfo->name + "::operator=") > 0)
+		{
+			// a = b: the struct's operator= (for what it takes; b of the same type otherwise: copied)
+			check(e->b, t);
+			if (userOperator(e, "operator=", { e->a, e->b }, true))
+				return;
+		}
 		if (e->name == "=")
 		{
 			check(e->b, t);
@@ -2787,8 +2809,8 @@ namespace dscript
 			}
 		};
 		l_add(info);
-		if (name == "new" || info->kind == 0)
-			return out;		// (constructors are not inherited)
+		if (name == "new" || name == "del" || info->kind == 0)
+			return out;		// (constructors and destructors are not inherited)
 		for (StructInfo* b = info->base; b != nullptr; b = b->base)
 			l_add(b);
 		for (const auto& slot : info->ifaceSlots)
@@ -2876,8 +2898,8 @@ namespace dscript
 		{
 			Node* d = m->decl;
 			const std::string& n = d->shortName;
-			if (n == "new")
-				continue;
+			if (n == "new" || n == "del")
+				continue;		// (each class has its own: not inherited)
 			// What it inherits with this name (its classes', its interfaces').
 			std::vector<FuncInfo*> inherited;
 			for (StructInfo* b = info->base; b != nullptr; b = b->base)
@@ -3056,7 +3078,16 @@ namespace dscript
 		};
 		for (const auto& v : info->vptrs)
 		{
-			std::string line = "\t$" + vtableLabel(info, v.offset) + " $" + typeinfoLabel(info) + ", " + l_word(v.offset) + ", " + l_word(0) + ", " + l_word(0);
+			std::string line = "\t$" + vtableLabel(info, v.offset) + " $" + typeinfoLabel(info) + ", " + l_word(v.offset);
+			// (the destructor's slot: the class's own del, on the whole object)
+			if (FuncInfo* del = destructorOf(info))
+			{
+				markUsed(del);
+				del->addressTaken = true;
+				line += ", $" + del->label + ", " + l_word(-(int64_t)v.offset);
+			}
+			else
+				line += ", " + l_word(0) + ", " + l_word(0);
 			auto l_entry = [&](FuncInfo* g, StructInfo* where) {
 				if (g == nullptr)
 				{
@@ -3203,6 +3234,524 @@ namespace dscript
 					error(f->init->pos, "which '" + f->init->name + "' (it is overloaded)?");
 			});
 		}
+	}
+
+	// =============================== Destructors, copies, moves ===============================
+	bool CodeGen::destructible(Type* t)
+	{
+		while (t != nullptr && t->kind == Type::Kind::Array)
+			t = t->base;
+		if (t == nullptr || t->kind != Type::Kind::Struct)
+			return false;
+		resolveStruct(t->structInfo, t->structInfo->pos);
+		return destructorOf(t->structInfo) != nullptr;
+	}
+
+	FuncInfo* CodeGen::destructorOf(StructInfo* info)
+	{
+		auto it = m_funcs.find(info->name + "::del");
+		if (it == m_funcs.end() || it->second.empty() || (it->second[0]->decl->value & 4) == 0)
+			return nullptr;
+		return it->second[0];
+	}
+
+	// A struct whose fields (or base) have destructors gets del() (it destroys them).
+	void CodeGen::implicitDestructor(StructInfo* info)
+	{
+		if (info->isInterface() || info->anonymous || m_funcs.count(info->name + "::del") > 0)
+			return;
+		bool needed = info->base != nullptr && destructible(m_types.structType(info->base));
+		for (const StructField& f : info->fields)
+			needed = needed || (f.owner == nullptr && destructible(f.type));
+		if (!needed)
+			return;
+		Node* cls = info->decl;
+		Node* d = new Node();
+		d->kind = NodeKind::FuncDecl;
+		d->pos = cls->namePos;
+		d->namePos = cls->namePos;
+		d->name = info->name + "::del";
+		d->shortName = "del";
+		d->text = "__implicit";
+		d->scope = info->name;
+		d->owner = cls;
+		d->value = 4;
+		d->external = cls->external;
+		Node* self = new Node();
+		self->kind = NodeKind::VarDecl;
+		self->pos = cls->namePos;
+		self->namePos = cls->namePos;
+		self->name = "this";
+		TypeSyntax* named = new TypeSyntax();
+		named->pos = cls->namePos;
+		named->name = info->name;
+		named->written = cls->shortName;
+		named->resolved = true;
+		self->typeSyntax = new TypeSyntax();
+		self->typeSyntax->kind = TypeSyntax::Kind::Pointer;
+		self->typeSyntax->pos = cls->namePos;
+		self->typeSyntax->base = named;
+		d->list.push_back(self);
+		if (cls->external == 0)
+		{
+			d->a = new Node();
+			d->a->kind = NodeKind::Block;
+			d->a->pos = cls->namePos;
+			d->a->endPos = cls->namePos;
+		}
+		FuncInfo* f = new FuncInfo();
+		f->name = d->name;
+		f->decl = d;
+		f->external = cls->external != 0;
+		f->defined = true;
+		f->instance = m_instanceOrigin.count(info->name) > 0;
+		if (m_names.count(d->name) == 0)
+			m_names[d->name] = "a sub";
+		m_funcs[d->name].push_back(f);
+		m_funcList.push_back(f);
+		if (!m_inDeclarations || f->instance)
+		{
+			resolveFunction(f);
+			f->label = codeLabel(f->name, true);
+		}
+	}
+
+	// A destructor: [its own tables] [defer: its fields, the last first, then its base's destructor]
+	// then its body (so they are destroyed when it ends, also by a return).
+	void CodeGen::prepareDestructor(FuncInfo* f)
+	{
+		Node* d = f->decl;
+		if ((d->value & 4) == 0 || d->shortName != "del" || d->a == nullptr || d->owner == nullptr || !m_preparedDtors.insert(d).second)
+			return;
+		auto it = m_structs.find(d->owner->name);
+		if (it == m_structs.end())
+			return;
+		StructInfo* info = it->second;
+		resolveStruct(info, d->pos);
+		bool members = info->base != nullptr && destructible(m_types.structType(info->base));
+		for (const StructField& field : info->fields)
+			members = members || (field.owner == nullptr && destructible(field.type));
+		std::vector<Node*>& body = d->a->list;
+		if (members)
+		{
+			Node* destroy = new Node();
+			destroy->kind = NodeKind::Destroy;
+			destroy->pos = d->a->endPos;
+			destroy->value = 0;
+			Node* defer = new Node();
+			defer->kind = NodeKind::Defer;
+			defer->pos = d->namePos;
+			defer->a = destroy;
+			body.insert(body.begin(), defer);
+		}
+		if (!info->vptrs.empty())
+		{
+			// (while a base's destructor runs, the object is of the base's class again)
+			Node* sv = new Node();
+			sv->kind = NodeKind::SetVtables;
+			sv->pos = d->namePos;
+			body.insert(body.begin(), sv);
+		}
+	}
+
+	FuncInfo* CodeGen::copyConstructorOf(StructInfo* info)
+	{
+		auto it = m_funcs.find(info->name + "::new");
+		if (it == m_funcs.end())
+			return nullptr;
+		Type* self = m_types.structType(info);
+		for (FuncInfo* f : it->second)
+		{
+			if (f->type == nullptr && !f->resolving)
+				resolveFunction(f);
+			if (f->type == nullptr || f->type->params.size() != 2 || f->type->variadic != 0)
+				continue;
+			Type* p = f->type->params[1];
+			if (p->kind == Type::Kind::Pointer && p->base == self)
+				return f;
+		}
+		return nullptr;
+	}
+
+	bool CodeGen::ownsResources(StructInfo* info)
+	{
+		FuncInfo* del = destructorOf(info);
+		return (del != nullptr && del->decl->text != "__implicit") || copyConstructorOf(info) != nullptr;
+	}
+
+	bool CodeGen::customCopy(Type* t)
+	{
+		while (t != nullptr && t->kind == Type::Kind::Array)
+			t = t->base;
+		if (t == nullptr || t->kind != Type::Kind::Struct)
+			return false;
+		StructInfo* info = t->structInfo;
+		if (copyConstructorOf(info) != nullptr)
+			return true;
+		if (info->base != nullptr && customCopy(m_types.structType(info->base)))
+			return true;
+		for (const StructField& f : info->fields)
+		{
+			if (f.owner == nullptr && customCopy(f.type))
+				return true;
+		}
+		return false;
+	}
+
+	bool CodeGen::customAssign(Type* t)
+	{
+		while (t != nullptr && t->kind == Type::Kind::Array)
+			t = t->base;
+		if (t == nullptr || t->kind != Type::Kind::Struct)
+			return false;
+		StructInfo* info = t->structInfo;
+		if (m_funcs.count(info->name + "::operator=") > 0 || ownsResources(info))
+			return true;
+		if (info->base != nullptr && customAssign(m_types.structType(info->base)))
+			return true;
+		for (const StructField& f : info->fields)
+		{
+			if (f.owner == nullptr && customAssign(f.type))
+				return true;
+		}
+		return false;
+	}
+
+	void CodeGen::requireCopyable(Type* t, const SourcePos& pos)
+	{
+		while (t != nullptr && t->kind == Type::Kind::Array)
+			t = t->base;
+		if (t == nullptr || t->kind != Type::Kind::Struct)
+			return;
+		StructInfo* info = t->structInfo;
+		if (ownsResources(info) && copyConstructorOf(info) == nullptr)
+			error(pos, info->name + " has a destructor (it owns something): copying it needs a copy constructor (sub new(var o: const " + info->name +
+				"*)); or pass a pointer (a call's result, a returned variable are moved, not copied)");
+		if (copyConstructorOf(info) != nullptr)
+			return;
+		if (info->base != nullptr)
+			requireCopyable(m_types.structType(info->base), pos);
+		for (const StructField& f : info->fields)
+		{
+			if (f.owner == nullptr)
+				requireCopyable(f.type, pos);
+		}
+	}
+
+	// f (a method) on self + offset, with one more argument (a register or an immediate).
+	void CodeGen::callMethod(FuncInfo* f, const Reg& self, int32_t offset, const std::string& arg)
+	{
+		markUsed(f);
+		if (f->isInline && !m_discarding)
+			f->addressTaken = true;		// (called from here, not expanded: it needs its code)
+		Reg a = alloc({});
+		emit("mov " + a + ", " + self);
+		addImmediate(a, offset);
+		emit("push " + a);
+		release(a);
+		if (!arg.empty())
+			emit("push " + arg);
+		emit("push " + std::string(arg.empty() ? "1" : "2"));
+		emit("call $" + f->label);
+	}
+
+	void CodeGen::genDestroy(const Reg& addr, Type* t, int32_t offset)
+	{
+		if (!destructible(t))
+			return;
+		if (t->kind == Type::Kind::Struct)
+		{
+			callMethod(destructorOf(t->structInfo), addr, offset);
+			return;
+		}
+		// An array: its elements, the last first.
+		const uint32_t size = t->base->size();
+		if (t->count <= 8)
+		{
+			for (uint32_t i = t->count; i-- > 0; )
+				genDestroy(addr, t->base, offset + (int32_t)(i * size));
+			return;
+		}
+		Reg p = alloc({});
+		emit("mov " + p + ", " + addr);
+		addImmediate(p, offset + (int64_t)(t->count - 1) * size);
+		Reg n = alloc({});
+		emit("mov " + n + ", " + imm(t->count));
+		const std::string loop = newLabel();
+		label(loop);
+		genDestroy(p, t->base, 0);
+		addImmediate(p, -(int64_t)size);
+		emit("subip " + n + ", 1");
+		emit("mov ACC, " + n);
+		emit("jne $" + loop + ", 0");
+		release(n);
+		release(p);
+	}
+
+	void CodeGen::genCopy(const Reg& dst, const Reg& src, Type* t, const SourcePos& pos)
+	{
+		if (!customCopy(t))
+		{
+			requireCopyable(t, pos);
+			if (t->kind == Type::Kind::Struct)
+				copyValue(dst, src, t);
+			else
+				copyMemory(dst, src, t->size());
+			return;
+		}
+		requireCopyable(t, pos);
+		auto l_part = [&](Type* pt, uint32_t offset) {
+			Reg d = alloc(pos);
+			emit("mov " + d + ", " + dst);
+			addImmediate(d, offset);
+			Reg s = alloc(pos);
+			emit("mov " + s + ", " + src);
+			addImmediate(s, offset);
+			genCopy(d, s, pt, pos);
+			release(s);
+			release(d);
+		};
+		if (t->kind == Type::Kind::Array)
+		{
+			for (uint32_t i = 0; i < t->count; i++)
+				l_part(t->base, i * t->base->size());
+			return;
+		}
+		StructInfo* info = t->structInfo;
+		if (FuncInfo* cc = copyConstructorOf(info))
+		{
+			callMethod(cc, dst, 0, src);
+			return;
+		}
+		// Member by member: the bytes, then the parts that copy themselves (they overwrite theirs).
+		copyMemory(dst, src, t->size());
+		if (info->base != nullptr && customCopy(m_types.structType(info->base)))
+			l_part(m_types.structType(info->base), info->baseOffset);
+		for (const StructField& f : info->fields)
+		{
+			if (f.owner == nullptr && customCopy(f.type))
+				l_part(f.type, f.offset);
+		}
+		storeVptrs(dst, t);
+	}
+
+	void CodeGen::genAssignValue(const Reg& dst, const Reg& src, Type* t, const SourcePos& pos)
+	{
+		if (!customAssign(t))
+		{
+			copyMemory(dst, src, t->size());
+			return;
+		}
+		auto l_part = [&](Type* pt, uint32_t offset, bool assign) {
+			Reg d = alloc(pos);
+			emit("mov " + d + ", " + dst);
+			addImmediate(d, offset);
+			Reg s = alloc(pos);
+			emit("mov " + s + ", " + src);
+			addImmediate(s, offset);
+			if (assign)
+				genAssignValue(d, s, pt, pos);
+			else
+				copyMemory(d, s, pt->size());
+			release(s);
+			release(d);
+		};
+		if (t->kind == Type::Kind::Array)
+		{
+			for (uint32_t i = 0; i < t->count; i++)
+				l_part(t->base, i * t->base->size(), true);
+			return;
+		}
+		StructInfo* info = t->structInfo;
+		auto it = m_funcs.find(info->name + "::operator=");
+		if (it != m_funcs.end())
+		{
+			// Its operator= (taking a T* / const T*, or a T: a copy).
+			for (FuncInfo* f : it->second)
+			{
+				if (f->type == nullptr)
+					resolveFunction(f);
+				if (f->type->params.size() != 2)
+					continue;
+				Type* p = f->type->params[1];
+				if (p->kind == Type::Kind::Pointer && p->base == t)
+				{
+					callMethod(f, dst, 0, src);
+					return;
+				}
+				if (p == t)
+				{
+					Reg copy = alloc(pos);
+					emit("mov " + copy + ", FP");
+					addImmediate(copy, temporary(t->size()));
+					genCopy(copy, src, t, pos);
+					callMethod(f, dst, 0, copy);
+					genDestroy(copy, t, 0);
+					release(copy);
+					return;
+				}
+			}
+			error(pos, info->name + " has an operator=, but none takes a " + info->name + " (sub operator=(var o: const " + info->name + "*))");
+		}
+		if (ownsResources(info))
+		{
+			// The old value destroyed, then a copy (not when it is assigned to itself).
+			const std::string same = newLabel();
+			emit("mov ACC, " + dst);
+			emit("jeq $" + same + ", " + src);
+			genDestroy(dst, t, 0);
+			genCopy(dst, src, t, pos);
+			label(same);
+			return;
+		}
+		// Member by member.
+		uint32_t at = 0;
+		if (info->base != nullptr)
+		{
+			l_part(m_types.structType(info->base), info->baseOffset, customAssign(m_types.structType(info->base)));
+			at = info->baseOffset + info->base->size;
+		}
+		for (const StructField& f : info->fields)
+		{
+			if (f.owner != nullptr)
+				continue;
+			if (f.offset > at)
+			{
+				// (vtable pointers in between: copied as they are, restored by the caller)
+				Reg d = alloc(pos);
+				emit("mov " + d + ", " + dst);
+				addImmediate(d, at);
+				Reg s = alloc(pos);
+				emit("mov " + s + ", " + src);
+				addImmediate(s, at);
+				copyMemory(d, s, f.offset - at);
+				release(s);
+				release(d);
+			}
+			l_part(f.type, f.offset, customAssign(f.type));
+			at = f.offset + f.type->size();
+		}
+	}
+
+	void CodeGen::genInitValue(const Reg& dst, Node* src, const Reg& value, Type* t)
+	{
+		if (src->kind == NodeKind::Call && t->kind == Type::Kind::Struct)
+		{
+			copyValue(dst, value, t);		// (moved: the call's temporary is not destroyed)
+			consumeTemp(src);
+			return;
+		}
+		genCopy(dst, value, t, src->pos);
+	}
+
+	size_t CodeGen::beginExpr(void)
+	{
+		m_exprStarts.push_back(m_out != nullptr ? m_out->size() : 0);
+		return m_temps.size();
+	}
+
+	void CodeGen::endExpr(size_t mark)
+	{
+		for (size_t i = m_temps.size(); i-- > mark; )
+		{
+			const Temp temp = m_temps[i];
+			if (temp.consumed)
+				continue;
+			Reg r = alloc({});
+			std::string skip;
+			if (temp.flag != 0)
+			{
+				// (made in a branch: only if it was)
+				skip = newLabel();
+				emit("movo " + r + ", *FP, dword " + imm(temp.flag));
+				emit("mov ACC, " + r);
+				emit("jeq $" + skip + ", 0");
+				m_out->insert(m_out->begin() + (std::ptrdiff_t)temp.codePos, "\tomov *FP, 0x00000000, dword " + imm(temp.flag));
+			}
+			emit("mov " + r + ", FP");
+			genDestroy(r, temp.type, temp.offset);
+			if (!skip.empty())
+				label(skip);
+			release(r);
+		}
+		m_temps.resize(std::min(mark, m_temps.size()));
+		if (!m_exprStarts.empty())
+			m_exprStarts.pop_back();
+	}
+
+	void CodeGen::addTemp(int32_t offset, Type* t, Node* node)
+	{
+		if (!destructible(t))
+			return;
+		Temp temp { offset, t, 0, 0, false, node };
+		if (m_condDepth > 0 && !m_exprStarts.empty())
+		{
+			temp.flag = temporary(4);
+			temp.codePos = m_exprStarts.back();
+			emit("omov *FP, 0x00000001, dword " + imm(temp.flag));
+		}
+		m_temps.push_back(temp);
+	}
+
+	bool CodeGen::consumeTemp(Node* n)
+	{
+		for (size_t i = m_temps.size(); i-- > 0; )
+		{
+			if (m_temps[i].node == n && !m_temps[i].consumed)
+			{
+				m_temps[i].consumed = true;
+				return true;
+			}
+		}
+		return false;
+	}
+
+	bool CodeGen::makesTemps(Node* e)
+	{
+		if (e == nullptr)
+			return false;
+		if (e->kind == NodeKind::Call)
+		{
+			if (destructible(e->type))
+				return true;
+			Type* fn = e->func != nullptr ? e->func->type : nullptr;
+			for (size_t i = 0; fn != nullptr && i < fn->params.size(); i++)
+			{
+				if (fn->params[i]->kind == Type::Kind::Struct && destructible(fn->params[i]))
+					return true;
+			}
+		}
+		if (e->kind == NodeKind::FuncDecl)
+			return false;
+		for (Node* c : { e->a, e->b, e->c, e->d })
+		{
+			if (makesTemps(c))
+				return true;
+		}
+		for (Node* c : e->list)
+		{
+			if (makesTemps(c))
+				return true;
+		}
+		return false;
+	}
+
+	void CodeGen::genCondBranch(Node* e, const std::string& target, bool jumpIfTrue)
+	{
+		const size_t mark = beginExpr();
+		if (!makesTemps(e))
+		{
+			genBranch(e, target, jumpIfTrue);
+			endExpr(mark);
+			return;
+		}
+		// Its value first, then its temporaries destroyed, then the jump.
+		Reg r = gen(e);
+		convert(r, decay(e->type), m_types.boolType());
+		endExpr(mark);
+		emit("mov ACC, " + r);
+		emit(std::string(jumpIfTrue ? "jne" : "jeq") + " $" + target + ", 0");
+		release(r);
 	}
 
 	// ===================================== Operators =====================================
@@ -3713,6 +4262,9 @@ namespace dscript
 				if (e->vslot < 0)
 					error(e->pos, "internal error: no slot for " + f->name);
 			}
+			else if ((callee->callFlags & 1) != 0 && owner != nullptr && f->decl->shortName == "del" && owner->dynamic && (callee->callFlags & 2) == 0
+				&& !(callee->methodClass != nullptr && callee->methodClass->isFinal))
+				e->vslot = -2;		// (p->del(): the object's own destructor, from its table's destructor slot)
 			else if ((f->decl->value & 1024) != 0)
 				error(callee->pos, "'" + f->name + "' is pure: it has no body (a class derived from " + owner->name + " gives it one; call it on an object: p->" +
 					f->decl->shortName + "(...))");
@@ -3732,7 +4284,7 @@ namespace dscript
 			e->type = f->type->base;
 			if (m_options.index != nullptr)
 				indexName(callee->pos, callee->text.empty() ? callee->name : callee->text, f->decl->namePos, hoverFunc(f));
-			if (e->vslot < 0)
+			if (e->vslot == -1 && !destructible(e->type))
 				ctFold(e, f);		// constexpr / consteval: its value, if it can be computed now
 			return;
 		}
@@ -5752,6 +6304,8 @@ namespace dscript
 				Reg r = alloc(e->pos);
 				std::string lElse = newLabel(), lEnd = newLabel();
 				genBranch(e->a, lElse, false);
+				m_condDepth++;
+				struct Depth { int& d; ~Depth() { d--; } } depth { m_condDepth };
 				Reg v = gen(e->b);
 				convert(v, decay(e->b->type), e->type);
 				emit("mov " + r + ", " + v);
@@ -6080,13 +6634,17 @@ namespace dscript
 			{
 				// && jumping when false, || jumping when true: either side decides.
 				genBranch(e->a, target, jumpIfTrue);
+				m_condDepth++;		// (the second side may not run: its temporaries are flagged)
 				genBranch(e->b, target, jumpIfTrue);
+				m_condDepth--;
 			}
 			else
 			{
 				std::string skip = newLabel();
 				genBranch(e->a, skip, !jumpIfTrue);
+				m_condDepth++;
 				genBranch(e->b, target, jumpIfTrue);
+				m_condDepth--;
 				label(skip);
 			}
 			return;
@@ -6301,7 +6859,17 @@ namespace dscript
 				kept.push_back(alloc(e->pos));
 				emit("movo " + kept.back() + ", *" + d + ", dword " + imm(v.offset));
 			}
-			copyMemory(d, s, t->size());
+			if (!customAssign(t))
+				copyMemory(d, s, t->size());
+			else if (e->b->kind == NodeKind::Call && ownsResources(t->structInfo) && m_funcs.count(t->structInfo->name + "::operator=") == 0)
+			{
+				// From a call's result: the old value destroyed, the result moved in.
+				genDestroy(d, t, 0);
+				copyMemory(d, s, t->size());
+				consumeTemp(e->b);
+			}
+			else
+				genAssignValue(d, s, t, e->pos);
 			for (size_t i = kept.size(); i-- > 0; )
 			{
 				emit("omov *" + d + ", " + kept[i] + ", dword " + imm(t->structInfo->vptrs[i].offset));
@@ -6509,6 +7077,7 @@ namespace dscript
 	CodeGen::Reg CodeGen::genInlineCall(Node* e, FuncInfo* f)
 	{
 		prepareConstructor(f);
+		prepareDestructor(f);
 		for (const auto& c : m_inline)
 		{
 			if (c.func == f)
@@ -6568,7 +7137,13 @@ namespace dscript
 				convert(r, decay(e->list[i]->type), params[i]);
 				Reg a = alloc(e->pos);
 				varAddress(a, v);
-				store(a, r, params[i]);
+				if (params[i]->kind == Type::Kind::Struct)
+				{
+					genInitValue(a, e->list[i], r, params[i]);		// (destroyed when the statement ends)
+					addTemp(v->offset, params[i], nullptr);
+				}
+				else
+					store(a, r, params[i]);
 				release(a);
 				release(r);
 			}
@@ -6621,6 +7196,7 @@ namespace dscript
 		{
 			emit("mov " + r + ", FP");
 			addImmediate(r, result);
+			addTemp(result, f->type->base, e);
 			return r;
 		}
 		emit("mov " + r + ", RV");
@@ -6660,7 +7236,9 @@ namespace dscript
 			return r;
 		}
 		FuncInfo* f = e->func;
-		const bool virtualCall = e->vslot >= 0;
+		const bool virtualCall = e->vslot != -1;
+		// (slot n: the sub at 16 + 8n, what to add to this at 20 + 8n; the destructor: at 8 and 12)
+		const int32_t slotOffset = e->vslot == -2 ? 8 : 16 + 8 * e->vslot;
 		if (f && f->isInline && !virtualCall)
 			return genInlineCall(e, f);
 		if (f && m_options.noInline && m_func && (m_func->decl->value & 2) != 0 && (f->decl->value & 2) != 0)
@@ -6722,8 +7300,8 @@ namespace dscript
 				convert(self, decay(e->list[0]->type), params[0]);
 				emit("mov " + fr + ", *" + self);
 				Reg delta = alloc(e->pos);
-				emit("movo " + delta + ", *" + fr + ", dword " + imm(20 + 8 * e->vslot));
-				emit("movo " + fr + ", *" + fr + ", dword " + imm(16 + 8 * e->vslot));
+				emit("movo " + delta + ", *" + fr + ", dword " + imm(slotOffset + 4));
+				emit("movo " + fr + ", *" + fr + ", dword " + imm(slotOffset));
 				emit("addip " + self + ", " + delta);
 				release(delta);
 				emit("push " + self);
@@ -6732,15 +7310,25 @@ namespace dscript
 			}
 			if (params[i]->kind == Type::Kind::Struct)
 			{
-				// By value: a copy in this frame, passed by its address.
+				// By value: a copy in this frame, passed by its address (a call's result: itself),
+				// destroyed when the statement ends.
 				Reg src = gen(e->list[i]);
+				if (e->list[i]->kind == NodeKind::Call && (destructible(params[i]) || customCopy(params[i])))
+				{
+					storeVptrs(src, params[i]);
+					emit("push " + src);
+					release(src);
+					continue;
+				}
 				Reg dst = alloc(e->pos);
+				const int32_t slot = temporary(params[i]->size());
 				emit("mov " + dst + ", FP");
-				addImmediate(dst, temporary(params[i]->size()));
-				copyValue(dst, src, params[i]);
+				addImmediate(dst, slot);
+				genCopy(dst, src, params[i], e->list[i]->pos);
 				emit("push " + dst);
 				release(dst);
 				release(src);
+				addTemp(slot, params[i], nullptr);
 				continue;
 			}
 			const std::string value = argImmediate(e->list[i], params[i]);
@@ -6791,6 +7379,7 @@ namespace dscript
 			// The value: the caller's copy (a struct value is its address).
 			emit("mov " + fr + ", FP");
 			addImmediate(fr, result);
+			addTemp(result, fnType->base, e);
 			return fr;
 		}
 		emit("mov " + fr + ", RV");
@@ -6850,7 +7439,7 @@ namespace dscript
 			emit("mov " + d + ", " + addr);
 			addImmediate(d, offset);
 			Reg s = gen(init);
-			copyValue(d, s, type);
+			genInitValue(d, init, s, type);
 			release(s);
 			release(d);
 			return;
@@ -7005,6 +7594,16 @@ namespace dscript
 		if (s->c)
 			genConstructor(v, s);
 		m_scopes.back()[s->name] = v;
+		if (destructible(t) && !m_defers.empty())
+		{
+			// Its destructor, when its scope ends (as a defer: also by return, break, continue).
+			Node* destroy = new Node();
+			destroy->kind = NodeKind::Destroy;
+			destroy->value = 1;
+			destroy->pos = s->pos;
+			destroy->var = v;
+			m_defers.back().push_back({ destroy, m_scopes, m_atomic, v });
+		}
 	}
 
 	void CodeGen::genConstructor(VarInfo* v, Node* decl)
@@ -7046,6 +7645,8 @@ namespace dscript
 
 	void CodeGen::genDeferred(const Deferred& d)
 	{
+		if (d.destroys != nullptr && d.destroys == m_movedVar)
+			return;		// (a return moved this local out)
 		// With the variables of where it was written; no loops to leave; the defers in it have a
 		// frame of their own (run at its end).
 		auto scopes = std::move(m_scopes);
@@ -7068,6 +7669,32 @@ namespace dscript
 
 	void CodeGen::genStatement(Node* s)
 	{
+		if (s->kind == NodeKind::Destroy)
+		{
+			Reg r = alloc(s->pos);
+			if (s->value == 1)
+			{
+				// (a local's destructor, when its scope ends)
+				varAddress(r, s->var);
+				genDestroy(r, s->var->type, 0);
+			}
+			else
+			{
+				// (a destructor's end: its fields, the last first, then its base's part)
+				VarInfo* self = lookupVar("this");
+				loadVar(r, self);
+				StructInfo* info = self->type->base->structInfo;
+				for (size_t i = info->fields.size(); i-- > 0; )
+				{
+					if (info->fields[i].owner == nullptr)
+						genDestroy(r, info->fields[i].type, (int32_t)info->fields[i].offset);
+				}
+				if (info->base != nullptr && destructible(m_types.structType(info->base)))
+					callMethod(destructorOf(info->base), r, (int32_t)info->baseOffset);
+			}
+			release(r);
+			return;
+		}
 		if (s->kind == NodeKind::SetVtables)
 		{
 			// (a class's constructor, after its base's: its own tables)
@@ -7129,14 +7756,20 @@ namespace dscript
 					else if (m_globals.count(h->name) == 0 || !m_globals[h->name]->localRuntime)
 						break;		// a constant array (its values are constants: in the program)
 				}
-				genLocalVar(s);
+				{
+					const size_t mark = beginExpr();
+					genLocalVar(s);
+					endExpr(mark);
+				}
 			break;
 			case NodeKind::ExprStmt:
 			{
 				check(s->a);
 				if (s->a->kind == NodeKind::Ident && s->a->func == nullptr && s->a->var == nullptr && m_funcs.count(s->a->name))
 					error(s->pos, "'" + s->a->name + "' is a sub: call it with " + s->a->name + "()");
+				const size_t mark = beginExpr();
 				genDiscard(s->a);
+				endExpr(mark);
 			}
 			break;
 			case NodeKind::Assert:
@@ -7175,7 +7808,7 @@ namespace dscript
 				call->list = { file, line, condition, message };
 				check(call);
 				const std::string lEnd = newLabel();
-				genBranch(s->a, lEnd, true);
+				genCondBranch(s->a, lEnd, true);
 				release(gen(call));
 				label(lEnd);
 			}
@@ -7185,9 +7818,11 @@ namespace dscript
 				// The string goes to the host's terminal (the debug_print instruction).
 				check(s->a);
 				requireConvertible(s->a, m_types.pointer(m_types.u8()), "the debug_print argument");
+				const size_t mark = beginExpr();
 				Reg r = gen(s->a);
 				emit("debug_print " + r);
 				release(r);
+				endExpr(mark);
 			}
 			break;
 			case NodeKind::If:
@@ -7206,7 +7841,7 @@ namespace dscript
 				if (!decay(s->a->type)->isScalar())
 					error(s->a->pos, "the condition must be an integer or a pointer");
 				std::string lElse = newLabel(), lEnd = newLabel();
-				genBranch(s->a, s->c ? lElse : lEnd, false);
+				genCondBranch(s->a, s->c ? lElse : lEnd, false);
 				genStatement(s->b);
 				if (s->c)
 				{
@@ -7223,7 +7858,7 @@ namespace dscript
 				std::string lStart = newLabel(), lEnd = newLabel();
 				m_loopDepth++;
 				label(lStart);
-				genBranch(s->a, lEnd, false);
+				genCondBranch(s->a, lEnd, false);
 				m_loops.push_back({ lEnd, lStart, m_defers.size() });
 				genStatement(s->b);
 				m_loops.pop_back();
@@ -7243,7 +7878,7 @@ namespace dscript
 				label(lCont);
 				check(s->a);
 				loc(s->a->pos);
-				genBranch(s->a, lStart, true);
+				genCondBranch(s->a, lStart, true);
 				label(lEnd);
 				m_loopDepth--;
 			}
@@ -7256,6 +7891,7 @@ namespace dscript
 				m_scopes.push_back({});
 				m_scopeEnds.push_back(s->d != nullptr && s->d->kind == NodeKind::Block ? s->d->endPos
 					: (m_scopeEnds.empty() ? SourcePos {} : m_scopeEnds.back()));
+				m_defers.emplace_back();		// (its variable's destructor: when the loop ends)
 				if (s->a)
 					genStatement(s->a);
 				std::string lStart = newLabel(), lCont = newLabel(), lEnd = newLabel();
@@ -7264,7 +7900,7 @@ namespace dscript
 				if (s->b)
 				{
 					check(s->b);
-					genBranch(s->b, lEnd, false);
+					genCondBranch(s->b, lEnd, false);
 				}
 				m_loops.push_back({ lEnd, lCont, m_defers.size() });
 				genStatement(s->d);
@@ -7274,11 +7910,16 @@ namespace dscript
 				if (s->c)
 				{
 					check(s->c);
+					const size_t mark = beginExpr();
 					genDiscard(s->c);
+					endExpr(mark);
 				}
 				emit("jmp $" + lStart);
 				label(lEnd);
 				m_loopDepth--;
+				if (hasDefers(m_defers.size() - 1))
+					genDefers(m_defers.size() - 1);
+				m_defers.pop_back();
 				optEndScope(m_scopes.back());
 				m_scopes.pop_back();
 				m_scopeEnds.pop_back();
@@ -7291,6 +7932,8 @@ namespace dscript
 				if (m_inDefer > 0)
 					error(s->pos, "return cannot leave a defer");
 				Reg r;
+				const size_t exprMark = beginExpr();
+				VarInfo* moved = nullptr;
 				if (s->a && ret->kind == Type::Kind::Struct)
 				{
 					// A struct: copied to the caller's room for it (inline: in the frame; otherwise its
@@ -7306,7 +7949,17 @@ namespace dscript
 					}
 					else
 						emit("movo " + r + ", *PP, dword " + imm(0));
-					copyValue(r, src, ret);
+					// A local of the sub returned: moved out (its destructor does not run); a call's
+					// result: moved; anything else: copied.
+					Node* value = s->a;
+					if (value->kind == NodeKind::Ident && value->var != nullptr && value->var->storage == VarInfo::Storage::Local && !value->var->param
+						&& value->var->type == ret)
+					{
+						copyValue(r, src, ret);
+						moved = value->var;
+					}
+					else
+						genInitValue(r, value, src, ret);
 					emit("mov " + src + ", " + r);		// (registers are released in order: the address in src)
 					release(r);
 					r = src;
@@ -7322,16 +7975,23 @@ namespace dscript
 				}
 				else if (ret->kind != Type::Kind::Void)
 					error(s->pos, fn->name + " must return a value (" + ret->name() + ")");
-				// The value first, then every defer of the sub (it stays in its register: calls keep them).
+				// The value first, then its temporaries, then every defer of the sub (it stays in its
+				// register: calls keep them).
+				const bool temps = m_temps.size() > exprMark;
+				endExpr(exprMark);
 				const bool deferred = hasDefers(0);
 				if (deferred)
 				{
 					const int stmtDepth = m_stmtDepth;
 					m_stmtDepth = m_regDepth;
+					VarInfo* outerMoved = m_movedVar;
+					m_movedVar = moved;
 					genDefers(0);
+					m_movedVar = outerMoved;
 					m_stmtDepth = stmtDepth;
 					loc(s->pos);
 				}
+				const bool deferredOrTemps = deferred || temps;
 				if (!r.empty())
 				{
 					// The value's last instruction writes r (a load / move): it can write RV itself.
@@ -7340,7 +8000,7 @@ namespace dscript
 					bool retargeted = false;
 					for (const char* inst : { "mov ", "movo ", "movbo ", "movwo " })
 					{
-						if (deferred)
+						if (deferredOrTemps)
 							break;
 						const std::string head = std::string("\t") + inst + r + ", ";
 						if (last.rfind(head, 0) == 0 && last.find(", " + r, head.size() - 2) == std::string::npos)
@@ -7645,6 +8305,7 @@ namespace dscript
 	void CodeGen::genFunction(FuncInfo* f)
 	{
 		prepareConstructor(f);
+		prepareDestructor(f);
 		// The body (into body): pass 1 / 2 of -O run it once each.
 		auto l_body = [&](std::vector<std::string>& body) {
 			m_out = &body;
@@ -8512,6 +9173,7 @@ namespace dscript
 						"(this is computed when the program starts: use var, or constant values)");
 				(isSharedData(v) ? m_dataRW : m_data).push_back(line);
 				// Run time initializations.
+				const size_t mark = beginExpr();
 				for (const auto& p : pending)
 				{
 					Reg val = alloc(p.init->pos);
@@ -8526,13 +9188,30 @@ namespace dscript
 					Reg addr = alloc(p.init->pos);
 					varAddress(addr, v, false);
 					addImmediate(addr, p.offset);
-					store(addr, val, p.type);
+					if (p.type->kind == Type::Kind::Struct)
+						genInitValue(addr, p.init, val, p.type);
+					else
+						store(addr, val, p.type);
 					release(addr);
 					release(val);
 				}
 				// var g: Struct(args): its constructor, after the values (in the order of the source).
 				if (d->c)
 					genConstructor(v, d);
+				endExpr(mark);
+				if (!m_options.library && destructible(t))
+				{
+					// (destroyed after main, the last built first)
+					std::vector<std::string> chunk;
+					std::vector<std::string>* out = m_out;
+					m_out = &chunk;
+					Reg a = alloc(d->pos);
+					varAddress(a, v, false);
+					genDestroy(a, t, 0);
+					release(a);
+					m_out = out;
+					m_finiChunks.push_back(chunk);
+				}
 			});
 		}
 		m_globalsGenerated = m_globalDecls.size();
@@ -8819,6 +9498,7 @@ namespace dscript
 	uint32_t CodeGen::ctCall(FuncInfo* f, const std::vector<uint32_t>& args, const SourcePos& pos)
 	{
 		prepareConstructor(f);
+		prepareDestructor(f);
 		if (f->decl->constKind == 0)
 			ctFail(pos, "it calls " + f->name + ", which is not constexpr");
 		if (f->decl->a == nullptr)
@@ -9059,6 +9739,8 @@ namespace dscript
 		m_discarding = discarding;
 		if (!vptrs.empty())
 			ctFail(s->pos, "objects of classes with virtual subs (or interfaces) are not built when compiling");
+		if (destructible(t))
+			ctFail(s->pos, "values with destructors are not built when compiling");
 		for (const auto& d : defaults)
 		{
 			Node* init = d.second->init;
@@ -9296,7 +9978,7 @@ namespace dscript
 				FuncInfo* f = e->func;
 				if (f == nullptr)
 					ctFail(e->pos, "it calls a sub through a pointer");
-				if (e->vslot >= 0)
+				if (e->vslot != -1)
 					ctFail(e->pos, "it calls a virtual sub (through its object's table)");
 				std::vector<uint32_t> args;
 				const auto& params = f->type->params;
@@ -10667,6 +11349,14 @@ namespace dscript
 			else
 				out.push_back("\tpush 0");
 			out.push_back("\tcall $" + mainFunc->label);
+			if (!m_finiChunks.empty())
+			{
+				// The globals' destructors (main's value kept: calls keep the registers).
+				out.push_back("\tmov R1, RV");
+				out.push_back("\tpush 0");
+				out.push_back("\tcall $__ds_fini");
+				out.push_back("\tmov RV, R1");
+			}
 			out.push_back(m_options.raw ? "\thlt" : "\tret");
 		}
 		if (!m_initCode.empty())
@@ -10684,6 +11374,15 @@ namespace dscript
 			out.push_back("\tret");
 		}
 		out.insert(out.end(), m_code.begin(), m_code.end());
+		if (!m_finiChunks.empty())
+		{
+			out.push_back("");
+			out.push_back("__ds_fini:");
+			out.push_back(".loc -");
+			for (size_t i = m_finiChunks.size(); i-- > 0; )
+				out.insert(out.end(), m_finiChunks[i].begin(), m_finiChunks[i].end());
+			out.push_back("\tret");
+		}
 		if (m_helpers.count("__ds_dyncast") > 0)
 		{
 			if (m_subEmitted || m_topLows.empty())

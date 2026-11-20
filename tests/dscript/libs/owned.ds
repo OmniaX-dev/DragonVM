@@ -1,0 +1,16 @@
+// Structs and classes with destructors in a library (destructors_library.ds, destructors_dynamic.ds).
+namespace own {
+	var dels: i32 = 0;
+	struct Handle {
+		var id: i32;
+		sub new(var id: i32) -> void { this->id = id; }
+		sub new(var o: const Handle*) -> void { this->id = o->id * 10; }
+		sub del() -> void { dels++; }
+	}
+	class Base {
+		var h: Handle;
+		virt sub f() -> i32 { return 1; }		// (an implicit destructor: h's)
+	}
+	sub make(var id: i32) -> Handle { var h: Handle(id); return h; }
+	sub idOf(var h: Handle) -> i32 { return h.id; }
+}

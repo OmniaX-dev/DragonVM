@@ -1,0 +1,33 @@
+// Destructors of a library's structs and classes: their destructors, copy constructors and
+// implicit destructors are the library's; a program's class extends one.
+// dsc-lib: libs/owned.ds
+// expect-rv: 0
+#import("owned")
+#include(check.ds)
+
+class Mine ex own::Base {
+	var extra: own::Handle;
+	override sub f() -> i32 { return 2; }
+}
+
+sub main() -> i32 {
+	{
+		var h = own::make(4);
+		check(1, own::idOf(h) == 40);
+		check(5, own::dels == 1);		// (the copy passed: destroyed when its statement ended)
+	}
+	check(2, own::dels == 2);
+	own::dels = 0;
+	{
+		var m: Mine;
+	}
+	check(3, own::dels == 2);
+	own::dels = 0;
+	var heap: u8[32];
+	var p: Mine* = cast<Mine*>(&heap[0]);
+	p->new();
+	var b: own::Base* = p;
+	b->del();
+	check(4, own::dels == 2);
+	return result();
+}

@@ -1,0 +1,145 @@
+// expect-rv: 0
+// Destructors (sub del()): locals when their scope ends (also by return, break, continue), in
+// reverse order; temporaries when their statement ends (only those made: && / || / ?:); fields
+// (the last first) and the base's part after the destructor's body; arrays (the last element
+// first); globals after main. Copies use the copy constructor (new(var o: const T*)); a call's
+// result, a returned local are moved (no copy, no destructor). Through a pointer to a class
+// with a table, del is the object's own.
+#include(check.ds)
+
+var g_log: u32 = 0;
+var g_live: i32 = 0;
+sub log(var n: u32) -> void { g_log = g_log * 10 + n; }
+
+struct Res {
+	var id: u32;
+	sub new(var id: u32) -> void { this->id = id; g_live++; }
+	sub new(var o: const Res*) -> void { this->id = o->id + 5; g_live++; }		// (the copy constructor)
+	sub del() -> void { if (this->id != 0) { log(this->id); g_live--; } }
+	readonly sub get() -> u32 { return this->id; }
+}
+
+struct Pair {			// (no destructor of its own: an implicit one destroys its fields)
+	var a: Res;
+	var b: Res;
+}
+
+sub make(var id: u32) -> Res { var r: Res(id); return r; }			// (moved out: no copy)
+sub pass(var r: Res) -> u32 { return r.get(); }						// (its own copy)
+
+class Base {
+	var tag: u32 = 1;
+	sub del() -> void { log(8); }
+	virt sub f() -> u32 { return 0; }
+}
+class Derived ex Base {
+	var r: Res;
+	sub new() -> void { this->r.new(6); }
+	override sub f() -> u32 { return 1; }
+	sub del() -> void { log(7); }		// (then r, then Base::del)
+}
+
+sub early(var n: u32) -> u32 {
+	var a: Res(1);
+	if (n > 0)
+		return 9;			// (a is destroyed here too)
+	var b: Res(2);
+	return 0;
+}
+
+sub main() -> i32 {
+	{
+		var a: Res(1);
+		var b: Res(2);
+	}
+	check(1, g_log == 21 && g_live == 0);
+	g_log = 0;
+	{
+		var m = make(3);					// (moved twice, destroyed once)
+		check(2, g_log == 0 && m.get() == 3 && g_live == 1);
+	}
+	check(3, g_log == 3 && g_live == 0);
+	g_log = 0;
+	check(4, make(4).get() == 4 && g_log == 0);		// (the temporary: when the statement ends)
+	check(24, g_log == 4);
+	g_log = 0;
+	{
+		var a: Res(1);
+		var c: Res = a;					// (copied: 6)
+		check(5, c.get() == 6 && g_live == 2);
+	}
+	check(6, g_log == 61 && g_live == 0);
+	g_log = 0;
+	{
+		var a: Res(2);
+		check(7, pass(a) == 7);			// (the copy destroyed when the statement ends)
+		check(8, g_log == 7);
+	}
+	g_log = 0;
+	{
+		var p: Pair;
+		p.a.new(1);
+		p.b.new(2);
+	}
+	check(9, g_log == 21);
+	g_log = 0;
+	{
+		var arr: Res[3];
+		arr[0].new(1);
+		arr[1].new(2);
+		arr[2].new(3);
+	}
+	check(10, g_log == 321);
+	g_log = 0;
+	check(11, early(1) == 9 && g_log == 1);
+	g_log = 0;
+	check(12, early(0) == 0 && g_log == 21);
+	g_log = 0;
+	for (var i: u32 = 1; i <= 3; i++)
+	{
+		var r: Res(i);
+		if (i == 2)
+			continue;
+	}
+	check(13, g_log == 123);
+	g_log = 0;
+	while (true)
+	{
+		var r: Res(4);
+		break;
+	}
+	check(14, g_log == 4);
+	g_log = 0;
+	{
+		var d: Derived();
+	}
+	check(15, g_log == 768);
+	g_log = 0;
+	var heap: u8[32];
+	var dp: Derived* = cast<Derived*>(&heap[0]);
+	dp->new();
+	var bp: Base* = dp;
+	bp->del();							// (Derived's destructor, through the table)
+	check(16, g_log == 768);
+	g_log = 0;
+	var flag = false;
+	if (flag && make(5).get() == 5)		// (not made: not destroyed)
+		check(17, false);
+	check(18, g_log == 0);
+	if (!flag || make(5).get() == 5)
+		g_log = g_log;
+	check(19, g_log == 0);
+	g_log = 0;
+	var x: Res(1);
+	x = make(2);						// (the old value destroyed, the result moved in)
+	check(20, g_log == 1 && x.get() == 2);
+	g_log = 0;
+	var y: Res(3);
+	x = y;								// (destroyed, then copied: 8)
+	check(21, g_log == 2 && x.get() == 8);
+	g_log = 0;
+	x = x;								// (itself: nothing)
+	check(22, g_log == 0 && x.get() == 8);
+	check(23, g_live == 2);
+	return result();
+}
