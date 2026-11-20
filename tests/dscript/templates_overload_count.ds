@@ -1,0 +1,17 @@
+// expect-rv: 0
+// Overloaded subs in one template, told apart by their number of arguments (also when the
+// template's parameters are given: pick<u32>(...)).
+#include(check.ds)
+
+template(T, Extra: u32 = 0) where is_integer(T) {
+	sub pick(var a: T, var b: T) -> T { return a + b + cast<T>(Extra); }
+	sub pick(var a: T, var b: T, var c: ref T) -> T { c = a * b; return c; }
+	sub pick(var a: T) -> T { return a; }
+}
+
+sub main() -> i32 {
+	var out: u32 = 0;
+	check(1, pick<u32>(2, 3) == 5 && pick<u32>(2, 3, out) == 6 && out == 6 && pick<u32>(9) == 9);
+	check(2, pick(2, 3) == 5 && pick<i32, 10>(1, 1) == 12);
+	return result();
+}

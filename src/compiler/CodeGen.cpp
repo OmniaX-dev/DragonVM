@@ -1310,11 +1310,8 @@ namespace dscript
 			case Type::Kind::Array: return mangle(t->base) + "a" + std::to_string(t->count);
 			case Type::Kind::Struct:
 			{
-				// (A::B -> A__B: labels have no ':')
-				std::string s = "S";
-				for (char c : t->structInfo->name)
-					s += (c == ':' ? '_' : c);
-				return s;
+				// (A::B -> A__B, Box<u16, 4> -> Box_Lu16_C4_R: only label characters)
+				return "S" + symbolChars(t->structInfo->name);
 			}
 			case Type::Kind::Function:
 			{
@@ -5761,6 +5758,16 @@ namespace dscript
 		std::vector<Node*> params(head->list.begin(), head->list.end());
 		if (method && (head->value & 8) == 0 && !params.empty())
 			params.erase(params.begin());		// (this)
+		// (the number of arguments: overloads in one template are told apart by it too)
+		size_t required = 0;
+		for (Node* p : params)
+			required += p->a == nullptr ? 1 : 0;
+		if ((callArgs.size() > params.size() && head->variadic == 0) || callArgs.size() < required)
+		{
+			why = "this " + head->shortName + " takes " + (required == params.size() ? std::to_string(params.size()) : std::to_string(required) + " to " + std::to_string(params.size())) +
+				" argument" + (params.size() == 1 ? "" : "s") + ", not " + std::to_string(callArgs.size());
+			return false;
+		}
 		for (int pass = 0; pass < 2; pass++)
 		{
 			for (size_t i = 0; i < params.size() && i < callArgs.size(); i++)
@@ -5974,9 +5981,12 @@ namespace dscript
 			shortName += ">";
 		}
 		const std::string full = def->scope.empty() ? shortName : def->scope + "::" + shortName;
-		if (m_instances.count(full) > 0)
+		// (overloaded subs of one template: one instance name, each instantiated when one of its calls
+		// needs it)
+		const std::string key = ent.isStruct ? full : full + "#" + std::to_string(m.c.entity);
+		if (m_instances.count(key) > 0)
 			return full;
-		m_instances[full] = full;
+		m_instances[key] = full;
 		// The template body's static_asserts (those its if constexpr keep), for these arguments.
 		if (!def->asserts.empty())
 		{
@@ -6071,6 +6081,16 @@ namespace dscript
 				f->type = m_types.function({}, m_types.voidType());
 			}
 			f->label = codeLabel(subLabelName(f, f->name), (f->decl->value & 4) != 0);
+			if (!f->broken)
+			{
+				// (its parameter types: overloads of one template, instantiated one by one, each have a
+				// label of their own; instances are only in this program)
+				f->label += "__";
+				for (Type* p : f->type->params)
+					f->label += "_" + mangle(p);
+				if (f->type->params.empty())
+					f->label += "_void";
+			}
 		}
 		if (wantStruct)
 		{
