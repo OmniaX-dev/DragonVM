@@ -81,7 +81,9 @@ namespace dscript
 		Block, If, While, DoWhile, For, ForIn, Return, Break, Continue, ExprStmt, LowBlock, Assert, DebugPrint, Defer, SetVtables, Destroy,
 		// Expressions
 		IntLit, FloatLit, StrLit, BoolLit, Null, Ident, Unary, Binary, Assign, Ternary, Call, Index,
-		Member, Cast, SizeofType, SizeofExpr, PreInc, PreDec, PostInc, PostDec, InitList, TypeArg
+		Member, Cast, SizeofType, SizeofExpr, PreInc, PreDec, PostInc, PostDec, InitList, TypeArg,
+		// Construct: a struct value built from a: its constructor func (a temporary; an implicit conversion)
+		Construct
 	};
 
 	// One node type for the whole tree: the fields used depend on the kind (see Parser.cpp).

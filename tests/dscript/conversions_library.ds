@@ -1,0 +1,16 @@
+// Conversions of a library's struct (implicit constructors, operator casts) and an interface's
+// helpers (its final subs), used by a program.
+// dsc-lib: libs/conv.ds
+// expect-rv: 0
+#import("conv")
+#include(check.ds)
+class Mine impl cv::Valued { override readonly sub value() -> i32 { return 21; } }
+sub main() -> i32 {
+	var n: cv::Num = cv::add(2, 3);
+	var i: i32 = n;
+	check(1, i == 5 && cast<bool>(n));
+	var m: Mine;
+	var v: cv::Valued* = &m;
+	check(2, v->doubled() == 42);
+	return result();
+}

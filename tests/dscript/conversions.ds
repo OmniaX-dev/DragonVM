@@ -1,0 +1,77 @@
+// expect-rv: 0
+// Implicit conversions: implicit sub new(var x: T) (a value of T becomes the struct: in a
+// variable's value, an argument, a returned value, an assignment, an operator's operand) and
+// implicit sub operator cast() -> T (the struct becomes a T, also a bool in a condition); the
+// others only with cast<T>(...) (also cast<Struct>(value): a constructor). An interface's final
+// subs are helpers with a body (here: every Stringable converts to a String).
+#include(check.ds)
+
+var g_dels: i32 = 0;
+
+class String {
+	var text: string;
+	var length: u32;
+	implicit sub new(var s: string) -> void { this->text = s; this->length = 0; while (s[this->length] != 0) this->length++; }
+	sub new(var o: const String*) -> void { this->text = o->text; this->length = o->length; }
+	sub del() -> void { g_dels++; }
+	readonly sub operator==(var o: const String*) -> bool {
+		if (this->length != o->length) return false;
+		for (var i: u32 = 0; i < this->length; i++)
+			if (this->text[i] != o->text[i]) return false;
+		return true;
+	}
+	implicit readonly sub operator cast() -> string { return this->text; }
+	implicit readonly sub operator cast() -> bool { return this->length != 0; }
+	readonly sub operator cast() -> u32 { return this->length; }		// (only with cast<u32>(...))
+}
+
+interface Stringable {
+	readonly sub toString() -> String;
+	final implicit readonly sub operator cast() -> String { return this->toString(); }
+	final readonly sub size() -> u32 { return this->toString().length; }
+}
+
+class Point impl Stringable {
+	var x: i32;
+	override readonly sub toString() -> String { return this->x == 1 ? "one" : "other"; }
+}
+
+struct Meters {
+	var v: i32;
+	implicit sub new(var v: i32) -> void { this->v = v; }
+}
+sub twice(var m: Meters) -> i32 { return m.v * 2; }
+sub give() -> Meters { return 21; }
+sub length(var s: String) -> u32 { return s.length; }
+sub raw(var s: string) -> u8 { return s[0]; }
+
+sub main() -> i32 {
+	var s: String = "hello";
+	check(1, s.length == 5 && length("abc") == 3);
+	check(2, s == "hello" && !(s == "help") && s == s);
+	var t: string = s;
+	check(3, t[1] == 'e' && raw(s) == 'h');
+	if (s)
+		check(4, true);
+	else
+		check(4, false);
+	var empty: String = "";
+	check(5, !empty && cast<u32>(s) == 5);
+	s = "hi";
+	check(6, s.length == 2);
+	check(7, twice(5) == 10 && give().v == 21);
+	var m: Meters = 3;
+	m = 4;
+	check(8, m.v == 4 && cast<Meters>(7).v == 7);
+	var p: Point;
+	p.x = 1;
+	var named: Stringable* = &p;
+	var str: String = *named;
+	check(9, str == "one" && named->size() == 3);
+	g_dels = 0;
+	{
+		var tmp: String = cast<String>("temp");
+	}
+	check(10, g_dels == 1);
+	return result();
+}

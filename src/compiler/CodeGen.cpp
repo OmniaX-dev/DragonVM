@@ -1375,7 +1375,9 @@ namespace dscript
 		// An operator: on a struct (a method, its first operand this), or a top-level sub taking one.
 		if (d->shortName.rfind("operator", 0) == 0 && d->shortName.size() > 8 && !std::isalnum((unsigned char)d->shortName[8]) && d->shortName[8] != '_')
 		{
-			const std::string op = d->shortName.substr(8);
+			std::string op = d->shortName.substr(8);
+			if (op.rfind(" cast ", 0) == 0)
+				op = " cast";		// (operator cast <type>)
 			const bool method = (d->value & 4) != 0;
 			if ((d->value & 8) != 0)
 				error(d->namePos, "an operator works on a struct: it cannot be static (a top-level sub operator" + op + "(...) takes its operands as parameters)");
@@ -1508,6 +1510,15 @@ namespace dscript
 	// -1: not convertible; 0: same type; higher: worse (for choosing an overload).
 	int CodeGen::conversionCost(Node* from, Type* to)
 	{
+		const int c = builtinConversionCost(from, to);
+		if (c >= 0 || m_noUserConv || from->type == nullptr)
+			return c;
+		UserConv u;
+		return userConversion(from, to, u, false, false) ? u.cost : -1;
+	}
+
+	int CodeGen::builtinConversionCost(Node* from, Type* to)
+	{
 		Type* f = from->type;
 		if (f == nullptr)
 		{
@@ -1573,8 +1584,16 @@ namespace dscript
 
 	void CodeGen::requireConvertible(Node* from, Type* to, const std::string& context)
 	{
-		if (conversionCost(from, to) >= 0)
+		if (builtinConversionCost(from, to) >= 0)
 			return;
+		UserConv u;
+		if (from->type != nullptr && userConversion(from, to, u, false, true))
+		{
+			// (an implicit constructor / operator cast: from becomes the conversion)
+			Node* inner = new Node(*from);
+			applyConversion(from, inner, u);
+			return;
+		}
 		std::string fromName = (from->type ? from->type->name() : "overloaded sub '" + (from->kind == NodeKind::Ident ? from->name : from->a->name) + "'");
 		std::string hint = "";
 		if (from->type && to->isPointer() && from->type->isInteger())
@@ -1724,9 +1743,7 @@ namespace dscript
 			case NodeKind::Member: checkMember(e, placeWanted); break;
 			case NodeKind::Ternary:
 			{
-				check(e->a);
-				if (!decay(e->a->type)->isScalar())
-					error(e->a->pos, "the condition must be an integer or a pointer");
+				checkCondition(e->a);
 				check(e->b, expected);
 				check(e->c, expected);
 				Type* tb = decay(e->b->type);
@@ -1872,6 +1889,8 @@ namespace dscript
 				// interface): the pointer moves to the whole object (unchecked: it must be one).
 				Type* to = resolveType(e->typeSyntax);
 				check(e->a, to->isFunction() ? to : nullptr);
+				if (castConversion(e, to))
+					break;
 				Type* from = decay(e->a->type);
 				if (from == nullptr)
 					error(e->a->pos, "ambiguous overloaded sub in static_cast");
@@ -1899,6 +1918,8 @@ namespace dscript
 			{
 				Type* to = resolveType(e->typeSyntax);
 				check(e->a, to->isFunction() ? to : nullptr);
+				if (castConversion(e, to))
+					break;		// (a struct's conversion, or a constructor: cast<String>("text"))
 				Type* from = decay(e->a->type);
 				if (from == nullptr)
 					error(e->a->pos, "ambiguous overloaded sub in cast");
@@ -1988,6 +2009,17 @@ namespace dscript
 				if (!e->a->type->isArithmetic() && e->a->type->kind != Type::Kind::Pointer)
 					error(e->pos, "++ and -- work on numbers and pointers");
 				e->type = e->a->type;
+			}
+			break;
+			case NodeKind::Construct:
+			{
+				// (an object built from a value: its constructor, on a temporary)
+				check(e->a);
+				Type* p = e->func->type->params[1];
+				requireConvertible(e->a, p, "for " + e->func->name);
+				markUsed(e->func);
+				checkSubAccess(e->func, e->pos);
+				e->type = m_types.structType(e->methodClass);
 			}
 			break;
 			case NodeKind::InitList:
@@ -2172,7 +2204,7 @@ namespace dscript
 			// A struct returned by a call is in the caller's frame (its result temporary): a method
 			// may be called on it (a.copy().add(1)), its address taken.
 			const bool structResult = (e->a->kind == NodeKind::Call && e->a->type != nullptr && e->a->type->kind == Type::Kind::Struct)
-				|| (e->a->kind == NodeKind::Ident && e->a->var != nullptr && e->a->var->ctValue);
+				|| (e->a->kind == NodeKind::Ident && e->a->var != nullptr && e->a->var->ctValue) || e->a->kind == NodeKind::Construct;
 			if (!e->a->lvalue && !structResult)
 				error(e->pos, "& needs a variable (or something stored in memory)");
 			// Something that cannot change (a constant, a const field, through a const pointer):
@@ -2186,9 +2218,13 @@ namespace dscript
 			error(e->a->pos, "ambiguous overloaded sub");
 		if (t->kind == Type::Kind::Struct && op != "*")
 		{
-			if (!userOperator(e, "operator" + op, { e->a }))
+			if (userOperator(e, "operator" + op, { e->a }))
+				return;
+			UserConv u;
+			if (op != "!" || !userConversion(e->a, m_types.boolType(), u, false, true))
 				error(e->pos, "no operator" + op + " for " + t->name() + " (a sub operator" + op + "() in the struct, or a top-level one)");
-			return;
+			requireConvertible(e->a, m_types.boolType(), "for !");		// (!x: its conversion to bool)
+			t = decay(e->a->type);
 		}
 		if (op == "*")
 		{
@@ -2253,6 +2289,16 @@ namespace dscript
 			error(e->pos, "ambiguous overloaded sub");
 		if ((ta->kind == Type::Kind::Struct || tb->kind == Type::Kind::Struct) && op != "&&" && op != "||")
 			return binaryOperator(e);		// (a struct's operator)
+		if (op == "&&" || op == "||")
+		{
+			// (a struct operand: its conversion to bool)
+			if (ta->kind == Type::Kind::Struct)
+				requireConvertible(e->a, m_types.boolType(), "for " + op);
+			if (tb->kind == Type::Kind::Struct)
+				requireConvertible(e->b, m_types.boolType(), "for " + op);
+			ta = decay(e->a->type);
+			tb = decay(e->b->type);
+		}
 		if (op == "&&" || op == "||")
 		{
 			if (!ta->isScalar() || !tb->isScalar())
@@ -2887,7 +2933,8 @@ namespace dscript
 					if (sameSignature(slot.decl, f))
 						error(f->decl->namePos, "'" + f->decl->shortName + "' is a sub of " + structOfMethod(slot.decl)->name + " already (" + info->name + " extends it)");
 				}
-				info->vslots.push_back({ f, nullptr });
+				if ((f->decl->value & 1024) != 0)
+					info->vslots.push_back({ f, nullptr });		// (final subs: helpers, not in the table)
 			}
 			info->vtablesBuilt = true;
 			return;
@@ -3635,7 +3682,7 @@ namespace dscript
 
 	void CodeGen::genInitValue(const Reg& dst, Node* src, const Reg& value, Type* t)
 	{
-		if (src->kind == NodeKind::Call && t->kind == Type::Kind::Struct)
+		if ((src->kind == NodeKind::Call || src->kind == NodeKind::Construct) && t->kind == Type::Kind::Struct)
 		{
 			copyValue(dst, value, t);		// (moved: the call's temporary is not destroyed)
 			consumeTemp(src);
@@ -3710,6 +3757,8 @@ namespace dscript
 	{
 		if (e == nullptr)
 			return false;
+		if (e->kind == NodeKind::Construct && destructible(e->type))
+			return true;
 		if (e->kind == NodeKind::Call)
 		{
 			if (destructible(e->type))
@@ -3752,6 +3801,189 @@ namespace dscript
 		emit("mov ACC, " + r);
 		emit(std::string(jumpIfTrue ? "jne" : "jeq") + " $" + target + ", 0");
 		release(r);
+	}
+
+	// ================================== User conversions ==================================
+	// A struct's conversions (operator cast <type>), its own and those it inherits.
+	std::string CodeGen::subLabelName(FuncInfo* f, const std::string& name)
+	{
+		if (f->decl->shortName.rfind("operator cast ", 0) != 0 || f->type == nullptr || f->decl->owner == nullptr)
+			return name;
+		return f->decl->owner->name + "::operator cast " + f->type->base->name();
+	}
+
+	std::vector<FuncInfo*> CodeGen::castOperators(StructInfo* info)
+	{
+		std::vector<FuncInfo*> out;
+		resolveStruct(info, info->pos);
+		std::vector<StructInfo*> chain;
+		for (StructInfo* c = info; c != nullptr; c = c->base)
+			chain.push_back(c);
+		for (const auto& slot : info->ifaceSlots)
+			chain.push_back(slot.iface);
+		for (StructInfo* c : chain)
+		{
+			const std::string prefix = c->name + "::operator cast ";
+			for (auto it = m_funcs.lower_bound(prefix); it != m_funcs.end() && it->first.compare(0, prefix.size(), prefix) == 0; ++it)
+			{
+				for (FuncInfo* f : it->second)
+				{
+					if (f->type == nullptr)
+						resolveFunction(f);
+					const bool hidden = std::any_of(out.begin(), out.end(), [&](FuncInfo* g) { return g->type->base == f->type->base; });
+					if (!hidden)
+						out.push_back(f);
+				}
+			}
+		}
+		return out;
+	}
+
+	// from as a `to`: a constructor of `to` taking it (implicit ones only, unless explicitToo), or a
+	// conversion of from's struct (operator cast) giving `to` (or what converts to it). One step,
+	// no chains.
+	bool CodeGen::userConversion(Node* from, Type* to, UserConv& out, bool explicitToo, bool report)
+	{
+		Type* ft = from->type;
+		if (m_noUserConv || ft == nullptr || to == nullptr || ft == to)
+			return false;
+		const bool fromStruct = ft->kind == Type::Kind::Struct, toStruct = to->kind == Type::Kind::Struct;
+		if (!fromStruct && !toStruct)
+			return false;
+		struct Guard { bool& b; Guard(bool& x) : b(x) { b = true; } ~Guard() { b = false; } } guard { m_noUserConv };
+		std::vector<UserConv> found;
+		if (toStruct && !to->structInfo->onlyPointer())
+		{
+			resolveStruct(to->structInfo, from->pos);
+			auto it = m_funcs.find(to->structInfo->name + "::new");
+			for (size_t i = 0; it != m_funcs.end() && i < it->second.size(); i++)
+			{
+				FuncInfo* f = it->second[i];
+				if (f->type == nullptr)
+					resolveFunction(f);
+				if (!explicitToo && (f->decl->value & 16384) == 0)
+					continue;
+				if (f->type->params.size() < 2 || f->requiredParams > 2 || f->type->variadic != 0)
+					continue;
+				const int c = conversionCost(from, f->type->params[1]);
+				if (c >= 0)
+					found.push_back({ f, true, 10 + c });
+			}
+		}
+		if (fromStruct)
+		{
+			for (FuncInfo* g : castOperators(ft->structInfo))
+			{
+				if (!explicitToo && (g->decl->value & 16384) == 0)
+					continue;
+				Type* x = g->type->base;
+				Node value;
+				value.kind = NodeKind::TypeArg;
+				value.type = x;
+				const int c = x == to ? 0 : conversionCost(&value, to);
+				if (c >= 0)
+					found.push_back({ g, false, 10 + c });
+			}
+		}
+		if (found.empty())
+			return false;
+		std::sort(found.begin(), found.end(), [](const UserConv& a, const UserConv& b) { return a.cost < b.cost; });
+		if (found.size() > 1 && found[0].cost == found[1].cost)
+		{
+			if (report)
+				error(from->pos, "ambiguous conversion of " + ft->name() + " to " + to->name() + ": " + found[0].f->name + " and " + found[1].f->name);
+			return false;
+		}
+		out = found[0];
+		return true;
+	}
+
+	// target becomes inner converted (a Construct node: the object built from it; or the call of
+	// its operator cast).
+	void CodeGen::applyConversion(Node* target, Node* inner, const UserConv& c)
+	{
+		const SourcePos pos = inner->pos;
+		*target = Node();
+		target->pos = pos;
+		if (c.ctor)
+		{
+			target->kind = NodeKind::Construct;
+			target->a = inner;
+			target->func = c.f;
+			target->methodClass = structOfMethod(c.f);
+		}
+		else
+		{
+			Node* callee = new Node();
+			callee->kind = NodeKind::Member;
+			callee->pos = pos;
+			callee->namePos = pos;
+			callee->a = inner;
+			callee->name = c.f->decl->shortName;
+			target->kind = NodeKind::Call;
+			target->a = callee;
+		}
+		check(target);
+	}
+
+	// cast<T>(x) / static_cast<T>(x) with a struct (x's or T): its conversions (also the ones that
+	// are not implicit; a constructor of T taking x). false: none (e is checked as before).
+	bool CodeGen::castConversion(Node* e, Type* to)
+	{
+		Type* from = e->a->type;
+		if (from == nullptr || from == to || (from->kind != Type::Kind::Struct && to->kind != Type::Kind::Struct))
+			return false;
+		UserConv c;
+		if (!userConversion(e->a, to, c, true, true))
+			return false;
+		Node* conv = new Node();
+		applyConversion(conv, e->a, c);
+		if (conv->type == to)
+			*e = *conv;
+		else
+		{
+			e->a = conv;		// (an operator cast to a type that converts to T)
+			check(e);
+		}
+		return true;
+	}
+
+	// A condition: a number or a pointer (a struct: its implicit conversion to bool).
+	void CodeGen::checkCondition(Node* e)
+	{
+		check(e);
+		Type* t = decay(e->type);
+		if (t != nullptr && t->kind == Type::Kind::Struct)
+			requireConvertible(e, m_types.boolType(), "as a condition");
+		else if (t == nullptr || !t->isScalar())
+			error(e->pos, "the condition must be an integer or a pointer");
+	}
+
+	// The zeroes, default values and tables of a new struct value at a.
+	void CodeGen::storeDefaults(const Reg& a, Type* t)
+	{
+		zeroMemory(a, t->size());
+		std::vector<std::pair<int32_t, const StructField*>> defaults;
+		std::vector<std::pair<int32_t, std::string>> vptrs;
+		collectDefaults(t, 0, defaults, &vptrs);
+		for (const auto& d : defaults)
+		{
+			std::string val;
+			if (d.second->init->kind == NodeKind::StrLit)
+				val = "$" + stringLiteral(d.second->init->text);
+			else if (d.second->init->kind == NodeKind::Ident && d.second->init->func != nullptr)
+				val = "$" + d.second->init->func->label;
+			else
+				val = imm(constConvert(d.second->init->constValue, decay(d.second->init->type), d.second->type));
+			Place p;
+			p.base = a;
+			p.ownBase = false;
+			if (d.first != 0)
+				p.offset = "dword " + imm(d.first);
+			storePlace(p, val, d.second->type);
+		}
+		for (const auto& vp : vptrs)
+			emit("omov *" + a + ", $" + vp.second + ", dword " + imm(vp.first));
 	}
 
 	// ===================================== Operators =====================================
@@ -3821,11 +4053,18 @@ namespace dscript
 			int depth = 0;
 			if (s != nullptr && param->kind == Type::Kind::Pointer && param->base->kind == Type::Kind::Struct && derives(s, param->base->structInfo, nullptr, &depth))
 			{
-				const bool addressable = arg->lvalue || arg->kind == NodeKind::Call || (arg->kind == NodeKind::Ident && arg->var != nullptr);
+				const bool addressable = arg->lvalue || arg->kind == NodeKind::Call || arg->kind == NodeKind::Construct || (arg->kind == NodeKind::Ident && arg->var != nullptr);
 				if (!addressable || (arg->readOnly && !param->constTarget))
 					return -1;
 				address = true;
 				return depth;
+			}
+			// (a value its struct converts from: built, then passed by its address)
+			UserConv u;
+			if (param->kind == Type::Kind::Pointer && param->constTarget && param->base->kind == Type::Kind::Struct && userConversion(arg, param->base, u, false, false))
+			{
+				address = true;
+				return u.cost;
 			}
 			return -1;
 		};
@@ -3886,6 +4125,15 @@ namespace dscript
 		for (size_t i = bestMember ? 1 : 0; i < operands.size(); i++)
 		{
 			Node* a = operands[i];
+			Type* param = best->type->params[i];
+			if (bestAddress[i] && (a->type == nullptr || a->type->kind != Type::Kind::Struct || !derives(a->type->structInfo, param->base->structInfo)))
+			{
+				UserConv u;
+				userConversion(a, param->base, u, false, true);
+				Node* conv = new Node();
+				applyConversion(conv, a, u);
+				a = conv;
+			}
 			if (bestAddress[i])
 			{
 				Node* addr = new Node();
@@ -5597,7 +5845,7 @@ namespace dscript
 				f->requiredParams = 0;
 				f->type = m_types.function({}, m_types.voidType());
 			}
-			f->label = codeLabel(f->name, (f->decl->value & 4) != 0);
+			f->label = codeLabel(subLabelName(f, f->name), (f->decl->value & 4) != 0);
 		}
 		if (wantStruct)
 		{
@@ -6299,6 +6547,38 @@ namespace dscript
 			case NodeKind::Binary: return genBinary(e);
 			case NodeKind::Assign: return genAssign(e);
 			case NodeKind::Call: return genCall(e);
+			case NodeKind::Construct:
+			{
+				// A temporary: its defaults, then its constructor with the value (destroyed when the
+				// statement ends, unless moved).
+				Type* t = e->type;
+				const int32_t slot = temporary(t->size());
+				Reg r = alloc(e->pos);
+				emit("mov " + r + ", FP");
+				addImmediate(r, slot);
+				storeDefaults(r, t);
+				Type* p = e->func->type->params[1];
+				Reg v = gen(e->a);
+				if (p->kind == Type::Kind::Struct)
+				{
+					Reg c = alloc(e->pos);
+					const int32_t argSlot = temporary(p->size());
+					emit("mov " + c + ", FP");
+					addImmediate(c, argSlot);
+					genInitValue(c, e->a, v, p);
+					callMethod(e->func, r, 0, c);
+					release(c);
+					addTemp(argSlot, p, nullptr);
+				}
+				else
+				{
+					convert(v, decay(e->a->type), p);
+					callMethod(e->func, r, 0, v);
+				}
+				release(v);
+				addTemp(slot, t, e);
+				return r;
+			}
 			case NodeKind::Ternary:
 			{
 				Reg r = alloc(e->pos);
@@ -6443,6 +6723,8 @@ namespace dscript
 				if (e->type != nullptr && e->type->kind == Type::Kind::Struct)
 					return gen(e);		// a struct result: its place in this frame
 			break;
+			case NodeKind::Construct:
+				return gen(e);
 			default: break;
 		}
 		error(e->pos, "this has no address");
@@ -6861,7 +7143,7 @@ namespace dscript
 			}
 			if (!customAssign(t))
 				copyMemory(d, s, t->size());
-			else if (e->b->kind == NodeKind::Call && ownsResources(t->structInfo) && m_funcs.count(t->structInfo->name + "::operator=") == 0)
+			else if ((e->b->kind == NodeKind::Call || e->b->kind == NodeKind::Construct) && ownsResources(t->structInfo) && m_funcs.count(t->structInfo->name + "::operator=") == 0)
 			{
 				// From a call's result: the old value destroyed, the result moved in.
 				genDestroy(d, t, 0);
@@ -7313,7 +7595,7 @@ namespace dscript
 				// By value: a copy in this frame, passed by its address (a call's result: itself),
 				// destroyed when the statement ends.
 				Reg src = gen(e->list[i]);
-				if (e->list[i]->kind == NodeKind::Call && (destructible(params[i]) || customCopy(params[i])))
+				if ((e->list[i]->kind == NodeKind::Call || e->list[i]->kind == NodeKind::Construct) && (destructible(params[i]) || customCopy(params[i])))
 				{
 					storeVptrs(src, params[i]);
 					emit("push " + src);
@@ -7837,9 +8119,7 @@ namespace dscript
 						genStatement(s->c);
 					break;
 				}
-				check(s->a);
-				if (!decay(s->a->type)->isScalar())
-					error(s->a->pos, "the condition must be an integer or a pointer");
+				checkCondition(s->a);
 				std::string lElse = newLabel(), lEnd = newLabel();
 				genCondBranch(s->a, s->c ? lElse : lEnd, false);
 				genStatement(s->b);
@@ -7854,7 +8134,7 @@ namespace dscript
 			break;
 			case NodeKind::While:
 			{
-				check(s->a);
+				checkCondition(s->a);
 				std::string lStart = newLabel(), lEnd = newLabel();
 				m_loopDepth++;
 				label(lStart);
@@ -7876,7 +8156,7 @@ namespace dscript
 				genStatement(s->b);
 				m_loops.pop_back();
 				label(lCont);
-				check(s->a);
+				checkCondition(s->a);
 				loc(s->a->pos);
 				genCondBranch(s->a, lStart, true);
 				label(lEnd);
@@ -7899,7 +8179,7 @@ namespace dscript
 				label(lStart);
 				if (s->b)
 				{
-					check(s->b);
+					checkCondition(s->b);
 					genCondBranch(s->b, lEnd, false);
 				}
 				m_loops.push_back({ lEnd, lCont, m_defers.size() });
@@ -9971,6 +10251,8 @@ namespace dscript
 				Node* chosen = constTruth(ctEval(e->a), decay(e->a->type)) ? e->b : e->c;
 				return ctConvert(ctEval(chosen), decay(chosen->type), t);
 			}
+			case NodeKind::Construct:
+				ctFail(e->pos, "it builds an object from a value (a conversion: when the program runs)");
 			case NodeKind::Call:
 			{
 				if (e->vaBuiltin != 0)
@@ -10732,9 +11014,9 @@ namespace dscript
 			const bool inInterface = method && d->owner != nullptr && d->owner->classKind == 2;
 			const std::string head = indent + ((d->value & 16) != 0 ? "priv " : "") + ((d->value & 8192) != 0 ? "prot " : "") + (isStatic ? "static " : "")
 				+ ((d->value & 512) != 0 ? "virt " : "") + ((d->value & 1024) != 0 && !inInterface ? "pure " : "") + ((d->value & 2048) != 0 ? "override " : "")
-				+ ((d->value & 4096) != 0 ? "final " : "") + ((d->value & 64) != 0 ? "readonly " : "")
+				+ ((d->value & 4096) != 0 ? "final " : "") + ((d->value & 16384) != 0 ? "implicit " : "") + ((d->value & 64) != 0 ? "readonly " : "")
 				+ (f->interrupt ? "interrupt " : "") + (d->constKind == 2 ? "constexpr " : d->constKind == 3 ? "consteval " : "") + ((d->value & 2) != 0 ? "inline " : "") + "sub ";
-			std::string text = head + declaredName(d) + "(";
+			std::string text = head + (d->shortName.rfind("operator cast ", 0) == 0 ? std::string("operator cast") : declaredName(d)) + "(";
 			const size_t first = (method && !isStatic) ? 1 : 0;
 			for (size_t i = first; i < f->type->params.size() && i < f->paramNames.size(); i++)
 			{
@@ -11081,7 +11363,7 @@ namespace dscript
 			});
 			for (FuncInfo* f : funcs)
 			{
-				f->label = codeLabel(entry.first, (f->decl->value & 4) != 0);
+				f->label = codeLabel(subLabelName(f, entry.first), (f->decl->value & 4) != 0);
 				// A library's sub has the label it has there (the overloads it has there).
 				size_t overloads = funcs.size();
 				if (f->decl->external != 0)

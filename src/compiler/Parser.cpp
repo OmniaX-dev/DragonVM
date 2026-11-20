@@ -1034,7 +1034,8 @@ namespace dscript
 			return;
 		}
 		if (isKeyword("sub") || isKeyword("inline") || isKeyword("static") || isKeyword("priv") || isKeyword("atomic") || isKeyword("readonly")
-			|| isKeyword("constexpr") || isKeyword("consteval") || isKeyword("virt") || isKeyword("pure") || isKeyword("override") || isKeyword("final"))
+			|| isKeyword("constexpr") || isKeyword("consteval") || isKeyword("virt") || isKeyword("pure") || isKeyword("override") || isKeyword("final")
+			|| isKeyword("implicit"))
 		{
 			// A method: a hidden top-level sub (added at the end of the program). static: no
 			// this, called as Struct::name(...) / Struct.name(...).
@@ -1050,7 +1051,7 @@ namespace dscript
 				{
 					if (decl->classKind == 0)
 						error(at, "'" + m_tokens[m_pos - 1].text + "' is for the subs of a class (struct subs are never virtual)");
-					if (decl->classKind == 2 && virtFlags != 1024)
+					if (decl->classKind == 2 && virtFlags != 1024 && virtFlags != 4096)
 						error(at, "the subs of an interface are pure already (sub name(...) -> type;): '" + m_tokens[m_pos - 1].text + "' is for classes");
 					flags |= virtFlags;
 					continue;
@@ -1076,6 +1077,8 @@ namespace dscript
 					flags |= 128;
 				else if ((flags & 384) == 0 && acceptKeyword("consteval"))
 					flags |= 256;
+				else if ((flags & 16384) == 0 && acceptKeyword("implicit"))
+					flags |= 16384;		// (a constructor / operator cast used as an implicit conversion)
 				else
 					break;
 			}
@@ -1085,13 +1088,24 @@ namespace dscript
 				error(peek().pos, "a static sub has no this: readonly is for the subs that work on the struct (it makes this a const pointer)");
 			if (!isKeyword("sub"))
 				error(peek().pos, "'sub' expected after '" + m_tokens[m_pos - 1].text + "', found " + describe(peek()));
-			if (decl->classKind == 2)
+			if (decl->classKind == 2 && (flags & 4096) != 0)
 			{
-				if ((flags & ~(1024 | 64)) != 0)
-					error(peek().pos, "the subs of an interface are only declared (sub name(...) -> type;): no static, inline, atomic, constexpr or consteval");
-				flags |= 1024;		// (pure)
+				// final sub in an interface: a helper with a body (not virtual; no fields to use: it
+				// calls the interface's subs on this).
+				if ((flags & ~(4096 | 64 | 2 | 16384)) != 0)
+					error(peek().pos, "a final sub of an interface is a helper with a body: readonly, inline, implicit are its only other words");
 			}
-			checkVirtualFlags(flags, peek(1));
+			else
+			{
+				if (decl->classKind == 2)
+				{
+					if ((flags & ~(1024 | 64)) != 0)
+						error(peek().pos, "the subs of an interface are only declared (sub name(...) -> type;): no static, inline, atomic, constexpr or consteval "
+							"(a helper with a body: final sub)");
+					flags |= 1024;		// (pure)
+				}
+				checkVirtualFlags(flags, peek(1));
+			}
 			Node* outerFunc = m_currentFunc;
 			auto outerScopes = std::move(m_scopes);
 			m_scopes.clear();
@@ -1417,8 +1431,19 @@ namespace dscript
 			self->typeSyntax->constTarget = (flags & 64) != 0;	// readonly sub: this is a const pointer
 			n->list.insert(n->list.begin(), self);
 		}
+		const size_t returnFrom = m_pos + 1;
 		if (acceptPunct("->"))
 			n->typeSyntax = parseType();
+		if (n->shortName == "operator cast")
+		{
+			// Each conversion is a sub of its own: "operator cast <type>" (by the type it gives).
+			if (n->typeSyntax == nullptr)
+				error(n->namePos, "operator cast returns the type it converts to (sub operator cast() -> T)");
+			n->shortName += " " + tokenText(returnFrom, m_pos);
+			n->name = (n->scope.empty() ? "" : n->scope + "::") + n->shortName;
+		}
+		if ((flags & 16384) != 0 && n->shortName != "new" && n->shortName.rfind("operator cast", 0) != 0)
+			error(n->namePos, "implicit is for constructors (implicit sub new(var x: T)) and conversions (implicit sub operator cast() -> T)");
 		if ((flags & 1024) != 0)
 		{
 			if (isPunct("{"))

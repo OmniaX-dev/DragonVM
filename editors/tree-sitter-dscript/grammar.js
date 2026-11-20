@@ -260,7 +260,7 @@ module.exports = grammar({
 			// virt / pure (no body) / override / final: a class's virtual subs; prot: its subs and
 			// its derived classes' use it
 			repeat(choice($.atomic_modifier, $.interrupt_modifier, $.inline_modifier, $.static_modifier, $.priv_modifier, $.readonly_modifier,
-				$.constexpr_modifier, $.consteval_modifier, $.prot_modifier, $.virt_modifier, $.pure_modifier, $.override_modifier, $.final_modifier)),
+				$.constexpr_modifier, $.consteval_modifier, $.prot_modifier, $.virt_modifier, $.pure_modifier, $.override_modifier, $.final_modifier, $.implicit_modifier)),
 			'sub',
 			field('name', choice($.identifier, $.operator_name)),
 			field('parameters', $.parameter_list),
@@ -288,6 +288,8 @@ module.exports = grammar({
 		pure_modifier: _ => 'pure',
 		override_modifier: _ => 'override',
 		final_modifier: _ => 'final',
+		// implicit: a constructor / operator cast that converts without cast<...>
+		implicit_modifier: _ => 'implicit',
 		// static var x: T = value;  static const X = value;  (in a sub)
 		static_declaration: $ => seq(
 			$.static_modifier,

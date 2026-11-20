@@ -1,0 +1,4 @@
+// expect-error: is a sub of I already, and it is not virtual
+interface I { sub g() -> i32; final sub f() -> i32 { return this->g(); } }
+class C impl I { override sub g() -> i32 { return 1; } sub f() -> i32 { return 2; } }
+sub main() -> i32 { return 0; }

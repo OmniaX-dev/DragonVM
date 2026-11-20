@@ -549,7 +549,7 @@ g_origin = add(mk(1, 2), mk(3, 4)); // also in a global's value (computed before
 A class is a struct that can extend another class (or a struct) and have virtual subs. A struct
 stays exactly its fields (no hidden data); a class adds a table pointer only when it needs one.
 ```
-interface Shape {                           // only subs (all pure: no body), no fields
+interface Shape {                           // only subs (pure: no body; final subs: helpers), no fields
     sub area() -> i32;
 }
 abstract class Figure impl Shape {          // abstract: has pure subs, only classes derived from it are built
@@ -672,6 +672,29 @@ sub main() {
   keeps its own table.
 - Constant values and compile-time evaluation have no destructors (an error).
 
+### Implicit conversions
+- `implicit sub new(var x: T)`: a constructor taking one value (the others with defaults) also
+  converts a `T` to the struct where one is expected: a variable's value (`var s: String =
+  "hi";`), an argument, a returned value, an assignment (`s = "hi";`: a temporary, moved in), an
+  operator's operand (also for a `const S*` parameter: built, then passed by its address).
+- `sub operator cast() -> T`: the struct converted to a `T`, by `cast<T>(x)` (or `static_cast`);
+  `implicit sub operator cast() -> T` also where a `T` is expected (`var t: string = s;`), and a
+  conversion to `bool` in conditions, `!`, `&&` / `||`. A struct can have several (one per type).
+- One conversion at a time (no chains), after the conversions the types have anyway (an
+  `operator cast() -> u32` also gives an `i32`). Two ways to convert (a constructor and an
+  operator cast) are an error. Overloads prefer every other conversion to these.
+- `cast<S>(value)`: an `S` built from the value by any of its constructors taking one (implicit
+  or not): a temporary, as a call's result (destroyed when the statement ends, moved if kept).
+- An interface's `final sub` has a body: a helper every class implementing it has (not
+  virtual, nothing in the table; it uses the interface's subs on `this`). Also for conversions:
+  ```
+  interface Stringable {
+      readonly sub toString() -> String;
+      final implicit readonly sub operator cast() -> String { return this->toString(); }
+  }
+  var s: String = *shape;       // any Stringable becomes a String
+  ```
+
 ### Operators
 A struct (or a class) can give meaning to operators on its values: `sub operator<op>(...)` in
 it is a method whose first operand is `this`; a top-level `sub operator<op>(...)` takes all its
@@ -693,7 +716,8 @@ struct Vec {
 sub operator*(var k: i32, var v: Vec) -> Vec { ... }     // 2 * v
 ```
 - Operators: `+ - * / % & | ^ << >> == != < <= > >= ! ~ ++ --`, the compound assignments,
-  `[]` and `()` (those two only as methods); `-` and `+` with no operand are unary. `&&` / `||`,
+  `[]` and `()` (those two only as methods), `=` (see "Destructors, copies and moves") and
+  `cast` (see "Implicit conversions"); `-` and `+` with no operand are unary. `&&` / `||`,
   `&` (address), `.`, `->`, `?:` and `sizeof` keep their meaning.
 - `a != b` is `!(a == b)` when there is no `operator!=`; with only `operator<`, `a > b` is
   `b < a`, `a <= b` is `!(b < a)`, `a >= b` is `!(a < b)`. `a += b` is only `operator+=` (not made

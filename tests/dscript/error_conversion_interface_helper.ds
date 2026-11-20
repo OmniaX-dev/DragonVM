@@ -1,0 +1,3 @@
+// expect-error: a final sub of an interface is a helper with a body: readonly, inline, implicit are its only other words
+interface I { final static sub f() -> void { } }
+sub main() -> i32 { return 0; }

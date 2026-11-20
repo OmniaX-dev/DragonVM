@@ -1,0 +1,3 @@
+// expect-error: implicit is for constructors (implicit sub new(var x: T)) and conversions
+struct M { implicit sub f() -> void { } }
+sub main() -> i32 { return 0; }

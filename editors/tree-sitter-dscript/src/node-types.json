@@ -3929,6 +3929,10 @@
           "named": true
         },
         {
+          "type": "implicit_modifier",
+          "named": true
+        },
+        {
           "type": "inline_modifier",
           "named": true
         },
@@ -8299,6 +8303,10 @@
   {
     "type": "impl",
     "named": false
+  },
+  {
+    "type": "implicit_modifier",
+    "named": true
   },
   {
     "type": "in",

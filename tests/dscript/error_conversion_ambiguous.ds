@@ -1,0 +1,4 @@
+// expect-error: ambiguous conversion of B to A
+struct A { var v: i32; implicit sub new(var b: B) -> void { } }
+struct B { var w: i32; implicit readonly sub operator cast() -> A { var a: A; return a; } }
+sub main() -> i32 { var b: B; var a: A = b; return 0; }

@@ -395,6 +395,19 @@ namespace dscript
 			// The program's globals with destructors: destroyed after main (__ds_fini), the last first.
 			std::vector<std::vector<std::string>> m_finiChunks;
 
+			// ===== User conversions =====
+			struct UserConv { FuncInfo* f { nullptr }; bool ctor { false }; int cost { 0 }; };
+			std::vector<FuncInfo*> castOperators(StructInfo* info);
+			bool userConversion(Node* from, Type* to, UserConv& out, bool explicitToo, bool report);
+			void applyConversion(Node* target, Node* inner, const UserConv& c);
+			bool castConversion(Node* e, Type* to);
+			void checkCondition(Node* e);
+			void storeDefaults(const Reg& a, Type* t);
+			int builtinConversionCost(Node* from, Type* to);
+			bool m_noUserConv { false };
+			// The label of a sub (an operator cast: by the type it gives, the same in every program).
+			std::string subLabelName(FuncInfo* f, const std::string& name);
+
 			// ===== Templates =====
 			// A template's struct / sub (by full name: Ns::Array, Struct::map): the templates that
 			// declare it (several: overloads chosen by their where).

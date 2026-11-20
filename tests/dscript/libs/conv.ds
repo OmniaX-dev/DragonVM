@@ -1,0 +1,14 @@
+// Conversions and interface helpers in a library (conversions_library.ds).
+namespace cv {
+	struct Num {
+		var v: i32;
+		implicit sub new(var v: i32) -> void { this->v = v; }
+		implicit readonly sub operator cast() -> i32 { return this->v; }
+		readonly sub operator cast() -> bool { return this->v != 0; }
+	}
+	interface Valued {
+		readonly sub value() -> i32;
+		final readonly sub doubled() -> i32 { return this->value() * 2; }
+	}
+	sub add(var a: Num, var b: Num) -> Num { return a.v + b.v; }
+}

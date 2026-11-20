@@ -1,0 +1,3 @@
+// expect-error: cannot convert i32 to M
+struct M { var v: i32; sub new(var v: i32) -> void { this->v = v; } }
+sub main() -> i32 { var m: M = 3; return 0; }

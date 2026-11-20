@@ -2168,6 +2168,10 @@
               {
                 "type": "SYMBOL",
                 "name": "final_modifier"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "implicit_modifier"
               }
             ]
           }
@@ -2482,6 +2486,10 @@
     "final_modifier": {
       "type": "STRING",
       "value": "final"
+    },
+    "implicit_modifier": {
+      "type": "STRING",
+      "value": "implicit"
     },
     "static_declaration": {
       "type": "SEQ",
