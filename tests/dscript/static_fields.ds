@@ -12,6 +12,8 @@ struct Counter {
 	static const START = compute();			// computed when the program starts
 	static const LIMIT = 100;				// a compile-time constant
 	static var origin: Point(3, 4);			// built by its constructor
+	priv static var hidden: Point(5, 6);	// (priv, built by its constructor)
+	static sub hidden_sum() -> i32 { return hidden.x + hidden.y; }
 	var id: u32;
 	sub new() { count++; created++; this->id = created + secret + START; }
 	static sub reset() { count = 0; }
@@ -29,7 +31,7 @@ sub main() -> i32 {
 	if (Counter.count != 12 or b.total() != 14) return 3;
 	Counter.reset();
 	if (a.count != 0 or sizeof(Counter) != 4 or sizeof(g_arr) != 100) return 4;
-	if (Counter.origin.x != 3 or Counter.origin.y != 4) return 5;
+	if (Counter.origin.x != 3 or Counter.origin.y != 4 or Counter.hidden_sum() != 11) return 5;
 	Pool<u8>.make(); Pool<u8>.make(); Pool<u32>.make();
 	if (Pool<u8>.made != 2 or Pool<u32>.made != 1) return 6;
 	var q: u32* = &Counter.count;

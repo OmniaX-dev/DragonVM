@@ -12,6 +12,8 @@ struct Bag {
 template(T) where has_method(T, find, sub(u32, f32) -> i32*) and has_field(T, count, u32) {
 	sub lookup(var t: T*) -> u32 { return 1; }
 }
+template(T) where has_method(T, size, sub() -> u32) { struct Wrapper { var inner: T; }; }
+alias BagWrapper = Wrapper<Bag>;		// (instantiated while the declarations are resolved)
 sub main() -> i32 {
 	static_assert(has_field(Bag, count) and has_field(Bag, count, u32) and not has_field(Bag, count, i32));
 	static_assert(has_field(Bag, data, i32*) and not has_field(Bag, data, u32*));
@@ -20,6 +22,7 @@ sub main() -> i32 {
 	static_assert(has_method(Bag, size, sub() -> u32) and has_method(Bag, make, sub(u32) -> Bag));
 	static_assert(not has_method(Bag, missing, sub() -> void));
 	var b: Bag;
-	if (lookup(&b) != 1) return 1;
+	var w: BagWrapper;
+	if (lookup(&b) != 1 or sizeof(w) != sizeof(Bag)) return 1;
 	return 0;
 }

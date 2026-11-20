@@ -1767,7 +1767,7 @@ namespace dscript
 			}
 			// A static field: priv (only the struct's subs use it), readonly (only they change it).
 			if (v->storage == VarInfo::Storage::Global && v->decl != nullptr && v->decl->owner != nullptr && v->decl->owner->kind == NodeKind::StructDecl
-				&& m_structs.count(v->decl->owner->name) > 0)
+				&& m_structs.count(v->decl->owner->name) > 0 && e->name != " ctor")		// (its own constructor call: allowed)
 			{
 				const Node* owner = v->decl->owner;
 				StructInfo* info = m_structs[owner->name];
@@ -3775,8 +3775,16 @@ namespace dscript
 						return 0;		// (a method template has no type until it is instantiated)
 					for (FuncInfo* f : cg.m_funcs[m])
 					{
+						if (f->type == nullptr && !f->instance && !f->resolving)
+						{
+							// (in the declarations, the subs have no types yet: this one's now)
+							f->resolving = true;
+							try { cg.resolveFunction(f); }
+							catch (CompileError&) { f->resolving = false; f->type = nullptr; f->paramNames.clear(); f->defaults.clear(); f->requiredParams = 0; throw; }
+							f->resolving = false;
+						}
 						if (f->type == nullptr)
-							error(pos, "has_method: the type of " + m + " is not known yet here (in a declaration's condition)");
+							error(pos, "has_method: the type of " + m + " is not known yet here");
 						const size_t skip = (f->decl->value & 8) != 0 ? 0 : 1;		// (this)
 						const auto& params = f->type->params;
 						if (params.size() < skip || params.size() - skip != sig->params.size() || f->type->base != sig->base || f->type->variadic != sig->variadic)
