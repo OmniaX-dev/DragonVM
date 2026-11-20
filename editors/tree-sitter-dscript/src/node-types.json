@@ -8220,6 +8220,10 @@
     "named": false
   },
   {
+    "type": "dynamic_cast",
+    "named": false
+  },
+  {
     "type": "else",
     "named": false
   },

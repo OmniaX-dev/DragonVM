@@ -1,0 +1,4 @@
+// expect-error: dynamic_cast: A has no table (no virtual subs, no interfaces)
+class A { var x: i32; }
+class B ex A { }
+sub main() -> i32 { var b: B; var a: A* = &b; var p = dynamic_cast<B*>(a); return 0; }

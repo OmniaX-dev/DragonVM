@@ -107,7 +107,7 @@ namespace dscript
 			const Token& t = peek();
 			bool value = t.kind == TokenKind::Integer || t.kind == TokenKind::Float || t.kind == TokenKind::String
 				|| (t.kind == TokenKind::Punct && (t.text == "-" || t.text == "!" || t.text == "~" || t.text == "+"))
-				|| (t.kind == TokenKind::Keyword && (t.text == "true" || t.text == "false" || t.text == "null" || t.text == "sizeof" || t.text == "cast" || t.text == "bitcast" || t.text == "static_cast" || t.text == "not"));
+				|| (t.kind == TokenKind::Keyword && (t.text == "true" || t.text == "false" || t.text == "null" || t.text == "sizeof" || t.text == "cast" || t.text == "bitcast" || t.text == "static_cast" || t.text == "dynamic_cast" || t.text == "not"));
 			if (t.kind == TokenKind::Identifier && t.fixedType == nullptr)
 			{
 				// Name.field / f(...) / N + 1: a value (after a qualified name)
@@ -1970,10 +1970,10 @@ namespace dscript
 					(t.kind == TokenKind::Punct && noSpaceBefore.count(t.text) > 0) || unaryPrev || typeDepth > 0 ||
 					(l_is(&t, TokenKind::Punct, "(") && (l_endsValue(prev) || afterType ||
 						l_is(prev, TokenKind::Keyword, "sizeof"))) ||
-					(l_is(&t, TokenKind::Punct, "<") && (l_is(prev, TokenKind::Keyword, "cast") || l_is(prev, TokenKind::Keyword, "bitcast") || l_is(prev, TokenKind::Keyword, "static_cast") || l_is(prev, TokenKind::Keyword, "sizeof")));
+					(l_is(&t, TokenKind::Punct, "<") && (l_is(prev, TokenKind::Keyword, "cast") || l_is(prev, TokenKind::Keyword, "bitcast") || l_is(prev, TokenKind::Keyword, "static_cast") || l_is(prev, TokenKind::Keyword, "dynamic_cast") || l_is(prev, TokenKind::Keyword, "sizeof")));
 			}
 			afterType = false;
-			if (l_is(&t, TokenKind::Punct, "<") && (l_is(prev, TokenKind::Keyword, "cast") || l_is(prev, TokenKind::Keyword, "bitcast") || l_is(prev, TokenKind::Keyword, "static_cast") || l_is(prev, TokenKind::Keyword, "sizeof")))
+			if (l_is(&t, TokenKind::Punct, "<") && (l_is(prev, TokenKind::Keyword, "cast") || l_is(prev, TokenKind::Keyword, "bitcast") || l_is(prev, TokenKind::Keyword, "static_cast") || l_is(prev, TokenKind::Keyword, "dynamic_cast") || l_is(prev, TokenKind::Keyword, "sizeof")))
 				typeDepth++;
 			else if (typeDepth > 0 && l_is(&t, TokenKind::Punct, "<"))
 				typeDepth++;
@@ -2264,14 +2264,15 @@ namespace dscript
 			n->a = parseUnary();
 			return n;
 		}
-		if (isKeyword("cast") || isKeyword("bitcast") || isKeyword("static_cast"))
+		if (isKeyword("cast") || isKeyword("bitcast") || isKeyword("static_cast") || isKeyword("dynamic_cast"))
 		{
 			// cast<T>(value): converted to T; bitcast<T>(value): the same bits read as a T (value = 1);
 			// static_cast<T>(value): a conversion the types allow, also from a class pointer to a
 			// pointer to a class derived from it (value = 2).
 			const std::string word = next().text;
 			Node* n = make(NodeKind::Cast, pos);
-			n->value = word == "bitcast" ? 1 : word == "static_cast" ? 2 : 0;
+			// dynamic_cast<T*>(value): checked when the program runs (null if it does not point at a T): 3.
+			n->value = word == "bitcast" ? 1 : word == "static_cast" ? 2 : word == "dynamic_cast" ? 3 : 0;
 			expectPunct("<", "after '" + word + "' (" + word + "<type>(value))");
 			n->typeSyntax = parseType();
 			expectPunct(">", "after the " + word + " type");

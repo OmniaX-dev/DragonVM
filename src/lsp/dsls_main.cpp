@@ -1648,7 +1648,7 @@ namespace
 		static const char* keywords[] = { "var", "auto", "const", "constexpr", "consteval", "constinit", "readonly", "sub", "template", "struct", "enum", "alias", "return", "if", "else", "while", "do", "for",
 			"break", "continue", "null", "true", "false", "cast", "bitcast", "sizeof", "low", "interrupt", "inline", "static", "priv", "assert", "static_assert",
 			"debug_print", "namespace", "defer", "atomic", "and", "or", "not",
-			"class", "interface", "ex", "impl", "friend", "prot", "virt", "pure", "override", "final", "abstract", "static_cast", nullptr };
+			"class", "interface", "ex", "impl", "friend", "prot", "virt", "pure", "override", "final", "abstract", "static_cast", "dynamic_cast", "operator", "implicit", nullptr };
 		if (where == General || where == TypeName)
 		{
 			if (where == General)

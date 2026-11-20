@@ -1751,6 +1751,31 @@ namespace dscript
 				}
 				break;
 			}
+			if (e->value == 3)
+			{
+				// dynamic_cast<T*>(p): p's object's type (from its table) decides: a pointer to its T
+				// part, or null. p: a pointer to a class with a table, or to an interface.
+				Type* to = resolveType(e->typeSyntax);
+				check(e->a);
+				Type* from = decay(e->a->type);
+				if (from == nullptr)
+					error(e->a->pos, "ambiguous overloaded sub in dynamic_cast");
+				if (to->kind != Type::Kind::Pointer || to->base->kind != Type::Kind::Struct || to->base->structInfo->kind == 0)
+					error(e->pos, "dynamic_cast<" + to->name() + ">: the type is a pointer to a class or an interface");
+				e->type = to;
+				if (from->kind == Type::Kind::Null)
+					break;
+				if (from->kind != Type::Kind::Pointer || from->base->kind != Type::Kind::Struct)
+					error(e->pos, "dynamic_cast needs a pointer to a class or an interface (not " + from->name() + ")");
+				if (from->constTarget && !to->constTarget)
+					error(e->pos, "dynamic_cast<" + to->name() + ">: " + from->name() + " points at a constant (dynamic_cast<const " + to->base->name() + "*>(...))");
+				StructInfo* fromInfo = from->base->structInfo;
+				resolveStruct(fromInfo, e->pos);
+				resolveStruct(to->base->structInfo, e->pos);
+				if (conversionCost(e->a, to) < 0 && fromInfo->vptrs.empty())
+					error(e->pos, "dynamic_cast: " + fromInfo->name + " has no table (no virtual subs, no interfaces): its objects' type is not known when the program runs");
+				break;
+			}
 			if (e->value == 2)
 			{
 				// static_cast<T>(value): what converts to T anyway, numbers to numbers, and a class
@@ -2887,12 +2912,25 @@ namespace dscript
 		const std::string label = "__ti_" + symbolChars(info->name);
 		if (!m_typeinfos.insert(info).second)
 			return label;
-		// The class's type: its name, and its base's type (0: none).
+		// The class's type (dynamic_cast walks it): its name, its base's type (0: none) and where the
+		// base is in it, then how many interfaces it can be used as, and each one's type and where its
+		// table pointer is. An interface: its name, then zeroes.
+		auto l_word = [](uint32_t w) {
+			char buf[40];
+			std::snprintf(buf, sizeof(buf), "0x%02X, 0x%02X, 0x%02X, 0x%02X", (w >> 24) & 0xFF, (w >> 16) & 0xFF, (w >> 8) & 0xFF, w & 0xFF);
+			return std::string(buf);
+		};
 		std::string line = "\t$" + label + " $" + stringLiteral(info->name) + ", ";
 		if (info->base != nullptr && info->base->isClass())
-			line += "$" + typeinfoLabel(info->base);
+			line += "$" + typeinfoLabel(info->base) + ", " + l_word(info->baseOffset);
 		else
-			line += "0x00, 0x00, 0x00, 0x00";
+			line += l_word(0) + ", " + l_word(0);
+		std::vector<StructInfo::IfaceSlot> slots;
+		if (info->isClass())
+			slots = info->ifaceSlots;
+		line += ", " + l_word((uint32_t)slots.size());
+		for (const auto& s : slots)
+			line += ", $" + typeinfoLabel(s.iface) + ", " + l_word(s.offset);
 		m_data.push_back(line);
 		return label;
 	}
@@ -5406,6 +5444,29 @@ namespace dscript
 				return r;
 			}
 			case NodeKind::Cast:
+			if (e->value == 3)
+			{
+				Reg r = gen(e->a);
+				Type* from = decay(e->a->type);
+				if (from->kind == Type::Kind::Null || conversionCost(e->a, e->type) >= 0)
+				{
+					convert(r, from, e->type);		// (to a class it extends: known when compiling)
+					return r;
+				}
+				// __ds_dyncast(a pointer to a table pointer of the object, the type wanted)
+				const std::string done = newLabel();
+				emit("mov ACC, " + r);
+				emit("jeq $" + done + ", 0");
+				addImmediate(r, from->base->structInfo->vptrs[0].offset);
+				emit("push " + r);
+				emit("push $" + typeinfoLabel(e->type->base->structInfo));
+				emit("push 2");
+				emit("call $__ds_dyncast");
+				emit("mov " + r + ", RV");
+				label(done);
+				m_helpers.insert("__ds_dyncast");
+				return r;
+			}
 			if (e->value == 1)
 			{
 				// bitcast: registers hold the bits already (a smaller integer: in its own form); a
@@ -8930,6 +8991,8 @@ namespace dscript
 				return ctCall(f, args, e->pos);
 			}
 			case NodeKind::Cast:
+				if (e->value == 3 && decay(e->a->type)->kind != Type::Kind::Null && conversionCost(e->a, t) < 0)
+					ctFail(e->pos, "dynamic_cast reads an object's table (when the program runs)");
 				if (e->value == 1)
 				{
 					Type* from = e->a->type->kind == Type::Kind::Null ? m_types.pointer(m_types.voidType()) : e->a->type;
@@ -10284,6 +10347,42 @@ namespace dscript
 			out.push_back("\tret");
 		}
 		out.insert(out.end(), m_code.begin(), m_code.end());
+		if (m_helpers.count("__ds_dyncast") > 0)
+		{
+			if (m_subEmitted || m_topLows.empty())
+				m_pieceStarts.push_back("__ds_dyncast");
+			// __ds_dyncast(p, T): p points at one of an object's table pointers; the table has the
+			// object's type and where p is in it (the object: p - that). T found up its chain of
+			// classes (where each base is), or among its interfaces: the pointer to that part (RV),
+			// or 0. Two types are the same if their names are (a library has its own copies).
+			std::vector<std::string> h = { "", "__ds_dyncast:", ".loc -",
+				"\tmovo R1, *PP, dword 0x00000000", "\tmovo R2, *PP, dword 0xFFFFFFFC",
+				"\tmov R3, *R1", "\tmovo R4, *R3, dword 0x00000004", "\tmov R5, R1", "\tsubip R5, R4",
+				"\tmov R6, *R3", "\tmov R7, R6", "\tmov R8, R5" };
+			int n = 0;
+			// (is the type in R7 T: the same address, or the same name? found: jump)
+			auto l_same = [&](const std::string& found) {
+				const std::string loop = "__ds_dyncast_s" + std::to_string(n), differ = "__ds_dyncast_d" + std::to_string(n);
+				n++;
+				for (const std::string& line : std::initializer_list<std::string> { "\tmov ACC, R7", "\tjeq $" + found + ", R2", "\tmov R10, *R7", "\tmov R11, *R2", loop + ":",
+					std::string("\tmovb R12, *R10"), std::string("\tmovb R13, *R11"), std::string("\tmov ACC, R12"), "\tjne $" + differ + ", R13",
+					"\tjeq $" + found + ", 0", std::string("\taddip R10, 1"), std::string("\taddip R11, 1"), "\tjmp $" + loop, differ + ":" })
+					h.push_back(line);
+			};
+			h.push_back("__ds_dyncast_chain:");
+			l_same("__ds_dyncast_class");
+			for (const char* line : { "\tmovo R9, *R7, dword 0x00000004", "\tmov ACC, R9", "\tjeq $__ds_dyncast_ifaces, 0", "\tmovo R10, *R7, dword 0x00000008",
+				"\taddip R8, R10", "\tmov R7, R9", "\tjmp $__ds_dyncast_chain", "__ds_dyncast_class:", "\tmov RV, R8", "\tret",
+				"__ds_dyncast_ifaces:", "\tmovo R9, *R6, dword 0x0000000C", "\tmov R14, R6", "\taddip R14, 0x00000010", "__ds_dyncast_iloop:",
+				"\tmov ACC, R9", "\tjeq $__ds_dyncast_none, 0", "\tmov R7, *R14" })
+				h.push_back(line);
+			l_same("__ds_dyncast_iface");
+			for (const char* line : { "\taddip R14, 0x00000008", "\tsubip R9, 1", "\tjmp $__ds_dyncast_iloop", "__ds_dyncast_iface:",
+				"\tmovo R10, *R14, dword 0x00000004", "\tmov R8, R5", "\taddip R8, R10", "\tmov RV, R8", "\tret",
+				"__ds_dyncast_none:", "\tmov RV, 0", "\tret" })
+				h.push_back(line);
+			out.insert(out.end(), h.begin(), h.end());
+		}
 		if (m_helpers.count("__ds_shru") > 0)
 		{
 			if (m_subEmitted || m_topLows.empty())

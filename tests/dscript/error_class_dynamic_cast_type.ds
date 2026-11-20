@@ -1,0 +1,3 @@
+// expect-error: dynamic_cast<u32*>: the type is a pointer to a class or an interface
+class A { virt sub f() -> void { } }
+sub main() -> i32 { var a: A; var p = dynamic_cast<u32*>(&a); return 0; }

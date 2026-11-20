@@ -1,0 +1,60 @@
+// expect-rv: 0
+// dynamic_cast<T*>(p): the object's type (from its table) decides: a pointer to its T part (a class
+// up its chain, an interface it implements), or null. Also from an interface, and while a base's
+// constructor runs (the object is of the base's class then).
+#include(check.ds)
+
+interface Named { readonly sub name() -> u8; }
+interface Sized { readonly sub size() -> i32; }
+struct Pad { var bytes: i32[3]; }
+
+class Animal {
+	var legs: i32;
+	sub new() -> void { g_during = dynamic_cast<Dog*>(this) != null; }
+	virt sub kind() -> i32 { return 0; }
+}
+class Plain ex Pad { var p: i32; }
+class Dog ex Animal impl Named {
+	override sub kind() -> i32 { return 1; }
+	override readonly sub name() -> u8 { return 'd'; }
+}
+class Puppy ex Dog impl Sized {
+	var age: i32 = 1;
+	override readonly sub size() -> i32 { return 2; }
+}
+class Cat ex Animal impl Named, Sized {
+	override readonly sub name() -> u8 { return 'c'; }
+	override readonly sub size() -> i32 { return 5; }
+}
+class Late ex Plain impl Named {						// (its table pointer after Pad's fields)
+	override readonly sub name() -> u8 { return 'l'; }
+}
+
+var g_during: bool = true;
+
+sub main() -> i32 {
+	var puppy: Puppy();
+	check(1, !g_during);								// (in Animal::new, a Puppy is an Animal)
+	var cat: Cat();
+	var a: Animal* = &puppy;
+	check(2, dynamic_cast<Dog*>(a) == &puppy && dynamic_cast<Puppy*>(a) == &puppy && dynamic_cast<Cat*>(a) == null);
+	var n: Named* = dynamic_cast<Named*>(a);
+	check(3, n != null && n->name() == 'd' && n == &puppy);
+	var s: Sized* = dynamic_cast<Sized*>(n);			// (one interface to another)
+	check(4, s != null && s->size() == 2);
+	a = &cat;
+	check(5, dynamic_cast<Dog*>(a) == null && dynamic_cast<Sized*>(a)->size() == 5);
+	n = &cat;
+	check(6, dynamic_cast<Cat*>(n) == &cat && dynamic_cast<Animal*>(n) == &cat && dynamic_cast<Puppy*>(n) == null);
+	var none: Animal* = null;
+	check(7, dynamic_cast<Dog*>(none) == null);
+	var late: Late;
+	n = &late;
+	var lp: Late* = dynamic_cast<Late*>(n);
+	check(8, lp == &late && dynamic_cast<Named*>(lp) == n);
+	var pl: Plain* = dynamic_cast<Plain*>(n);
+	check(9, pl == &late);
+	var up: Animal* = dynamic_cast<Animal*>(&puppy);	// (an upcast: known when compiling)
+	check(10, up == &puppy);
+	return result();
+}

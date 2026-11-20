@@ -33,6 +33,7 @@
 	"cast"
 	"bitcast"
 	"static_cast"
+	"dynamic_cast"
 	"sizeof"
 	"value_type"
 	"base_type"

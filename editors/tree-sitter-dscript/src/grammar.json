@@ -4575,6 +4575,10 @@
             {
               "type": "STRING",
               "value": "static_cast"
+            },
+            {
+              "type": "STRING",
+              "value": "dynamic_cast"
             }
           ]
         },

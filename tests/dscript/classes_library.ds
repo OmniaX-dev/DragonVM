@@ -26,5 +26,7 @@ sub main() -> i32 {
 	var a: zoo::Animal* = &heap;
 	check(5, a->describe() == 704);
 	check(6, static_cast<zoo::Dog*>(a) == &heap);
+	var lib: zoo::Speaker* = &zoo::built;		// (its table is the library's: its types are compared by name)
+	check(7, dynamic_cast<zoo::Dog*>(lib) == &zoo::built && dynamic_cast<Bird*>(lib) == null && dynamic_cast<zoo::Animal*>(lib) != null);
 	return result();
 }

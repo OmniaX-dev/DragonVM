@@ -514,8 +514,9 @@ module.exports = grammar({
 		},
 
 		// cast<T>(value): converted; bitcast<T>(value): the same bits read as a T; static_cast<T>(value):
-		// also from a class pointer to a pointer to a class derived from it
-		cast_expression: $ => seq(choice('cast', 'bitcast', 'static_cast'), '<', field('type', $._type), '>', '(', field('value', $._expression), ')'),
+		// also from a class pointer to a pointer to a class derived from it; dynamic_cast<T*>(value):
+		// checked when the program runs
+		cast_expression: $ => seq(choice('cast', 'bitcast', 'static_cast', 'dynamic_cast'), '<', field('type', $._type), '>', '(', field('value', $._expression), ')'),
 
 		sizeof_expression: $ => choice(
 			seq('sizeof', '<', field('type', $._type), '>'),

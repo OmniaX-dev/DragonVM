@@ -606,6 +606,11 @@ var back = static_cast<Square*>(sh);        // back to the class (unchecked: it 
   `static_cast` does what converts anyway, numbers to numbers, and class pointers up or down;
   `cast<T*>` between pointers to classes derived from one another is an error (it would not find
   the part of the object). Pointers to related classes can be compared (`f == &sq`).
+- `dynamic_cast<T*>(p)` asks the object's table: a pointer to its `T` part (`T` a class up the
+  object's chain, or an interface it implements: also from one interface to another), or `null`.
+  `p` points at a class with a table (virtual subs or interfaces) or an interface; an upcast is
+  decided when compiling. While a base's constructor runs, the object is of the base's class.
+  (Types are the same when their names are: a library's objects work with the program's types.)
 - `friend A, B::C, f`: those structs, classes and subs have the access of the class's own subs
   (`priv`, `prot`, changing `readonly` fields). Structs can have friends too. Friendship is not
   inherited.
@@ -615,8 +620,9 @@ var back = static_cast<Square*>(sh);        // back to the class (unchecked: it 
 - Layout: a class with virtual subs has its table pointer first (when its base has none, the
   base's fields follow it, 4 bytes on), then a table pointer for each interface it adds, then its
   fields. An interface is 4 bytes (its table pointer). A table (read-only data) holds the class's
-  type (its name, its base's type), the offset of its pointer in the object, a slot reserved for
-  destructors, then a sub and a `this` adjustment per slot.
+  type, the offset of its pointer in the object, a slot reserved for destructors, then a sub and a
+  `this` adjustment per slot. A type (for `dynamic_cast`): its name, its base's type and offset,
+  and each interface's type and table pointer offset.
 - Templates can declare classes and interfaces (`class Box ex Base<T> impl Getter<T>`); classes
   work in libraries and shared libraries (a program can extend a library's class); constant
   values (`constexpr`, struct constants) and consteval subs cannot hold objects with tables.
@@ -1408,8 +1414,7 @@ optimized).
 - No `switch`, `goto`, unions, 64-bit floats.
 - Arrays are passed by pointer (structs by value).
 - Lambdas do not capture the variables of the sub around them.
-- Classes have no destructors and no `dynamic_cast` yet (their tables reserve a slot for the one,
-  and hold the class's type for the other); no operator overloading.
+- Classes have no destructors yet (their tables reserve a slot for them); no operator overloading.
 - Uninitialized global arrays are stored in the program (zeroes).
 - The assembler replaces data symbols line by line: very big programs assemble slowly.
 
