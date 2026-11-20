@@ -43,6 +43,9 @@
 
 [
 	"return"
+	"switch"
+	"is"
+	"fall"
 	"if"
 	"else"
 	"while"

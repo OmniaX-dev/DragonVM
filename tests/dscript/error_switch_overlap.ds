@@ -1,0 +1,2 @@
+// expect-error: this value is a case already
+sub main() -> i32 { var n: i32 = 1; switch (n) { is 0..10 { } is 5 { } } return 0; }

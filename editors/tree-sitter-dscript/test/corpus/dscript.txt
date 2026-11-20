@@ -1530,3 +1530,34 @@ sub swap(var a: ref i32, var b: const ref Big) -> ref i32 { var ref: i32 = 1; re
         (number_literal))
       (return_statement
         (identifier)))))
+
+================================================================================
+switch
+================================================================================
+
+sub f(var n: i32) { switch (n) fall { is 1 or 2..5 { } else { } } var is: i32 = 1; }
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    (identifier)
+    (parameter_list
+      (parameter
+        (identifier)
+        (primitive_type)))
+    (block
+      (switch_statement
+        (identifier)
+        (switch_case
+          (number_literal)
+          (range_expression
+            (number_literal)
+            (number_literal))
+          (block))
+        (switch_else
+          (block)))
+      (variable_declaration
+        (identifier)
+        (primitive_type)
+        (number_literal)))))

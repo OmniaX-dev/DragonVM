@@ -1,0 +1,2 @@
+// expect-error: an empty range
+sub main() -> i32 { var n: i32 = 1; switch (n) { is 5..5 { } } return 0; }

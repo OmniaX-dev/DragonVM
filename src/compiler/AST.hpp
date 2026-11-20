@@ -79,7 +79,11 @@ namespace dscript
 		DeclIf, StaticAssert,
 		// Statements (SetVtables: a class constructor's own vtable pointers, see CodeGen::prepareConstructor)
 		// Destroy: value 0, a destructor's fields (in reverse) and its base's part; 1, a variable (var).
+		// Switch: a = the value, list = its cases (SwitchCase: list = the values (a range: a Binary
+		// "..", a..b without b), b = the body (a Block); value 1: else), value 1: fall (a case runs
+		// into the next one).
 		Block, If, While, DoWhile, For, ForIn, Return, Break, Continue, ExprStmt, LowBlock, Assert, DebugPrint, Defer, SetVtables, Destroy,
+		Switch, SwitchCase,
 		// Expressions
 		IntLit, FloatLit, StrLit, BoolLit, Null, Ident, Unary, Binary, Assign, Ternary, Call, Index,
 		Member, Cast, SizeofType, SizeofExpr, PreInc, PreDec, PostInc, PostDec, InitList, TypeArg,

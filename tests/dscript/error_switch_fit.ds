@@ -1,0 +1,2 @@
+// expect-error: 300 is not a value of the switch's type (u8)
+sub main() -> i32 { var n: u8 = 1; switch (n) { is 300 { } } return 0; }

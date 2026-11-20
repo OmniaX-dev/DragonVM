@@ -2079,11 +2079,67 @@ namespace dscript
 		return s;
 	}
 
+	// switch (value) [fall] { is A or B or C..D { ... } is E { ... } else { ... } }
+	Node* Parser::parseSwitch(void)
+	{
+		Node* n = make(NodeKind::Switch, next().pos);
+		expectPunct("(", "after 'switch'");
+		n->a = parseExpression();
+		expectPunct(")", "after the switch's value");
+		if (peek().kind == TokenKind::Identifier && peek().text == "fall" && isPunct("{", 1))
+		{
+			next();
+			n->value = 1;		// (a case runs into the next one, unless it breaks)
+		}
+		expectPunct("{", "to start the switch's cases (switch (value) { is ... { } else { } })");
+		while (!acceptPunct("}"))
+		{
+			Node* c = make(NodeKind::SwitchCase, peek().pos);
+			if (acceptKeyword("else"))
+			{
+				c->value = 1;
+				if (!isPunct("{"))
+					error(peek().pos, "'{' expected after else (each case has its block)");
+				c->b = parseBlock();
+				if (!isPunct("}"))
+					error(peek().pos, "else is the switch's last case");
+			}
+			else if (peek().kind == TokenKind::Identifier && peek().text == "is")
+			{
+				next();
+				do
+				{
+					// (a value: an expression without || / or, which separate the values)
+					Node* v = parseBinary(2);
+					if (isPunct(".."))
+					{
+						Node* r = make(NodeKind::Binary, next().pos);
+						r->name = "..";
+						r->a = v;
+						r->b = parseBinary(2);
+						v = r;
+					}
+					c->list.push_back(v);
+				}
+				while (acceptKeyword("or"));
+				if (!isPunct("{"))
+					error(peek().pos, "'{' expected after the case's values (is A or B { ... })");
+				c->b = parseBlock();
+			}
+			else
+				error(peek().pos, "'is' (a case: is A or B { ... }) or 'else' expected in the switch, found " + describe(peek()));
+			n->list.push_back(c);
+		}
+		return n;
+	}
+
 	Node* Parser::parseStatement(void)
 	{
 		const SourcePos pos = peek().pos;
 		if (isPunct("{"))
 			return parseBlock();
+		if (isKeyword("switch"))
+			return parseSwitch();
 		if (acceptPunct(";"))
 			return make(NodeKind::Block, pos);
 		if (isKeyword("var") || isKeyword("auto"))

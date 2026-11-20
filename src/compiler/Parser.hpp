@@ -79,6 +79,7 @@ namespace dscript
 			Node* parseInitializer(void);
 
 			Node* parseStatement(void);
+			Node* parseSwitch(void);
 			Node* parseBlock(void);
 			Node* atomicBlock(Node* body, const SourcePos& pos);
 			Node* parseLocalStatic(const SourcePos& pos, bool isStatic);

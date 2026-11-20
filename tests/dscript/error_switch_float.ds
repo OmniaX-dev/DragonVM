@@ -1,0 +1,2 @@
+// expect-error: a switch takes an integer, a character, a bool or an enum (not f32)
+sub main() -> i32 { var f: f32 = 1.0f; switch (f) { is 1 { } } return 0; }

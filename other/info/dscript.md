@@ -1219,6 +1219,35 @@ struct Chain {                       // a linked list: node pointers, null at th
   Its cursors only come from `begin()` and `next()`, so a `get()` without bound checks is safe
   there without being callable with any index.
 
+### switch
+```
+switch (key) {
+    is 'q' or 27 { quit(); }                // several values
+    is 'a'..'z' + 1 { letter(key); }        // a range (the end excluded, as in for-in)
+    is Keys.Enter { enter(); }              // constants, enum members, constexpr calls
+    else { other(); }
+}
+switch (n) fall {                           // fall: a case runs into the next one...
+    is 1 { setup(); }
+    is 2 { run(); break; }                  // ... unless it breaks
+    else { idle(); }
+}
+```
+- The value is an integer, a character, a `bool` or an enum (enum members and integers mix
+  freely: an enum is its integer type). The cases' values are known when compiling: literals,
+  constants, enum members, constexpr / consteval calls (one that cannot be evaluated is an error);
+  each must be a value of the switch's type, and a value can be in one case only.
+- Each case has its block (its locals end there, also when the next case runs). Without `fall`, a
+  case ends the switch; with it, a case runs into the next one unless it breaks. `break` leaves the
+  switch; `continue` belongs to the loop around it. `else` (the last case) runs when no case has
+  the value.
+- `or` separates a case's values (so a value is an expression without `||` / `or`: parentheses
+  for one).
+- A switch on an enum's members without `else` warns about the members no case has.
+- Code: a few values are compared one by one; dense values (they fill at least half of their span,
+  up to 1024) jump through a table; sparse ones are found by a binary search. A switch also works
+  in constexpr subs.
+
 ### defer
 `defer <statement or block>` runs that code when the block it is in is left, on every way out:
 the end of the block, `return`, `break` and `continue` (each runs the defers of the blocks it
@@ -1544,7 +1573,7 @@ optimized).
 
 - One source file (plus includes) per program (a library: several, compiled as one).
 - `#define` has no stringizing or token pasting.
-- No `switch`, `goto`, unions, 64-bit floats.
+- No `goto`, unions, 64-bit floats.
 - Arrays are passed by pointer (structs by value).
 - Lambdas do not capture the variables of the sub around them.
 - Uninitialized global arrays are stored in the program (zeroes).

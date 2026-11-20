@@ -39,7 +39,7 @@ namespace dscript
 		"var", "auto", "const", "constexpr", "consteval", "constinit", "sub", "template", "struct", "enum", "alias", "return", "if", "else", "while", "do", "for",
 		"break", "continue", "null", "true", "false", "cast", "bitcast", "sizeof", "low", "interrupt", "inline", "static", "priv", "readonly",
 		"assert", "static_assert", "debug_print", "namespace", "defer", "atomic", "and", "or", "not", "void",
-		"class", "interface", "ex", "impl", "friend", "prot", "virt", "pure", "override", "final", "abstract", "static_cast", "dynamic_cast", "operator", "implicit", nullptr
+		"class", "interface", "ex", "impl", "friend", "prot", "virt", "pure", "override", "final", "abstract", "static_cast", "dynamic_cast", "operator", "implicit", "switch", nullptr
 	};
 
 	bool Lexer::isKeyword(const std::string& word)

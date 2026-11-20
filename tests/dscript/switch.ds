@@ -1,0 +1,121 @@
+// expect-rv: 0
+// switch (value) { is A or B { } is C..D { } else { } }: case values known when compiling
+// (literals, constants, enum members, constexpr calls), ranges a..b (b excluded); each case ends
+// the switch, unless the switch is "fall" (a case runs into the next one, unless it breaks).
+// break leaves the switch (continue: the loop around it). Few cases: comparisons; dense ones: a
+// table of jumps; sparse ones: a binary search.
+#include(check.ds)
+
+enum Color { Red, Green, Blue, Alpha = 10 }
+enum Small: u8 { A = 1, B = 2 }
+constexpr LIMIT = 100;
+constexpr sub twice(var n: i32) -> i32 { return n * 2; }
+var g_dels: i32 = 0;
+struct Tracked { var id: i32; sub del() -> void { g_dels++; } }
+
+sub few(var n: i32) -> i32 {
+	switch (n) {
+		is 1 or 2 { return 10; }
+		is LIMIT { return 20; }
+		else { return 0; }
+	}
+	return -1;
+}
+
+sub dense(var n: i32) -> i32 {
+	var r: i32 = 0;
+	switch (n) {
+		is 0 { r = 1; }
+		is 1 or 2 { r = 2; }
+		is 3 { r = 3; }
+		is 5..8 { r = 4; }
+		is twice(5) { r = 5; }
+		is -1 { r = 6; }
+	}
+	return r;
+}
+
+sub sparse(var n: u32) -> u32 {
+	switch (n) {
+		is 7 { return 1; }
+		is 1000 { return 2; }
+		is 50000 or 60000 { return 3; }
+		is 0x80000000u { return 4; }
+		is 123456 { return 5; }
+		is 'a'..'z' + 1 { return 6; }
+		else { return 9; }
+	}
+	return 0;
+}
+
+sub fallen(var n: i32) -> i32 {
+	var log: i32 = 0;
+	switch (n) fall {
+		is 1 { log = log * 10 + 1; }
+		is 2 { log = log * 10 + 2; break; }
+		is 3 { log = log * 10 + 3; }
+		else { log = log * 10 + 4; }
+	}
+	return log;
+}
+
+sub colors(var c: Color) -> i32 {
+	switch (c) {
+		is Color.Red { return 1; }
+		is Color.Green or Color.Blue { return 2; }
+		is Color.Alpha { return 3; }
+	}
+	return 0;
+}
+
+sub mixed(var n: i32) -> i32 {
+	switch (n) { is Color.Blue { return 7; } is Small.B + 10 { return 8; } else { return 0; } }
+	return -1;
+}
+
+sub loops() -> i32 {
+	var sum: i32 = 0;
+	for (var i: i32 = 0; i < 6; i++)
+	{
+		switch (i) {
+			is 1 { continue; }
+			is 4 { break; }		// (leaves the switch, not the loop)
+			else { sum += i; }
+		}
+		sum += 100;
+	}
+	return sum;
+}
+
+sub scoped(var n: i32) -> i32 {
+	switch (n) fall {
+		is 1 { var t: Tracked; t.id = 1; }
+		is 2 { var t: Tracked; t.id = 2; }
+	}
+	return g_dels;
+}
+
+constexpr sub ct(var n: i32) -> i32 {
+	switch (n) fall { is 1 { n += 10; } is 2 { n += 100; break; } else { n = 0; } }
+	return n;
+}
+constexpr CT = ct(1);
+
+sub main() -> i32 {
+	check(1, few(1) == 10 && few(2) == 10 && few(100) == 20 && few(3) == 0);
+	check(2, dense(0) == 1 && dense(2) == 2 && dense(3) == 3 && dense(4) == 0 && dense(5) == 4 && dense(7) == 4 && dense(8) == 0
+		&& dense(10) == 5 && dense(-1) == 6 && dense(-2) == 0 && dense(1000) == 0);
+	check(3, sparse(7) == 1 && sparse(1000) == 2 && sparse(60000) == 3 && sparse(0x80000000u) == 4 && sparse(123456) == 5
+		&& sparse('q') == 6 && sparse('z') == 6 && sparse(8) == 9 && sparse(0xFFFFFFFFu) == 9);
+	check(4, fallen(1) == 12 && fallen(2) == 2 && fallen(3) == 34 && fallen(9) == 4);
+	check(5, colors(Color.Red) == 1 && colors(Color.Blue) == 2 && colors(Color.Alpha) == 3 && colors(cast<Color>(5)) == 0);
+	check(6, mixed(2) == 7 && mixed(12) == 8 && mixed(1) == 0);
+	check(7, loops() == (0 + 100) + (2 + 100) + (3 + 100) + 100 + (5 + 100));
+	check(8, scoped(1) == 2 && scoped(2) == 3);
+	check(9, CT == 111 && ct(3) == 0);
+	var ch: u8 = 'x';
+	switch (ch) { is 'x' { check(10, true); } else { check(10, false); } }
+	var flag = true;
+	switch (flag) { is true { check(11, true); } is false { check(11, false); } }
+	return result();
+}

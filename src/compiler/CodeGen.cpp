@@ -8691,6 +8691,9 @@ namespace dscript
 			case NodeKind::ForIn:
 				genStatement(forInLoop(s));
 			break;
+			case NodeKind::Switch:
+				genSwitch(s);
+			break;
 			case NodeKind::For:
 			{
 				m_scopes.push_back({});
@@ -8847,11 +8850,12 @@ namespace dscript
 			case NodeKind::Continue:
 			{
 				const bool isBreak = s->kind == NodeKind::Break;
-				if (m_loops.empty())
-					error(s->pos, std::string(isBreak ? "break" : "continue") + (m_inDefer > 0 ? " cannot leave a defer" : " outside of a loop"));
-				if (hasDefers(m_loops.back().deferDepth))
+				if (m_loops.empty() || (!isBreak && m_loops.back().continueLabel.empty()))
+					error(s->pos, std::string(isBreak ? "break" : "continue") + (m_inDefer > 0 ? " cannot leave a defer" : isBreak ? " outside of a loop or a switch" : " outside of a loop"));
+				const size_t depth = isBreak || m_loops.back().continueDepth == SIZE_MAX ? m_loops.back().deferDepth : m_loops.back().continueDepth;
+				if (hasDefers(depth))
 				{
-					genDefers(m_loops.back().deferDepth);
+					genDefers(depth);
 					loc(s->pos);
 				}
 				emit("jmp $" + (isBreak ? m_loops.back().breakLabel : m_loops.back().continueLabel));
@@ -8865,6 +8869,197 @@ namespace dscript
 		}
 		if (m_regDepth != m_stmtDepth)
 			error(s->pos, "internal error: temporaries left after a statement");
+	}
+
+	// ======================================== switch ========================================
+	// The cases' values (constants of the switch's type): [lo, hi] and the case, sorted (overlaps are
+	// errors); elseCase: the else (-1: none). A switch on an enum's members without else: a warning
+	// for the members no case has.
+	void CodeGen::switchEntries(Node* s, Type* t, std::vector<SwitchEntry>& entries, int& elseCase)
+	{
+		entries.clear();
+		elseCase = -1;
+		const bool isBool = t->kind == Type::Kind::Bool;
+		const int64_t minV = isBool ? 0 : t->isSigned() ? -(int64_t(1) << (8 * t->size() - 1)) : 0;
+		const int64_t maxV = isBool ? 1 : t->isSigned() ? (int64_t(1) << (8 * t->size() - 1)) - 1 : (int64_t(1) << (8 * t->size())) - 1;
+		std::string enumName;
+		bool allEnum = true;
+		auto l_value = [&](Node* x) -> int64_t {
+			check(x);
+			if (!x->isConst)
+				error(x->pos, "a case's value is known when compiling (a literal, a constant, an enum member, a constexpr call)" +
+					(x->kind == NodeKind::Call && !m_ctWhy.empty() ? std::string(": ") + m_ctWhy : std::string()));
+			Type* xt = decay(x->type);
+			if (xt == nullptr || !xt->isInteger())
+				error(x->pos, "a case's value is an integer, a character, a bool or an enum member (not " + (xt ? xt->name() : std::string("?")) + ")");
+			const int64_t v = xt->isSigned() ? (int64_t)(int32_t)x->constValue : x->constValue;
+			if (v < minV || v > maxV)
+				error(x->pos, std::to_string(v) + " is not a value of the switch's type (" + t->name() + ")");
+			return v;
+		};
+		for (size_t ci = 0; ci < s->list.size(); ci++)
+		{
+			Node* c = s->list[ci];
+			if (c->value == 1)
+			{
+				elseCase = (int)ci;
+				continue;
+			}
+			for (Node* v : c->list)
+			{
+				const bool range = v->kind == NodeKind::Binary && v->name == "..";
+				const int64_t lo = l_value(range ? v->a : v);
+				const int64_t hi = range ? l_value(v->b) - 1 : lo;
+				if (range && hi < lo)
+					error(v->pos, "an empty range (a..b is from a to b - 1)");
+				Node* single = range ? nullptr : v;
+				if (single != nullptr && single->kind == NodeKind::Member && single->a != nullptr && single->a->kind == NodeKind::Ident && m_enums.count(single->a->name) > 0
+					&& (enumName.empty() || enumName == single->a->name))
+					enumName = single->a->name;
+				else
+					allEnum = false;
+				entries.push_back({ lo, hi, ci, v->pos });
+			}
+		}
+		std::sort(entries.begin(), entries.end(), [](const SwitchEntry& a, const SwitchEntry& b) { return a.lo < b.lo; });
+		for (size_t i = 1; i < entries.size(); i++)
+		{
+			if (entries[i].lo <= entries[i - 1].hi)
+				error(entries[i].pos, "this value is a case already (" + posString(entries[i - 1].pos) + ")");
+		}
+		if (elseCase < 0 && allEnum && !enumName.empty() && !m_discarding && m_warnedSwitches.insert(posKey(s->pos)).second)
+		{
+			std::string missing;
+			for (const Node* m : m_enums[enumName].decl->list)
+			{
+				const int64_t v = m_enums[enumName].values[m->name];
+				const bool covered = std::any_of(entries.begin(), entries.end(), [&](const SwitchEntry& e) { return v >= e.lo && v <= e.hi; });
+				if (!covered)
+					missing += (missing.empty() ? "" : ", ") + m->name;
+			}
+			if (!missing.empty())
+				warning(s->pos, "switch on " + enumName + " without else: no case for " + missing);
+		}
+	}
+
+	void CodeGen::genSwitch(Node* s)
+	{
+		check(s->a);
+		Type* t = decay(s->a->type);
+		if (t != nullptr && t->kind == Type::Kind::Struct)
+		{
+			requireConvertible(s->a, m_types.i32(), "as a switch's value");		// (an implicit operator cast)
+			t = decay(s->a->type);
+		}
+		if (t == nullptr || !t->isInteger())
+			error(s->a->pos, "a switch takes an integer, a character, a bool or an enum (not " + (t ? t->name() : std::string("?")) + ")");
+		std::vector<SwitchEntry> entries;
+		int elseCase = -1;
+		switchEntries(s, t, entries, elseCase);
+		const bool fall = s->value == 1;
+		const bool isSigned = t->isSigned();
+		std::vector<std::string> labels;
+		for (size_t i = 0; i < s->list.size(); i++)
+			labels.push_back(newLabel());
+		const std::string lEnd = newLabel();
+		const std::string lDefault = elseCase >= 0 ? labels[(size_t)elseCase] : lEnd;
+		const std::string less = isSigned ? "jgr" : "jgru", more = isSigned ? "jls" : "jlsu";	// (r < x: x > ACC; r > x: x < ACC)
+
+		// The value (its temporaries destroyed), then the case it is.
+		const size_t mark = beginExpr();
+		Reg r = gen(s->a);
+		endExpr(mark);
+		auto l_chain = [&](size_t from, size_t to) {
+			for (size_t i = from; i < to; i++)
+			{
+				const SwitchEntry& e = entries[i];
+				if (e.lo == e.hi)
+				{
+					emit("mov ACC, " + r);
+					emit("jeq $" + labels[e.c] + ", " + imm(e.lo));
+					continue;
+				}
+				const std::string skip = newLabel();
+				emit("mov ACC, " + r);
+				emit(less + " $" + skip + ", " + imm(e.lo));
+				emit(more + " $" + skip + ", " + imm(e.hi));
+				emit("jmp $" + labels[e.c]);
+				label(skip);
+			}
+			emit("jmp $" + lDefault);
+		};
+		std::function<void(size_t, size_t)> l_search = [&](size_t from, size_t to) {
+			if (to - from <= 3)
+				return l_chain(from, to);
+			const size_t mid = (from + to) / 2;
+			const SwitchEntry& e = entries[mid];
+			const std::string left = newLabel(), right = newLabel();
+			emit("mov ACC, " + r);
+			emit(less + " $" + left + ", " + imm(e.lo));
+			emit(more + " $" + right + ", " + imm(e.hi));
+			emit("jmp $" + labels[e.c]);
+			label(left);
+			l_search(from, mid);
+			label(right);
+			l_search(mid + 1, to);
+		};
+		int64_t covered = 0;
+		for (const SwitchEntry& e : entries)
+			covered += e.hi - e.lo + 1;
+		const int64_t span = entries.empty() ? 0 : entries.back().hi - entries.front().lo + 1;
+		if (entries.size() >= 4 && span <= 1024 && covered * 2 >= span)
+		{
+			// Dense: a table of jumps (each one jmp, 5 bytes), at the value minus the smallest one.
+			const int64_t low = entries.front().lo;
+			const std::string table = newLabel();
+			addImmediate(r, -low);
+			emit("mov ACC, " + r);
+			emit("jlsu $" + lDefault + ", " + imm(span - 1));		// (span - 1 < r - low: not in it)
+			emit("mulip " + r + ", 5");
+			Reg b = alloc(s->pos);
+			emit("mov " + b + ", $" + table);
+			emit("addip " + r + ", " + b);
+			release(b);
+			m_out->push_back(std::string("\t") + LowMark + "mov IP, " + r);
+			label(table);
+			size_t k = 0;
+			for (int64_t v = low; v < low + span; v++)
+			{
+				while (k < entries.size() && entries[k].hi < v)
+					k++;
+				const std::string& target = (k < entries.size() && v >= entries[k].lo) ? labels[entries[k].c] : lDefault;
+				m_out->push_back(std::string("\t") + LowMark + "jmp $" + target);
+			}
+		}
+		else if (entries.size() > 4)
+			l_search(0, entries.size());		// sparse: a binary search
+		else
+			l_chain(0, entries.size());
+		release(r);
+
+		// The cases: break leaves the switch (continue: the loop around it); without fall, a case ends it.
+		size_t continueDepth = 0;
+		std::string continueLabel;
+		if (!m_loops.empty())
+		{
+			continueLabel = m_loops.back().continueLabel;
+			continueDepth = m_loops.back().continueDepth == SIZE_MAX ? m_loops.back().deferDepth : m_loops.back().continueDepth;
+		}
+		m_loops.push_back({ lEnd, continueLabel, m_defers.size(), continueDepth });
+		for (size_t i = 0; i < s->list.size(); i++)
+		{
+			label(labels[i]);
+			genStatement(s->list[i]->b);
+			if (!fall && i + 1 < s->list.size())
+			{
+				const auto& body = s->list[i]->b->list;
+				const NodeKind last = body.empty() ? NodeKind::Block : body.back()->kind;
+				if (last != NodeKind::Return && last != NodeKind::Break && last != NodeKind::Continue)
+					emit("jmp $" + lEnd);
+			}
+		}
+		m_loops.pop_back();
+		label(lEnd);
 	}
 
 	// ======================================= Low blocks =====================================
@@ -10383,6 +10578,35 @@ namespace dscript
 		{
 			case NodeKind::SetVtables:
 				ctFail(s->pos, "objects of classes with virtual subs (or interfaces) are not built when compiling");
+			case NodeKind::Switch:
+			{
+				// The case the value is (or else), then the next ones while they fall.
+				check(s->a);
+				Type* t = decay(s->a->type);
+				if (t == nullptr || !t->isInteger())
+					ctFail(s->a->pos, "a switch on " + (t ? t->name() : std::string("?")));
+				const int64_t v = ctNumber(ctEval(s->a), t);
+				std::vector<SwitchEntry> entries;
+				int elseCase = -1;
+				switchEntries(s, t, entries, elseCase);
+				int start = elseCase;
+				for (const SwitchEntry& e : entries)
+				{
+					if (v >= e.lo && v <= e.hi)
+						start = (int)e.c;
+				}
+				for (size_t i = start < 0 ? s->list.size() : (size_t)start; i < s->list.size(); i++)
+				{
+					const CtFlow flow = ctStatement(s->list[i]->b, result);
+					if (flow == CtFlow::Break)
+						return CtFlow::Normal;
+					if (flow != CtFlow::Normal)
+						return flow;
+					if (s->value != 1)
+						break;
+				}
+				return CtFlow::Normal;
+			}
 			case NodeKind::Block:
 			{
 				const size_t mark = m_ct.size();

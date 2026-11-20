@@ -1,0 +1,2 @@
+// expect-error: continue outside of a loop
+sub main() -> i32 { var n: i32 = 1; switch (n) { is 1 { continue; } } return 0; }

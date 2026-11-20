@@ -389,6 +389,7 @@ module.exports = grammar({
 			$.do_statement,
 			$.for_statement,
 			$.for_in_statement,
+			$.switch_statement,
 			$.return_statement,
 			$.break_statement,
 			$.continue_statement,
@@ -448,6 +449,15 @@ module.exports = grammar({
 			seq(field('start', alias($._number_dotdot, $.number_literal)), field('end', $._expression)),
 		),
 		_number_dotdot: _ => token(prec(1, /[0-9][0-9_]*[uU]?\.\./)),
+		// switch (value) [fall] { is A or B or C..D { ... } else { ... } }
+		switch_statement: $ => seq(
+			'switch', '(', field('value', $._expression), ')', optional(field('fall', 'fall')),
+			'{', repeat($.switch_case), optional($.switch_else), '}',
+		),
+		switch_case: $ => seq('is', $._case_value, repeat(seq('or', $._case_value)), field('body', $.block)),
+		// (a value: no || / or, which separate the values)
+		_case_value: $ => prec(PREC.OR + 1, choice($.range_expression, $._expression)),
+		switch_else: $ => seq('else', field('body', $.block)),
 		return_statement: $ => seq('return', optional($._expression), ';'),
 		break_statement: _ => seq('break', ';'),
 		continue_statement: _ => seq('continue', ';'),

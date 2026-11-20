@@ -142,7 +142,8 @@ namespace dscript
 				Type* type { nullptr }; };	// type: the enum's integer type (i32 unless given: enum E: u8 { ... })
 			struct AliasInfo { Node* decl { nullptr }; bool resolving { false }; Type* type { nullptr }; };
 			// deferDepth: the defer frames outside the loop (break / continue run the ones above).
-			struct Loop { std::string breakLabel; std::string continueLabel; size_t deferDepth { 0 }; };
+			// (a switch: continue is its loop's, with that loop's defer depth: continueDepth; SIZE_MAX: deferDepth)
+			struct Loop { std::string breakLabel; std::string continueLabel; size_t deferDepth { 0 }; size_t continueDepth { SIZE_MAX }; };
 			// A defer: its statement, and the variables it sees (those declared before it).
 			// destroys: a local's destructor (skipped when a return moves the local out).
 			struct Deferred { Node* body; std::vector<std::map<std::string, VarInfo*>> scopes; int atomic; VarInfo* destroys { nullptr }; };
@@ -416,6 +417,12 @@ namespace dscript
 			bool m_noUserConv { false };
 			// The label of a sub (an operator cast: by the type it gives, the same in every program).
 			std::string subLabelName(FuncInfo* f, const std::string& name);
+
+			// ===== switch =====
+			struct SwitchEntry { int64_t lo; int64_t hi; size_t c; SourcePos pos; };
+			void switchEntries(Node* s, Type* t, std::vector<SwitchEntry>& entries, int& elseCase);
+			void genSwitch(Node* s);
+			std::set<std::string> m_warnedSwitches;
 
 			// ===== Templates in analysis (the language server) =====
 			struct ParamUse { std::string name; SourcePos def; std::set<std::string> types; bool probe { false }; };
