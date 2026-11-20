@@ -1,0 +1,73 @@
+// expect-rv: 0
+// References: var v: ref T (the caller's variable, no copy: changing v changes it), const ref T
+// (also values: literals, constants, call results, conversions, in a temporary), results
+// -> ref T (the call is what it refers to: f() = x works). Passed as pointers; a class
+// reference may refer to a derived object (its virtual subs are the object's).
+#include(check.ds)
+
+struct Big { var a: i32[8]; var tag: i32; }
+var g_big: Big;
+var g_copies: i32 = 0;
+
+struct Counted {
+	var v: i32;
+	sub new(var v: i32) -> void { this->v = v; }
+	sub new(var o: const Counted*) -> void { this->v = o->v; g_copies++; }
+}
+
+class Shape { virt readonly sub sides() -> i32 { return 0; } }
+class Square ex Shape { override readonly sub sides() -> i32 { return 4; } }
+
+struct Grid {
+	var cells: i32[4];
+	sub operator[](var i: i32) -> ref i32 { return this->cells[i]; }
+	sub at(var i: i32) -> const ref i32 { return this->cells[i]; }
+}
+
+sub bump(var x: ref i32) -> void { x++; }
+sub swap(var a: ref i32, var b: ref i32) -> void { var t = a; a = b; b = t; }
+sub fill(var b: ref Big, var n: i32) -> void { b.tag = n; b.a[7] = n * 2; }
+sub peek(var b: const ref Big) -> i32 { return b.tag + b.a[7]; }
+sub twice(var x: const ref i32) -> i32 { return x * 2; }
+sub value(var c: const ref Counted) -> i32 { return c.v; }
+sub count(var s: const ref Shape) -> i32 { return s.sides(); }
+sub pick(var a: ref i32, var b: ref i32, var first: bool) -> ref i32 { if (first) return a; return b; }
+sub global() -> ref Big { return g_big; }
+sub forward(var x: ref i32) -> void { bump(x); }				// (a reference passed on)
+sub address(var x: ref i32) -> i32* { return &x; }
+
+template(T) { sub inc(var x: ref T) -> void { x += 1; } }
+
+sub main() -> i32 {
+	var n: i32 = 1;
+	bump(n);
+	forward(n);
+	check(1, n == 3);
+	var m: i32 = 9;
+	swap(n, m);
+	check(2, n == 9 && m == 3);
+	var big: Big;
+	fill(big, 5);
+	check(3, big.tag == 5 && big.a[7] == 10 && peek(big) == 15);
+	check(4, twice(21) == 42 && twice(n) == 18);					// (a literal: in a temporary)
+	var c: Counted(7);
+	check(5, value(c) == 7 && value(Counted.new(8)) == 8 && g_copies == 0);
+	var sq: Square;
+	check(6, count(sq) == 4);
+	pick(n, m, false) = 40;
+	check(7, m == 40 && pick(n, m, true) == 9);
+	global().tag = 3;
+	check(8, g_big.tag == 3);
+	var g: Grid;
+	g[2] = 6;
+	g[2] += 1;
+	check(9, g.cells[2] == 7 && g.at(2) == 7);
+	check(10, address(n) == &n);
+	var f: u8 = 4;
+	inc(f);
+	check(11, f == 5);
+	var fp: sub(ref i32) -> void = bump;
+	fp(n);
+	check(12, n == 10);
+	return result();
+}

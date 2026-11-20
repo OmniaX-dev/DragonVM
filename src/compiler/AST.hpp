@@ -26,6 +26,7 @@ namespace dscript
 		bool resolved { false };			// Named: name is already the full name
 		TypeSyntax* base { nullptr };		// Pointer / Array; Function: the return type (nullptr: void)
 		bool constTarget { false };			// Pointer: const T* (what it points at is constant)
+		bool isRef { false };				// Pointer: ref T / const ref T (a reference: base is T)
 		struct Node* count { nullptr };		// Array (a constant expression; nullptr: [], the size of the value)
 		std::vector<TypeSyntax*> params;	// Function
 		int variadic { 0 };					// Function: 1 ... (more arguments), 2 ...typed (with their types)
@@ -83,7 +84,9 @@ namespace dscript
 		IntLit, FloatLit, StrLit, BoolLit, Null, Ident, Unary, Binary, Assign, Ternary, Call, Index,
 		Member, Cast, SizeofType, SizeofExpr, PreInc, PreDec, PostInc, PostDec, InitList, TypeArg,
 		// Construct: a struct value built from a: its constructor func (a temporary; an implicit conversion)
-		Construct
+		// (or T.new(args): a == nullptr, list); Materialize: a's value in a temporary, its address (a
+		// value given to a const ref parameter)
+		Construct, Materialize
 	};
 
 	// One node type for the whole tree: the fields used depend on the kind (see Parser.cpp).
@@ -162,7 +165,9 @@ namespace dscript
 		// (virtual subs are called through its table), 2: the object is a variable (its type is
 		// exactly the struct: no table needed). Call: callFlags 4: Base::new(...) as a statement of
 		// a constructor (it builds the base's part); vslot: a virtual call (the slot in the table of
-		// the struct whose sub it calls; -1: a direct call).
+		// the struct whose sub it calls; -1: a direct call). References: callFlags 16 on an Ident of a
+		// ref parameter / a Call of a sub returning a ref: the pointer itself (not what it refers to);
+		// 32 on the & a reference argument became.
 		StructInfo* methodClass { nullptr };
 		int callFlags { 0 };
 		int vslot { -1 };

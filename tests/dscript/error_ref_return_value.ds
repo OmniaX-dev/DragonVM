@@ -1,0 +1,4 @@
+// expect-error: f returns a reference (ref i32): to something in memory that lives on, not a value
+var g: i32;
+sub f() -> ref i32 { return g + 1; }
+sub main() -> i32 { return f(); }

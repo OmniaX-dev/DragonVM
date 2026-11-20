@@ -1,0 +1,3 @@
+// expect-error: a ref i32 for parameter 'x' of bump takes a variable of type i32 (something in memory), not a u8
+sub bump(var x: ref i32) -> void { x++; }
+sub main() -> i32 { var b: u8 = 1; bump(b); return 0; }

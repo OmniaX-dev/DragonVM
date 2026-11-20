@@ -19,6 +19,9 @@ namespace dscript
 		// Pointer: what it points at is constant (const T*: reading it is fine, changing it through
 		// the pointer is an error). Values have no const of their own: only what a pointer points at.
 		bool constTarget { false };
+		// Pointer: a reference (ref T / const ref T: a parameter or a result; its uses are what it
+		// refers to). It is passed as a pointer.
+		bool isRef { false };
 		// A template's value argument (not a type: Array<u32, 16>): its value is the compile-time
 		// constant valueConst (of type base); name() is how it is written in the instance's name.
 		bool valueArg { false };
@@ -36,6 +39,7 @@ namespace dscript
 		bool isScalar(void) const { return isInteger() || isFloat() || isPointer() || isFunction(); }
 		bool isVoidPointer(void) const { return kind == Kind::Pointer && base->kind == Kind::Void; }
 		bool isConstPointer(void) const { return kind == Kind::Pointer && constTarget; }
+		bool isReference(void) const { return kind == Kind::Pointer && isRef; }
 		uint32_t size(void) const;
 		// brief: nameless structs as "struct { ... }" (without where they are declared)
 		std::string name(bool brief = false) const;
@@ -118,7 +122,7 @@ namespace dscript
 			Type* u32(void) { return m_u32; }
 			Type* f32(void) { return m_f32; }
 			Type* nullType(void) { return m_null; }
-			Type* pointer(Type* base, bool constTarget = false);
+			Type* pointer(Type* base, bool constTarget = false, bool isRef = false);
 			// A template's value argument (interned by its type and text).
 			Type* valueArg(Type* type, const std::string& text, const std::string& constName);
 			Type* findValueArg(Type* type, const std::string& text);

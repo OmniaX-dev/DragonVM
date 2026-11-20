@@ -1,0 +1,3 @@
+// expect-error: it points at a constant (const i32*): it cannot be changed through it: a ref i32 for parameter 'x' of bump could change it
+sub bump(var x: ref i32) -> void { x++; }
+sub main() -> i32 { var n: i32 = 3; var p: const i32* = &n; bump(*p); return 0; }

@@ -1,0 +1,13 @@
+// References in a library's subs (references_library.ds).
+namespace rf {
+	var copies: i32 = 0;
+	struct Val {
+		var v: i32;
+		sub new(var v: i32) -> void { this->v = v; }
+		sub new(var o: const ref Val) -> void { this->v = o.v; copies++; }		// (the copy constructor)
+		readonly sub operator==(var o: const ref Val) -> bool { return this->v == o.v; }
+	}
+	var store: i32[4];
+	sub slot(var i: i32) -> ref i32 { return store[i]; }
+	sub add(var to: ref Val, var n: const ref i32) -> void { to.v += n; }
+}

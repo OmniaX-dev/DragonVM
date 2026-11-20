@@ -3890,6 +3890,10 @@
             "named": true
           },
           {
+            "type": "ref_type",
+            "named": true
+          },
+          {
             "type": "scoped_type_identifier",
             "named": true
           },
@@ -4012,6 +4016,10 @@
             "named": true
           },
           {
+            "type": "ref_type",
+            "named": true
+          },
+          {
             "type": "scoped_type_identifier",
             "named": true
           },
@@ -4064,6 +4072,10 @@
         },
         {
           "type": "primitive_type",
+          "named": true
+        },
+        {
+          "type": "ref_type",
           "named": true
         },
         {
@@ -5230,6 +5242,10 @@
             "named": true
           },
           {
+            "type": "ref_type",
+            "named": true
+          },
+          {
             "type": "scoped_type_identifier",
             "named": true
           },
@@ -5708,6 +5724,66 @@
           },
           {
             "type": "update_expression",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "ref_type",
+    "named": true,
+    "fields": {
+      "type": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "array_type",
+            "named": true
+          },
+          {
+            "type": "base_type",
+            "named": true
+          },
+          {
+            "type": "const_type",
+            "named": true
+          },
+          {
+            "type": "function_type",
+            "named": true
+          },
+          {
+            "type": "generic_type",
+            "named": true
+          },
+          {
+            "type": "parenthesized_type",
+            "named": true
+          },
+          {
+            "type": "pointer_type",
+            "named": true
+          },
+          {
+            "type": "primitive_type",
+            "named": true
+          },
+          {
+            "type": "scoped_type_identifier",
+            "named": true
+          },
+          {
+            "type": "struct_type",
+            "named": true
+          },
+          {
+            "type": "type_identifier",
+            "named": true
+          },
+          {
+            "type": "value_type",
             "named": true
           }
         ]
@@ -8401,6 +8477,10 @@
   {
     "type": "readonly_modifier",
     "named": true
+  },
+  {
+    "type": "ref",
+    "named": false
   },
   {
     "type": "return",

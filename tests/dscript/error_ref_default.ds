@@ -1,0 +1,4 @@
+// expect-error: a reference parameter has no default value
+var g: i32;
+sub f(var x: ref i32 = 3) -> void { }
+sub main() -> i32 { return 0; }

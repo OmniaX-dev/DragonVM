@@ -81,6 +81,8 @@ namespace dscript
 		return s;
 	}
 
+	static bool boundReference(const Node* n);
+
 	static bool plainName(const std::string& name) { return std::all_of(name.begin(), name.end(), [](char c) { return std::isalnum((unsigned char)c) || c == '_'; }); }
 
 	static std::string dataSymbol(const std::string& name, bool isStatic)
@@ -762,7 +764,14 @@ namespace dscript
 				error(ts->pos, "unknown type: " + written);
 			}
 			case TypeSyntax::Kind::Pointer:
-				return m_types.pointer(resolveType(ts->base), ts->constTarget);
+			{
+				Type* base = resolveType(ts->base);
+				if (ts->isRef && (base->isReference() || base->kind == Type::Kind::Void || base->kind == Type::Kind::Array))
+					error(ts->pos, "ref " + base->name() + ": a reference refers to a value (not void, an array or a reference)");
+				if (!ts->isRef && base->isReference())
+					error(ts->pos, "a pointer to a reference (" + base->name() + "*): use a pointer to the value");
+				return m_types.pointer(base, ts->constTarget, ts->isRef);
+			}
 			case TypeSyntax::Kind::Array:
 			{
 				if (ts->count == nullptr)
@@ -770,6 +779,7 @@ namespace dscript
 				Type* base = resolveType(ts->base);
 				if (base->kind == Type::Kind::Void)
 					error(ts->pos, "arrays of void are not allowed");
+				rejectReference(base, ts->pos, "array elements");
 				if (base->kind == Type::Kind::Struct)
 				{
 					resolveStruct(base->structInfo, ts->pos);
@@ -857,6 +867,7 @@ namespace dscript
 			field.type = resolveType(f->typeSyntax);
 			if (field.type->kind == Type::Kind::Void)
 				error(f->pos, "fields cannot be void");
+			rejectReference(field.type, f->pos, "fields");
 			requireValueType(field.type, f->pos, "a field");
 			if (field.type->kind == Type::Kind::Struct)
 				resolveStruct(field.type->structInfo, f->pos);
@@ -1295,7 +1306,7 @@ namespace dscript
 	{
 		switch (t->kind)
 		{
-			case Type::Kind::Pointer: return mangle(t->base) + (t->constTarget ? "c" : "p");
+			case Type::Kind::Pointer: return mangle(t->base) + (t->isRef ? (t->constTarget ? "cr" : "r") : (t->constTarget ? "c" : "p"));
 			case Type::Kind::Array: return mangle(t->base) + "a" + std::to_string(t->count);
 			case Type::Kind::Struct:
 			{
@@ -1345,6 +1356,8 @@ namespace dscript
 			params.push_back(t);
 			f->paramNames.push_back(p->name);
 			f->defaults.push_back(p->a);
+			if (p->a != nullptr && t->isReference())
+				error(p->a->pos, "a reference parameter has no default value (it refers to what the caller gives)");
 			if (p->a)
 				seenDefault = true;
 			else if (seenDefault)
@@ -1514,11 +1527,15 @@ namespace dscript
 		if (c >= 0 || m_noUserConv || from->type == nullptr)
 			return c;
 		UserConv u;
+		if (to->isReference())
+			return (to->constTarget && !boundReference(from) && userConversion(from, to->base, u, false, false)) ? u.cost + 1 : -1;
 		return userConversion(from, to, u, false, false) ? u.cost : -1;
 	}
 
 	int CodeGen::builtinConversionCost(Node* from, Type* to)
 	{
+		if (to != nullptr && to->isReference())
+			return referenceCost(from, to);
 		Type* f = from->type;
 		if (f == nullptr)
 		{
@@ -1584,6 +1601,11 @@ namespace dscript
 
 	void CodeGen::requireConvertible(Node* from, Type* to, const std::string& context)
 	{
+		if (to->isReference())
+		{
+			bindReference(from, to, context);		// (its address, or a temporary's)
+			return;
+		}
 		if (builtinConversionCost(from, to) >= 0)
 			return;
 		UserConv u;
@@ -1674,6 +1696,16 @@ namespace dscript
 					error(pos, "'" + f->decl->shortName + "' is not a readonly sub (it may change the " + args[0]->type->base->name() + "), and " +
 						(why.empty() ? "this one is reached through a const pointer" : why) + " (if it does not change it: readonly sub " + f->decl->shortName + "(...))");
 				}
+			}
+		}
+		if (best == nullptr && funcs.size() == 1 && funcs[0]->type != nullptr && args.size() <= funcs[0]->type->params.size() && args.size() >= funcs[0]->requiredParams)
+		{
+			// (one sub: the reference parameter that does not take its argument says why)
+			FuncInfo* f = funcs[0];
+			for (size_t i = 0; i < args.size(); i++)
+			{
+				if (f->type->params[i]->isReference() && args[i]->type != nullptr && conversionCost(args[i], f->type->params[i]) < 0)
+					bindReference(args[i], f->type->params[i], "for parameter '" + f->paramNames[i] + "' of " + f->name);
 			}
 		}
 		if (best == nullptr)
@@ -2011,6 +2043,14 @@ namespace dscript
 				e->type = e->a->type;
 			}
 			break;
+			case NodeKind::Materialize:
+			{
+				// (a value for a const ref parameter: in a temporary)
+				check(e->a);
+				Type* t = e->a->type;
+				e->type = m_types.pointer(t, true);
+			}
+			break;
 			case NodeKind::Construct:
 			if (e->a == nullptr)
 			{
@@ -2069,6 +2109,20 @@ namespace dscript
 		resolveTemplateIdent(e);
 		if (VarInfo* v = lookupVar(e->name))
 		{
+			if (v->type != nullptr && v->type->isReference() && (e->callFlags & 16) == 0)
+			{
+				// A reference parameter: what it refers to (*the pointer).
+				Node* raw = new Node(*e);
+				raw->callFlags |= 16;
+				const SourcePos pos = e->pos;
+				*e = Node();
+				e->kind = NodeKind::Unary;
+				e->name = "*";
+				e->pos = pos;
+				e->a = raw;
+				checkUnary(e);
+				return;
+			}
 			if (m_options.index != nullptr && !m_discarding)
 				indexName(e->pos, (e->text.empty() ? e->name : e->text), v->defPos, hoverVar(v));
 			e->var = v;
@@ -3836,6 +3890,117 @@ namespace dscript
 		release(r);
 	}
 
+	// ===================================== References =====================================
+	// A ref T parameter is a pointer the caller passes (to its argument); in the sub, the name is
+	// what it points at. A sub returning ref T returns a pointer; its call is what it points at.
+
+	// An argument (or a returned value) for a reference: its address (an & node, marked), or (const
+	// ref T, a value) the value in a temporary (Materialize: its address).
+	static bool boundReference(const Node* n)
+	{
+		return (n->kind == NodeKind::Unary && n->name == "&" && (n->callFlags & 32) != 0) || n->kind == NodeKind::Materialize;
+	}
+
+	void CodeGen::bindReference(Node* from, Type* to, const std::string& context)
+	{
+		if (boundReference(from))
+			return;
+		Type* t = to->base;
+		Type* ft = from->type;
+		auto l_wrap = [&](NodeKind kind) {
+			Node* inner = new Node(*from);
+			const SourcePos pos = from->pos;
+			*from = Node();
+			from->pos = pos;
+			from->kind = kind;
+			from->a = inner;
+			if (kind == NodeKind::Unary)
+				from->name = "&";
+			from->callFlags = 32;
+			check(from);
+		};
+		const bool related = ft == t || (ft != nullptr && ft->kind == Type::Kind::Struct && t->kind == Type::Kind::Struct && derives(ft->structInfo, t->structInfo));
+		const bool structTemp = (from->kind == NodeKind::Call || from->kind == NodeKind::Construct) && ft != nullptr && ft->kind == Type::Kind::Struct;
+		if (related && (from->lvalue || structTemp) && (to->constTarget || !from->readOnly))
+		{
+			if (!to->constTarget && structTemp)
+				error(from->pos, "a ref " + t->name() + " " + context + " takes a variable (something in memory), not a call's result (const ref " + t->name() + " takes values too)");
+			l_wrap(NodeKind::Unary);
+			return;
+		}
+		if (!to->constTarget)
+		{
+			if (related && from->readOnly)
+				error(from->pos, (from->readOnlyWhy.empty() ? std::string("this is a constant") : from->readOnlyWhy) + ": a ref " + t->name() + " " + context +
+					" could change it (const ref " + t->name() + " cannot)");
+			error(from->pos, "a ref " + t->name() + " " + context + " takes a variable of type " + t->name() + " (something in memory)" +
+				(ft != nullptr ? ", not " + std::string(from->lvalue ? "a " + ft->name() : "a value") : std::string()) + " (const ref " + t->name() + " takes values too)");
+		}
+		// const ref T: a value of T (or what converts to it) in a temporary.
+		if (!related)
+			requireConvertible(from, t, context);
+		if ((from->kind == NodeKind::Call || from->kind == NodeKind::Construct) && from->type != nullptr && from->type->kind == Type::Kind::Struct)
+			l_wrap(NodeKind::Unary);
+		else
+			l_wrap(NodeKind::Materialize);
+	}
+
+	// The cost of an argument for a reference (-1: it cannot be one).
+	int CodeGen::referenceCost(Node* from, Type* to)
+	{
+		Type* t = to->base;
+		Type* ft = from->type;
+		if (ft == nullptr)
+			return -1;
+		int depth = 0;
+		if (boundReference(from))
+		{
+			// (already its address)
+			if (ft->kind != Type::Kind::Pointer)
+				return -1;
+			if (ft->constTarget && !to->constTarget)
+				return -1;
+			if (ft->base == t)
+				return 0;
+			return (ft->base->kind == Type::Kind::Struct && t->kind == Type::Kind::Struct && derives(ft->base->structInfo, t->structInfo, nullptr, &depth)) ? depth : -1;
+		}
+		int base = -1;
+		if (ft == t)
+			base = 0;
+		else if (ft->kind == Type::Kind::Struct && t->kind == Type::Kind::Struct && derives(ft->structInfo, t->structInfo, nullptr, &depth))
+			base = depth;
+		const bool structTemp = (from->kind == NodeKind::Call || from->kind == NodeKind::Construct) && ft->kind == Type::Kind::Struct;
+		if (!to->constTarget)
+			return (base >= 0 && from->lvalue && !from->readOnly && !structTemp) ? base : -1;
+		if (base >= 0)
+			return base;
+		const int c = builtinConversionCost(from, t);
+		return c >= 0 ? c + 1 : -1;
+	}
+
+	// A call of a sub returning a reference: what it refers to (e becomes *call).
+	void CodeGen::dereferenceResult(Node* e)
+	{
+		if (e->type == nullptr || !e->type->isReference() || (e->callFlags & 16) != 0)
+			return;
+		Node* call = new Node(*e);
+		call->callFlags |= 16;
+		const SourcePos pos = e->pos;
+		*e = Node();
+		e->kind = NodeKind::Unary;
+		e->name = "*";
+		e->pos = pos;
+		e->a = call;
+		check(e);
+	}
+
+	// References are parameters and results only.
+	void CodeGen::rejectReference(Type* t, const SourcePos& pos, const std::string& what)
+	{
+		if (t != nullptr && t->isReference())
+			error(pos, "a reference (" + t->name() + ") is for parameters and results, not " + what + " (use a pointer)");
+	}
+
 	// ================================== User conversions ==================================
 	// A struct's conversions (operator cast <type>), its own and those it inherits.
 	std::string CodeGen::subLabelName(FuncInfo* f, const std::string& name)
@@ -4585,8 +4750,12 @@ namespace dscript
 			e->type = f->type->base;
 			if (m_options.index != nullptr)
 				indexName(callee->pos, callee->text.empty() ? callee->name : callee->text, f->decl->namePos, hoverFunc(f));
-			if (e->vslot == -1 && !destructible(e->type))
+			bool references = f->type->base->isReference();
+			for (Type* p : f->type->params)
+				references = references || p->isReference();
+			if (e->vslot == -1 && !destructible(e->type) && !references)
 				ctFold(e, f);		// constexpr / consteval: its value, if it can be computed now
+			dereferenceResult(e);
 			return;
 		}
 		check(callee);
@@ -4623,6 +4792,7 @@ namespace dscript
 			requireConvertible(e->list[i], t->params[i], "for argument " + std::to_string(i + 1));
 		}
 		e->type = t->base;
+		dereferenceResult(e);
 	}
 
 	// An argument for ...: any scalar (one 32-bit slot), arrays as pointers.
@@ -5533,6 +5703,8 @@ namespace dscript
 				return true;
 			}
 			case TypeSyntax::Kind::Pointer:
+				if (p->isRef)
+					return unify(p->base, actual, def, args, fromLiteral, why);		// (ref T: from the argument's own type)
 				if (actual->kind == Type::Kind::Pointer || actual->kind == Type::Kind::Array)
 					return unify(p->base, actual->base, def, args, fromLiteral, why);
 				return true;
@@ -5946,7 +6118,7 @@ namespace dscript
 				Type* base = conditionType(ts->base, bindings);
 				if (base == nullptr)
 					error(ts->pos, "an optional template parameter that is not given");
-				return m_types.pointer(base, ts->constTarget);
+				return m_types.pointer(base, ts->constTarget, ts->isRef);
 			}
 			case TypeSyntax::Kind::Array:
 			{
@@ -6600,6 +6772,25 @@ namespace dscript
 			case NodeKind::Binary: return genBinary(e);
 			case NodeKind::Assign: return genAssign(e);
 			case NodeKind::Call: return genCall(e);
+			case NodeKind::Materialize:
+			{
+				Type* t = e->type->base;
+				const int32_t slot = temporary(t->size());
+				Reg v = gen(e->a);
+				Reg r = alloc(e->pos);
+				emit("mov " + r + ", FP");
+				addImmediate(r, slot);
+				if (t->kind == Type::Kind::Struct)
+					genCopy(r, v, t, e->pos);
+				else
+				{
+					convert(v, decay(e->a->type), t);
+					store(r, v, t);
+				}
+				emit("mov " + v + ", " + r);		// (registers are released in order)
+				release(r);
+				return v;
+			}
 			case NodeKind::Construct:
 			{
 				// A temporary: its defaults, then its constructor with the value (destroyed when the
@@ -7886,6 +8077,7 @@ namespace dscript
 		}
 		if (t->kind == Type::Kind::Void)
 			error(s->pos, "variables cannot be void");
+		rejectReference(t, s->pos, "variables");
 		if (t->kind == Type::Kind::Struct)
 		{
 			resolveStruct(t->structInfo, s->pos);
@@ -8344,6 +8536,20 @@ namespace dscript
 				{
 					if (ret->kind == Type::Kind::Void)
 						error(s->pos, fn->name + " returns void");
+					if (ret->isReference() && !boundReference(s->a))
+					{
+						// A reference: to something that lives after the sub returns (not a local, a
+						// value parameter or a temporary).
+						check(s->a);
+						if (!s->a->lvalue)
+							error(s->a->pos, fn->name + " returns a reference (" + ret->name() + "): to something in memory that lives on, not a value");
+						const Node* root = s->a;
+						while ((root->kind == NodeKind::Member && root->value == 0) || (root->kind == NodeKind::Index && root->a->type != nullptr && root->a->type->kind == Type::Kind::Array))
+							root = root->a;
+						if (root->kind == NodeKind::Ident && root->var != nullptr && (root->var->storage == VarInfo::Storage::Local || root->var->storage == VarInfo::Storage::Param))
+							error(s->a->pos, fn->name + " returns a reference to '" + (root->text.empty() ? root->name : root->text) + "', which ends when it returns " +
+								"(a local or a parameter: return a value, or a reference to something that lives on)");
+					}
 					check(s->a, ret);
 					requireConvertible(s->a, ret, "in the return value");
 					r = gen(s->a);
@@ -9382,6 +9588,7 @@ namespace dscript
 		}
 		if (t->kind == Type::Kind::Void)
 			error(d->pos, "variables cannot be void");
+		rejectReference(t, d->pos, "variables");
 		if (t->kind == Type::Kind::Struct)
 		{
 			resolveStruct(t->structInfo, d->pos);
@@ -10095,6 +10302,7 @@ namespace dscript
 		}
 		if (t->kind == Type::Kind::Void)
 			error(s->pos, "variables cannot be void");
+		rejectReference(t, s->pos, "variables");
 		if (t->kind == Type::Kind::Struct)
 		{
 			resolveStruct(t->structInfo, s->pos);
@@ -10349,6 +10557,8 @@ namespace dscript
 			}
 			case NodeKind::Construct:
 				ctFail(e->pos, "it builds an object from a value (a conversion: when the program runs)");
+			case NodeKind::Materialize:
+				ctFail(e->pos, "it passes a value by reference (when the program runs)");
 			case NodeKind::Call:
 			{
 				if (e->vaBuiltin != 0)
@@ -10752,7 +10962,7 @@ namespace dscript
 		{
 			case Type::Kind::Void: return "v";
 			case Type::Kind::Struct: return "s:" + t->structInfo->name;
-			case Type::Kind::Pointer: return "p:" + typeCode(t->base);
+			case Type::Kind::Pointer: return t->isRef ? typeCode(t->base) : "p:" + typeCode(t->base);
 			case Type::Kind::Array: return "a:" + typeCode(t->base);
 			case Type::Kind::Function: return "f:" + typeCode(t->base);
 			default: return "i";
@@ -10994,6 +11204,8 @@ namespace dscript
 			case Type::Kind::Pointer:
 			case Type::Kind::Array:
 			{
+				if (t->isReference())
+					return std::string(t->constTarget ? "const ref " : "ref ") + interfaceType(t->base);
 				std::string base = interfaceType(t->base);
 				if (t->base->kind == Type::Kind::Function || (t->constTarget && t->base->kind == Type::Kind::Pointer))
 					base = "(" + base + ")";

@@ -1,0 +1,3 @@
+// expect-error: f returns a reference to 'x', which ends when it returns
+sub f() -> ref i32 { var x: i32 = 1; return x; }
+sub main() -> i32 { return f(); }

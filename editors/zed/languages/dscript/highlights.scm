@@ -26,6 +26,7 @@
 	"ex"
 	"impl"
 	"friend"
+	"ref"
 	"enum"
 	"alias"
 	"namespace"

@@ -1500,3 +1500,33 @@ interface Shape ex Other { sub area() -> i32; }
         (identifier)
         (parameter_list)
         (primitive_type)))))
+
+================================================================================
+references
+================================================================================
+
+sub swap(var a: ref i32, var b: const ref Big) -> ref i32 { var ref: i32 = 1; return a; }
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    (identifier)
+    (parameter_list
+      (parameter
+        (identifier)
+        (ref_type
+          (primitive_type)))
+      (parameter
+        (identifier)
+        (ref_type
+          (type_identifier))))
+    (ref_type
+      (primitive_type))
+    (block
+      (variable_declaration
+        (identifier)
+        (primitive_type)
+        (number_literal))
+      (return_statement
+        (identifier)))))

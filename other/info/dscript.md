@@ -733,6 +733,35 @@ sub operator*(var k: i32, var v: Vec) -> Vec { ... }     // 2 * v
 - Operators are subs like the others: `readonly`, `inline`, `constexpr`, `virt` / `override`
   (`(*shape)()` calls the object's own), in templates and libraries; not `static`.
 
+### References
+`ref T` (parameters and results) refers to a `T` somewhere else: no copy is made, and the
+parameter is used as the `T` itself.
+```
+sub bump(var x: ref i32) { x++; }                   // the caller's variable changes
+sub area(var r: const ref Rect) -> u32 { ... }      // no copy, and r cannot change
+sub at(var i: u32) -> ref i32 { return g_cells[i]; }
+var n: i32 = 1;
+bump(n);                    // n == 2 (no & to write)
+area(Rect.new(2, 3));       // const ref: values too (a temporary)
+at(4) = 7;                  // the call is what it refers to
+```
+- `ref T` takes a variable of type `T` (or a class derived from it): something in memory that may
+  change (a variable, a field, an array element, `*p`, another reference). `const ref T` also
+  takes constants and values: literals, call results, `T.new(...)`, what converts to `T`
+  (they are put in a temporary that lives until the statement ends).
+- In the sub, the parameter is the `T` it refers to: reading, assigning (`x = 5` changes the
+  caller's), `&x` (the caller's address), methods (on a class: the object's own virtual subs).
+- `-> ref T`: the sub returns what it refers to; the call can be assigned, changed, its address
+  taken. It must refer to something that lives on: a global, a field through `this` or a pointer,
+  `*p`, a reference parameter; a local, a value parameter, or a value is an error.
+- Underneath, a reference is a pointer: one 32-bit argument, the same as `T*`. `ref T` and `T*`
+  are different parameter types (overloads, sub pointers: `sub(ref i32)`); templates deduce `T`
+  from a `ref T` parameter's argument.
+- Copy constructors and operators can take `const ref T` (`sub new(var o: const ref T)`,
+  `sub operator==(var o: const ref T)`).
+- Only parameters and results: no reference variables, fields or arrays (use pointers), no
+  default values for reference parameters, no `ref void` / references to references.
+
 ### Variadic subs
 A sub whose parameters end with `...` takes more arguments, of any scalar type; with
 `...typed`, each one's type is passed too. Three built-ins read them, in the sub itself:

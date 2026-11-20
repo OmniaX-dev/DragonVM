@@ -1,0 +1,16 @@
+// References through a library's interface (parameters, results, a const ref copy constructor
+// and operator).
+// dsc-lib: libs/refs.ds
+// expect-rv: 0
+#import("refs")
+#include(check.ds)
+sub main() -> i32 {
+	rf::slot(1) = 5;
+	check(1, rf::store[1] == 5 && rf::slot(1) == 5);
+	var a: rf::Val(1);
+	rf::add(a, 4);
+	check(2, a.v == 5 && a == rf::Val.new(5));
+	var b: rf::Val = a;
+	check(3, b.v == 5 && rf::copies == 1);
+	return result();
+}

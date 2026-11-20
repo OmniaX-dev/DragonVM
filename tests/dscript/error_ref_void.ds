@@ -1,0 +1,3 @@
+// expect-error: ref void: a reference refers to a value
+sub f(var x: ref void) -> void { }
+sub main() -> i32 { return 0; }

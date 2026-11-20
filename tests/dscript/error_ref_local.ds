@@ -1,0 +1,2 @@
+// expect-error: a reference (ref i32) is for parameters and results, not variables
+sub main() -> i32 { var n: i32 = 1; var r: ref i32 = n; return 0; }

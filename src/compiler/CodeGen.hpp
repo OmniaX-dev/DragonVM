@@ -395,6 +395,12 @@ namespace dscript
 			// The program's globals with destructors: destroyed after main (__ds_fini), the last first.
 			std::vector<std::vector<std::string>> m_finiChunks;
 
+			// ===== References =====
+			void bindReference(Node* from, Type* to, const std::string& context);
+			int referenceCost(Node* from, Type* to);
+			void dereferenceResult(Node* e);
+			void rejectReference(Type* t, const SourcePos& pos, const std::string& what);
+
 			// ===== User conversions =====
 			struct UserConv { FuncInfo* f { nullptr }; bool ctor { false }; int cost { 0 }; };
 			std::vector<FuncInfo*> castOperators(StructInfo* info);

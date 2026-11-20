@@ -34,6 +34,8 @@ namespace dscript
 			case Kind::Null: return "null";
 			case Kind::Pointer:
 			{
+				if (isRef)
+					return std::string(constTarget ? "const ref " : "ref ") + base->name(brief);
 				// const T*; a pointer to a constant pointer: const (T*)* (const u8** is a pointer to a const u8*)
 				const bool paren = base->kind == Kind::Function || (constTarget && base->kind == Kind::Pointer);
 				return std::string(constTarget ? "const " : "") + (paren ? "(" + base->name(brief) + ")" : base->name(brief)) + "*";
@@ -92,16 +94,17 @@ namespace dscript
 		return t;
 	}
 
-	Type* TypeTable::pointer(Type* base, bool constTarget)
+	Type* TypeTable::pointer(Type* base, bool constTarget, bool isRef)
 	{
 		for (Type* t : m_types)
 		{
-			if (t->kind == Type::Kind::Pointer && t->base == base && t->constTarget == constTarget)
+			if (t->kind == Type::Kind::Pointer && t->base == base && t->constTarget == constTarget && t->isRef == isRef)
 				return t;
 		}
 		Type* t = make(Type::Kind::Pointer);
 		t->base = base;
 		t->constTarget = constTarget;
+		t->isRef = isRef;
 		return t;
 	}
 

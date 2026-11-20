@@ -1655,6 +1655,23 @@ namespace dscript
 		const bool constTarget = acceptKeyword("const");
 		if (constTarget && isKeyword("const"))
 			error(peek().pos, "const twice");
+		// (ref is only a word in a type: ref followed by a type; elsewhere a name like the others)
+		const Token& after = peek(1);
+		if (peek().kind == TokenKind::Identifier && peek().text == "ref" && peek().fixedType == nullptr
+			&& (after.kind == TokenKind::Identifier || (after.kind == TokenKind::Punct && (after.text == "(" || after.text == "::"))
+				|| (after.kind == TokenKind::Keyword && (after.text == "sub" || after.text == "struct" || after.text == "void" || after.text == "const"))))
+		{
+			// ref T / const ref T: a reference (a parameter, a sub's result).
+			TypeSyntax* r = new TypeSyntax();
+			r->kind = TypeSyntax::Kind::Pointer;
+			r->pos = next().pos;
+			r->isRef = true;
+			r->constTarget = constTarget;
+			if ((peek().kind == TokenKind::Identifier && peek().text == "ref") || isKeyword("const"))
+				error(peek().pos, "write const ref T (a reference to a reference is not a type)");
+			r->base = parseType();
+			return r;
+		}
 		TypeSyntax* t = new TypeSyntax();
 		t->pos = peek().pos;
 		if (acceptPunct("("))

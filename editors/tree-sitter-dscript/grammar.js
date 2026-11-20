@@ -264,7 +264,7 @@ module.exports = grammar({
 			'sub',
 			field('name', choice($.identifier, $.operator_name)),
 			field('parameters', $.parameter_list),
-			optional(seq('->', field('return_type', $._type))),
+			optional(seq('->', field('return_type', $._param_type))),
 			choice(field('body', $.block), ';'),
 		),
 		// operator+, operator[], operator(), operator post++, operator cast
@@ -308,7 +308,7 @@ module.exports = grammar({
 			optional(choice('var', 'const')),
 			field('name', $.identifier),
 			':',
-			field('type', $._type),
+			field('type', $._param_type),
 			optional(seq('=', field('default', $._expression))),
 		),
 
@@ -334,6 +334,8 @@ module.exports = grammar({
 			$.value_type,
 			$.base_type,
 		),
+		// A parameter's / result's type: also a reference
+		_param_type: $ => choice($._type, $.ref_type),
 		// A::B::Type, ::Type (the global one)
 		scoped_type_identifier: $ => seq(
 			optional(field('scope', alias($.identifier, $.namespace_identifier))),
@@ -354,16 +356,18 @@ module.exports = grammar({
 			'(',
 			choice(
 				alias('void', $.primitive_type),
-				commaSep($._type),
-				seq(commaSep1($._type), ',', $.variadic_parameter),
+				commaSep($._param_type),
+				seq(commaSep1($._param_type), ',', $.variadic_parameter),
 				$.variadic_parameter,
 			),
 			')',
-			optional(seq('->', field('return_type', $._type))),
+			optional(seq('->', field('return_type', $._param_type))),
 		)),
 		parenthesized_type: $ => seq('(', $._type, ')'),
 		// const T*: what the pointer points at is constant (const u8* groups as const (u8*))
 		const_type: $ => prec(1, seq('const', field('type', $._type))),
+		// ref T / const ref T: a reference (parameters, results only: ref is a name elsewhere)
+		ref_type: $ => prec.right(seq(optional('const'), 'ref', field('type', $._type))),
 		// value_type(N): the type of a value (of a template parameter given one)
 		value_type: $ => seq('value_type', '(', field('value', $._expression), ')'),
 		// base_type(T): the class T extends; absolute_base_type(T): the first class of its chain
