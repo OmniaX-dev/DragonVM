@@ -554,6 +554,62 @@
         {
           "type": "SYMBOL",
           "name": "static_assert"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "static_field"
+        }
+      ]
+    },
+    "static_field": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "SYMBOL",
+                  "name": "priv_modifier"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "readonly_modifier"
+                }
+              ]
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
+        },
+        {
+          "type": "SYMBOL",
+          "name": "static_modifier"
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SEQ",
+              "members": [
+                {
+                  "type": "SYMBOL",
+                  "name": "variable_declaration"
+                },
+                {
+                  "type": "STRING",
+                  "value": ";"
+                }
+              ]
+            },
+            {
+              "type": "SYMBOL",
+              "name": "const_declaration"
+            }
+          ]
         }
       ]
     },
@@ -4929,6 +4985,10 @@
     ],
     [
       "struct_constant",
+      "function_declaration"
+    ],
+    [
+      "static_field",
       "function_declaration"
     ],
     [

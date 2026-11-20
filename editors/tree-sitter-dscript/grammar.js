@@ -48,6 +48,8 @@ module.exports = grammar({
 		[$.generic_type, $._expression, $.generic_expression],
 		// (priv constexpr NAME = ... / priv constexpr sub: told by what follows)
 		[$.struct_constant, $.function_declaration],
+		// (static var / static const / static sub: told by what follows)
+		[$.static_field, $.function_declaration],
 		// (Name<16>: a template's value argument or comparisons: the parse that works wins)
 		[$.template_arguments, $._expression],
 	],
@@ -121,7 +123,13 @@ module.exports = grammar({
 		// constexpr NAME = value;: a constant of the struct.
 		field_list: $ => seq('{', repeat($._member), '}'),
 		_member: $ => choice($.field_declaration, $.function_declaration, $.nested_type_declaration, $.template_declaration,
-			$.struct_constant, $.conditional_member, $.static_assert),
+			$.struct_constant, $.conditional_member, $.static_assert, $.static_field),
+		// static var / static const: one variable for the struct (not one per instance)
+		static_field: $ => seq(
+			optional(choice($.priv_modifier, $.readonly_modifier)),
+			$.static_modifier,
+			choice(seq($.variable_declaration, ';'), $.const_declaration),
+		),
 		conditional_member: $ => conditional($, $.conditional_member, $._member),
 		struct_constant: $ => seq(
 			optional($.priv_modifier),

@@ -1,0 +1,39 @@
+// Static fields: one variable for the struct (Struct.x, Struct::x, x.x, p->x, x in its subs), priv /
+// readonly, static const (compile-time or computed when the program starts), built by a
+// constructor, one per template instance; not part of sizeof.
+// expect-rv: 0
+var g_seed: u32 = 5;
+sub compute() -> u32 { return g_seed * 10; }
+struct Point { var x: i32; var y: i32; sub new(var x: i32, var y: i32) { this->x = x; this->y = y; } };
+struct Counter {
+	static var count: u32 = 0;
+	readonly static var created: u32;		// everyone reads it, only Counter's subs change it
+	priv static var secret: u32 = 7;
+	static const START = compute();			// computed when the program starts
+	static const LIMIT = 100;				// a compile-time constant
+	static var origin: Point(3, 4);			// built by its constructor
+	var id: u32;
+	sub new() { count++; created++; this->id = created + secret + START; }
+	static sub reset() { count = 0; }
+	readonly sub total() -> u32 { return this->count + Counter.created; }
+};
+template(T) { struct Pool { static var made: u32; static sub make() -> T { made++; var v: T; return v; } }; }
+var g_arr: u8[Counter.LIMIT];
+sub main() -> i32 {
+	var a: Counter();
+	var b: Counter();
+	if (Counter.count != 2 or Counter::count != 2 or a.count != 2 or Counter.created != 2) return 1;
+	if (a.id != 1 + 7 + 50 or b.id != 2 + 7 + 50 or Counter.START != 50) return 2;
+	var p: Counter* = &b;
+	p->count += 10;
+	if (Counter.count != 12 or b.total() != 14) return 3;
+	Counter.reset();
+	if (a.count != 0 or sizeof(Counter) != 4 or sizeof(g_arr) != 100) return 4;
+	if (Counter.origin.x != 3 or Counter.origin.y != 4) return 5;
+	Pool<u8>.make(); Pool<u8>.make(); Pool<u32>.make();
+	if (Pool<u8>.made != 2 or Pool<u32>.made != 1) return 6;
+	var q: u32* = &Counter.count;
+	*q = 9;
+	if (Counter.count != 9) return 7;
+	return 0;
+}

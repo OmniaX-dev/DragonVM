@@ -1,0 +1,3 @@
+// expect-error: 'n' is readonly: only the subs of Counter can change it
+struct Counter { readonly static var n: u32; };
+sub main() { Counter.n = 3; }

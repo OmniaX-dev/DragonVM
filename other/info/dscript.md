@@ -419,6 +419,24 @@ var f: sub(Counter*, i32) -> i32 = Counter::add; // the method as a sub: this co
 - `static sub` in a struct has no `this`: it is a sub grouped under the struct's name, called as
   `Struct.name(...)` or `Struct::name(...)` (also from the struct's other subs: a struct's subs
   are not found by their name alone). A struct can have only static subs (and no fields).
+- `static var` / `static const` in a struct is one variable for the struct (a global under its
+  name), not one per instance: `Struct.count`, `Struct::count`, `x.count` / `p->count` (`x` is only
+  its type), or `count` in its subs. It is not part of `sizeof`, `{ ... }` or a copy. `priv`
+  (only its subs use it) and `readonly` (`readonly static var`: only its subs change it) work as
+  for fields; `static const` follows `const` (a compile-time constant, or computed when the
+  program starts); `static var p: Point(1, 2)` calls the constructor (before `main`). In a struct
+  template, each instance has its own (`Pool<u8>.made`, `Pool<u32>.made`); in a library they are
+  its data (programs use them through its interface).
+```
+struct Counter {
+    static var count: u32 = 0;
+    readonly static var created: u32;
+    var id: u32;
+    sub new() { count++; created++; this->id = created; }
+};
+var a: Counter();
+Counter.count += 1;      // a.count is the same variable
+```
 ```
 struct Print {
     static sub str(var s: string) { ... }

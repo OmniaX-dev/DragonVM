@@ -1694,6 +1694,10 @@
           "named": true
         },
         {
+          "type": "static_field",
+          "named": true
+        },
+        {
           "type": "struct_constant",
           "named": true
         },
@@ -2984,6 +2988,10 @@
         },
         {
           "type": "static_assert",
+          "named": true
+        },
+        {
+          "type": "static_field",
           "named": true
         },
         {
@@ -5922,6 +5930,37 @@
       "types": [
         {
           "type": "const_declaration",
+          "named": true
+        },
+        {
+          "type": "static_modifier",
+          "named": true
+        },
+        {
+          "type": "variable_declaration",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "static_field",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "const_declaration",
+          "named": true
+        },
+        {
+          "type": "priv_modifier",
+          "named": true
+        },
+        {
+          "type": "readonly_modifier",
           "named": true
         },
         {

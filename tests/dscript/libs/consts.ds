@@ -1,6 +1,6 @@
 // A library with the const forms (const_library.ds, const_dynamic.ds): a constant computed when
 // it starts, compile-time constants, constexpr / consteval subs (their bodies are in its
-// interface), a struct with const fields, readonly subs and constants of its own.
+// interface), a struct with const fields, readonly subs, constants and static fields of its own.
 namespace kc {
 	var starts: u32 = 0;
 	sub start_value() -> u32 { starts++; return 1000 + starts; }
@@ -13,7 +13,11 @@ namespace kc {
 		var w: i32 = 0;
 		var h: i32 = 0;
 		constexpr SIDES = 4;
-		sub new(var id: u32, var w: i32, var h: i32) { this->id = id; this->w = w; this->h = h; }
+		static var made: u32 = 0;					// static fields (data of the library)
+		readonly static var largest: i32;
+		static const FIRST_ID = start_value();		// computed when the library starts
+		static const KIND = 3;
+		sub new(var id: u32, var w: i32, var h: i32) { this->id = id; this->w = w; this->h = h; made++; if (w * h > largest) largest = w * h; }
 		readonly constexpr sub area() -> i32 { return this->w * this->h; }
 		sub grow(var by: i32) { this->w += by; this->h += by; }
 	};

@@ -366,7 +366,7 @@ namespace dscript
 			{
 				// In a struct: only its nested types (and what is in them) and constants, not its subs.
 				const std::string first = s + "::" + written.substr(0, written.find("::"));
-				found = m_structs.count(first) > 0 || m_enums.count(first) > 0 || m_consts.count(first) > 0;
+				found = m_structs.count(first) > 0 || m_enums.count(first) > 0 || m_consts.count(first) > 0 || m_globals.count(first) > 0;	// (and static fields)
 			}
 			if (found)
 				return candidate;
@@ -1765,6 +1765,20 @@ namespace dscript
 				e->readOnly = true;
 				e->readOnlyWhy = "'" + (e->text.empty() ? shownName(e->name) : e->text) + "' is a constant (const): it cannot change";
 			}
+			// A static field: priv (only the struct's subs use it), readonly (only they change it).
+			if (v->storage == VarInfo::Storage::Global && v->decl != nullptr && v->decl->owner != nullptr && v->decl->owner->kind == NodeKind::StructDecl
+				&& m_structs.count(v->decl->owner->name) > 0)
+			{
+				const Node* owner = v->decl->owner;
+				StructInfo* info = m_structs[owner->name];
+				if (v->decl->isPrivate && !insideStruct(info))
+					error(e->pos, "'" + v->decl->shortName + "' is private to " + owner->name + " (priv): only the subs of " + owner->name + " can use it");
+				if (v->decl->isReadonly && !insideStruct(info))
+				{
+					e->readOnly = true;
+					e->readOnlyWhy = "'" + v->decl->shortName + "' is readonly: only the subs of " + owner->name + " can change it";
+				}
+			}
 			if (v->ctValue)
 			{
 				// A struct value computed when compiling: like a call's result (its address: a copy).
@@ -2459,7 +2473,8 @@ namespace dscript
 		if (e->value == 0 && e->a->kind == NodeKind::Ident && lookupVar(e->a->name) == nullptr)
 		{
 			resolveTemplateIdent(e->a);
-			if (m_structs.count(e->a->name) > 0 && m_consts.count(e->a->name + "::" + e->name) > 0)
+			const std::string full = e->a->name + "::" + e->name;
+			if (m_structs.count(e->a->name) > 0 && (m_consts.count(full) > 0 || (m_globals.count(full) > 0 && m_globals[full]->decl != nullptr && m_globals[full]->decl->owner != nullptr)))
 			{
 				if (m_options.index != nullptr)
 					indexName(e->a->pos, writtenName(e->a), m_structs[e->a->name]->decl->namePos, hoverStruct(m_structs[e->a->name]));
@@ -2519,9 +2534,10 @@ namespace dscript
 		}
 		resolveStruct(t->structInfo, e->pos);
 		const StructField* f = t->structInfo->field(e->name);
-		if (f == nullptr && m_consts.count(t->structInfo->name + "::" + e->name) > 0)
+		const std::string staticName = t->structInfo->name + "::" + e->name;
+		if (f == nullptr && (m_consts.count(staticName) > 0 || (m_globals.count(staticName) > 0 && m_globals[staticName]->decl != nullptr && m_globals[staticName]->decl->owner != nullptr)))
 		{
-			// x.NAME / p->NAME: a constant of its struct.
+			// x.NAME / p->NAME: a constant or a static field of its struct (x is only its type).
 			const std::string written = e->name;
 			e->kind = NodeKind::Ident;
 			e->name = t->structInfo->name + "::" + e->name;
@@ -7821,7 +7837,13 @@ namespace dscript
 		const std::string size = (v->type && !v->type->isScalar()) ? bytes(v->type->size()) : "";
 		if (v->isConst && !v->readOnly && v->storage == VarInfo::Storage::Global)
 			where = (hidden ? "static, " + ownerOf(v->decl) : "global") + std::string(", computed when the program starts");
-		const std::string keyword = (v->readOnly || v->isConst) ? (hidden && !v->readOnly ? "static const " : "const ") : v->constKind == 3 ? "constinit " : (hidden ? "static var " : "var ");
+		std::string keyword = (v->readOnly || v->isConst) ? (hidden && !v->readOnly ? "static const " : "const ") : v->constKind == 3 ? "constinit " : (hidden ? "static var " : "var ");
+		if (v->decl != nullptr && v->decl->owner != nullptr && v->decl->owner->kind == NodeKind::StructDecl && v->storage == VarInfo::Storage::Global)
+		{
+			// A static field.
+			keyword = std::string(v->decl->isPrivate ? "priv " : "") + (v->decl->isReadonly ? "readonly " : "") + (v->isConst ? "static const " : "static var ");
+			return keyword + v->decl->shortName + ": " + type + comment({ "static field of " + v->decl->owner->name, size });
+		}
 		return keyword + (hidden ? declaredName(v->decl) : v->name) + ": " + type + comment({ where, size });
 	}
 
@@ -8476,9 +8498,18 @@ namespace dscript
 				}
 				else if (n->kind == NodeKind::TemplateDecl)
 					l_template(n, indent + "\t");		// (a method template)
+				else if (n->kind == NodeKind::VarDecl || (n->kind == NodeKind::ConstDecl && m_globals.count(n->name) > 0))
+				{
+					// A static field (its data is in the library); a static const computed when the
+					// library starts: static readonly var (a constant of the importers).
+					VarInfo* v = m_globals.count(n->name) > 0 ? m_globals[n->name] : nullptr;
+					const bool computedConst = v != nullptr && v->isConst;
+					const std::string h = indent + "\t" + (n->isPrivate ? "priv " : "") + (computedConst ? "static readonly var " : std::string(n->isReadonly ? "readonly " : "") + "static var ");
+					l_line(h + n->shortName + ": " + interfaceType(v != nullptr && v->type != nullptr ? v->type : m_types.i32()) + ";", &n->namePos, h.size());
+				}
 				else if (n->kind == NodeKind::ConstDecl && m_consts.count(n->name) > 0)
 				{
-					// A constant of the struct.
+					// A constant of the struct (static const with a compile-time value: the same).
 					const ConstInfo& c = m_consts[n->name];
 					const std::string h = indent + "\t" + (n->isPrivate ? "priv " : "") + "constexpr ";
 					std::string text = h + n->shortName;

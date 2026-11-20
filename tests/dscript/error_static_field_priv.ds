@@ -1,0 +1,3 @@
+// expect-error: 's' is private to Counter (priv): only the subs of Counter can use it
+struct Counter { priv static var s: u32; };
+sub main() -> u32 { return Counter.s; }

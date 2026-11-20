@@ -821,6 +821,50 @@ namespace dscript
 		// priv var / priv sub: only the struct's own subs can use it. readonly var: everyone
 		// can read it, only the struct's own subs can change it.
 		const bool priv = acceptKeyword("priv");
+		// static var / static const: a variable of the struct (one, not one per instance): a hidden
+		// top-level declaration <Struct>::<name> (priv, readonly: as for fields). In a library's
+		// interface, static readonly var is a static const computed when the library starts.
+		bool staticReadonly = false, interfaceConst = false;
+		if (isKeyword("readonly") && isKeyword("static", 1) && (isKeyword("var", 2) || isKeyword("const", 2) || isKeyword("auto", 2)))
+		{
+			next();
+			staticReadonly = true;
+		}
+		if (m_external != 0 && isKeyword("static") && isKeyword("readonly", 1) && isKeyword("var", 2))
+		{
+			next();
+			interfaceConst = true;
+		}
+		if ((isKeyword("static") && (isKeyword("var", 1) || isKeyword("const", 1) || isKeyword("auto", 1))) || interfaceConst)
+		{
+			if (decl->value != 0)
+				error(peek().pos, "static fields need a named struct (struct Name { ... })");
+			if (priv && staticReadonly)
+				error(peek().pos, "a static field is either priv or readonly: priv already keeps others from changing it (and from reading it)");
+			next();		// static (an interface's static readonly var: readonly)
+			Node* v = nullptr;
+			if (isKeyword("const"))
+			{
+				if (staticReadonly)
+					error(peek().pos, "a static field is either readonly or const: const already keeps everyone (also the struct's subs) from changing it");
+				v = parseConst();
+			}
+			else
+			{
+				v = parseVarDecl();
+				expectPunct(";", "after the static field");
+			}
+			if (interfaceConst)
+				v->constKind = 1;
+			nameDeclaration(v);
+			v->owner = decl;
+			v->isPrivate = priv;
+			v->isReadonly = staticReadonly;
+			m_nested.push_back(v);
+			return;
+		}
+		if (staticReadonly)
+			error(peek().pos, "'static' expected after 'readonly' (readonly static var)");
 		if (isKeyword("const"))
 		{
 			// const name: T [= default];: set when the struct is built (its default value,
@@ -881,8 +925,6 @@ namespace dscript
 			m_nested.push_back(nested);
 			return;
 		}
-		if (isKeyword("static") && isKeyword("var", 1))
-			error(peek(1).pos, "structs have no static fields: use a global (or a constant) next to the struct");
 		if (isKeyword("template"))
 		{
 			// Method templates: hidden top-level template declarations, owned by the struct.

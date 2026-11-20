@@ -8,7 +8,7 @@
 var g_side: i32 = 5;
 var g_table: u8[kc::square(4)];
 sub main() -> i32 {
-	if (kc::STARTED != 1001 or kc::starts != 1) return 1;
+	if (kc::STARTED != 1001 or kc::starts != 2) return 1;
 	if (sizeof(g_table) != 16 or kc::LIMIT != 64) return 2;
 	if (kc::square(g_side) != 25 or kc::cube(3) != 27) return 3;
 	var b: kc::Box(5, 2, 3);
@@ -16,6 +16,10 @@ sub main() -> i32 {
 	b.grow(1);
 	if (kc::area_of(&b) != 12) return 5;
 	if (kc::Unit.area() != 1 or kc::area_of(&kc::Unit) != 1 or kc::Unit.id != 2 or kc::unit_area() != 2) return 6;
+	if (kc::Box.made != 1 or kc::Box.largest != 6 or kc::Box.FIRST_ID != 1002 or kc::Box.KIND != 3 or b.made != 1) return 8;
+	var b2: kc::Box(6, 4, 4);
+	kc::Box.made += 10;
+	if (kc::Box::made != 12 or kc::Box.largest != 16) return 9;
 	const m = kc::make(2, 5);
 	if (m.area() != 10 or m.id != 9 or kc::make(3, 3).area() != 9) return 7;
 	return 0;

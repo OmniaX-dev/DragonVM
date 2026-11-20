@@ -1,5 +1,2 @@
-// expect-error: structs have no static fields
-struct Counter {
-	static var count: u32;
-};
-sub main() { }
+// expect-error: static fields need a named struct
+sub main() { var x: struct { static var s: u32; }; }
