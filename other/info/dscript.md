@@ -1026,6 +1026,12 @@ C operators and precedence: `= += -= *= /= %= &= |= ^= <<= >>=`, `?:`, `|| &&` (
 - `cast<T>(value)`: conversions between integers, `f32`, pointers and sub pointers (not between
   `f32` and pointers). `cast<T*>(constant)`
   is a constant address (it can be a field's default value).
+- `bitcast<T>(value)`: the same bits read as a `T` (nothing is converted): `bitcast<f32>(0x3F800000)`
+  is `1.0`, `bitcast<u32>(1.0)` is `0x3F800000` (what `*cast<f32*>(&bits)` does, for any value, not
+  only a variable). Any two types of the same size (an error otherwise): integers (`bitcast<u16>(-2)`
+  is `0xFFFE`), `f32`, pointers, sub pointers, and structs and arrays as values (`bitcast<u32>(pixel)`,
+  `bitcast<Pixel>(0xAABBCCDDu).r`; big endian: the first byte is the top one); not to an array (not
+  a value) or a `bool`. Constants give constants, and it works in constexpr subs.
 - `sizeof(type or value)`, `sizeof<type>`: a `u32` constant.
 - Literals: `42`, `0x2A`, `0b101010`, `1_000` (underscores), `1.5` / `1e-3` / `2f` (`f32`), `'a'` (a `u8`), `"text"`
   (escapes `\n \t \r \0 \\ \' \" \xNN`, adjacent strings are joined), `true`, `false`, `null`.

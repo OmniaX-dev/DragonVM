@@ -1,0 +1,2 @@
+// expect-error: bitcast<f32> needs a value of the same size: u8 is 1 byte, f32 is 4
+sub main() { var x: u8 = 1; var f = bitcast<f32>(x); }

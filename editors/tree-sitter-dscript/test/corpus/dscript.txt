@@ -1421,3 +1421,26 @@ sub main() {
         (binary_expression
           (number_literal)
           (number_literal))))))
+
+================================================================================
+bitcast
+================================================================================
+
+var f = bitcast<f32>(bits);
+var p = bitcast<Pixel>(0xAABBCCDDu).r;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (variable_declaration
+    (identifier)
+    (cast_expression
+      (primitive_type)
+      (identifier)))
+  (variable_declaration
+    (identifier)
+    (member_expression
+      (cast_expression
+        (type_identifier)
+        (number_literal))
+      (field_identifier))))

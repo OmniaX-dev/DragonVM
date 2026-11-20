@@ -242,6 +242,15 @@ items = complete(MAIN, main_text, 18, "template(T) where is_integer(T) { sub f()
 version += 2
 check("no condition built-ins after the where", "is_integer" not in [i["label"] for i in items], str([i["label"] for i in items]))
 
+completes("value_type after ':'", MAIN, main_text, 18, "\tvar q: valu|", ["value_type"], exact=False)
+vt_text = main_text.replace("\tg_count++;", "\tvar vt: value_type(g_count * 2) = 1;\n\tg_count++;")
+c.notify("textDocument/didChange", {"textDocument": {"uri": uri(MAIN), "version": version}, "contentChanges": [{"text": vt_text}]})
+c.sync()
+hover_has(c, "value_type's type", MAIN, vt_text, 20, "value_type", "value_type(...): u32")
+c.notify("textDocument/didChange", {"textDocument": {"uri": uri(MAIN), "version": version + 1}, "contentChanges": [{"text": main_text}]})
+c.sync()
+version += 2
+
 print("editing (unsaved buffers)")
 broken = main_text.replace("p->x + p->y", "p->x + p->zz")
 c.notify("textDocument/didChange", {"textDocument": {"uri": uri(MAIN), "version": 2}, "contentChanges": [{"text": broken}]})

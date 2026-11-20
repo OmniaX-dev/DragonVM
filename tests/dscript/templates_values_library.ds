@@ -9,5 +9,6 @@ sub main() -> i32 {
 	if (r.capacity() != 4 or big.capacity() != 16 or sizeof(big) != 20) return 1;
 	if (sz::clamp<sz::PERCENT>(150) != 100 or sz::clamp<sz::PERCENT>(-5) != 0) return 2;
 	if (sz::limits_size() != 8) return 3;
+	if (sz::bits_of<f32>(1.0) != 0x3F800000) return 4;
 	return 0;
 }

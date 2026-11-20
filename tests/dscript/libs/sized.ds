@@ -8,4 +8,6 @@ namespace sz {
 	}
 	template(L: Limits) { sub clamp(var v: i32) -> i32 { return v < L.lo ? L.lo : (v > L.hi ? L.hi : v); } }
 	if constexpr (sizeof(Limits) == 8) { sub limits_size() -> u32 { return 8; } }
+	// (a low block in a template: the interface writes it back as source)
+	template(T) { sub bits_of(var v: T) -> u32 { var r: u32; low { mov $r, $v } return r; } }
 }

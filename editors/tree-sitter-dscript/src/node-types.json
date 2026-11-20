@@ -7758,6 +7758,10 @@
     "named": false
   },
   {
+    "type": "bitcast",
+    "named": false
+  },
+  {
     "type": "block_comment",
     "named": true,
     "extra": true

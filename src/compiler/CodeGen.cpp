@@ -747,6 +747,8 @@ namespace dscript
 				// (an integer literal: i32, as var x = 5 would be)
 				if (t->isInteger() && ts->value->kind == NodeKind::IntLit && ts->value->name != "u" && ts->value->name != "char")
 					t = m_types.i32();
+				if (m_options.index != nullptr && !m_discarding)
+					indexName(ts->pos, "value_type", {}, "value_type(...): " + t->name(true) + comment({ "the type of a value" }));
 				return t;
 			}
 			case TypeSyntax::Kind::Function:
@@ -1620,6 +1622,44 @@ namespace dscript
 			}
 			break;
 			case NodeKind::Cast:
+			if (e->value == 1)
+			{
+				// bitcast<T>(value): the same bits as a T (the same size; structs and arrays too).
+				Type* to = resolveType(e->typeSyntax);
+				check(e->a);
+				Type* from = e->a->type;
+				if (from == nullptr)
+					error(e->a->pos, "ambiguous overloaded sub in bitcast");
+				if (from->kind == Type::Kind::Null)
+					from = m_types.pointer(m_types.voidType());
+				if (from->kind == Type::Kind::Struct)
+					resolveStruct(from->structInfo, e->pos);
+				if (to->kind == Type::Kind::Struct)
+					resolveStruct(to->structInfo, e->pos);
+				if (to->kind == Type::Kind::Void || from->kind == Type::Kind::Void)
+					error(e->pos, "bitcast needs a value and a type with a size (not void)");
+				if (to->kind == Type::Kind::Array)
+					error(e->pos, "bitcast to an array: arrays are not values (bitcast to a struct holding it, or use a pointer)");
+				if (to->kind == Type::Kind::Bool)
+					error(e->pos, "bitcast to bool: its bits could be other than 0 or 1 (compare instead: value != 0)");
+				if (from->size() != to->size())
+					error(e->pos, "bitcast<" + to->name() + "> needs a value of the same size: " + from->name() + " is " + std::to_string(from->size()) +
+						" byte" + (from->size() == 1 ? "" : "s") + ", " + to->name() + " is " + std::to_string(to->size()));
+				e->type = to;
+				const bool scalarFrom = from->isArithmetic() || from->isPointer() || from->isFunction();
+				if ((e->a->isConst || e->a->constPtr) && scalarFrom && to->isScalar())
+				{
+					// A constant: its bits, as the other type (f32: its bits are its value).
+					const uint64_t mask = to->size() >= 4 ? 0xFFFFFFFFull : ((1ull << (8 * to->size())) - 1);
+					const uint64_t bits = (uint64_t)e->a->constValue & mask;
+					e->constValue = to->isFloat() ? (int64_t)bits : wrapTo((int64_t)bits, to);
+					if (to->isArithmetic())
+						e->isConst = true;
+					else
+						e->constPtr = true;
+				}
+				break;
+			}
 			{
 				Type* to = resolveType(e->typeSyntax);
 				check(e->a, to->isFunction() ? to : nullptr);
@@ -4202,6 +4242,30 @@ namespace dscript
 				return r;
 			}
 			case NodeKind::Cast:
+			if (e->value == 1)
+			{
+				// bitcast: registers hold the bits already (a smaller integer: in its own form); a
+				// struct or an array is its address (loaded from, or a copy in the frame).
+				Type* from = e->a->type;
+				Type* to = e->type;
+				const bool fromMemory = from->kind == Type::Kind::Struct || from->kind == Type::Kind::Array;
+				const bool toMemory = to->kind == Type::Kind::Struct;
+				Reg r = gen(e->a);
+				if (fromMemory && !toMemory)
+					load(r, r, to);
+				else if (!fromMemory && toMemory)
+				{
+					Reg d = alloc(e->pos);
+					emit("mov " + d + ", FP");
+					addImmediate(d, temporary(to->size()));
+					store(d, r, from);
+					emit("mov " + r + ", " + d);		// (registers are released in order: the address in r)
+					release(d);
+				}
+				else if (!fromMemory)
+					normalize(r, to);
+				return r;
+			}
 			{
 				if (e->type->kind == Type::Kind::Void)
 				{
@@ -4223,6 +4287,10 @@ namespace dscript
 	{
 		switch (e->kind)
 		{
+			case NodeKind::Cast:
+				if (e->value == 1 && e->type->kind == Type::Kind::Struct)
+					return gen(e);		// (bitcast<Struct>(...).field)
+			break;
 			case NodeKind::Ident:
 			{
 				Reg r = alloc(e->pos);
@@ -7617,6 +7685,25 @@ namespace dscript
 				return ctCall(f, args, e->pos);
 			}
 			case NodeKind::Cast:
+				if (e->value == 1)
+				{
+					Type* from = e->a->type->kind == Type::Kind::Null ? m_types.pointer(m_types.voidType()) : e->a->type;
+					const bool fromMemory = from->kind == Type::Kind::Struct || from->kind == Type::Kind::Array;
+					const bool toMemory = t->kind == Type::Kind::Struct;
+					const uint32_t v = ctEval(e->a);
+					if (fromMemory && !toMemory)
+						return ctLoad(v, t, e->pos);
+					if (!fromMemory && toMemory)
+					{
+						const uint32_t tmp = ctAlloc(t->size());
+						ctStore(tmp, from, v, e->pos);
+						return tmp;
+					}
+					if (fromMemory)
+						return v;
+					const uint32_t mask = t->size() >= 4 ? 0xFFFFFFFFu : ((1u << (8 * t->size())) - 1);
+					return t->isFloat() ? (v & mask) : (uint32_t)wrapTo((int64_t)(v & mask), t);
+				}
 				return ctConvert(ctEval(e->a), decay(e->a->type), t);
 			case NodeKind::PreInc: case NodeKind::PreDec: case NodeKind::PostInc: case NodeKind::PostDec:
 			{
@@ -7671,6 +7758,7 @@ namespace dscript
 				return base + f->offset;
 			}
 			case NodeKind::Call:
+			case NodeKind::Cast:
 				if (e->type != nullptr && e->type->kind == Type::Kind::Struct)
 					return ctEval(e);
 			break;
@@ -8233,7 +8321,7 @@ namespace dscript
 			switch (t.kind)
 			{
 				case TokenKind::String: return dscript::quoted(t.text);
-				case TokenKind::LowBlock: return "low {" + t.text + "}";
+				case TokenKind::LowBlock: return "{" + t.text + "}";		// (after the 'low' keyword's token)
 				case TokenKind::Integer:
 					if (t.isChar)
 					{

@@ -26,7 +26,9 @@
 	"namespace"
 	"low"
 	"cast"
+	"bitcast"
 	"sizeof"
+	"value_type"
 ] @keyword
 
 [

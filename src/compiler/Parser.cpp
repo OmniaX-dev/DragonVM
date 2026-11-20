@@ -107,7 +107,7 @@ namespace dscript
 			const Token& t = peek();
 			bool value = t.kind == TokenKind::Integer || t.kind == TokenKind::Float || t.kind == TokenKind::String
 				|| (t.kind == TokenKind::Punct && (t.text == "-" || t.text == "!" || t.text == "~" || t.text == "+"))
-				|| (t.kind == TokenKind::Keyword && (t.text == "true" || t.text == "false" || t.text == "null" || t.text == "sizeof" || t.text == "cast" || t.text == "not"));
+				|| (t.kind == TokenKind::Keyword && (t.text == "true" || t.text == "false" || t.text == "null" || t.text == "sizeof" || t.text == "cast" || t.text == "bitcast" || t.text == "not"));
 			if (t.kind == TokenKind::Identifier && t.fixedType == nullptr)
 			{
 				// Name.field / f(...) / N + 1: a value (after a qualified name)
@@ -1748,10 +1748,10 @@ namespace dscript
 					(t.kind == TokenKind::Punct && noSpaceBefore.count(t.text) > 0) || unaryPrev || typeDepth > 0 ||
 					(l_is(&t, TokenKind::Punct, "(") && (l_endsValue(prev) || afterType ||
 						l_is(prev, TokenKind::Keyword, "sizeof"))) ||
-					(l_is(&t, TokenKind::Punct, "<") && (l_is(prev, TokenKind::Keyword, "cast") || l_is(prev, TokenKind::Keyword, "sizeof")));
+					(l_is(&t, TokenKind::Punct, "<") && (l_is(prev, TokenKind::Keyword, "cast") || l_is(prev, TokenKind::Keyword, "bitcast") || l_is(prev, TokenKind::Keyword, "sizeof")));
 			}
 			afterType = false;
-			if (l_is(&t, TokenKind::Punct, "<") && (l_is(prev, TokenKind::Keyword, "cast") || l_is(prev, TokenKind::Keyword, "sizeof")))
+			if (l_is(&t, TokenKind::Punct, "<") && (l_is(prev, TokenKind::Keyword, "cast") || l_is(prev, TokenKind::Keyword, "bitcast") || l_is(prev, TokenKind::Keyword, "sizeof")))
 				typeDepth++;
 			else if (typeDepth > 0 && l_is(&t, TokenKind::Punct, "<"))
 				typeDepth++;
@@ -2041,15 +2041,18 @@ namespace dscript
 			n->a = parseUnary();
 			return n;
 		}
-		if (acceptKeyword("cast"))
+		if (isKeyword("cast") || isKeyword("bitcast"))
 		{
+			// cast<T>(value): converted to T; bitcast<T>(value): the same bits read as a T (value = 1).
+			const std::string word = next().text;
 			Node* n = make(NodeKind::Cast, pos);
-			expectPunct("<", "after 'cast' (cast<type>(value))");
+			n->value = word == "bitcast" ? 1 : 0;
+			expectPunct("<", "after '" + word + "' (" + word + "<type>(value))");
 			n->typeSyntax = parseType();
-			expectPunct(">", "after the cast type");
-			expectPunct("(", "after cast<type>");
+			expectPunct(">", "after the " + word + " type");
+			expectPunct("(", "after " + word + "<type>");
 			n->a = parseExpression();
-			expectPunct(")", "after the cast value");
+			expectPunct(")", "after the " + word + " value");
 			return parsePostfix(n);
 		}
 		if (acceptKeyword("sizeof"))

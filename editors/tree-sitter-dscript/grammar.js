@@ -477,7 +477,8 @@ module.exports = grammar({
 			);
 		},
 
-		cast_expression: $ => seq('cast', '<', field('type', $._type), '>', '(', field('value', $._expression), ')'),
+		// cast<T>(value): converted; bitcast<T>(value): the same bits read as a T
+		cast_expression: $ => seq(choice('cast', 'bitcast'), '<', field('type', $._type), '>', '(', field('value', $._expression), ')'),
 
 		sizeof_expression: $ => choice(
 			seq('sizeof', '<', field('type', $._type), '>'),

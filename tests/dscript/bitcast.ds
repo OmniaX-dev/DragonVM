@@ -1,0 +1,28 @@
+// bitcast<T>(value): the same bits read as a T (f32 <-> integers, integers of a size, pointers,
+// structs and arrays of the same size, constants, constexpr subs).
+// expect-rv: 0
+struct Pixel { var r: u8; var g: u8; var b: u8; var a: u8; };
+struct Pair { var lo: u16; var hi: u16; };
+constexpr sub float_bits(var f: f32) -> u32 { return bitcast<u32>(f); }
+constexpr sub pixel_of(var v: u32) -> Pixel { return bitcast<Pixel>(v); }
+constexpr ONE_BITS = bitcast<u32>(1.0);
+sub main() -> i32 {
+	var bits: u32 = 0x3F800000;
+	var f = bitcast<f32>(bits);
+	if (f != 1.0 or bitcast<u32>(f + 1.0) != 0x40000000) return 1;
+	if (ONE_BITS != 0x3F800000 or float_bits(2.0) != 0x40000000) return 2;
+	var s: i16 = -2;
+	var u = bitcast<u16>(s);
+	if (u != 0xFFFE or bitcast<i16>(u) != -2 or bitcast<i8>(cast<u8>(200)) != -56) return 3;
+	var p: Pixel = { 1, 2, 3, 4 };
+	if (bitcast<u32>(p) != 0x01020304) return 4;
+	var q = bitcast<Pixel>(0xAABBCCDDu);
+	if (q.r != 0xAA or q.a != 0xDD or bitcast<Pixel>(bits | 1).a != 1) return 5;
+	if (bitcast<Pair>(p).hi != 0x0304) return 6;
+	var bytes: u8[4] = { 0, 0, 0x80, 0x3F };
+	if (bitcast<u32>(bytes) != 0x0000803F) return 7;	// (big endian)
+	var ptr: u8* = cast<u8*>(0x1000);
+	if (bitcast<u32>(ptr) != 0x1000 or bitcast<u8*>(0x2000u) != cast<u8*>(0x2000)) return 8;
+	if (pixel_of(0x01020304).b != 3) return 9;
+	return 0;
+}
