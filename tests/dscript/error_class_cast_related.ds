@@ -1,0 +1,4 @@
+// expect-error: cast<B*> between pointers to classes derived from one another: static_cast<B*>(...)
+class A { }
+class B ex A { }
+sub main() -> i32 { var b: B; var a: A* = &b; var p: B* = cast<B*>(a); return 0; }

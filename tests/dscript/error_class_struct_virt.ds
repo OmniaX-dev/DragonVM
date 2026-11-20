@@ -1,0 +1,3 @@
+// expect-error: 'virt' is for the subs of a class
+struct S { virt sub f() -> void { } }
+sub main() -> i32 { return 0; }

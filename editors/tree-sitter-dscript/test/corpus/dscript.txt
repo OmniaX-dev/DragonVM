@@ -1444,3 +1444,59 @@ var p = bitcast<Pixel>(0xAABBCCDDu).r;
         (type_identifier)
         (number_literal))
       (field_identifier))))
+
+================================================================================
+classes and interfaces
+================================================================================
+
+abstract class Fig ex Base impl Shape, Named friend Spy, peek {
+	prot var s: i32;
+	pure sub sides() -> i32;
+	override final sub area() -> i32 { return static_cast<i32>(1); }
+}
+interface Shape ex Other { sub area() -> i32; }
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (struct_declaration
+    (abstract_modifier)
+    (type_identifier)
+    (extends_clause
+      (type_identifier))
+    (implements_clause
+      (type_identifier)
+      (type_identifier))
+    (friend_clause
+      (identifier)
+      (identifier))
+    (field_list
+      (field_declaration
+        (prot_modifier)
+        (field_identifier)
+        (primitive_type))
+      (function_declaration
+        (pure_modifier)
+        (identifier)
+        (parameter_list)
+        (primitive_type))
+      (function_declaration
+        (override_modifier)
+        (final_modifier)
+        (identifier)
+        (parameter_list)
+        (primitive_type)
+        (block
+          (return_statement
+            (cast_expression
+              (primitive_type)
+              (number_literal)))))))
+  (struct_declaration
+    (type_identifier)
+    (extends_clause
+      (type_identifier))
+    (field_list
+      (function_declaration
+        (identifier)
+        (parameter_list)
+        (primitive_type)))))

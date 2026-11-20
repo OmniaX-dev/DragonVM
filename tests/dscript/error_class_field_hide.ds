@@ -1,0 +1,4 @@
+// expect-error: 'x' is a field of A already (B extends it): a class cannot hide what it inherits
+class A { var x: i32; }
+class B ex A { var x: i32; }
+sub main() -> i32 { return 0; }

@@ -1,0 +1,4 @@
+// expect-error: 'x' is private to A (priv)
+class A { priv var x: i32; }
+class B ex A { sub g() -> i32 { return this->x; } }
+sub main() -> i32 { return 0; }

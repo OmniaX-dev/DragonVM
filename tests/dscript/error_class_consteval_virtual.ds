@@ -1,0 +1,5 @@
+// expect-error: objects of classes with virtual subs (or interfaces) are not built when compiling
+class V { virt sub f() -> i32 { return 3; } }
+consteval sub useV() -> i32 { var v: V; return v.f(); }
+constexpr K = useV();
+sub main() -> i32 { return K; }

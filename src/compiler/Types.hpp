@@ -52,6 +52,8 @@ namespace dscript
 		bool isPrivate { false };	// priv var: only the struct's own subs can use it
 		bool isReadonly { false };	// readonly var: everyone reads it, only the struct's own subs change it
 		bool isConst { false };		// const: set when the struct is built (default, { ... }, in new), then never changed
+		bool isProtected { false };	// prot var: the class, the classes derived from it (and its friends) use it
+		const StructInfo* owner { nullptr };	// a field a class inherits: the struct / class that declares it (nullptr: this one)
 	};
 
 	struct StructInfo
@@ -64,6 +66,39 @@ namespace dscript
 		Node* decl { nullptr };
 		bool anonymous { false };	// struct { ... } used as a type (name is a hidden one)
 		SourcePos pos;
+
+		// ===== classes and interfaces =====
+		// A class's fields start with those of the class it extends (base, at baseOffset: 0, or 4
+		// when the class adds the vtable pointer its base has not), copied with their offsets in the
+		// whole object (owner: where they are declared). An interface is only a vtable pointer.
+		int kind { 0 };				// 0 struct, 1 class, 2 interface
+		bool isAbstract { false };
+		bool isFinal { false };
+		StructInfo* base { nullptr };
+		uint32_t baseOffset { 0 };
+		std::vector<StructInfo*> interfaces;	// impl (an interface: the one it extends)
+		bool dynamic { false };		// a vtable pointer at offset 0 (a class with virtual subs, an interface)
+		// Every interface the class can be used as, and where its vtable pointer is in the object.
+		struct IfaceSlot { StructInfo* iface; uint32_t offset; };
+		std::vector<IfaceSlot> ifaceSlots;
+		// The vtable pointers in the object: their offset, and whose table layout they follow (the
+		// class itself at 0, or an interface).
+		struct Vptr { uint32_t offset; StructInfo* view; };
+		std::vector<Vptr> vptrs;
+		// The table (built once the subs have their types): a slot per virtual sub (the base's
+		// first), the sub that introduced it and the one this class calls (nullptr: pure).
+		struct VSlot { FuncInfo* decl; FuncInfo* impl; };
+		std::vector<VSlot> vslots;
+		bool vtablesBuilt { false };
+		bool vtablesBuilding { false };
+		std::vector<std::string> friendClasses;	// full names
+		std::vector<std::string> friendSubs;
+		bool friendsResolved { false };
+		bool isClass(void) const { return kind == 1; }
+		bool isInterface(void) const { return kind == 2; }
+		// Can't be a value (only pointed at): an interface, an abstract class.
+		bool onlyPointer(void) const { return kind == 2 || isAbstract; }
+
 		const StructField* field(const std::string& name) const;
 		// The name for messages ("struct { ... } (file:line)" for nameless structs).
 		std::string displayName(void) const;

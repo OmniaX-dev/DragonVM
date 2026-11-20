@@ -1,0 +1,4 @@
+// expect-error: 'f' redefines the virtual sub A::f: mark it override
+class A { virt sub f() -> i32 { return 1; } }
+class B ex A { sub f() -> i32 { return 2; } }
+sub main() -> i32 { return 0; }

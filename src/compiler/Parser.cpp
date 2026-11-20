@@ -70,7 +70,7 @@ namespace dscript
 				const Token& t = m_tokens[j];
 				if (t.kind == TokenKind::Punct && t.text == "{") depth++;
 				else if (t.kind == TokenKind::Punct && t.text == "}" && --depth == 0) break;
-				else if (depth == 1 && t.kind == TokenKind::Keyword && (t.text == "struct" || t.text == "sub") && j + 1 < m_tokens.size()
+				else if (depth == 1 && t.kind == TokenKind::Keyword && (t.text == "struct" || t.text == "sub" || t.text == "class" || t.text == "interface") && j + 1 < m_tokens.size()
 						 && m_tokens[j + 1].kind == TokenKind::Identifier)
 					m_templateNames.insert(m_tokens[j + 1].text);
 			}
@@ -107,7 +107,7 @@ namespace dscript
 			const Token& t = peek();
 			bool value = t.kind == TokenKind::Integer || t.kind == TokenKind::Float || t.kind == TokenKind::String
 				|| (t.kind == TokenKind::Punct && (t.text == "-" || t.text == "!" || t.text == "~" || t.text == "+"))
-				|| (t.kind == TokenKind::Keyword && (t.text == "true" || t.text == "false" || t.text == "null" || t.text == "sizeof" || t.text == "cast" || t.text == "bitcast" || t.text == "not"));
+				|| (t.kind == TokenKind::Keyword && (t.text == "true" || t.text == "false" || t.text == "null" || t.text == "sizeof" || t.text == "cast" || t.text == "bitcast" || t.text == "static_cast" || t.text == "not"));
 			if (t.kind == TokenKind::Identifier && t.fixedType == nullptr)
 			{
 				// Name.field / f(...) / N + 1: a value (after a qualified name)
@@ -340,12 +340,18 @@ namespace dscript
 			e.first = i;
 			e.guards = guards;
 			while (i < tk.size() && tk[i].kind == TokenKind::Keyword && (tk[i].text == "priv" || tk[i].text == "inline" || tk[i].text == "static" || tk[i].text == "atomic"
-				|| tk[i].text == "readonly" || tk[i].text == "constexpr" || tk[i].text == "consteval"))
+				|| tk[i].text == "readonly" || tk[i].text == "constexpr" || tk[i].text == "consteval" || tk[i].text == "prot" || tk[i].text == "abstract" || tk[i].text == "final"
+				|| tk[i].text == "virt" || tk[i].text == "pure" || tk[i].text == "override"))
+			{
+				if (owner != nullptr && (tk[i].text == "virt" || tk[i].text == "pure" || tk[i].text == "override" || tk[i].text == "final"))
+					error(tk[i].pos, "a method template is not virtual (each instance is a sub of its own: there is no slot for it in the class's table)");
 				i++;
-			if (!(l_is(i, TokenKind::Keyword, "sub") || (l_is(i, TokenKind::Keyword, "struct") && owner == nullptr)) || i + 1 >= tk.size() || tk[i + 1].kind != TokenKind::Identifier)
+			}
+			const bool structLike = l_is(i, TokenKind::Keyword, "struct") || l_is(i, TokenKind::Keyword, "class") || l_is(i, TokenKind::Keyword, "interface");
+			if (!(l_is(i, TokenKind::Keyword, "sub") || (structLike && owner == nullptr)) || i + 1 >= tk.size() || tk[i + 1].kind != TokenKind::Identifier)
 				error(i < tk.size() ? tk[i].pos : open, owner != nullptr ? "a template in a struct holds methods (sub ...)" :
 					"a template holds structs and subs (struct ... / sub ...; around them, if constexpr (...) { ... }; static_assert(...)), found " + describe(i < tk.size() ? tk[i] : peek()));
-			e.isStruct = tk[i].text == "struct";
+			e.isStruct = structLike;
 			e.nameToken = i + 1;
 			e.name = tk[i + 1].text;
 			i += 2;
@@ -391,6 +397,9 @@ namespace dscript
 				else if ((flags & 64) == 0 && acceptKeyword("readonly")) flags |= 64;
 				else if ((flags & 384) == 0 && acceptKeyword("constexpr")) flags |= 128;
 				else if ((flags & 384) == 0 && acceptKeyword("consteval")) flags |= 256;
+				else if ((flags & 8208) == 0 && acceptKeyword("prot")) flags |= 8192;
+				else if (isKeyword("virt") || isKeyword("pure") || isKeyword("override") || isKeyword("final"))
+					error(peek().pos, "a method template is not virtual (each instance is a sub of its own: there is no slot for it in the class's table)");
 				else break;
 			}
 			m_scope = owner->name;
@@ -696,7 +705,8 @@ namespace dscript
 	Node* Parser::parseDeclaration(void)
 	{
 		if (isKeyword("template")) return parseTemplate(nullptr);
-		if (isKeyword("struct")) return parseStruct();
+		if (isKeyword("struct") || isKeyword("class") || isKeyword("interface") || isKeyword("abstract") || (isKeyword("final") && isKeyword("class", 1)))
+			return parseStruct();
 		if (isKeyword("enum")) return parseEnum();
 		if (isKeyword("const") || (isKeyword("constexpr") && peek(1).kind == TokenKind::Identifier))
 		{
@@ -756,6 +766,10 @@ namespace dscript
 			error(peek().pos, "'static' is for the local variables and constants of a sub (a global already exists for the whole program)");
 		if (isKeyword("priv"))
 			error(peek().pos, "'priv' is for the fields and subs of a struct");
+		if (isKeyword("prot"))
+			error(peek().pos, "'prot' is for the fields and subs of a class");
+		if (isKeyword("virt") || isKeyword("pure") || isKeyword("override") || isKeyword("final"))
+			error(peek().pos, "'" + peek().text + "' is for the subs of a class");
 		if (acceptKeyword("atomic"))
 		{
 			if (isKeyword("inline"))
@@ -791,13 +805,73 @@ namespace dscript
 		error(peek().pos, "declaration expected (var, sub, inline sub, struct, enum, const, alias, namespace or low), found " + describe(peek()));
 	}
 
+	// struct Name [friend A, f] { ... }
+	// [abstract | final] class Name [ex Base] [impl I1, I2] [friend A, f] { ... }
+	// interface Name [ex Other] { ... }
 	Node* Parser::parseStruct(const Node* owner)
 	{
-		Node* n = make(NodeKind::StructDecl, next().pos);
-		n->name = expectIdentifier("after 'struct'");
+		const SourcePos start = peek().pos;
+		int classFlags = 0;
+		while (isKeyword("abstract") || isKeyword("final"))
+		{
+			const Token& t = next();
+			const int flag = t.text == "abstract" ? 1 : 2;
+			if ((classFlags & flag) != 0)
+				error(t.pos, "'" + t.text + "' twice");
+			classFlags |= flag;
+			if (!isKeyword("class") && !isKeyword("abstract") && !isKeyword("final"))
+				error(peek().pos, "'class' expected after '" + t.text + "' (" + t.text + " class Name ...)");
+		}
+		if (classFlags == 3)
+			error(start, "a class is either abstract (only classes derived from it are built) or final (no class derives from it), not both");
+		const Token& kw = next();
+		Node* n = make(NodeKind::StructDecl, start);
+		n->classKind = kw.text == "class" ? 1 : kw.text == "interface" ? 2 : 0;
+		n->classFlags = classFlags;
+		n->name = expectIdentifier("after '" + kw.text + "'");
 		n->namePos = lastPos();
 		nameDeclaration(n);
 		n->owner = const_cast<Node*>(owner);
+		if (isKeyword("ex"))
+		{
+			const Token& ex = next();
+			if (n->classKind == 0)
+				error(ex.pos, "structs do not extend others (their size is their fields'): a class can (class " + n->shortName + " ex ...)");
+			n->typeSyntax = parseType();
+			if (isPunct(","))
+				error(peek().pos, n->classKind == 2 ? "an interface extends one interface" :
+					"a class extends one class (no multiple inheritance); interfaces are implemented with impl (class " + n->shortName + " ex Base impl I1, I2)");
+		}
+		if (isKeyword("impl"))
+		{
+			const Token& im = next();
+			if (n->classKind != 1)
+				error(im.pos, std::string(n->classKind == 0 ? "structs" : "interfaces") + " do not implement interfaces (" +
+					(n->classKind == 0 ? "a class does: class " + n->shortName + " impl ..." : "an interface extends one: interface " + n->shortName + " ex Other") + ")");
+			do
+				n->impls.push_back(parseType());
+			while (acceptPunct(","));
+		}
+		if (isKeyword("ex") && n->classKind == 1)
+			error(peek().pos, "ex comes before impl (class " + n->shortName + " ex Base impl I1, I2)");
+		if (isKeyword("friend"))
+		{
+			const Token& fr = next();
+			if (n->classKind == 2)
+				error(fr.pos, "interfaces have nothing private: no friends");
+			do
+			{
+				Node* f = make(NodeKind::Ident, peek().pos);
+				bool global = false;
+				f->name = parseQualifiedName("after 'friend' (a struct, a class or a sub)", global);
+				if (global)
+					f->name = "::" + f->name;
+				n->friends.push_back(f);
+			}
+			while (acceptPunct(","));
+		}
+		if (isKeyword("ex") || isKeyword("impl"))
+			error(peek().pos, "write the class as: class " + n->shortName + " ex Base impl I1, I2 friend F1, F2 { ... }");
 		parseStructFields(n);
 		acceptPunct(";");
 		return n;
@@ -819,8 +893,25 @@ namespace dscript
 			return;
 		}
 		// priv var / priv sub: only the struct's own subs can use it. readonly var: everyone
-		// can read it, only the struct's own subs can change it.
+		// can read it, only the struct's own subs can change it. prot (classes): also the subs of
+		// the classes derived from it.
 		const bool priv = acceptKeyword("priv");
+		const bool prot = !priv && isKeyword("prot");
+		if (prot)
+		{
+			const Token& p = next();
+			if (decl->classKind != 1)
+				error(p.pos, decl->classKind == 2 ? "interfaces have nothing protected (their subs are for everyone)" : "prot is for classes (structs are not derived from): priv keeps it in the struct");
+			if (isKeyword("priv"))
+				error(peek().pos, "a member is either priv or prot");
+		}
+		if (decl->classKind == 2)
+		{
+			if (priv)
+				error(m_tokens[m_pos - 1].pos, "interfaces have nothing private (their subs are for everyone)");
+			if (isKeyword("var") || isKeyword("const") || isKeyword("auto") || (isKeyword("readonly") && (isKeyword("var", 1) || isKeyword("const", 1))))
+				error(peek().pos, "interfaces have no fields (only subs: their classes have the fields)");
+		}
 		// static var / static const: a variable of the struct (one, not one per instance): a hidden
 		// top-level declaration <Struct>::<name> (priv, readonly: as for fields). In a library's
 		// interface, static readonly var is a static const computed when the library starts.
@@ -856,9 +947,12 @@ namespace dscript
 			}
 			if (interfaceConst)
 				v->constKind = 1;
+			if (decl->classKind == 2 && v->kind == NodeKind::VarDecl)
+				error(v->pos, "interfaces have no variables (static const and constexpr constants are fine)");
 			nameDeclaration(v);
 			v->owner = decl;
 			v->isPrivate = priv;
+			v->isProtected = prot;
 			v->isReadonly = staticReadonly;
 			m_nested.push_back(v);
 			return;
@@ -873,6 +967,7 @@ namespace dscript
 				error(peek(1).pos, "'const " + peek(1).text + "': const takes the place of var (const name: type)");
 			Node* field = parseVarDecl(false);
 			field->isPrivate = priv;
+			field->isProtected = prot;
 			field->shortName = field->name;
 			field->scope = m_scope;
 			expectPunct(";", "after the struct field");
@@ -889,6 +984,7 @@ namespace dscript
 			nameDeclaration(c);
 			c->owner = decl;
 			c->isPrivate = priv;
+			c->isProtected = prot;
 			m_nested.push_back(c);
 			return;
 		}
@@ -899,8 +995,8 @@ namespace dscript
 		else if (isKeyword("readonly"))
 		{
 			const Token& ro = next();
-			if (priv || isKeyword("priv"))
-				error(ro.pos, "a field is either priv or readonly: priv already keeps others from changing it (and from reading it)");
+			if (priv || prot || isKeyword("priv") || isKeyword("prot"))
+				error(ro.pos, std::string("a field is either ") + (prot ? "prot" : "priv") + " or readonly: " + (prot ? "prot" : "priv") + " already keeps others from changing it (and from reading it)");
 			if (decl->value != 0)
 				error(ro.pos, "readonly fields need a named struct (struct Name { ... }): only its subs can change them");
 			if (isKeyword("const"))
@@ -913,14 +1009,16 @@ namespace dscript
 			decl->list.push_back(field);
 			return;
 		}
-		if (isKeyword("struct") || isKeyword("enum"))
+		if (isKeyword("struct") || isKeyword("enum") || isKeyword("class") || isKeyword("interface") || isKeyword("abstract") || (isKeyword("final") && isKeyword("class", 1)))
 		{
 			// A nested struct / enum: <Struct>::<name> (priv: only usable in the struct).
 			if (decl->value != 0)
 				error(peek().pos, "nested types need a named struct (struct Name { ... }), not a nameless one");
 			if (isKeyword("struct") && !(peek(1).kind == TokenKind::Identifier))
 				error(peek(1).pos, "a nested struct needs a name (struct Name { ... }); use struct { ... } as the type of a field for a nameless one");
-			Node* nested = isKeyword("struct") ? parseStruct(decl) : parseEnum(decl);
+			if (prot)
+				error(peek().pos, "nested types are priv or for everyone (not prot)");
+			Node* nested = isKeyword("enum") ? parseEnum(decl) : parseStruct(decl);
 			nested->isPrivate = priv;
 			m_nested.push_back(nested);
 			return;
@@ -936,22 +1034,40 @@ namespace dscript
 			return;
 		}
 		if (isKeyword("sub") || isKeyword("inline") || isKeyword("static") || isKeyword("priv") || isKeyword("atomic") || isKeyword("readonly")
-			|| isKeyword("constexpr") || isKeyword("consteval"))
+			|| isKeyword("constexpr") || isKeyword("consteval") || isKeyword("virt") || isKeyword("pure") || isKeyword("override") || isKeyword("final"))
 		{
 			// A method: a hidden top-level sub (added at the end of the program). static: no
 			// this, called as Struct::name(...) / Struct.name(...).
 			if (decl->value != 0)
 				error(peek().pos, "methods need a named struct (struct Name { ... }), not a nameless one");
 			// priv, static and inline, in any order
-			int flags = priv ? 16 : 0;
+			int flags = (priv ? 16 : 0) | (prot ? 8192 : 0);
 			while (true)
 			{
+				const SourcePos at = peek().pos;
+				const int virtFlags = parseVirtualFlag(flags);
+				if (virtFlags != 0)
+				{
+					if (decl->classKind == 0)
+						error(at, "'" + m_tokens[m_pos - 1].text + "' is for the subs of a class (struct subs are never virtual)");
+					if (decl->classKind == 2 && virtFlags != 1024)
+						error(at, "the subs of an interface are pure already (sub name(...) -> type;): '" + m_tokens[m_pos - 1].text + "' is for classes");
+					flags |= virtFlags;
+					continue;
+				}
 				if ((flags & 8) == 0 && acceptKeyword("static"))
 					flags |= 8;
 				else if ((flags & 2) == 0 && acceptKeyword("inline"))
 					flags |= 2;
-				else if ((flags & 16) == 0 && acceptKeyword("priv"))
+				else if ((flags & 8208) == 0 && acceptKeyword("priv"))
 					flags |= 16;
+				else if ((flags & 8208) == 0 && isKeyword("prot"))
+				{
+					if (decl->classKind != 1)
+						error(peek().pos, "prot is for the subs of a class");
+					next();
+					flags |= 8192;
+				}
 				else if ((flags & 32) == 0 && acceptKeyword("atomic"))
 					flags |= 32;
 				else if ((flags & 64) == 0 && acceptKeyword("readonly"))
@@ -969,6 +1085,13 @@ namespace dscript
 				error(peek().pos, "a static sub has no this: readonly is for the subs that work on the struct (it makes this a const pointer)");
 			if (!isKeyword("sub"))
 				error(peek().pos, "'sub' expected after '" + m_tokens[m_pos - 1].text + "', found " + describe(peek()));
+			if (decl->classKind == 2)
+			{
+				if ((flags & ~(1024 | 64)) != 0)
+					error(peek().pos, "the subs of an interface are only declared (sub name(...) -> type;): no static, inline, atomic, constexpr or consteval");
+				flags |= 1024;		// (pure)
+			}
+			checkVirtualFlags(flags, peek(1));
 			Node* outerFunc = m_currentFunc;
 			auto outerScopes = std::move(m_scopes);
 			m_scopes.clear();
@@ -985,10 +1108,50 @@ namespace dscript
 			error(peek().pos, "struct fields are declared with 'var' (methods with 'sub'), found " + describe(peek()));
 		Node* field = parseVarDecl(false);
 		field->isPrivate = priv;
+		field->isProtected = prot;
 		field->shortName = field->name;
 		field->scope = m_scope;
 		expectPunct(";", "after the struct field");
 		decl->list.push_back(field);
+	}
+
+	// virt (512), pure (1024), override (2048), final (4096) before a method: the flag (0: none).
+	int Parser::parseVirtualFlag(int flags)
+	{
+		static const char* words[] = { "virt", "pure", "override", "final" };
+		for (int i = 0; i < 4; i++)
+		{
+			if (!isKeyword(words[i]))
+				continue;
+			const Token& t = next();
+			const int flag = 512 << i;
+			if ((flags & flag) != 0)
+				error(t.pos, "'" + t.text + "' twice");
+			return flag;
+		}
+		return 0;
+	}
+
+	// The virtual flags that go together (name: the sub's name, after 'sub').
+	void Parser::checkVirtualFlags(int flags, const Token& name)
+	{
+		if ((flags & (512 | 1024 | 2048 | 4096)) == 0)
+			return;
+		const SourcePos& pos = name.pos;
+		if ((flags & 8) != 0)
+			error(pos, "a static sub has no this: it cannot be virtual (virt, pure, override, final are for the subs called on an object)");
+		if (name.kind == TokenKind::Identifier && name.text == "new")
+			error(pos, "constructors are not virtual (a class's new builds that class: a derived class calls it as Base::new(...))");
+		if ((flags & 256) != 0)
+			error(pos, "a consteval sub only exists when compiling: it cannot be virtual (its table needs its address)");
+		if ((flags & 512) != 0 && (flags & 2048) != 0)
+			error(pos, "override is virtual already (override sub ...): virt is for the subs a class introduces");
+		if ((flags & 512) != 0 && (flags & 1024) != 0)
+			error(pos, "pure is virtual already (pure sub ...;)");
+		if ((flags & 1024) != 0 && (flags & (2048 | 4096)) != 0)
+			error(pos, std::string("a pure sub has no body: it cannot be ") + ((flags & 2048) != 0 ? "an override (an override replaces a sub with a body of its own)" : "final (the classes derived from it give it a body)"));
+		if ((flags & 4096) != 0 && (flags & (512 | 2048)) == 0)
+			error(pos, "final is for virtual subs: final override sub ... (no class derived from this one overrides it), or virt final sub ...");
 	}
 
 	void Parser::parseStructFields(Node* decl)
@@ -1217,8 +1380,8 @@ namespace dscript
 	}
 
 	// FuncDecl flags (value): 1 interrupt, 2 inline, 4 method, 8 static method, 16 priv, 32 atomic
-	// (the body is an atomic block). owner:
-	// the struct of a method.
+	// (the body is an atomic block), 64 readonly, 128 constexpr, 256 consteval, 512 virt, 1024 pure,
+	// 2048 override, 4096 final, 8192 prot. owner: the struct of a method.
 	Node* Parser::parseFunction(int flags, const Node* owner)
 	{
 		Node* n = make(NodeKind::FuncDecl, next().pos);
@@ -1256,6 +1419,14 @@ namespace dscript
 		}
 		if (acceptPunct("->"))
 			n->typeSyntax = parseType();
+		if ((flags & 1024) != 0)
+		{
+			if (isPunct("{"))
+				error(peek().pos, owner != nullptr && owner->classKind == 2 ? "the subs of an interface have no body (its classes have them: override sub " + n->shortName + "(...) { ... })" :
+					"a pure sub has no body (the classes derived from it have one: override sub " + n->shortName + "(...) { ... })");
+			expectPunct(";", "after the pure sub (it has no body)");
+			return n;
+		}
 		if (owner != nullptr && !isPunct("{") && m_external == 0)
 			error(peek().pos, "a method needs its body here, in the struct ('{' expected)");
 		if (acceptPunct(";"))
@@ -1790,10 +1961,10 @@ namespace dscript
 					(t.kind == TokenKind::Punct && noSpaceBefore.count(t.text) > 0) || unaryPrev || typeDepth > 0 ||
 					(l_is(&t, TokenKind::Punct, "(") && (l_endsValue(prev) || afterType ||
 						l_is(prev, TokenKind::Keyword, "sizeof"))) ||
-					(l_is(&t, TokenKind::Punct, "<") && (l_is(prev, TokenKind::Keyword, "cast") || l_is(prev, TokenKind::Keyword, "bitcast") || l_is(prev, TokenKind::Keyword, "sizeof")));
+					(l_is(&t, TokenKind::Punct, "<") && (l_is(prev, TokenKind::Keyword, "cast") || l_is(prev, TokenKind::Keyword, "bitcast") || l_is(prev, TokenKind::Keyword, "static_cast") || l_is(prev, TokenKind::Keyword, "sizeof")));
 			}
 			afterType = false;
-			if (l_is(&t, TokenKind::Punct, "<") && (l_is(prev, TokenKind::Keyword, "cast") || l_is(prev, TokenKind::Keyword, "bitcast") || l_is(prev, TokenKind::Keyword, "sizeof")))
+			if (l_is(&t, TokenKind::Punct, "<") && (l_is(prev, TokenKind::Keyword, "cast") || l_is(prev, TokenKind::Keyword, "bitcast") || l_is(prev, TokenKind::Keyword, "static_cast") || l_is(prev, TokenKind::Keyword, "sizeof")))
 				typeDepth++;
 			else if (typeDepth > 0 && l_is(&t, TokenKind::Punct, "<"))
 				typeDepth++;
@@ -1976,7 +2147,8 @@ namespace dscript
 			expectPunct(";", "after continue");
 			return make(NodeKind::Continue, pos);
 		}
-		if ((isKeyword("sub") && peek(1).kind == TokenKind::Identifier) || isKeyword("inline") || isKeyword("struct") || isKeyword("enum") || isKeyword("namespace"))
+		if ((isKeyword("sub") && peek(1).kind == TokenKind::Identifier) || isKeyword("inline") || isKeyword("struct") || isKeyword("enum") || isKeyword("namespace")
+			|| isKeyword("class") || isKeyword("interface") || isKeyword("abstract"))
 			error(pos, "'" + peek().text + "' declarations are only allowed at the top level");
 		Node* n = make(NodeKind::ExprStmt, pos);
 		n->a = parseExpression();
@@ -2083,12 +2255,14 @@ namespace dscript
 			n->a = parseUnary();
 			return n;
 		}
-		if (isKeyword("cast") || isKeyword("bitcast"))
+		if (isKeyword("cast") || isKeyword("bitcast") || isKeyword("static_cast"))
 		{
-			// cast<T>(value): converted to T; bitcast<T>(value): the same bits read as a T (value = 1).
+			// cast<T>(value): converted to T; bitcast<T>(value): the same bits read as a T (value = 1);
+			// static_cast<T>(value): a conversion the types allow, also from a class pointer to a
+			// pointer to a class derived from it (value = 2).
 			const std::string word = next().text;
 			Node* n = make(NodeKind::Cast, pos);
-			n->value = word == "bitcast" ? 1 : 0;
+			n->value = word == "bitcast" ? 1 : word == "static_cast" ? 2 : 0;
 			expectPunct("<", "after '" + word + "' (" + word + "<type>(value))");
 			n->typeSyntax = parseType();
 			expectPunct(">", "after the " + word + " type");

@@ -1,0 +1,95 @@
+// expect-rv: 0
+// Interfaces (only subs, all pure; one may extend another), abstract classes (pure subs, only
+// pointed at), impl (a table per interface in the object: a pointer to the object converts to
+// a pointer to it), static_cast back to the class (null stays null), objects built in raw memory
+// with new() (an implicit one sets the tables).
+#include(check.ds)
+
+interface Shape {
+	sub area() -> i32;
+}
+interface Named {
+	readonly sub name() -> string;
+}
+interface Scalable ex Shape {
+	sub scale(var k: i32) -> void;
+	constexpr MAX = 100;
+}
+
+struct Pos { var x: i32; var y: i32; }
+
+class Base ex Pos {
+	var id: i32 = 7;
+	sub bump() -> void { this->id++; }
+}
+
+abstract class Figure ex Base impl Scalable, Named {
+	prot var s: i32;
+	sub new(var s: i32) -> void { this->s = s; }
+	pure sub sides() -> i32;
+	override readonly sub name() -> string { return "figure"; }
+}
+
+final class Square ex Figure {
+	inline sub new(var s: i32) -> void { Figure::new(s); }
+	override sub area() -> i32 { return this->s * this->s; }
+	override sub scale(var k: i32) -> void { this->s = this->s * k; }
+	override sub sides() -> i32 { return 4; }
+}
+
+class Rect ex Figure {
+	var w: i32;
+	sub new(var w: i32, var h: i32) -> void { Figure::new(h); this->w = w; }
+	override sub area() -> i32 { return this->w * this->s; }
+	override sub scale(var k: i32) -> void { this->s = this->s * k; this->w = this->w * k; }
+	override sub sides() -> i32 { return 4; }
+	override readonly sub name() -> string { return "rect"; }
+}
+
+abstract class Fig impl Shape { virt sub kind() -> i32 { return 0; } }
+class Plain ex Fig { override sub area() -> i32 { return 7; } }
+
+var g_memory: u8[32];
+
+sub total(var shapes: Shape**, var n: i32) -> i32 {
+	var t: i32 = 0;
+	for (var i: i32 = 0; i < n; i++)
+		t += shapes[i]->area();
+	return t;
+}
+
+sub first(var n: Named*) -> u8 { return n->name()[0]; }
+
+sub main() -> i32 {
+	var sq: Square(3);
+	var r: Rect(2, 5);
+	check(1, sq.area() == 9 && r.area() == 10);
+	var shapes: Shape*[2];
+	shapes[0] = &sq;
+	shapes[1] = &r;
+	check(2, total(&shapes[0], 2) == 19);
+	var sc: Scalable* = &r;
+	sc->scale(2);
+	check(3, r.area() == 40 && shapes[1]->area() == 40 && sc->area() == 40);
+	check(4, first(&sq) == 'f' && first(&r) == 'r');
+	var f: Figure* = &r;
+	check(5, f->sides() == 4 && f->name()[0] == 'r' && f->area() == 40 && f->id == 7);
+	f->bump();
+	f->x = 5;
+	var p: Pos* = &r;
+	check(6, r.id == 8 && p->x == 5);
+	var sh: Shape* = sc;
+	check(7, static_cast<Rect*>(f) == &r && static_cast<Rect*>(sh) == &r && static_cast<Rect*>(sh)->w == 4);
+	check(8, sh == &r && f == &r);
+	var none: Rect* = null;
+	var nf: Figure* = none;
+	var ns: Shape* = none;
+	check(9, nf == null && ns == null && static_cast<Rect*>(ns) == null);
+	var raw: Plain* = cast<Plain*>(&g_memory[0]);
+	raw->new();
+	var rf: Fig* = raw;
+	sh = raw;
+	check(10, rf->area() == 7 && rf->kind() == 0 && sh->area() == 7);
+	check(11, Scalable.MAX == 100 && sizeof(Shape) == 4 && sizeof(Figure) == sizeof(Base) + 16);
+	return result();
+}

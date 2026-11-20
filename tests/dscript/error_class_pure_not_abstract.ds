@@ -1,0 +1,3 @@
+// expect-error: 'f' is pure: A is then an abstract class
+class A { pure sub f() -> i32; }
+sub main() -> i32 { return 0; }

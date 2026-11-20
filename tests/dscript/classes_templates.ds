@@ -1,0 +1,79 @@
+// expect-rv: 0
+// Classes and interfaces in templates (a template class extending another one's instance:
+// Base<T>.m() calls the base's sub on this), nested classes, a for-in on a class's inherited
+// begin / end, an interface that extends another, the conditions' built-ins for classes.
+#include(check.ds)
+
+template(T) {
+	class Base {
+		prot var v: T;
+		constexpr SIZE = sizeof(T);
+		static var count: i32 = 0;
+		static sub make() -> i32 { return 77; }
+		virt sub get() -> T { return this->v; }
+		sub set(var x: T) -> void { this->v = x; }
+	}
+	interface Getter { sub fetch() -> T; }
+	class Derived ex Base<T> impl Getter<T> {
+		override sub get() -> T { return this->v + 1; }
+		override sub fetch() -> T { return this->get() * 2; }
+		sub size() -> u32 { return SIZE; }
+		sub viaBase() -> T { return Base<T>.get(); }
+	}
+}
+
+class Outer {
+	class Inner { virt sub f() -> i32 { return 3; } }
+	priv class Hidden ex Inner { override sub f() -> i32 { return 4; } }
+	var h: Hidden;
+	sub inner() -> Inner* { return &this->h; }
+}
+
+class Range {
+	var a: i32[3];
+	sub begin() -> i32* { return &this->a[0]; }
+	sub end() -> i32* { return &this->a[3]; }
+}
+class MyRange ex Range { }
+
+interface IA { sub a() -> i32; }
+interface IB ex IA { sub b() -> i32; }
+class Both impl IB, IA {
+	override sub a() -> i32 { return 1; }
+	override sub b() -> i32 { return 2; }
+}
+
+sub callA(var p: IA*) -> i32 { return p->a(); }
+
+sub main() -> i32 {
+	var d: Derived<i32>;
+	d.set(10);
+	check(1, d.get() == 11 && d.viaBase() == 10);
+	var g: Getter<i32>* = &d;
+	check(2, g->fetch() == 22);
+	check(3, d.size() == 4 && Derived<i32>.SIZE == 4 && d.SIZE == 4);
+	check(4, Derived<i32>.make() == 77);
+	Derived<i32>.count = 5;
+	check(5, Base<i32>.count == 5 && d.count == 5);
+	var o: Outer;
+	check(6, o.inner()->f() == 4);
+	var r: MyRange;
+	r.a[0] = 1;
+	r.a[1] = 2;
+	r.a[2] = 3;
+	var s: i32 = 0;
+	for (auto x in r)
+		s += x;
+	check(7, s == 6);
+	var both: Both;
+	var pb: IB* = &both;
+	check(8, pb->a() == 1 && pb->b() == 2 && callA(&both) == 1 && callA(pb) == 1);
+	var ia: IA* = &both;
+	check(9, cast<u32>(ia) == cast<u32>(pb) && sizeof(Both) == 8);	// (IB's table serves IA too)
+	if constexpr (is_class(Derived<i32>) and is_base_of(Base<i32>, Derived<i32>) and is_base_of(Getter<i32>, Derived<i32>) and not is_base_of(Derived<i32>, Base<i32>)
+		and is_interface(IA) and is_abstract(IA) and not is_class(IA) and has_method(Derived<i32>, set) and has_method(Derived<i32>, fetch, sub() -> i32) and is_range(MyRange))
+		check(10, true);
+	else
+		check(10, false);
+	return result();
+}

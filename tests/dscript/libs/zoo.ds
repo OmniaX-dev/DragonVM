@@ -1,0 +1,29 @@
+// Classes in a library: an interface, an abstract class, a class (classes_library.ds,
+// classes_dynamic.ds derive from them).
+namespace zoo {
+	interface Speaker {
+		readonly sub speak() -> i32;
+	}
+
+	abstract class Animal impl Speaker friend keeper {
+		prot var legs: i32;
+		priv var secret: i32 = 99;
+		sub new(var legs: i32) -> void { this->legs = legs; }
+		readonly sub getLegs() -> i32 { return this->legs; }
+		pure sub kind() -> i32;
+		virt sub describe() -> i32 { return this->kind() * 100 + this->legs; }
+	}
+
+	class Dog ex Animal {
+		sub new() -> void { Animal::new(4); }
+		override readonly sub speak() -> i32 { return 1; }
+		override sub kind() -> i32 { return 7; }
+	}
+
+	var built: Dog;
+
+	sub keeper(var a: Animal*) -> i32 { return a->secret; }
+	sub talk(var s: Speaker*) -> i32 { return s->speak(); }
+	sub describe(var a: Animal*) -> i32 { return a->describe(); }
+	sub makeDog(var out: Dog*) -> void { out->new(); }
+}

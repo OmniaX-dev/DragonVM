@@ -1,0 +1,3 @@
+// expect-error: a method template is not virtual
+class A { template(T) { virt sub f(var x: T) -> T { return x; } } }
+sub main() -> i32 { return 0; }

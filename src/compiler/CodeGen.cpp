@@ -370,6 +370,19 @@ namespace dscript
 			}
 			if (found)
 				return candidate;
+			if (!s.empty() && m_structs.count(s) > 0)
+			{
+				// A class: what it inherits (its base's constants, static fields, nested types).
+				const Node* d = m_structs[s]->decl;
+				for (int depth = 0; depth < 32 && d != nullptr && d->typeSyntax != nullptr && d->typeSyntax->kind == TypeSyntax::Kind::Named && d->typeSyntax->resolved; depth++)
+				{
+					const std::string base = d->typeSyntax->name;
+					const std::string first = base + "::" + written.substr(0, written.find("::"));
+					if (isDeclared(base + "::" + written) && (m_structs.count(first) > 0 || m_enums.count(first) > 0 || m_consts.count(first) > 0 || m_globals.count(first) > 0))
+						return base + "::" + written;
+					d = m_structs.count(base) > 0 ? m_structs[base]->decl : nullptr;
+				}
+			}
 			if (s.empty())
 				return qualifyThroughAlias(written, scope);
 			// The scope around s (its last '::' outside a template's arguments: Ns::Array<Ns::Point>).
@@ -458,7 +471,19 @@ namespace dscript
 			attempt([&] {
 				if (d->kind == NodeKind::StructDecl)
 				{
-					// The fields' types are looked up from the struct (its nested types).
+					// The fields' types are looked up from the struct (its nested types); the
+					// classes it extends, its interfaces and friends from where it is.
+					resolveTypeNames(d->typeSyntax, d->scope);
+					for (TypeSyntax* t : d->impls)
+						resolveTypeNames(t, d->scope);
+					for (Node* f : d->friends)
+					{
+						if (f->resolved)
+							continue;
+						f->text = f->name;
+						f->name = f->name.rfind("::", 0) == 0 ? f->name.substr(2) : aliasedScope(qualify(f->name, d->scope));
+						f->resolved = true;
+					}
 					for (Node* f : d->list)
 						resolveNames(f, f->scope);
 				}
@@ -551,7 +576,7 @@ namespace dscript
 					break;
 					case NodeKind::StructDecl:
 					{
-						declareName(d->name, d->pos, "a struct");
+						declareName(d->name, d->pos, d->classKind == 1 ? "a class" : d->classKind == 2 ? "an interface" : "a struct");
 						if (d->isPrivate && d->owner != nullptr)
 							m_privTypes[d->name] = d->owner->name;
 						StructInfo* info = new StructInfo();
@@ -559,6 +584,9 @@ namespace dscript
 						info->decl = d;
 						info->anonymous = d->value != 0;
 						info->pos = d->pos;
+						info->kind = d->classKind;
+						info->isAbstract = (d->classFlags & 1) != 0;
+						info->isFinal = (d->classFlags & 2) != 0;
 						m_structs[d->name] = info;
 					}
 					break;
@@ -628,7 +656,7 @@ namespace dscript
 						f->interrupt = (d->value & 1) != 0;
 						f->isInline = (d->value & 2) != 0 && !m_options.noInline;
 						f->external = d->external != 0 && (d->a == nullptr || d->constKind != 0);
-						f->defined = d->a != nullptr || f->external;
+						f->defined = d->a != nullptr || f->external || (d->value & 1024) != 0;	// (pure: no body)
 						m_funcs[d->name].push_back(f);
 						m_funcList.push_back(f);
 					}
@@ -728,7 +756,10 @@ namespace dscript
 				if (base->kind == Type::Kind::Void)
 					error(ts->pos, "arrays of void are not allowed");
 				if (base->kind == Type::Kind::Struct)
+				{
 					resolveStruct(base->structInfo, ts->pos);
+					requireValueType(base, ts->pos, "an array element");
+				}
 				int64_t count = constExpr(ts->count, "an array size");
 				if (count <= 0 || count > 0x0FFFFFFF)
 					error(ts->pos, "invalid array size: " + std::to_string(count));
@@ -778,8 +809,9 @@ namespace dscript
 			error(usePos, (info->anonymous ? info->displayName() : "struct '" + info->name + "'") + " contains itself (use a pointer)");
 		info->resolving = true;
 		filterMembers(info->decl);
-		uint32_t offset = 0;
+		uint32_t offset = classLayout(info);
 		std::vector<Node*> asserts;
+		const std::string what = info->anonymous ? info->displayName() : (info->isClass() ? "class " : info->isInterface() ? "interface " : "struct ") + info->name;
 		for (Node* f : info->decl->list)
 		{
 			if (f->kind == NodeKind::StaticAssert)
@@ -787,20 +819,28 @@ namespace dscript
 				asserts.push_back(f);
 				continue;
 			}
-			if (info->field(f->name) != nullptr)
-				error(f->pos, "duplicate field '" + f->name + "' in " + (info->anonymous ? info->displayName() : "struct " + info->name));
+			if (const StructField* same = info->field(f->name))
+			{
+				if (same->owner != nullptr)
+					error(f->namePos, "'" + f->name + "' is a field of " + same->owner->name + " already (" + info->name + " extends it): a class cannot hide what it inherits");
+				error(f->pos, "duplicate field '" + f->name + "' in " + what);
+			}
 			if (m_funcs.count(info->name + "::" + f->name) > 0)
-				error(f->namePos, "struct " + info->name + " has a field and a method named '" + f->name + "'");
+				error(f->namePos, what + " has a field and a method named '" + f->name + "'");
+			if (info->base != nullptr && !methodsOf(info->base, f->name).empty())
+				error(f->namePos, "'" + f->name + "' is a sub of " + structOfMethod(methodsOf(info->base, f->name)[0])->name + " (" + info->name + " extends it): a field cannot have its name");
 			StructField field;
 			field.name = f->name;
 			field.pos = f->pos;
 			field.namePos = f->namePos;
 			field.isPrivate = f->isPrivate;
+			field.isProtected = f->isProtected;
 			field.isReadonly = f->isReadonly;
 			field.isConst = f->constKind == 1;
 			field.type = resolveType(f->typeSyntax);
 			if (field.type->kind == Type::Kind::Void)
 				error(f->pos, "fields cannot be void");
+			requireValueType(field.type, f->pos, "a field");
 			if (field.type->kind == Type::Kind::Struct)
 				resolveStruct(field.type->structInfo, f->pos);
 			field.offset = offset;
@@ -811,6 +851,7 @@ namespace dscript
 		info->size = offset;
 		info->complete = true;
 		info->resolving = false;
+		implicitConstructor(info);
 		for (Node* sa : asserts)
 			checkStaticAssert(sa, nullptr);		// (sizeof the struct works here)
 		// Default values: constants of the field's type.
@@ -1000,6 +1041,23 @@ namespace dscript
 		if (t != nullptr && t->kind == Type::Kind::Struct)
 		{
 			resolveStruct(t->structInfo, c.decl->pos);
+			std::function<const StructInfo*(Type*)> l_withTable = [&](Type* ft) -> const StructInfo* {
+				if (ft->kind == Type::Kind::Array)
+					return l_withTable(ft->base);
+				if (ft->kind != Type::Kind::Struct)
+					return nullptr;
+				if (!ft->structInfo->vptrs.empty())
+					return ft->structInfo;
+				for (const StructField& f : ft->structInfo->fields)
+				{
+					if (const StructInfo* w = l_withTable(f.type))
+						return w;
+				}
+				return nullptr;
+			};
+			if (const StructInfo* w = l_withTable(t))
+				error(c.decl->pos, "constant '" + shownName(name) + "': " + w->name + " has virtual subs (or interfaces), its objects get their tables when the program runs "
+					"(use a variable)");
 			constStructValues(t->structInfo, c.decl->a, "", c, name);
 			c.type = t;
 			c.resolved = true;
@@ -1251,7 +1309,10 @@ namespace dscript
 		{
 			Type* t = resolveType(p->typeSyntax);
 			if (t->kind == Type::Kind::Struct)
+			{
 				resolveStruct(t->structInfo, p->pos);		// (by value: a copy)
+				requireValueType(t, p->pos, "a parameter");
+			}
 			else if (!t->isScalar())
 			{
 				if (t->kind == Type::Kind::Array)
@@ -1275,7 +1336,10 @@ namespace dscript
 		}
 		Type* ret = d->typeSyntax ? resolveType(d->typeSyntax) : m_types.voidType();
 		if (ret->kind == Type::Kind::Struct)
+		{
 			resolveStruct(ret->structInfo, d->pos);
+			requireValueType(ret, d->pos, "a return value");
+		}
 		else if (ret->kind != Type::Kind::Void && !ret->isScalar())
 			error(d->pos, "subs return integers, pointers, structs or void (not " + ret->name() + ")");
 		f->type = m_types.function(params, ret, d->variadic);
@@ -1422,6 +1486,13 @@ namespace dscript
 		{
 			if (f->base == to->base)
 				return 1;		// (adding const)
+			// A class pointer to a pointer to a class it extends / an interface it implements (the
+			// nearest is the better).
+			int depth = 0;
+			if (f->base->kind == Type::Kind::Struct && to->base->kind == Type::Kind::Struct && derives(f->base->structInfo, to->base->structInfo, nullptr, &depth))
+				return depth > 1 ? 2 : 1;
+			if (to->isVoidPointer() && f->base->kind == Type::Kind::Struct && f->base->structInfo->kind != 0)
+				return 3;		// (worse than to a class it extends)
 			if (to->isVoidPointer() || f->isVoidPointer())
 				return 1;
 			return -1;
@@ -1444,18 +1515,25 @@ namespace dscript
 		else if (from->type && from->type->isConstPointer() && to->kind == Type::Kind::Pointer && !to->constTarget)
 			hint = " (it points at a constant: " + to->name() + " would let it change; cast<" + to->name() + ">(...) if it really may)";
 		else if (from->type && from->type->isPointer() && to->isPointer())
-			hint = " (use cast<" + to->name() + ">(...))";
+		{
+			int64_t delta = 0;
+			if (pointerAdjust(decay(from->type), to, delta))
+				hint = " (" + to->base->name() + " is derived from " + decay(from->type)->base->name() + ": static_cast<" + to->name() + ">(...), if it points at one)";
+			else
+				hint = " (use cast<" + to->name() + ">(...))";
+		}
 		error(from->pos, "cannot convert " + fromName + " to " + to->name() + " " + context + hint);
 	}
 
-	FuncInfo* CodeGen::resolveOverload(const std::string& name, const std::vector<Node*>& args, const SourcePos& pos)
+	FuncInfo* CodeGen::bestOverload(const std::vector<FuncInfo*>& funcs, const std::vector<Node*>& args, bool& ambiguous)
 	{
-		const auto& funcs = m_funcs[name];
 		FuncInfo* best = nullptr;
 		int bestCost = 0x7FFFFFFF;
-		bool ambiguous = false;
+		ambiguous = false;
 		for (FuncInfo* f : funcs)
 		{
+			if (f->type == nullptr)
+				continue;
 			const auto& params = f->type->params;
 			if ((args.size() > params.size() && f->type->variadic == 0) || args.size() < f->requiredParams)
 				continue;
@@ -1483,6 +1561,14 @@ namespace dscript
 			else if (cost == bestCost)
 				ambiguous = true;
 		}
+		return best;
+	}
+
+	FuncInfo* CodeGen::resolveOverload(const std::string& name, const std::vector<Node*>& args, const SourcePos& pos, const std::vector<FuncInfo*>* candidates)
+	{
+		const auto& funcs = candidates != nullptr ? *candidates : m_funcs[name];
+		bool ambiguous = false;
+		FuncInfo* best = bestOverload(funcs, args, ambiguous);
 		std::string argTypes = "(";
 		for (size_t i = 0; i < args.size(); i++)
 			argTypes += (i > 0 ? ", " : "") + (args[i]->type ? args[i]->type->name() : std::string("sub"));
@@ -1507,7 +1593,7 @@ namespace dscript
 			{
 				msg += "; candidates:";
 				for (FuncInfo* f : funcs)
-					msg += "\n    " + name + f->type->name().substr(3) + " (" + posString(f->decl->pos) + ")";
+					msg += "\n    " + f->decl->name + f->type->name().substr(3) + " (" + posString(f->decl->pos) + ")";
 			}
 			error(pos, msg);
 		}
@@ -1660,12 +1746,46 @@ namespace dscript
 				}
 				break;
 			}
+			if (e->value == 2)
+			{
+				// static_cast<T>(value): what converts to T anyway, numbers to numbers, and a class
+				// pointer to a pointer to a class derived from it (or to the class implementing an
+				// interface): the pointer moves to the whole object (unchecked: it must be one).
+				Type* to = resolveType(e->typeSyntax);
+				check(e->a, to->isFunction() ? to : nullptr);
+				Type* from = decay(e->a->type);
+				if (from == nullptr)
+					error(e->a->pos, "ambiguous overloaded sub in static_cast");
+				e->type = to;
+				int64_t delta = 0;
+				if (conversionCost(e->a, to) >= 0)
+					;
+				else if (from->isArithmetic() && to->isArithmetic())
+					;
+				else if (pointerAdjust(from, to, delta))
+				{
+					if (from->constTarget && !to->constTarget)
+						error(e->pos, "static_cast<" + to->name() + ">: " + from->name() + " points at a constant (static_cast<const " + to->base->name() + "*>(...))");
+				}
+				else
+					error(e->pos, "static_cast cannot convert " + from->name() + " to " + to->name() + (from->isPointer() && to->isPointer() ?
+						" (they are not classes derived from one another: cast<" + to->name() + ">(...) reads the same address as the other type)" : ""));
+				if (e->a->isConst && to->isArithmetic())
+				{
+					e->isConst = true;
+					e->constValue = constConvert(e->a->constValue, from, to);
+				}
+				break;
+			}
 			{
 				Type* to = resolveType(e->typeSyntax);
 				check(e->a, to->isFunction() ? to : nullptr);
 				Type* from = decay(e->a->type);
 				if (from == nullptr)
 					error(e->a->pos, "ambiguous overloaded sub in cast");
+				int64_t delta = 0;
+				if (pointerAdjust(from, to, delta))
+					error(e->pos, "cast<" + to->name() + "> between pointers to classes derived from one another: static_cast<" + to->name() + ">(...) (it finds that part of the object)");
 				bool ok = (to->kind == Type::Kind::Void) || (from->isScalar() && to->isScalar());
 				// f32 <-> pointers: no meaning (to look at a float's bits: *cast<u32*>(&f)).
 				if ((from->isFloat() && !to->isArithmetic() && to->kind != Type::Kind::Void) || (to->isFloat() && !from->isArithmetic()))
@@ -1773,6 +1893,8 @@ namespace dscript
 				StructInfo* info = m_structs[owner->name];
 				if (v->decl->isPrivate && !insideStruct(info))
 					error(e->pos, "'" + v->decl->shortName + "' is private to " + owner->name + " (priv): only the subs of " + owner->name + " can use it");
+				if (v->decl->isProtected && !insideDerived(info))
+					error(e->pos, "'" + v->decl->shortName + "' is protected (prot): only the subs of " + owner->name + " and of the classes derived from it can use it");
 				if (v->decl->isReadonly && !insideStruct(info))
 				{
 					e->readOnly = true;
@@ -1793,6 +1915,8 @@ namespace dscript
 			const Node* cd = m_consts[e->name].decl;
 			if (cd->isPrivate && cd->owner != nullptr && m_structs.count(cd->owner->name) > 0 && !insideStruct(m_structs[cd->owner->name]))
 				error(e->pos, "'" + cd->shortName + "' is private to " + cd->owner->name + " (priv): only the subs of " + cd->owner->name + " can use it");
+			if (cd->isProtected && cd->owner != nullptr && m_structs.count(cd->owner->name) > 0 && !insideDerived(m_structs[cd->owner->name]))
+				error(e->pos, "'" + cd->shortName + "' is protected (prot): only the subs of " + cd->owner->name + " and of the classes derived from it can use it");
 			decideConst(e->name);
 			if (m_consts[e->name].runtime)
 			{
@@ -1862,6 +1986,24 @@ namespace dscript
 				indexName(e->pos, e->text.empty() ? e->name : e->text, (e->func ? e->func : funcs[0])->decl->namePos, hover);
 			}
 			return;
+		}
+		if (FuncInfo* cur = m_inline.empty() ? m_func : m_inline.back().func)
+		{
+			// In a class's sub: a constant / static field of a class it extends (a template's base,
+			// known once it is instantiated).
+			StructInfo* cls = structOfMethod(cur);
+			if (cls != nullptr && cls->isClass() && cls->base != nullptr && e->name.find("::") == std::string::npos)
+			{
+				const std::string full = memberName(cls->base, e->name);
+				if (!full.empty())
+				{
+					if (e->text.empty())
+						e->text = e->name;
+					e->name = full;
+					checkIdent(e, expected);
+					return;
+				}
+			}
 		}
 		if (m_func && m_inline.empty())
 		{
@@ -1988,6 +2130,30 @@ namespace dscript
 		}
 		if (isComparison(op))
 		{
+			// Pointers to classes derived from one another: the derived one as the other (where
+			// that part of its object is).
+			if (ta->kind == Type::Kind::Pointer && tb->kind == Type::Kind::Pointer && ta->base != tb->base && ta->base->kind == Type::Kind::Struct && tb->base->kind == Type::Kind::Struct)
+			{
+				const bool aDerived = derives(ta->base->structInfo, tb->base->structInfo);
+				if (aDerived || derives(tb->base->structInfo, ta->base->structInfo))
+				{
+					Node*& side = aDerived ? e->a : e->b;
+					TypeSyntax* ts = new TypeSyntax();
+					ts->pos = side->pos;
+					ts->fixed = m_types.pointer((aDerived ? tb : ta)->base, ta->constTarget || tb->constTarget);
+					ts->name = ts->fixed->name();
+					Node* conv = new Node();
+					conv->kind = NodeKind::Cast;
+					conv->value = 2;
+					conv->pos = side->pos;
+					conv->typeSyntax = ts;
+					conv->a = side;
+					side = conv;
+					check(side);
+					ta = decay(e->a->type);
+					tb = decay(e->b->type);
+				}
+			}
 			bool ok = (ta->isArithmetic() && tb->isArithmetic());
 			if (ta->isPointer() && tb->isPointer())
 				ok = (ta == tb || samePointee(ta, tb) || ta->kind == Type::Kind::Null || tb->kind == Type::Kind::Null || ta->isVoidPointer() || tb->isVoidPointer());
@@ -2135,24 +2301,749 @@ namespace dscript
 					return true;
 			}
 		}
+		// Its friends (friend A, f): everything, as its own subs.
+		resolveFriends(const_cast<StructInfo*>(info));
+		if (info->friendClasses.empty() && info->friendSubs.empty())
+			return false;
+		for (const Node* d = f ? f->decl : nullptr; d != nullptr; d = d->d)
+		{
+			if (std::find(info->friendSubs.begin(), info->friendSubs.end(), d->name) != info->friendSubs.end())
+				return true;
+			if ((d->value & 4) == 0)
+				continue;
+			for (const Node* o = d->owner; o != nullptr; o = o->owner)
+			{
+				if (std::find(info->friendClasses.begin(), info->friendClasses.end(), o->name) != info->friendClasses.end())
+					return true;
+			}
+		}
+		return false;
+	}
+
+	bool CodeGen::insideDerived(const StructInfo* info)
+	{
+		if (insideStruct(info))
+			return true;
+		FuncInfo* f = m_inline.empty() ? m_func : m_inline.back().func;
+		for (const Node* d = f ? f->decl : nullptr; d != nullptr; d = d->d)
+		{
+			if ((d->value & 4) == 0)
+				continue;
+			for (const Node* o = d->owner; o != nullptr; o = o->owner)
+			{
+				auto it = m_structs.find(o->name);
+				if (it != m_structs.end() && derives(it->second, info))
+					return true;
+			}
+		}
 		return false;
 	}
 
 	void CodeGen::checkFieldAccess(const StructInfo* info, const StructField* f, const SourcePos& pos)
 	{
-		if (f->isPrivate && !insideStruct(info))
-			error(pos, "'" + f->name + "' is private to " + info->name + " (priv): only the subs of " + info->name + " can use it");
+		const StructInfo* owner = f->owner != nullptr ? f->owner : info;
+		if (f->isPrivate && !insideStruct(owner))
+			error(pos, "'" + f->name + "' is private to " + owner->name + " (priv): only the subs of " + owner->name + " can use it");
+		if (f->isProtected && !insideDerived(owner))
+			error(pos, "'" + f->name + "' is protected (prot): only the subs of " + owner->name + " and of the classes derived from it can use it");
 	}
 
 	void CodeGen::checkSubAccess(FuncInfo* f, const SourcePos& pos)
 	{
-		if ((f->decl->value & 16) == 0)
+		if ((f->decl->value & (16 | 8192)) == 0)
 			return;
 		const Node* owner = f->decl->owner;
 		auto it = owner ? m_structs.find(owner->name) : m_structs.end();
-		if (it != m_structs.end() && !insideStruct(it->second))
+		if (it == m_structs.end())
+			return;
+		if ((f->decl->value & 16) != 0 && !insideStruct(it->second))
 			error(pos, "'" + f->decl->shortName + "' is private to " + owner->name + " (priv): only the subs of " + owner->name + " can use it");
+		if ((f->decl->value & 8192) != 0 && !insideDerived(it->second))
+			error(pos, "'" + f->decl->shortName + "' is protected (prot): only the subs of " + owner->name + " and of the classes derived from it can use it");
 	}
+
+	// ======================================== Classes ========================================
+	// A class: [vtable pointer (when it adds virtual subs to a base without them)] [the base's
+	// fields (and its vtable pointers)] [a vtable pointer per interface it adds] [its fields].
+	// An interface: a vtable pointer (its subs' table).
+	uint32_t CodeGen::classLayout(StructInfo* info)
+	{
+		resolveFriends(info);
+		if (info->kind == 0)
+			return 0;
+		Node* d = info->decl;
+		auto l_resolve = [&](TypeSyntax* ts) -> StructInfo* {
+			Type* t = resolveType(ts);
+			if (t->kind != Type::Kind::Struct)
+				error(ts->pos, t->name() + " is not a class or an interface");
+			if (t->structInfo->resolving)
+				error(ts->pos, (info->isInterface() ? "interface " : "class ") + info->name + " extends itself (through " + t->structInfo->name + ")");
+			resolveStruct(t->structInfo, ts->pos);
+			return t->structInfo;
+		};
+		auto l_addSlots = [&](StructInfo* iface, uint32_t offset) {
+			for (const auto& slot : iface->ifaceSlots)
+			{
+				const bool known = std::any_of(info->ifaceSlots.begin(), info->ifaceSlots.end(), [&](const StructInfo::IfaceSlot& s) { return s.iface == slot.iface; });
+				if (!known)
+					info->ifaceSlots.push_back({ slot.iface, offset });
+			}
+		};
+		if (info->kind == 2)
+		{
+			info->dynamic = true;
+			info->vptrs.push_back({ 0, info });
+			info->ifaceSlots.push_back({ info, 0 });
+			if (d->typeSyntax != nullptr)
+			{
+				StructInfo* parent = l_resolve(d->typeSyntax);
+				if (!parent->isInterface())
+					error(d->typeSyntax->pos, "an interface extends an interface (" + parent->name + " is a " + (parent->isClass() ? "class" : "struct") + ")");
+				info->interfaces.push_back(parent);
+				l_addSlots(parent, 0);
+			}
+			return 4;
+		}
+		// Virtual subs of its own (then it has a table)?
+		bool ownVirtual = false;
+		for (FuncInfo* f : m_funcList)
+		{
+			if (f->decl->owner == d && (f->decl->value & 4) != 0 && isVirtualSub(f))
+				ownVirtual = true;
+		}
+		StructInfo* base = nullptr;
+		if (d->typeSyntax != nullptr)
+		{
+			base = l_resolve(d->typeSyntax);
+			if (base->isInterface())
+				error(d->typeSyntax->pos, base->name + " is an interface: a class implements it with impl (class " + d->shortName + " impl " + base->name + ")");
+			if (base->isFinal)
+				error(d->typeSyntax->pos, base->name + " is a final class: no class extends it");
+			if (base->anonymous)
+				error(d->typeSyntax->pos, "a class extends a named class or struct");
+		}
+		info->base = base;
+		info->dynamic = ownVirtual || (base != nullptr && base->dynamic);
+		uint32_t offset = 0;
+		if (info->dynamic && !(base != nullptr && base->dynamic))
+		{
+			info->vptrs.push_back({ 0, info });
+			offset = 4;
+		}
+		if (base != nullptr)
+		{
+			info->baseOffset = offset;
+			for (const StructField& bf : base->fields)
+			{
+				StructField f = bf;
+				f.offset += offset;
+				if (f.owner == nullptr)
+					f.owner = base;
+				info->fields.push_back(f);
+			}
+			for (const auto& v : base->vptrs)
+				info->vptrs.push_back({ v.offset + offset, v.view->isInterface() ? v.view : info });
+			for (const auto& slot : base->ifaceSlots)
+				info->ifaceSlots.push_back({ slot.iface, slot.offset + offset });
+			offset += base->size;
+		}
+		for (TypeSyntax* ts : d->impls)
+		{
+			StructInfo* iface = l_resolve(ts);
+			if (!iface->isInterface())
+				error(ts->pos, iface->name + " is not an interface (impl takes interfaces; a class extends a class with ex)");
+			if (std::find(info->interfaces.begin(), info->interfaces.end(), iface) != info->interfaces.end())
+				error(ts->pos, iface->name + " twice");
+			info->interfaces.push_back(iface);
+			if (std::any_of(info->ifaceSlots.begin(), info->ifaceSlots.end(), [&](const StructInfo::IfaceSlot& s) { return s.iface == iface; }))
+				continue;		// (its base implements it already: that table)
+			info->vptrs.push_back({ offset, iface });
+			l_addSlots(iface, offset);
+			offset += 4;
+		}
+		return offset;
+	}
+
+	void CodeGen::resolveFriends(StructInfo* info)
+	{
+		if (info->friendsResolved)
+			return;
+		info->friendsResolved = true;
+		for (Node* f : info->decl->friends)
+		{
+			if (m_structs.count(f->name) > 0)
+				info->friendClasses.push_back(f->name);
+			else if (m_funcs.count(f->name) > 0)
+				info->friendSubs.push_back(f->name);
+			else
+				error(f->pos, "friend " + (f->text.empty() ? f->name : f->text) + ": no struct, class or sub of that name");
+		}
+	}
+
+	void CodeGen::implicitConstructor(StructInfo* info)
+	{
+		if (info->kind != 1 || m_funcs.count(info->name + "::new") > 0)
+			return;
+		bool needed = !info->vptrs.empty();
+		if (info->base != nullptr && m_funcs.count(info->base->name + "::new") > 0)
+		{
+			// (the base's constructor without arguments: what this one calls; none: no constructor,
+			// the class's own must call one of the base's)
+			bool baseDefault = false;
+			for (FuncInfo* b : m_funcs[info->base->name + "::new"])
+			{
+				size_t required = 0;
+				for (Node* p : b->decl->list)
+				{
+					if (p->name != "this" && p->a == nullptr)
+						required++;
+				}
+				if (required == 0 && b->decl->variadic == 0)
+					baseDefault = true;
+			}
+			needed = baseDefault;
+		}
+		if (!needed)
+			return;
+		Node* cls = info->decl;
+		Node* d = new Node();
+		d->kind = NodeKind::FuncDecl;
+		d->pos = cls->namePos;
+		d->namePos = cls->namePos;
+		d->name = info->name + "::new";
+		d->shortName = "new";
+		d->scope = info->name;
+		d->owner = cls;
+		d->value = 4;
+		d->external = cls->external;
+		Node* self = new Node();
+		self->kind = NodeKind::VarDecl;
+		self->pos = cls->namePos;
+		self->namePos = cls->namePos;
+		self->name = "this";
+		TypeSyntax* named = new TypeSyntax();
+		named->pos = cls->namePos;
+		named->name = info->name;
+		named->written = cls->shortName;
+		named->resolved = true;
+		self->typeSyntax = new TypeSyntax();
+		self->typeSyntax->kind = TypeSyntax::Kind::Pointer;
+		self->typeSyntax->pos = cls->namePos;
+		self->typeSyntax->base = named;
+		d->list.push_back(self);
+		if (cls->external == 0)
+		{
+			d->a = new Node();
+			d->a->kind = NodeKind::Block;
+			d->a->pos = cls->namePos;
+			d->a->endPos = cls->namePos;
+		}
+		FuncInfo* f = new FuncInfo();
+		f->name = d->name;
+		f->decl = d;
+		f->external = cls->external != 0;
+		f->defined = true;
+		f->instance = m_instanceOrigin.count(info->name) > 0;
+		if (m_names.count(d->name) == 0)
+			m_names[d->name] = "a sub";
+		m_funcs[d->name].push_back(f);
+		m_funcList.push_back(f);
+		if (!m_inDeclarations || f->instance)
+		{
+			resolveFunction(f);
+			f->label = codeLabel(f->name, true);
+		}
+	}
+
+	bool CodeGen::derives(const StructInfo* from, const StructInfo* to, uint32_t* offset, int* depth)
+	{
+		if (from == nullptr || to == nullptr)
+			return false;
+		if (from == to)
+		{
+			if (offset) *offset = 0;
+			if (depth) *depth = 0;
+			return true;
+		}
+		if (to->kind == 2)
+		{
+			for (const auto& slot : from->ifaceSlots)
+			{
+				if (slot.iface == to)
+				{
+					if (offset) *offset = slot.offset;
+					if (depth) *depth = 1;
+					return true;
+				}
+			}
+			return false;
+		}
+		uint32_t o = 0;
+		int steps = 0;
+		for (const StructInfo* c = from; c != nullptr; c = c->base)
+		{
+			if (c == to)
+			{
+				if (offset) *offset = o;
+				if (depth) *depth = steps;
+				return true;
+			}
+			o += c->baseOffset;
+			steps++;
+		}
+		return false;
+	}
+
+	bool CodeGen::pointerAdjust(Type* from, Type* to, int64_t& delta)
+	{
+		delta = 0;
+		if (from == nullptr || to == nullptr || from->kind != Type::Kind::Pointer || to->kind != Type::Kind::Pointer)
+			return false;
+		if (from->base->kind != Type::Kind::Struct || to->base->kind != Type::Kind::Struct || from->base == to->base)
+			return false;
+		uint32_t offset = 0;
+		if (derives(from->base->structInfo, to->base->structInfo, &offset))
+		{
+			delta = offset;
+			return true;
+		}
+		if (derives(to->base->structInfo, from->base->structInfo, &offset))
+		{
+			delta = -(int64_t)offset;
+			return true;
+		}
+		return false;
+	}
+
+	StructInfo* CodeGen::structOfMethod(const FuncInfo* f)
+	{
+		if (f == nullptr || f->decl->owner == nullptr || (f->decl->value & 4) == 0)
+			return nullptr;
+		auto it = m_structs.find(f->decl->owner->name);
+		return it == m_structs.end() ? nullptr : it->second;
+	}
+
+	// The same name and parameters (this not counted), static or not.
+	bool CodeGen::sameSignature(const FuncInfo* a, const FuncInfo* b)
+	{
+		if (a->decl->shortName != b->decl->shortName || a->type == nullptr || b->type == nullptr || a->type->variadic != b->type->variadic)
+			return false;
+		const size_t skipA = (a->decl->value & 8) != 0 ? 0 : 1, skipB = (b->decl->value & 8) != 0 ? 0 : 1;
+		const auto& pa = a->type->params;
+		const auto& pb = b->type->params;
+		if (pa.size() < skipA || pb.size() < skipB || pa.size() - skipA != pb.size() - skipB)
+			return false;
+		return std::equal(pa.begin() + (std::ptrdiff_t)skipA, pa.end(), pb.begin() + (std::ptrdiff_t)skipB);
+	}
+
+	std::vector<FuncInfo*> CodeGen::methodsOf(StructInfo* info, const std::string& name)
+	{
+		std::vector<FuncInfo*> out;
+		auto l_add = [&](StructInfo* s) {
+			auto it = m_funcs.find(s->name + "::" + name);
+			if (it == m_funcs.end())
+				return;
+			const size_t before = out.size();
+			for (FuncInfo* f : it->second)
+			{
+				// (those of a class it extends that one closer overrides: not candidates)
+				bool hidden = false;
+				for (size_t i = 0; i < before; i++)
+					hidden = hidden || sameSignature(f, out[i]);
+				if (!hidden && std::find(out.begin(), out.end(), f) == out.end())
+					out.push_back(f);
+			}
+		};
+		l_add(info);
+		if (name == "new" || info->kind == 0)
+			return out;		// (constructors are not inherited)
+		for (StructInfo* b = info->base; b != nullptr; b = b->base)
+			l_add(b);
+		for (const auto& slot : info->ifaceSlots)
+			l_add(slot.iface);
+		return out;
+	}
+
+	StructInfo* CodeGen::qualifierStruct(const std::string& name, std::string* member)
+	{
+		// (the last '::' outside a template's arguments: Ns::Array<Ns::Point>::get)
+		int angles = 0;
+		for (size_t i = name.size(); i-- > 1; )
+		{
+			if (name[i] == '>') angles++;
+			else if (name[i] == '<') angles--;
+			else if (angles == 0 && name[i] == ':' && name[i - 1] == ':')
+			{
+				auto it = m_structs.find(name.substr(0, i - 1));
+				if (it == m_structs.end())
+					return nullptr;
+				if (member)
+					*member = name.substr(i + 1);
+				return it->second;
+			}
+		}
+		return nullptr;
+	}
+
+	std::string CodeGen::memberName(StructInfo* info, const std::string& name)
+	{
+		for (StructInfo* c = info; c != nullptr; c = c->base)
+		{
+			const std::string full = c->name + "::" + name;
+			if (m_consts.count(full) > 0 || (m_globals.count(full) > 0 && m_globals[full]->decl != nullptr && m_globals[full]->decl->owner != nullptr))
+				return full;
+		}
+		return "";
+	}
+
+	// The table of a class: its base's slots (a class's sub that overrides one takes its place),
+	// then a slot per virtual sub it adds. An interface: its parent's, then its subs. Checks what
+	// a class may redefine (only virtual subs, with override), and what an abstract class lacks.
+	void CodeGen::buildVtables(StructInfo* info)
+	{
+		if (info->vtablesBuilt || info->kind == 0)
+			return;
+		if (info->vtablesBuilding)
+			error(info->pos, "internal error: the table of " + info->name + " needs itself");
+		resolveStruct(info, info->pos);
+		info->vtablesBuilding = true;
+		struct Done { StructInfo* i; ~Done() { i->vtablesBuilding = false; } } done { info };
+		if (info->base != nullptr)
+			buildVtables(info->base);
+		for (StructInfo* i : info->interfaces)
+			buildVtables(i);
+		std::vector<FuncInfo*> own;
+		for (FuncInfo* f : m_funcList)
+		{
+			if (f->decl->owner == info->decl && (f->decl->value & 4) != 0 && f->decl->name.rfind(info->name + "::", 0) == 0)
+			{
+				if (f->type == nullptr)
+					resolveFunction(f);
+				own.push_back(f);
+			}
+		}
+		if (info->isInterface())
+		{
+			if (!info->interfaces.empty())
+				info->vslots = info->interfaces[0]->vslots;
+			for (FuncInfo* f : own)
+			{
+				for (const auto& slot : info->vslots)
+				{
+					if (sameSignature(slot.decl, f))
+						error(f->decl->namePos, "'" + f->decl->shortName + "' is a sub of " + structOfMethod(slot.decl)->name + " already (" + info->name + " extends it)");
+				}
+				info->vslots.push_back({ f, nullptr });
+			}
+			info->vtablesBuilt = true;
+			return;
+		}
+		if (info->base != nullptr && info->base->dynamic)
+			info->vslots = info->base->vslots;
+		for (FuncInfo* m : own)
+		{
+			Node* d = m->decl;
+			const std::string& n = d->shortName;
+			if (n == "new")
+				continue;
+			// What it inherits with this name (its classes', its interfaces').
+			std::vector<FuncInfo*> inherited;
+			for (StructInfo* b = info->base; b != nullptr; b = b->base)
+			{
+				auto it = m_funcs.find(b->name + "::" + n);
+				if (it != m_funcs.end())
+					inherited.insert(inherited.end(), it->second.begin(), it->second.end());
+			}
+			for (const auto& slot : info->ifaceSlots)
+			{
+				auto it = m_funcs.find(slot.iface->name + "::" + n);
+				if (it == m_funcs.end())
+					continue;
+				for (FuncInfo* g : it->second)
+				{
+					if (std::find(inherited.begin(), inherited.end(), g) == inherited.end())
+						inherited.push_back(g);
+				}
+			}
+			if (const StructField* bf = info->field(n))
+			{
+				if (bf->owner != nullptr)
+					error(d->namePos, "'" + n + "' is a field of " + bf->owner->name + " (" + info->name + " extends it): a sub cannot have its name");
+			}
+			bool matched = false;
+			for (FuncInfo* a : inherited)
+			{
+				if (a->type == nullptr)
+					resolveFunction(a);
+				if (!sameSignature(m, a))
+					continue;
+				const StructInfo* where = structOfMethod(a);
+				const std::string aName = where->name + "::" + n;
+				if ((d->value & 8) != 0 || (a->decl->value & 8) != 0)
+					error(d->namePos, "'" + n + "' with these parameters is a " + std::string((a->decl->value & 8) != 0 ? "static " : "") + "sub of " + where->name +
+						" already (" + info->name + " extends it): a class cannot hide what it inherits (give it another name)");
+				if (!isVirtualSub(a))
+					error(d->namePos, "'" + n + "' with these parameters is a sub of " + where->name + " already, and it is not virtual: a class cannot hide what it inherits "
+						"(give it another name, or make " + aName + " virtual: virt sub " + n + "(...))");
+				if ((d->value & 2048) == 0)
+					error(d->namePos, "'" + n + "' redefines the virtual sub " + aName + ": mark it override (override sub " + n + "(...))");
+				if ((a->decl->value & 4096) != 0)
+					error(d->namePos, aName + " is final: no class overrides it");
+				if (m->type->base != a->type->base)
+					error(d->namePos, "'" + n + "' returns " + m->type->base->name() + ", but " + aName + " (which it overrides) returns " + a->type->base->name());
+				if ((m->decl->value & 64) != (a->decl->value & 64))
+					error(d->namePos, "'" + n + "' and " + aName + " (which it overrides) are both readonly subs, or neither (readonly makes this a const pointer)");
+				matched = true;
+			}
+			if ((d->value & 2048) != 0 && !matched)
+				error(d->namePos, "'" + n + "' is marked override, but no class or interface " + info->name + " extends has a virtual sub " + n + " with these parameters");
+			if (!isVirtualSub(m))
+				continue;
+			// Its slot: the class virtual it overrides, or a new one.
+			int slot = -1;
+			for (size_t i = 0; i < info->vslots.size(); i++)
+			{
+				if (sameSignature(info->vslots[i].decl, m))
+					slot = (int)i;
+			}
+			FuncInfo* impl = (d->value & 1024) != 0 ? nullptr : m;
+			if (slot >= 0)
+				info->vslots[(size_t)slot].impl = impl;
+			else
+				info->vslots.push_back({ m, impl });
+		}
+		info->vtablesBuilt = true;
+		if (info->isAbstract)
+			return;
+		// A class that is built: a body for every virtual sub (its own or inherited).
+		for (FuncInfo* m : own)
+		{
+			if ((m->decl->value & 1024) != 0)
+				error(m->decl->namePos, "'" + m->decl->shortName + "' is pure: " + info->name + " is then an abstract class (abstract class " + info->decl->shortName + " ...)");
+		}
+		for (const auto& slot : info->vslots)
+		{
+			if (slot.impl == nullptr)
+				error(info->decl->namePos, info->name + " has no body for the pure sub " + structOfMethod(slot.decl)->name + "::" + slot.decl->decl->shortName +
+					" (override it, or make " + info->decl->shortName + " an abstract class)");
+		}
+		for (const auto& is : info->ifaceSlots)
+		{
+			buildVtables(is.iface);
+			for (const auto& slot : is.iface->vslots)
+			{
+				if (finalOverrider(info, slot.decl, nullptr) == nullptr)
+					error(info->decl->namePos, info->name + " does not implement " + structOfMethod(slot.decl)->name + "::" + slot.decl->decl->shortName +
+						" (override sub " + slot.decl->decl->shortName + "(...) { ... }, or make " + info->decl->shortName + " an abstract class)");
+			}
+		}
+	}
+
+	int CodeGen::slotOf(StructInfo* info, const FuncInfo* f)
+	{
+		buildVtables(info);
+		for (size_t i = 0; i < info->vslots.size(); i++)
+		{
+			if (info->vslots[i].decl == f || info->vslots[i].impl == f)
+				return (int)i;
+		}
+		return -1;
+	}
+
+	FuncInfo* CodeGen::finalOverrider(StructInfo* info, const FuncInfo* m, StructInfo** where)
+	{
+		for (StructInfo* c = info; c != nullptr; c = c->base)
+		{
+			auto it = m_funcs.find(c->name + "::" + m->decl->shortName);
+			if (it == m_funcs.end())
+				continue;
+			for (FuncInfo* g : it->second)
+			{
+				if ((g->decl->value & 8) == 0 && (g->decl->value & 1024) == 0 && sameSignature(g, m))
+				{
+					if (where)
+						*where = c;
+					return g;
+				}
+			}
+		}
+		return nullptr;
+	}
+
+	std::string CodeGen::vtableLabel(StructInfo* info, uint32_t offset)
+	{
+		if (!m_discarding && !m_options.analysis && m_vtableRequests.insert(info).second)
+			m_vtableQueue.push_back(info);
+		return "__vt_" + symbolChars(info->name) + (offset != 0 ? "_" + std::to_string(offset) : "");
+	}
+
+	std::string CodeGen::typeinfoLabel(StructInfo* info)
+	{
+		const std::string label = "__ti_" + symbolChars(info->name);
+		if (!m_typeinfos.insert(info).second)
+			return label;
+		// The class's type: its name, and its base's type (0: none).
+		std::string line = "\t$" + label + " $" + stringLiteral(info->name) + ", ";
+		if (info->base != nullptr && info->base->isClass())
+			line += "$" + typeinfoLabel(info->base);
+		else
+			line += "0x00, 0x00, 0x00, 0x00";
+		m_data.push_back(line);
+		return label;
+	}
+
+	// A table: the type, the offset of its vtable pointer in the object (the object is at the
+	// pointer minus that), the destructor's slot (reserved: 0, 0), then each slot: the sub, and
+	// what to add to the pointer the call is made with (this, for the sub's class).
+	void CodeGen::emitVtables(StructInfo* info)
+	{
+		buildVtables(info);
+		auto l_word = [](int64_t v) {
+			char buf[40];
+			const uint32_t w = (uint32_t)v;
+			std::snprintf(buf, sizeof(buf), "0x%02X, 0x%02X, 0x%02X, 0x%02X", (w >> 24) & 0xFF, (w >> 16) & 0xFF, (w >> 8) & 0xFF, w & 0xFF);
+			return std::string(buf);
+		};
+		auto l_offsetOf = [&](StructInfo* c) {
+			uint32_t o = 0;
+			derives(info, c, &o);
+			return (int64_t)o;
+		};
+		for (const auto& v : info->vptrs)
+		{
+			std::string line = "\t$" + vtableLabel(info, v.offset) + " $" + typeinfoLabel(info) + ", " + l_word(v.offset) + ", " + l_word(0) + ", " + l_word(0);
+			auto l_entry = [&](FuncInfo* g, StructInfo* where) {
+				if (g == nullptr)
+				{
+					line += ", " + l_word(0) + ", " + l_word(0);
+					return;
+				}
+				markUsed(g);
+				g->addressTaken = true;
+				line += ", $" + g->label + ", " + l_word(l_offsetOf(where) - (int64_t)v.offset);
+			};
+			if (v.view == info)
+			{
+				for (const auto& slot : info->vslots)
+					l_entry(slot.impl, structOfMethod(slot.impl));
+			}
+			else
+			{
+				for (const auto& slot : v.view->vslots)
+				{
+					StructInfo* where = nullptr;
+					FuncInfo* g = finalOverrider(info, slot.decl, &where);
+					l_entry(g, where);
+				}
+			}
+			m_data.push_back(line);
+		}
+	}
+
+	void CodeGen::storeVptrs(const Reg& addr, Type* t, int32_t offset)
+	{
+		if (t->kind != Type::Kind::Struct || t->structInfo->vptrs.empty())
+			return;
+		for (const auto& v : t->structInfo->vptrs)
+			emit("omov *" + addr + ", $" + vtableLabel(t->structInfo, v.offset) + ", dword " + imm(offset + (int32_t)v.offset));
+	}
+
+	void CodeGen::copyValue(const Reg& dst, const Reg& src, Type* t)
+	{
+		copyMemory(dst, src, t->size());
+		storeVptrs(dst, t);		// (a class value copied from a derived object: its own table)
+	}
+
+	void CodeGen::requireValueType(Type* t, const SourcePos& pos, const std::string& what)
+	{
+		if (t == nullptr || t->kind != Type::Kind::Struct || !t->structInfo->onlyPointer())
+			return;
+		const StructInfo* info = t->structInfo;
+		if (info->isInterface())
+			error(pos, info->name + " is an interface: it cannot be " + what + " (only pointed at: " + info->name + "*, to an object of a class that implements it)");
+		error(pos, info->name + " is an abstract class: it cannot be " + what + " (only pointed at: " + info->name + "*, to an object of a class derived from it)");
+	}
+
+	// A class's constructor: Base::new(...) as one of its statements builds the base's part (the
+	// base's constructor without arguments is called first otherwise, if the base has constructors),
+	// then the class's vtable pointers are set (the base's constructor set its own).
+	void CodeGen::prepareConstructor(FuncInfo* f)
+	{
+		Node* d = f->decl;
+		if ((d->value & 4) == 0 || d->shortName != "new" || d->a == nullptr || d->owner == nullptr)
+			return;
+		auto it = m_structs.find(d->owner->name);
+		if (it == m_structs.end() || !it->second->isClass() || !m_preparedCtors.insert(d).second)
+			return;
+		StructInfo* info = it->second;
+		resolveStruct(info, d->pos);
+		std::vector<Node*>& body = d->a->list;
+		size_t at = 0;
+		if (info->base != nullptr)
+		{
+			const std::string baseNew = info->base->name + "::new";
+			bool explicitCall = false;
+			for (size_t i = 0; i < body.size(); i++)
+			{
+				Node* s = body[i];
+				if (s->kind != NodeKind::ExprStmt || s->a->kind != NodeKind::Call)
+					continue;
+				Node* callee = s->a->a;
+				bool isBase = callee->kind == NodeKind::Ident && callee->name == baseNew;
+				if (callee->kind == NodeKind::Member && callee->value == 0 && callee->name == "new" && callee->a->kind == NodeKind::Ident)
+				{
+					// Base.new(...) (Base<T>.new(...) in a template)
+					resolveTemplateIdent(callee->a);
+					isBase = callee->a->name == info->base->name;
+				}
+				if (!isBase)
+					continue;
+				if (explicitCall)
+					error(s->pos, info->base->name + "::new is called twice (the " + info->base->name + " part is built once)");
+				explicitCall = true;
+				s->a->callFlags |= 4;
+				at = i + 1;
+			}
+			if (!explicitCall && m_funcs.count(baseNew) > 0)
+			{
+				bool hasDefault = false;
+				for (FuncInfo* b : m_funcs[baseNew])
+				{
+					if (b->type == nullptr)
+						resolveFunction(b);
+					hasDefault = hasDefault || (b->requiredParams <= 1 && b->type->variadic == 0);	// (this)
+				}
+				if (!hasDefault)
+					error(d->namePos, info->name + "::new must build its " + info->base->name + " part: " + info->base->name +
+						" has no constructor without arguments (call " + info->base->name + "::new(...) in it, as one of its statements)");
+				Node* id = new Node();
+				id->kind = NodeKind::Ident;
+				id->pos = d->namePos;
+				id->name = baseNew;
+				id->text = baseNew;
+				id->resolved = true;
+				Node* call = new Node();
+				call->kind = NodeKind::Call;
+				call->pos = d->namePos;
+				call->a = id;
+				call->callFlags = 4;
+				Node* stmt = new Node();
+				stmt->kind = NodeKind::ExprStmt;
+				stmt->pos = d->namePos;
+				stmt->a = call;
+				body.insert(body.begin(), stmt);
+				at = 1;
+			}
+		}
+		if (!info->vptrs.empty())
+		{
+			Node* sv = new Node();
+			sv->kind = NodeKind::SetVtables;
+			sv->pos = d->namePos;
+			body.insert(body.begin() + (std::ptrdiff_t)at, sv);
+		}
+	}
+
 
 	// Fields whose default value is a sub (var f: sub(i32) -> i32 = twice;): stored as its
 	// address (the label), so they are checked after the subs (and their overloads) are known.
@@ -2187,13 +3078,13 @@ namespace dscript
 			if (!c.runtime && (c.type == nullptr || c.type->kind != Type::Kind::Struct))
 				return;
 		}
-		auto l_isStatic = [&](const std::string& method) {
-			for (FuncInfo* f : m_funcs[method])
+		auto l_isStatic = [&](const std::vector<FuncInfo*>& funcs) -> FuncInfo* {
+			for (FuncInfo* f : funcs)
 			{
 				if ((f->decl->value & 8) != 0)
-					return true;
+					return f;
 			}
-			return false;
+			return nullptr;
 		};
 		// Struct.name(args): a static sub of the struct (as Struct::name(args)).
 		if (obj->kind == NodeKind::Ident && callee->value == 0 && lookupVar(obj->name) == nullptr && m_structs.count(obj->name) > 0)
@@ -2214,12 +3105,40 @@ namespace dscript
 				callee->name = inst.substr(obj->name.size() + 2);
 				callee->templateArgs.clear();
 			}
-			const std::string method = obj->name + "::" + callee->name;
-			if (m_funcs.count(method) == 0)
+			std::string method = obj->name + "::" + callee->name;
+			resolveStruct(info, callee->namePos);
+			const std::vector<FuncInfo*> funcs = methodsOf(info, callee->name);
+			if (funcs.empty())
 				error(callee->namePos, "struct " + obj->name + " has no static sub '" + callee->name + "'");
-			if (!l_isStatic(method))
+			FuncInfo* found = l_isStatic(funcs);
+			VarInfo* self = lookupVar("this");
+			if (found == nullptr && self != nullptr && self->type->kind == Type::Kind::Pointer && self->type->base->kind == Type::Kind::Struct
+				&& self->type->base->structInfo != info && derives(self->type->base->structInfo, info))
+			{
+				// Base.m(args) in a sub of a class derived from Base (Base<T>.m(args) in a template):
+				// Base's m on this (as Base::m(args)).
+				if (m_options.index != nullptr)
+					indexName(obj->pos, writtenName(obj), info->decl->namePos, hoverStruct(info));
+				Node* thisNode = new Node();
+				thisNode->kind = NodeKind::Ident;
+				thisNode->name = "this";
+				thisNode->pos = callee->namePos;
+				thisNode->resolved = true;
+				Node* id = new Node();
+				id->kind = NodeKind::Ident;
+				id->name = method;
+				id->text = writtenName(obj) + "." + callee->name;
+				id->pos = callee->namePos;
+				id->resolved = true;
+				id->callFlags = 8;
+				e->a = id;
+				e->list.insert(e->list.begin(), thisNode);
+				return;
+			}
+			if (found == nullptr)
 				error(callee->namePos, "'" + callee->name + "' is a method of " + obj->name + ", not a static sub: call it on a struct (x." +
 					callee->name + "(...)), or as " + method + "(&x, ...)");
+			method = found->decl->name;		// (maybe a class it extends)
 			if (m_options.index != nullptr)
 				indexName(obj->pos, writtenName(obj), info->decl->namePos, hoverStruct(info));
 			Node* id = new Node();
@@ -2263,11 +3182,15 @@ namespace dscript
 			callee->templateArgs.clear();
 		}
 		const std::string method = info->name + "::" + callee->name;
-		if (m_funcs.count(method) == 0)
-			error(callee->namePos, (info->anonymous ? info->displayName() : "struct " + info->name) + " has no field or method '" + callee->name + "'");
-		if (l_isStatic(method))
-			error(callee->namePos, "'" + callee->name + "' is a static sub of " + info->name + " (it has no this): call it as " +
+		const std::vector<FuncInfo*> funcs = methodsOf(info, callee->name);
+		if (funcs.empty())
+			error(callee->namePos, (info->anonymous ? info->displayName() : (info->isClass() ? "class " : info->isInterface() ? "interface " : "struct ") + info->name) +
+				" has no field or method '" + callee->name + "'");
+		if (FuncInfo* st = l_isStatic(funcs))
+			error(callee->namePos, "'" + callee->name + "' is a static sub of " + structOfMethod(st)->name + " (it has no this): call it as " +
 				info->name + "." + callee->name + "(...)");
+		// (an object that is a variable has exactly its type: its subs are called directly)
+		const bool exact = callee->value == 0 && obj->kind == NodeKind::Ident && obj->var != nullptr;
 		Node* self = obj;
 		if (callee->value == 0)
 		{
@@ -2283,6 +3206,9 @@ namespace dscript
 		id->text = callee->name;
 		id->pos = callee->namePos;
 		id->isPrivate = callee->isPrivate;
+		id->resolved = true;
+		id->methodClass = info;
+		id->callFlags = 1 | (exact ? 2 : 0);
 		e->a = id;
 		e->list.insert(e->list.begin(), self);
 	}
@@ -2294,6 +3220,7 @@ namespace dscript
 		Node* callee = e->a;
 		e->func = nullptr;
 		e->vaBuiltin = 0;
+		e->vslot = -1;
 		if (callee->kind == NodeKind::Ident && lookupVar(callee->name) == nullptr && m_funcs.count(callee->name) == 0
 			&& (callee->name == "va_count" || callee->name == "va_start" || callee->name == "va_types"))
 		{
@@ -2324,11 +3251,27 @@ namespace dscript
 			callee->name = instantiate(callee->name, explicitArgs, &e->list, nullptr, callee->pos, false);
 			callee->templateArgs.clear();
 		}
-		if (callee->kind == NodeKind::Ident && lookupVar(callee->name) == nullptr && m_funcs.count(callee->name) > 0)
+		// A method: its struct's (and those it inherits); X::m(...) with X a class: also what X
+		// inherits.
+		std::vector<FuncInfo*> methodCands;
+		StructInfo* qualifier = nullptr;
+		if (callee->kind == NodeKind::Ident && lookupVar(callee->name) == nullptr)
 		{
+			std::string member;
+			if (callee->methodClass != nullptr)
+				methodCands = methodsOf(callee->methodClass, callee->name.substr(callee->methodClass->name.size() + 2));
+			else if ((qualifier = qualifierStruct(callee->name, &member)) != nullptr && qualifier->kind != 0)
+			{
+				resolveStruct(qualifier, callee->pos);
+				methodCands = methodsOf(qualifier, member);
+			}
+		}
+		if (callee->kind == NodeKind::Ident && lookupVar(callee->name) == nullptr && (m_funcs.count(callee->name) > 0 || !methodCands.empty()))
+		{
+			const std::vector<FuncInfo*>& cands = !methodCands.empty() ? methodCands : m_funcs[callee->name];
 			// The subs get their types after the declarations (constants, enum values, array
 			// sizes, default values): a call there is not a constant.
-			for (FuncInfo* f : m_funcs[callee->name])
+			for (FuncInfo* f : cands)
 			{
 				// (constexpr / consteval subs: their types now, they can be evaluated)
 				if (f->type == nullptr && f->decl->constKind != 0 && !f->instance && !f->resolving)
@@ -2343,17 +3286,69 @@ namespace dscript
 			}
 			for (Node* arg : e->list)
 				check(arg);
-			for (FuncInfo* g : m_funcs[callee->name])
+			for (FuncInfo* g : cands)
 			{
 				if (g->broken)
 					throw g->brokenError;		// (a template instance whose signature doesn't work for its types)
 			}
-			FuncInfo* f = resolveOverload(callee->name, e->list, e->pos);
+			// X::m(args) in a sub of X (or of a class derived from it): on this, if m is a method
+			// (a class's subs: tried first; a struct's: when the arguments are not (this, ...)).
+			if (qualifier == nullptr)
+				qualifier = qualifierStruct(callee->name);
+			VarInfo* self = lookupVar("this");
+			if (qualifier != nullptr && callee->methodClass == nullptr && (callee->callFlags & 8) == 0 && self != nullptr && self->type->kind == Type::Kind::Pointer
+				&& self->type->base->kind == Type::Kind::Struct && derives(self->type->base->structInfo, qualifier))
+			{
+				bool ambiguous = false;
+				const bool asWritten = !self->type->base->structInfo->isClass() && bestOverload(cands, e->list, ambiguous) != nullptr;
+				if (!asWritten)
+				{
+					Node* thisNode = new Node();
+					thisNode->kind = NodeKind::Ident;
+					thisNode->name = "this";
+					thisNode->pos = callee->pos;
+					thisNode->resolved = true;
+					check(thisNode);
+					std::vector<Node*> withThis = e->list;
+					withThis.insert(withThis.begin(), thisNode);
+					FuncInfo* g = bestOverload(cands, withThis, ambiguous);
+					if (g != nullptr && (g->decl->value & 12) == 4)
+					{
+						e->list = withThis;
+						callee->callFlags |= 8;
+					}
+				}
+			}
+			FuncInfo* f = resolveOverload(callee->name, e->list, e->pos, &cands);
 			markUsed(f);
 			// (A for-in may use a range's priv begin / end / next / get: its cursors only come from
 			// begin and next, so an unchecked get is safe there.)
 			if (!callee->isPrivate)
 				checkSubAccess(f, callee->pos);
+			StructInfo* owner = structOfMethod(f);
+			if (owner != nullptr && f->decl->shortName == "new")
+			{
+				// Base::new(...): the base's part of the object, in the constructor of a class derived from it.
+				StructInfo* building = (self != nullptr && self->type->kind == Type::Kind::Pointer && self->type->base->kind == Type::Kind::Struct) ? self->type->base->structInfo : nullptr;
+				const bool baseCall = (callee->callFlags & 8) != 0 && building != nullptr && building != owner;
+				if (baseCall && (e->callFlags & 4) == 0)
+					error(e->pos, owner->name + "::new(...) builds the " + owner->name + " part of a " + building->name + ": only as a statement of " + building->name +
+						"'s constructor (sub new), and only for the class it extends");
+				if (owner->isAbstract && !baseCall)
+					error(e->pos, owner->name + " is an abstract class: it is not built (a class derived from it is, its constructor calls " + owner->name + "::new(...))");
+			}
+			// A virtual sub called on an object: through its table (the object may be of a class
+			// derived from its type), unless its type is exact (a variable) or nothing overrides it.
+			if ((callee->callFlags & 1) != 0 && isVirtualSub(f) && (callee->callFlags & 2) == 0 && (f->decl->value & 4096) == 0
+				&& !(callee->methodClass != nullptr && callee->methodClass->isFinal))
+			{
+				e->vslot = slotOf(owner, f);
+				if (e->vslot < 0)
+					error(e->pos, "internal error: no slot for " + f->name);
+			}
+			else if ((f->decl->value & 1024) != 0)
+				error(callee->pos, "'" + f->name + "' is pure: it has no body (a class derived from " + owner->name + " gives it one; call it on an object: p->" +
+					f->decl->shortName + "(...))");
 			if (f->interrupt)
 				error(e->pos, "interrupt subs cannot be called (they end with rti)");
 			for (size_t i = 0; i < e->list.size(); i++)
@@ -2370,7 +3365,8 @@ namespace dscript
 			e->type = f->type->base;
 			if (m_options.index != nullptr)
 				indexName(callee->pos, callee->text.empty() ? callee->name : callee->text, f->decl->namePos, hoverFunc(f));
-			ctFold(e, f);		// constexpr / consteval: its value, if it can be computed now
+			if (e->vslot < 0)
+				ctFold(e, f);		// constexpr / consteval: its value, if it can be computed now
 			return;
 		}
 		check(callee);
@@ -2473,13 +3469,20 @@ namespace dscript
 		if (e->value == 0 && e->a->kind == NodeKind::Ident && lookupVar(e->a->name) == nullptr)
 		{
 			resolveTemplateIdent(e->a);
-			const std::string full = e->a->name + "::" + e->name;
+			std::string full = e->a->name + "::" + e->name;
+			if (m_structs.count(e->a->name) > 0 && m_structs[e->a->name]->kind != 0)
+			{
+				resolveStruct(m_structs[e->a->name], e->pos);
+				const std::string inherited = memberName(m_structs[e->a->name], e->name);
+				if (!inherited.empty())
+					full = inherited;
+			}
 			if (m_structs.count(e->a->name) > 0 && (m_consts.count(full) > 0 || (m_globals.count(full) > 0 && m_globals[full]->decl != nullptr && m_globals[full]->decl->owner != nullptr)))
 			{
 				if (m_options.index != nullptr)
 					indexName(e->a->pos, writtenName(e->a), m_structs[e->a->name]->decl->namePos, hoverStruct(m_structs[e->a->name]));
 				e->kind = NodeKind::Ident;
-				e->name = e->a->name + "::" + e->name;
+				e->name = full;
 				e->text = writtenName(e->a) + "." + shownName(e->name).substr(shownName(e->name).rfind(':') + 1);
 				e->pos = e->namePos;
 				e->resolved = true;
@@ -2534,13 +3537,13 @@ namespace dscript
 		}
 		resolveStruct(t->structInfo, e->pos);
 		const StructField* f = t->structInfo->field(e->name);
-		const std::string staticName = t->structInfo->name + "::" + e->name;
-		if (f == nullptr && (m_consts.count(staticName) > 0 || (m_globals.count(staticName) > 0 && m_globals[staticName]->decl != nullptr && m_globals[staticName]->decl->owner != nullptr)))
+		const std::string staticName = memberName(t->structInfo, e->name);
+		if (f == nullptr && !staticName.empty())
 		{
 			// x.NAME / p->NAME: a constant or a static field of its struct (x is only its type).
 			const std::string written = e->name;
 			e->kind = NodeKind::Ident;
-			e->name = t->structInfo->name + "::" + e->name;
+			e->name = staticName;
 			e->text = written;
 			e->pos = e->namePos;
 			e->resolved = true;
@@ -2559,10 +3562,11 @@ namespace dscript
 		e->readOnly = (e->value == 0) && e->a->readOnly;
 		if (e->readOnly)
 			e->readOnlyWhy = e->a->readOnlyWhy;
-		if (f->isReadonly && !insideStruct(t->structInfo))
+		const StructInfo* fieldOwner = f->owner != nullptr ? f->owner : t->structInfo;
+		if (f->isReadonly && !insideStruct(fieldOwner))
 		{
 			e->readOnly = true;
-			e->readOnlyWhy = "'" + e->name + "' is readonly: only the subs of " + t->structInfo->name + " can change it";
+			e->readOnlyWhy = "'" + e->name + "' is readonly: only the subs of " + fieldOwner->name + " can change it";
 		}
 		if (throughConst)
 		{
@@ -2571,10 +3575,10 @@ namespace dscript
 				(e->a->kind == NodeKind::Ident && e->a->name == "this" ? " (this sub is readonly)" : "");
 		}
 		// A const field: set when the struct is built (its default, { ... }, this->field in new).
-		if (f->isConst && !(constructing(t->structInfo) && e->value == 1 && e->a->kind == NodeKind::Ident && e->a->name == "this"))
+		if (f->isConst && !(constructing(fieldOwner) && e->value == 1 && e->a->kind == NodeKind::Ident && e->a->name == "this"))
 		{
 			e->readOnly = true;
-			e->readOnlyWhy = "'" + e->name + "' is a const field of " + t->structInfo->name + ": it gets its value when the struct is built "
+			e->readOnlyWhy = "'" + e->name + "' is a const field of " + fieldOwner->name + ": it gets its value when the struct is built "
 				"(its default value, { ... }, or this->" + e->name + " in new), then never changes";
 		}
 	}
@@ -2704,6 +3708,21 @@ namespace dscript
 	{
 		if (from == to || from == nullptr)
 			return;
+		int64_t delta = 0;
+		if (pointerAdjust(from, to, delta))
+		{
+			// A class pointer as a pointer to a class it extends / an interface (or back, for
+			// static_cast): where that part of the object is (null stays null).
+			if (delta != 0)
+			{
+				const std::string l = newLabel();
+				emit("mov ACC, " + r);
+				emit("jeq $" + l + ", 0");
+				addImmediate(r, delta);
+				label(l);
+			}
+			return;
+		}
 		if (to->isFloat())
 		{
 			if (from->isInteger())
@@ -2764,7 +3783,7 @@ namespace dscript
 			case 1: emit("movb *" + addr + ", " + value); break;
 			case 2: emit("movw *" + addr + ", " + value); break;
 			case 4: emit("mov *" + addr + ", " + value); break;
-			default: copyMemory(addr, value, t->size()); break;
+			default: copyValue(addr, value, t); break;
 		}
 	}
 
@@ -2882,8 +3901,8 @@ namespace dscript
 				resolveStruct(info, s->b->pos);
 				const std::string who = info->anonymous ? info->displayName() : info->name;
 				auto l_find = [&](const std::string& method) -> FuncInfo* {
-					auto it = m_funcs.find(info->name + "::" + method);
-					return (it == m_funcs.end() || it->second.empty()) ? nullptr : it->second[0];
+					const std::vector<FuncInfo*> funcs = methodsOf(info, method);		// (a class: also those it inherits)
+					return funcs.empty() ? nullptr : funcs[0];
 				};
 				FuncInfo* fBegin = l_find("begin");
 				FuncInfo* fEnd = l_find("end");
@@ -3746,7 +4765,15 @@ namespace dscript
 				{ { "is_bool", "T", "one type" }, [](CodeGen&, const auto& t, const auto&, const auto&) -> int64_t { return t[0]->kind == Type::Kind::Bool; } },
 				{ { "is_pointer", "T", "one type" }, [](CodeGen&, const auto& t, const auto&, const auto&) -> int64_t { return t[0]->kind == Type::Kind::Pointer; } },
 				{ { "is_array", "T", "one type" }, [](CodeGen&, const auto& t, const auto&, const auto&) -> int64_t { return t[0]->kind == Type::Kind::Array; } },
-				{ { "is_struct", "T", "one type" }, [](CodeGen&, const auto& t, const auto&, const auto&) -> int64_t { return t[0]->kind == Type::Kind::Struct; } },
+				{ { "is_struct", "T", "one type (a struct, a class or an interface)" }, [](CodeGen&, const auto& t, const auto&, const auto&) -> int64_t { return t[0]->kind == Type::Kind::Struct; } },
+				{ { "is_class", "T", "one type" }, [](CodeGen&, const auto& t, const auto&, const auto&) -> int64_t { return t[0]->kind == Type::Kind::Struct && t[0]->structInfo->isClass(); } },
+				{ { "is_interface", "T", "one type" }, [](CodeGen&, const auto& t, const auto&, const auto&) -> int64_t { return t[0]->kind == Type::Kind::Struct && t[0]->structInfo->isInterface(); } },
+				{ { "is_abstract", "T", "one type (an abstract class or an interface: only pointed at)" }, [](CodeGen&, const auto& t, const auto&, const auto&) -> int64_t {
+					return t[0]->kind == Type::Kind::Struct && t[0]->structInfo->onlyPointer(); } },
+				{ { "is_base_of", "TT", "two types (is the first the second, a class it extends or an interface it implements)" }, [](CodeGen& cg, const auto& t, const auto&, const auto& pos) -> int64_t {
+					if (t[0]->kind != Type::Kind::Struct || t[1]->kind != Type::Kind::Struct) return 0;
+					cg.resolveStruct(t[1]->structInfo, pos);
+					return cg.derives(t[1]->structInfo, t[0]->structInfo); } },
 				{ { "is_sub", "T", "one type (a sub pointer type)" }, [](CodeGen&, const auto& t, const auto&, const auto&) -> int64_t { return t[0]->isFunction(); } },
 				{ { "is_scalar", "T", "one type (fits a register: integers, floats, pointers, sub pointers)" }, [](CodeGen&, const auto& t, const auto&, const auto&) -> int64_t { return t[0]->isScalar(); } },
 				{ { "is_builtin", "T", "one type (i8 ... u32, f32, bool, void)" }, [](CodeGen&, const auto& t, const auto&, const auto&) -> int64_t { return t[0]->kind <= Type::Kind::F32; } },
@@ -3766,14 +4793,18 @@ namespace dscript
 					Type* st = structOf(t[0]);
 					if (st->kind != Type::Kind::Struct) return 0;
 					const std::string m = st->structInfo->name + "::" + n[0];
+					if (st->structInfo->kind != 0)
+						cg.resolveStruct(st->structInfo, pos);
+					const std::vector<FuncInfo*> funcs = st->structInfo->kind != 0 ? cg.methodsOf(st->structInfo, n[0]) :
+						(cg.m_funcs.count(m) > 0 ? cg.m_funcs[m] : std::vector<FuncInfo*>());
 					if (t.size() < 2)
-						return cg.m_funcs.count(m) > 0 || cg.m_templates.count(m) > 0;
+						return !funcs.empty() || cg.m_templates.count(m) > 0;
 					Type* sig = t[1]->kind == Type::Kind::Pointer && t[1]->base->isFunction() ? t[1]->base : t[1];
 					if (!sig->isFunction())
 						error(pos, "has_method's third argument is a sub type (sub(u32, f32) -> i32*), not " + t[1]->name());
-					if (cg.m_funcs.count(m) == 0)
+					if (funcs.empty())
 						return 0;		// (a method template has no type until it is instantiated)
-					for (FuncInfo* f : cg.m_funcs[m])
+					for (FuncInfo* f : funcs)
 					{
 						if (f->type == nullptr && !f->instance && !f->resolving)
 						{
@@ -3804,6 +4835,11 @@ namespace dscript
 					if (t[0]->kind == Type::Kind::Array) return 1;
 					Type* st = structOf(t[0]);
 					if (st->kind != Type::Kind::Struct) return 0;
+					if (st->structInfo->kind != 0)
+					{
+						cg.resolveStruct(st->structInfo, {});
+						return !cg.methodsOf(st->structInfo, "begin").empty() && !cg.methodsOf(st->structInfo, "end").empty();
+					}
 					return cg.m_funcs.count(st->structInfo->name + "::begin") > 0 && cg.m_funcs.count(st->structInfo->name + "::end") > 0; } },
 				{ { "size_of", "T", "one type (its size in bytes, like sizeof)" }, [](CodeGen& cg, const auto& t, const auto&, const auto& pos) -> int64_t {
 					if (t[0]->kind == Type::Kind::Struct) cg.resolveStruct(t[0]->structInfo, pos);
@@ -4756,7 +5792,19 @@ namespace dscript
 		{
 			Reg d = genAddr(e->a);
 			Reg s = gen(e->b);
+			// (a class: the object keeps its vtable pointers, it may be of a derived class)
+			std::vector<Reg> kept;
+			for (const auto& v : t->structInfo->vptrs)
+			{
+				kept.push_back(alloc(e->pos));
+				emit("movo " + kept.back() + ", *" + d + ", dword " + imm(v.offset));
+			}
 			copyMemory(d, s, t->size());
+			for (size_t i = kept.size(); i-- > 0; )
+			{
+				emit("omov *" + d + ", " + kept[i] + ", dword " + imm(t->structInfo->vptrs[i].offset));
+				release(kept[i]);
+			}
 			release(s);
 			release(d);
 			return "";
@@ -4958,6 +6006,7 @@ namespace dscript
 
 	CodeGen::Reg CodeGen::genInlineCall(Node* e, FuncInfo* f)
 	{
+		prepareConstructor(f);
 		for (const auto& c : m_inline)
 		{
 			if (c.func == f)
@@ -5109,13 +6158,19 @@ namespace dscript
 			return r;
 		}
 		FuncInfo* f = e->func;
-		if (f && f->isInline)
+		const bool virtualCall = e->vslot >= 0;
+		if (f && f->isInline && !virtualCall)
 			return genInlineCall(e, f);
 		if (f && m_options.noInline && m_func && (m_func->decl->value & 2) != 0 && (f->decl->value & 2) != 0)
 			m_inlineCalls[m_func].push_back({ f, e->pos });
 		Type* fnType = nullptr;
 		Reg fr;
-		if (f == nullptr)
+		if (virtualCall)
+		{
+			fr = alloc(e->pos);		// (the sub, from the table: after the object's pointer is known)
+			fnType = f->type;
+		}
+		else if (f == nullptr)
 		{
 			fr = gen(e->a);
 			fnType = e->a->type;
@@ -5157,6 +6212,22 @@ namespace dscript
 				release(r);
 				continue;
 			}
+			if (i == 0 && virtualCall)
+			{
+				// this: the object's table has the sub (slot n: at 16 + 8n) and what to add to this
+				// for it (at 20 + 8n).
+				Reg self = gen(e->list[0]);
+				convert(self, decay(e->list[0]->type), params[0]);
+				emit("mov " + fr + ", *" + self);
+				Reg delta = alloc(e->pos);
+				emit("movo " + delta + ", *" + fr + ", dword " + imm(20 + 8 * e->vslot));
+				emit("movo " + fr + ", *" + fr + ", dword " + imm(16 + 8 * e->vslot));
+				emit("addip " + self + ", " + delta);
+				release(delta);
+				emit("push " + self);
+				release(self);
+				continue;
+			}
 			if (params[i]->kind == Type::Kind::Struct)
 			{
 				// By value: a copy in this frame, passed by its address.
@@ -5164,7 +6235,7 @@ namespace dscript
 				Reg dst = alloc(e->pos);
 				emit("mov " + dst + ", FP");
 				addImmediate(dst, temporary(params[i]->size()));
-				copyMemory(dst, src, params[i]->size());
+				copyValue(dst, src, params[i]);
 				emit("push " + dst);
 				release(dst);
 				release(src);
@@ -5202,7 +6273,7 @@ namespace dscript
 			slots += extra;
 		}
 		emit("push " + std::to_string(slots));
-		if (f)
+		if (f && !virtualCall)
 			emit("call $" + f->label);
 		else
 			emit("call " + fr);
@@ -5277,7 +6348,7 @@ namespace dscript
 			emit("mov " + d + ", " + addr);
 			addImmediate(d, offset);
 			Reg s = gen(init);
-			copyMemory(d, s, type->size());
+			copyValue(d, s, type);
 			release(s);
 			release(d);
 			return;
@@ -5301,23 +6372,29 @@ namespace dscript
 		release(v);
 	}
 
-	// The struct's default field values (the memory was zeroed).
-	static void collectDefaults(Type* type, int32_t offset, std::vector<std::pair<int32_t, const StructField*>>& out)
+	// The struct's default field values (the memory was zeroed), and its classes' vtable pointers
+	// (vptrs: the offset, and the table's label).
+	void CodeGen::collectDefaults(Type* type, int32_t offset, std::vector<std::pair<int32_t, const StructField*>>& out, std::vector<std::pair<int32_t, std::string>>* vptrs)
 	{
 		if (type->kind == Type::Kind::Struct)
 		{
+			if (vptrs != nullptr)
+			{
+				for (const auto& v : type->structInfo->vptrs)
+					vptrs->push_back({ offset + (int32_t)v.offset, vtableLabel(type->structInfo, v.offset) });
+			}
 			for (const auto& f : type->structInfo->fields)
 			{
 				if (f.init)
 					out.push_back({ offset + (int32_t)f.offset, &f });
 				else
-					collectDefaults(f.type, offset + (int32_t)f.offset, out);
+					collectDefaults(f.type, offset + (int32_t)f.offset, out, vptrs);
 			}
 		}
 		else if (type->kind == Type::Kind::Array && type->base->kind == Type::Kind::Struct)
 		{
 			for (uint32_t i = 0; i < type->count; i++)
-				collectDefaults(type->base, offset + (int32_t)(i * type->base->size()), out);
+				collectDefaults(type->base, offset + (int32_t)(i * type->base->size()), out, vptrs);
 		}
 	}
 
@@ -5341,7 +6418,10 @@ namespace dscript
 		if (t->kind == Type::Kind::Void)
 			error(s->pos, "variables cannot be void");
 		if (t->kind == Type::Kind::Struct)
+		{
 			resolveStruct(t->structInfo, s->pos);
+			requireValueType(t, s->pos, "a variable");
+		}
 		VarInfo* v = new VarInfo();
 		v->name = s->name;
 		v->type = t;
@@ -5365,7 +6445,8 @@ namespace dscript
 
 		const bool aggregate = (t->kind == Type::Kind::Struct || t->kind == Type::Kind::Array);
 		std::vector<std::pair<int32_t, const StructField*>> defaults;
-		collectDefaults(t, 0, defaults);
+		std::vector<std::pair<int32_t, std::string>> vptrs;
+		collectDefaults(t, 0, defaults, &vptrs);
 		if (aggregate && (s->a == nullptr || s->a->kind == NodeKind::InitList))
 		{
 			if (s->a != nullptr || !defaults.empty() || t->kind == Type::Kind::Struct)
@@ -5389,6 +6470,8 @@ namespace dscript
 						p.offset = "dword " + imm(d.first);
 					storePlace(p, val, d.second->type);
 				}
+				for (const auto& vp : vptrs)
+					emit("omov *" + a + ", $" + vp.second + ", dword " + imm(vp.first));
 				if (s->a)
 					genInit(a, t, s->a, 0);
 				release(a);
@@ -5483,6 +6566,16 @@ namespace dscript
 
 	void CodeGen::genStatement(Node* s)
 	{
+		if (s->kind == NodeKind::SetVtables)
+		{
+			// (a class's constructor, after its base's: its own tables)
+			VarInfo* self = lookupVar("this");
+			Reg r = alloc(s->pos);
+			loadVar(r, self);
+			storeVptrs(r, self->type->base);
+			release(r);
+			return;
+		}
 		if (s->kind != NodeKind::Block)
 			loc(s->pos);
 		switch (s->kind)
@@ -5711,7 +6804,7 @@ namespace dscript
 					}
 					else
 						emit("movo " + r + ", *PP, dword " + imm(0));
-					copyMemory(r, src, ret->size());
+					copyValue(r, src, ret);
 					emit("mov " + src + ", " + r);		// (registers are released in order: the address in src)
 					release(r);
 					r = src;
@@ -6049,6 +7142,7 @@ namespace dscript
 	// ======================================== Program ========================================
 	void CodeGen::genFunction(FuncInfo* f)
 	{
+		prepareConstructor(f);
 		// The body (into body): pass 1 / 2 of -O run it once each.
 		auto l_body = [&](std::vector<std::string>& body) {
 			m_out = &body;
@@ -6750,7 +7844,10 @@ namespace dscript
 		if (t->kind == Type::Kind::Void)
 			error(d->pos, "variables cannot be void");
 		if (t->kind == Type::Kind::Struct)
+		{
 			resolveStruct(t->structInfo, d->pos);
+			requireValueType(t, d->pos, "a variable");
+		}
 		v->type = t;
 	}
 
@@ -6781,7 +7878,10 @@ namespace dscript
 				// Pointers to string literals: stored as the literal's address ($symbol in the data).
 				std::map<uint32_t, std::string> refs;
 				std::vector<std::pair<int32_t, const StructField*>> defaults;
-				collectDefaults(t, 0, defaults);
+				std::vector<std::pair<int32_t, std::string>> vptrs;
+				collectDefaults(t, 0, defaults, &vptrs);
+				for (const auto& vp : vptrs)
+					refs[(uint32_t)vp.first] = vp.second;
 				for (const auto& def : defaults)
 				{
 					if (def.second->init->kind == NodeKind::StrLit)
@@ -7019,6 +8119,9 @@ namespace dscript
 			return (uint32_t)constConvert(ctNumber(value, from), from, to);
 		if (to->kind == Type::Kind::Bool)
 			return value != 0;
+		int64_t delta = 0;
+		if (value != 0 && pointerAdjust(from, to, delta))
+			return value + (uint32_t)delta;		// (a part of a class's object)
 		return value;		// pointers, sub pointers
 	}
 
@@ -7213,6 +8316,7 @@ namespace dscript
 
 	uint32_t CodeGen::ctCall(FuncInfo* f, const std::vector<uint32_t>& args, const SourcePos& pos)
 	{
+		prepareConstructor(f);
 		if (f->decl->constKind == 0)
 			ctFail(pos, "it calls " + f->name + ", which is not constexpr");
 		if (f->decl->a == nullptr)
@@ -7275,6 +8379,8 @@ namespace dscript
 			ctFail(s->pos, "it takes too long (more than " + std::to_string(CtMaxSteps) + " steps)");
 		switch (s->kind)
 		{
+			case NodeKind::SetVtables:
+				ctFail(s->pos, "objects of classes with virtual subs (or interfaces) are not built when compiling");
 			case NodeKind::Block:
 			{
 				const size_t mark = m_ct.size();
@@ -7432,7 +8538,10 @@ namespace dscript
 		if (t->kind == Type::Kind::Void)
 			error(s->pos, "variables cannot be void");
 		if (t->kind == Type::Kind::Struct)
+		{
 			resolveStruct(t->structInfo, s->pos);
+			requireValueType(t, s->pos, "a variable");
+		}
 		VarInfo* v = new VarInfo();
 		v->name = s->name;
 		v->type = t;
@@ -7441,7 +8550,13 @@ namespace dscript
 		v->isConst = s->constKind == 1;
 		v->offset = (int32_t)ctAlloc(t->size());
 		std::vector<std::pair<int32_t, const StructField*>> defaults;
-		collectDefaults(t, 0, defaults);
+		std::vector<std::pair<int32_t, std::string>> vptrs;
+		const bool discarding = m_discarding;
+		m_discarding = true;		// (no table: only whether there is one)
+		collectDefaults(t, 0, defaults, &vptrs);
+		m_discarding = discarding;
+		if (!vptrs.empty())
+			ctFail(s->pos, "objects of classes with virtual subs (or interfaces) are not built when compiling");
 		for (const auto& d : defaults)
 		{
 			Node* init = d.second->init;
@@ -7679,6 +8794,8 @@ namespace dscript
 				FuncInfo* f = e->func;
 				if (f == nullptr)
 					ctFail(e->pos, "it calls a sub through a pointer");
+				if (e->vslot >= 0)
+					ctFail(e->pos, "it calls a virtual sub (through its object's table)");
 				std::vector<uint32_t> args;
 				const auto& params = f->type->params;
 				if (e->list.size() > params.size())
@@ -7869,7 +8986,10 @@ namespace dscript
 			s += "inline ";
 		const bool method = (f->decl->value & 4) != 0;
 		const bool isStatic = (f->decl->value & 8) != 0;
-		s = std::string((f->decl->value & 16) != 0 ? "priv " : "") + (isStatic ? "static " : "") + ((f->decl->value & 64) != 0 ? "readonly " : "") + s;
+		const int v = f->decl->value;
+		const bool inInterface = method && f->decl->owner != nullptr && f->decl->owner->classKind == 2;
+		s = std::string((v & 16) != 0 ? "priv " : "") + ((v & 8192) != 0 ? "prot " : "") + (isStatic ? "static " : "") + ((v & 512) != 0 ? "virt " : "")
+			+ ((v & 1024) != 0 && !inInterface ? "pure " : "") + ((v & 2048) != 0 ? "override " : "") + ((v & 4096) != 0 ? "final " : "") + ((v & 64) != 0 ? "readonly " : "") + s;
 		const size_t first = (method && !isStatic) ? 1 : 0;	// this is not shown
 		const std::string owner = (method && f->decl->owner) ? f->decl->owner->name : "";
 		s += lambda ? "sub(" : "sub " + (method ? owner + "." + f->decl->shortName : f->decl->name) + "(";
@@ -7944,12 +9064,20 @@ namespace dscript
 
 	std::string CodeGen::hoverStruct(StructInfo* info)
 	{
-		std::string s = info->anonymous ? "struct" : "struct " + info->name;
+		std::string s = info->anonymous ? "struct" : std::string(info->isAbstract ? "abstract " : "") + (info->isFinal ? "final " : "") +
+			(info->isClass() ? "class " : info->isInterface() ? "interface " : "struct ") + info->name;
 		if (!info->complete)
 			return s;
+		if (info->base != nullptr)
+			s += " ex " + info->base->name;
+		else if (info->isInterface() && !info->interfaces.empty())
+			s += " ex " + info->interfaces[0]->name;
+		for (size_t i = 0; info->isClass() && i < info->interfaces.size(); i++)
+			s += (i == 0 ? " impl " : ", ") + info->interfaces[i]->name;
 		s += " {  // " + bytes(info->size) + "\n";
 		for (const StructField& f : info->fields)
-			s += std::string("\t") + (f.isPrivate ? "priv " : "") + (f.isReadonly ? "readonly " : "") + (f.isConst ? "const " : "var ") + f.name + ": " + (f.type ? f.type->name(true) : "?") + ";  // +" + std::to_string(f.offset) + "\n";
+			s += std::string("\t") + (f.isPrivate ? "priv " : "") + (f.isProtected ? "prot " : "") + (f.isReadonly ? "readonly " : "") + (f.isConst ? "const " : "var ") + f.name + ": " +
+				(f.type ? f.type->name(true) : "?") + ";  // +" + std::to_string(f.offset) + (f.owner != nullptr ? " (" + f.owner->name + ")" : "") + "\n";
 		// Its methods and static subs (the signature, without the comment).
 		for (FuncInfo* f : m_funcList)
 		{
@@ -7968,7 +9096,8 @@ namespace dscript
 	std::string CodeGen::hoverField(StructInfo* info, const StructField& f)
 	{
 		const std::string owner = info->anonymous ? "struct { ... }" : info->name;
-		return std::string(f.isPrivate ? "priv " : "") + (f.isReadonly ? "readonly " : "") + (f.isConst ? "const " : "var ") + f.name + ": " + (f.type ? f.type->name(true) : "?") + comment({ "field of " + owner + " at +" + std::to_string(f.offset),
+		return std::string(f.isPrivate ? "priv " : "") + (f.isProtected ? "prot " : "") + (f.isReadonly ? "readonly " : "") + (f.isConst ? "const " : "var ") + f.name + ": " + (f.type ? f.type->name(true) : "?") +
+			comment({ "field of " + (f.owner != nullptr ? f.owner->name + " (in " + owner + ")" : owner) + " at +" + std::to_string(f.offset),
 			f.type ? bytes(f.type->size()) : "" });
 	}
 
@@ -8192,7 +9321,7 @@ namespace dscript
 					c.kind = !method ? CompletionSymbol::Sub : (d->value & 8) != 0 ? CompletionSymbol::StaticSub : CompletionSymbol::Method;
 					c.type = f->type != nullptr ? typeCode(f->type) : "f:v";
 					c.hover = hoverFunc(f);
-					c.isPrivate = (d->value & 16) != 0;
+					c.isPrivate = (d->value & (16 | 8192)) != 0;	// (prot: also only in its subs, and its derived classes': below)
 					if (method)
 						out.members.push_back(c);
 				}
@@ -8204,7 +9333,46 @@ namespace dscript
 		for (auto& s : m_structs)
 		{
 			for (const StructField& f : s.second->fields)
-				out.members.push_back({ f.name, s.first, CompletionSymbol::Field, typeCode(f.type), hoverField(s.second, f), f.namePos, {}, f.isPrivate });
+			{
+				if (f.owner != nullptr && f.isPrivate)
+					continue;		// (inherited, but only its class's subs use it)
+				out.members.push_back({ f.name, s.first, CompletionSymbol::Field, typeCode(f.type), hoverField(s.second, f), f.namePos, {}, f.isPrivate || f.isProtected });
+			}
+			if (s.second->kind == 0)
+				continue;
+			// A class's inherited subs (those it does not redefine), as its members.
+			std::vector<const StructInfo*> ancestors;
+			for (const StructInfo* b = s.second->base; b != nullptr; b = b->base)
+				ancestors.push_back(b);
+			for (const auto& slot : s.second->ifaceSlots)
+			{
+				if (slot.iface != s.second)
+					ancestors.push_back(slot.iface);
+			}
+			std::set<std::string> seen;
+			for (FuncInfo* f : m_funcList)
+				if (f->decl->owner == s.second->decl && (f->decl->value & 4) != 0)
+					seen.insert(f->decl->shortName);
+			for (const StructInfo* a : ancestors)
+			{
+				for (FuncInfo* f : m_funcList)
+				{
+					const Node* d = f->decl;
+					if (d->owner != a->decl || (d->value & 4) == 0 || (d->value & 16) != 0 || d->shortName == "new" || f->type == nullptr)
+						continue;
+					if (!seen.insert(d->shortName + "/" + f->type->name()).second || seen.count(d->shortName) > 0)
+						continue;
+					CompletionSymbol c;
+					c.name = d->shortName;
+					c.parent = s.first;
+					c.kind = (d->value & 8) != 0 ? CompletionSymbol::StaticSub : CompletionSymbol::Method;
+					c.type = typeCode(f->type);
+					c.hover = hoverFunc(f);
+					c.def = d->namePos;
+					c.isPrivate = (d->value & 8192) != 0;
+					out.members.push_back(c);
+				}
+			}
 		}
 		for (FuncInfo* f : m_funcList)
 		{
@@ -8243,7 +9411,7 @@ namespace dscript
 		std::vector<std::string> out;
 		for (FuncInfo* f : m_funcList)
 		{
-			if (!f->external && !f->instance && f->decl->name.rfind("__lambda_", 0) != 0 && !f->label.empty() && f->decl->constKind != 3)
+			if (!f->external && !f->instance && f->decl->name.rfind("__lambda_", 0) != 0 && !f->label.empty() && f->decl->constKind != 3 && (f->decl->value & 1024) == 0)
 				out.push_back(f->label);	// (inline subs without code: not in the image; template instances: each user has its own)
 		}
 		for (const auto& g : m_globals)
@@ -8375,7 +9543,10 @@ namespace dscript
 			if (f->type == nullptr)
 				return;
 			const bool method = (d->value & 4) != 0, isStatic = (d->value & 8) != 0;
-			const std::string head = indent + ((d->value & 16) != 0 ? "priv " : "") + (isStatic ? "static " : "") + ((d->value & 64) != 0 ? "readonly " : "")
+			const bool inInterface = method && d->owner != nullptr && d->owner->classKind == 2;
+			const std::string head = indent + ((d->value & 16) != 0 ? "priv " : "") + ((d->value & 8192) != 0 ? "prot " : "") + (isStatic ? "static " : "")
+				+ ((d->value & 512) != 0 ? "virt " : "") + ((d->value & 1024) != 0 && !inInterface ? "pure " : "") + ((d->value & 2048) != 0 ? "override " : "")
+				+ ((d->value & 4096) != 0 ? "final " : "") + ((d->value & 64) != 0 ? "readonly " : "")
 				+ (f->interrupt ? "interrupt " : "") + (d->constKind == 2 ? "constexpr " : d->constKind == 3 ? "consteval " : "") + ((d->value & 2) != 0 ? "inline " : "") + "sub ";
 			std::string text = head + declaredName(d) + "(";
 			const size_t first = (method && !isStatic) ? 1 : 0;
@@ -8484,11 +9655,30 @@ namespace dscript
 		};
 		std::function<void(Node*, const std::string&)> l_struct = [&](Node* d, const std::string& indent) {
 			StructInfo* info = m_structs[d->name];
-			const std::string head = indent + (d->isPrivate ? "priv " : "") + "struct ";
-			l_line(head + declaredName(d) + " {", &d->namePos, head.size());
+			const std::string head = indent + (d->isPrivate ? "priv " : "") + (info->isAbstract ? "abstract " : "") + (info->isFinal ? "final " : "") +
+				(info->isClass() ? "class " : info->isInterface() ? "interface " : "struct ");
+			// (the class it extends, its interfaces, its friends: by their full names)
+			std::string header;
+			if (info->base != nullptr)
+				header += " ex " + interfaceType(m_types.structType(info->base));
+			else if (info->isInterface() && !info->interfaces.empty())
+				header += " ex " + interfaceType(m_types.structType(info->interfaces[0]));
+			if (info->isClass() && !info->interfaces.empty())
+			{
+				header += " impl ";
+				for (size_t i = 0; i < info->interfaces.size(); i++)
+					header += (i > 0 ? ", " : "") + interfaceType(m_types.structType(info->interfaces[i]));
+			}
+			std::vector<std::string> friends = info->friendClasses;
+			friends.insert(friends.end(), info->friendSubs.begin(), info->friendSubs.end());
+			for (size_t i = 0; i < friends.size(); i++)
+				header += (i == 0 ? " friend ::" : ", ::") + friends[i];
+			l_line(head + declaredName(d) + header + " {", &d->namePos, head.size());
 			for (const StructField& f : info->fields)
 			{
-				const std::string h = indent + "\t" + (f.isPrivate ? "priv " : "") + (f.isReadonly ? "readonly " : "") + (f.isConst ? "const " : "var ");
+				if (f.owner != nullptr)
+					continue;		// (the class it extends has it)
+				const std::string h = indent + "\t" + (f.isPrivate ? "priv " : "") + (f.isProtected ? "prot " : "") + (f.isReadonly ? "readonly " : "") + (f.isConst ? "const " : "var ");
 				l_line(h + f.name + ": " + interfaceType(f.type) + (f.init != nullptr ? " = " + interfaceValue(f.init, f.type) : "") + ";", &f.namePos, h.size());
 			}
 			for (Node* n : m_program->list)
@@ -8512,14 +9702,14 @@ namespace dscript
 					// library starts: static readonly var (a constant of the importers).
 					VarInfo* v = m_globals.count(n->name) > 0 ? m_globals[n->name] : nullptr;
 					const bool computedConst = v != nullptr && v->isConst;
-					const std::string h = indent + "\t" + (n->isPrivate ? "priv " : "") + (computedConst ? "static readonly var " : std::string(n->isReadonly ? "readonly " : "") + "static var ");
+					const std::string h = indent + "\t" + (n->isPrivate ? "priv " : "") + (n->isProtected ? "prot " : "") + (computedConst ? "static readonly var " : std::string(n->isReadonly ? "readonly " : "") + "static var ");
 					l_line(h + n->shortName + ": " + interfaceType(v != nullptr && v->type != nullptr ? v->type : m_types.i32()) + ";", &n->namePos, h.size());
 				}
 				else if (n->kind == NodeKind::ConstDecl && m_consts.count(n->name) > 0)
 				{
 					// A constant of the struct (static const with a compile-time value: the same).
 					const ConstInfo& c = m_consts[n->name];
-					const std::string h = indent + "\t" + (n->isPrivate ? "priv " : "") + "constexpr ";
+					const std::string h = indent + "\t" + (n->isPrivate ? "priv " : "") + (n->isProtected ? "prot " : "") + "constexpr ";
 					std::string text = h + n->shortName;
 					if (c.isString)
 						text += " = " + dscript::quoted(c.text) + ";";
@@ -8723,6 +9913,12 @@ namespace dscript
 			}
 		}
 		resolveSubDefaults();
+		// The classes' tables (what they override, what an abstract class lacks).
+		for (auto& s : m_structs)
+		{
+			if (s.second->kind != 0 && m_instanceOrigin.count(s.first) == 0)
+				attempt([&] { buildVtables(s.second); });
+		}
 		// Analysis: a file without main is fine (it is included by others).
 		FuncInfo* mainFunc = nullptr;
 		bool mainArgs = false;	// main(var argc: u32, var argv: string*)
@@ -8794,7 +9990,7 @@ namespace dscript
 					error(f->decl->pos, "sub '" + f->name + "' is declared but not defined");
 			}))
 				continue;
-			if (!f->isInline && !f->external && f->decl->constKind != 3)
+			if (!f->isInline && !f->external && f->decl->constKind != 3 && (f->decl->value & 1024) == 0)
 				l_gen(f);
 		}
 		if (m_options.noInline)
@@ -8809,16 +10005,23 @@ namespace dscript
 			for (size_t i = 0; i < m_funcList.size(); i++)
 			{
 				FuncInfo* f = m_funcList[i];
-				if (f->instance && f->used && !f->generated && !f->isInline && f->defined && f->decl->constKind != 3)
+				if (f->instance && f->used && !f->generated && !f->isInline && f->defined && f->decl->constKind != 3 && (f->decl->value & 1024) == 0)
 				{
 					l_gen(f);
 					more = true;
 				}
-				else if (f->isInline && f->addressTaken && f->defined && kept.insert(f).second)
+				else if (f->isInline && f->addressTaken && f->defined && !f->external && kept.insert(f).second)
 				{
 					l_gen(f);
 					more = true;
 				}
+			}
+			// The classes' tables the code uses (they use subs: maybe instances to generate).
+			while (m_vtablesEmitted < m_vtableQueue.size())
+			{
+				StructInfo* info = m_vtableQueue[m_vtablesEmitted++];
+				attempt([&] { emitVtables(info); });
+				more = true;
 			}
 			if (m_globalsGenerated < m_globalDecls.size())
 			{

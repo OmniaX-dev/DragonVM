@@ -1,0 +1,4 @@
+// expect-error: B has no body for the pure sub A::f
+abstract class A { pure sub f() -> i32; }
+class B ex A { }
+sub main() -> i32 { return 0; }

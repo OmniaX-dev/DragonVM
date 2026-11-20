@@ -3,17 +3,18 @@
 	name: (namespace_name) @name) @item
 
 (function_declaration
-	[(atomic_modifier) (interrupt_modifier) (inline_modifier) (static_modifier) (priv_modifier)]* @context
+	[(atomic_modifier) (interrupt_modifier) (inline_modifier) (static_modifier) (priv_modifier) (prot_modifier) (virt_modifier) (pure_modifier) (override_modifier) (final_modifier)]* @context
 	"sub" @context
 	name: (identifier) @name
 	parameters: (parameter_list) @context) @item
 
 (struct_declaration
-	"struct" @context
+	[(abstract_modifier) (final_modifier)]* @context
+	["struct" "class" "interface"] @context
 	name: (type_identifier) @name) @item
 
 (field_declaration
-	[(priv_modifier) (readonly_modifier)]? @context
+	[(priv_modifier) (prot_modifier) (readonly_modifier)]? @context
 	name: (field_identifier) @name) @item
 
 (enum_declaration

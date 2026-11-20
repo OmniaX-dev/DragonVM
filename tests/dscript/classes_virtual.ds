@@ -1,0 +1,91 @@
+// expect-rv: 0
+// Virtual subs: virt (a slot in the class's table), override (a derived class's own), final;
+// calls through a pointer use the object's table, calls on a variable are direct. While a base's
+// constructor runs, the object is of the base's class. Copies get their type's table (an
+// assignment keeps the object's own); globals, fields, arrays of classes have their tables.
+#include(check.ds)
+
+var g_log: i32 = 0;
+
+class A {
+	var a: i32;
+	sub new() -> void { this->a = 1; g_log = g_log * 10 + 1; }
+	virt sub who() -> i32 { return 1; }
+	sub whoNow() -> i32 { return this->who(); }		// (through the table)
+	virt sub sum(var x: i32) -> i32 { return x + this->who(); }
+}
+
+class B ex A {
+	var b: i32;
+	var seen: i32;
+	sub new() -> void { this->seen = this->who(); this->b = 2; g_log = g_log * 10 + 2; }
+	override sub who() -> i32 { return 2; }
+	sub baseWho() -> i32 { return A::who(); }			// (A's, directly)
+}
+
+class C ex B {
+	var c: i32 = 9;
+	override final sub who() -> i32 { return 3; }		// (no constructor: an implicit one calls B::new())
+	override sub sum(var x: i32) -> i32 { return B::sum(x) * 10; }
+}
+
+class Holder {
+	var inner: C;
+	var arr: B[2];
+}
+
+class Plain { var p: i32; }
+class Late ex Plain {								// (a table its base has not: before the base's fields)
+	virt sub f() -> i32 { return 8; }
+}
+class Later ex Late { override sub f() -> i32 { return 9; } }
+
+class Inl { virt inline sub v() -> i32 { return 5; } }
+class Inl2 ex Inl { override inline sub v() -> i32 { return 6; } }
+
+var g_c: C;
+var g_b: B();
+
+sub byValue(var b: B) -> i32 { var p: A* = &b; return p->who(); }
+sub makeB() -> B { var c: C(); var p: B* = &c; return *p; }
+
+sub main() -> i32 {
+	check(1, g_log == 12);
+	g_log = 0;
+	var c: C();
+	check(2, g_log == 12 && c.a == 1 && c.b == 2 && c.c == 9);
+	check(3, c.seen == 2);				// (during B::new, a B)
+	var pa: A* = &c;
+	check(4, pa->who() == 3 && pa->whoNow() == 3 && c.baseWho() == 1);
+	check(5, pa->sum(1) == 40);
+	var pb: B* = &c;
+	check(6, byValue(*pb) == 2);		// (a B copy: B's table)
+	var b2: B = makeB();
+	pa = &b2;
+	check(7, pa->who() == 2);
+	var h: Holder;
+	pa = &h.inner;
+	check(8, pa->who() == 3);
+	pa = &h.arr[1];
+	check(9, pa->who() == 2);
+	pa = &g_c;
+	check(10, pa->who() == 3);
+	pa = &g_b;
+	check(11, pa->who() == 2 && g_b.b == 2);
+	var target: B();
+	pa = &target;
+	*pb = target;					// (c keeps its table)
+	check(12, pb->who() == 3);
+	target = *pb;					// (target keeps B's)
+	check(13, pa->who() == 2);
+	var later: Later;
+	var lp: Late* = &later;
+	var pp: Plain* = &later;
+	pp->p = 4;
+	check(14, lp->f() == 9 && later.p == 4 && sizeof(Late) == 8);
+	check(15, cast<u32>(pp) == cast<u32>(lp) + 4);
+	var i2: Inl2;
+	var ip: Inl* = &i2;
+	check(16, ip->v() == 6 && i2.v() == 6);
+	return result();
+}

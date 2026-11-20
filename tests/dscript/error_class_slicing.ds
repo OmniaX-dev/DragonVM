@@ -1,0 +1,4 @@
+// expect-error: cannot convert B to A
+class A { var x: i32; }
+class B ex A { var y: i32; }
+sub main() -> i32 { var b: B; var a: A = b; return 0; }

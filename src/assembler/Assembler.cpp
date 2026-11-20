@@ -61,6 +61,7 @@ namespace dragon
 			m_rawCodeSection.clear();
 			m_symbolTable.clear();
 			m_labelTable.clear();
+			m_codeDataRefs.clear();
 			m_disassembly.clear();
 			m_sourceFiles.clear();
 			m_locFile = -1;
@@ -1226,8 +1227,9 @@ namespace dragon
 			{
 				if (m_symbolTable.count(ref.target) == 0)
 				{
-					std::cout << "Unknown data symbol in data entry: " << ref.target << " (" << ref.line << ")\n";
-					exit(1);
+					// (maybe a code label: once the code is parsed)
+					m_codeDataRefs.push_back({ ref.entry, ref.offset, ref.target, ref.line });
+					continue;
 				}
 				const u32 address = m_symbolTable[ref.target].address;
 				auto& bytes = m_symbolTable[ref.entry].bytes;
@@ -3232,6 +3234,18 @@ namespace dragon
 				}
 				auto lbl = m_labelTable["$" + m_entry_lbl];
 				entryAddr = lbl.address;
+			}
+			for (auto& ref : m_codeDataRefs)
+			{
+				if (m_labelTable.count(ref.target) == 0)
+				{
+					std::cout << "Unknown data symbol or label in data entry: " << ref.target << " (" << ref.line << ")\n";
+					exit(1);
+				}
+				const u32 address = m_labelTable[ref.target].address;
+				auto& bytes = m_symbolTable[ref.entry].bytes;
+				for (i32 i = 0; i < data::WordSize; i++)
+					bytes[ref.offset + i] = cast<u8>(address >> (8 * (data::WordSize - 1 - i)));
 			}
 			std::vector<tSymbol> symbols;
 			ostd::ByteStream newCode;

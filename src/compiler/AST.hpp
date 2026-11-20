@@ -8,6 +8,7 @@ namespace dscript
 	struct Type;
 	struct VarInfo;
 	struct FuncInfo;
+	struct StructInfo;
 
 	// A type as written in the source (resolved to a Type by the code generator, so types
 	// can be used before they are declared).
@@ -72,8 +73,8 @@ namespace dscript
 		Program, NamespaceDecl, StructDecl, EnumDecl, EnumMember, ConstDecl, AliasDecl, VarDecl, FuncDecl, TemplateDecl,
 		// if constexpr (a) around declarations (their guard; value: -1 not decided, 0 / 1), static_assert(a, text)
 		DeclIf, StaticAssert,
-		// Statements
-		Block, If, While, DoWhile, For, ForIn, Return, Break, Continue, ExprStmt, LowBlock, Assert, DebugPrint, Defer,
+		// Statements (SetVtables: a class constructor's own vtable pointers, see CodeGen::prepareConstructor)
+		Block, If, While, DoWhile, For, ForIn, Return, Break, Continue, ExprStmt, LowBlock, Assert, DebugPrint, Defer, SetVtables,
 		// Expressions
 		IntLit, FloatLit, StrLit, BoolLit, Null, Ident, Unary, Binary, Assign, Ternary, Call, Index,
 		Member, Cast, SizeofType, SizeofExpr, PreInc, PreDec, PostInc, PostDec, InitList, TypeArg
@@ -98,6 +99,14 @@ namespace dscript
 		bool isPrivate { false };		// a struct field declared priv (methods: FuncDecl flag 16); a priv nested struct / enum;
 										// Member / Ident of a for-in's own call (begin, end, next, get): it may call a priv method
 		bool isReadonly { false };		// a struct field declared readonly
+		bool isProtected { false };		// a class member declared prot (methods: FuncDecl flag 8192)
+		// StructDecl: 0 struct, 1 class, 2 interface; classFlags: 1 abstract, 2 final. The class it
+		// extends (ex) is in typeSyntax (an interface's: the interface it extends), the interfaces it
+		// implements (impl) in impls, and its friends (friend A, f: Ident nodes) in friends.
+		int classKind { 0 };
+		int classFlags { 0 };
+		std::vector<TypeSyntax*> impls;
+		std::vector<Node*> friends;
 		// VarDecl (variables, parameters, fields): 1 const (never changed after its initialization),
 		// 3 constinit (a global whose value is known when compiling: no code sets it). ConstDecl: 1
 		// const (a compile-time constant if its value is one, otherwise a constant variable), 2
@@ -142,6 +151,15 @@ namespace dscript
 		std::vector<TypeSyntax*> templateArgs;
 		// TemplateDecl: the template. (TypeArg: a type given to a condition's built-in, in typeSyntax.)
 		TemplateDef* tmpl { nullptr };
+		// Ident of a method call (x.m() / p->m(), rewritten as Struct::m(&x / p)): the struct whose
+		// methods (with those it inherits) are the candidates; callFlags 1: a call through an object
+		// (virtual subs are called through its table), 2: the object is a variable (its type is
+		// exactly the struct: no table needed). Call: callFlags 4: Base::new(...) as a statement of
+		// a constructor (it builds the base's part); vslot: a virtual call (the slot in the table of
+		// the struct whose sub it calls; -1: a direct call).
+		StructInfo* methodClass { nullptr };
+		int callFlags { 0 };
+		int vslot { -1 };
 
 		// Filled in by the code generator.
 		Type* type { nullptr };

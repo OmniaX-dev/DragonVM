@@ -1,0 +1,3 @@
+// expect-error: constructors are not virtual
+class A { virt sub new() -> void { } }
+sub main() -> i32 { return 0; }

@@ -2793,6 +2793,62 @@
     }
   },
   {
+    "type": "extends_clause",
+    "named": true,
+    "fields": {
+      "type": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "array_type",
+            "named": true
+          },
+          {
+            "type": "const_type",
+            "named": true
+          },
+          {
+            "type": "function_type",
+            "named": true
+          },
+          {
+            "type": "generic_type",
+            "named": true
+          },
+          {
+            "type": "parenthesized_type",
+            "named": true
+          },
+          {
+            "type": "pointer_type",
+            "named": true
+          },
+          {
+            "type": "primitive_type",
+            "named": true
+          },
+          {
+            "type": "scoped_type_identifier",
+            "named": true
+          },
+          {
+            "type": "struct_type",
+            "named": true
+          },
+          {
+            "type": "type_identifier",
+            "named": true
+          },
+          {
+            "type": "value_type",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "field_declaration",
     "named": true,
     "fields": {
@@ -2953,6 +3009,10 @@
       "types": [
         {
           "type": "priv_modifier",
+          "named": true
+        },
+        {
+          "type": "prot_modifier",
           "named": true
         },
         {
@@ -3636,6 +3696,26 @@
     }
   },
   {
+    "type": "friend_clause",
+    "named": true,
+    "fields": {
+      "name": {
+        "multiple": true,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "scoped_identifier",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "function_declaration",
     "named": true,
     "fields": {
@@ -3737,6 +3817,10 @@
           "named": true
         },
         {
+          "type": "final_modifier",
+          "named": true
+        },
+        {
           "type": "inline_modifier",
           "named": true
         },
@@ -3745,7 +3829,19 @@
           "named": true
         },
         {
+          "type": "override_modifier",
+          "named": true
+        },
+        {
           "type": "priv_modifier",
+          "named": true
+        },
+        {
+          "type": "prot_modifier",
+          "named": true
+        },
+        {
+          "type": "pure_modifier",
           "named": true
         },
         {
@@ -3754,6 +3850,10 @@
         },
         {
           "type": "static_modifier",
+          "named": true
+        },
+        {
+          "type": "virt_modifier",
           "named": true
         }
       ]
@@ -4199,6 +4299,62 @@
           },
           {
             "type": "while_statement",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "implements_clause",
+    "named": true,
+    "fields": {
+      "type": {
+        "multiple": true,
+        "required": true,
+        "types": [
+          {
+            "type": "array_type",
+            "named": true
+          },
+          {
+            "type": "const_type",
+            "named": true
+          },
+          {
+            "type": "function_type",
+            "named": true
+          },
+          {
+            "type": "generic_type",
+            "named": true
+          },
+          {
+            "type": "parenthesized_type",
+            "named": true
+          },
+          {
+            "type": "pointer_type",
+            "named": true
+          },
+          {
+            "type": "primitive_type",
+            "named": true
+          },
+          {
+            "type": "scoped_type_identifier",
+            "named": true
+          },
+          {
+            "type": "struct_type",
+            "named": true
+          },
+          {
+            "type": "type_identifier",
+            "named": true
+          },
+          {
+            "type": "value_type",
             "named": true
           }
         ]
@@ -5960,6 +6116,10 @@
           "named": true
         },
         {
+          "type": "prot_modifier",
+          "named": true
+        },
+        {
           "type": "readonly_modifier",
           "named": true
         },
@@ -6155,6 +6315,10 @@
         {
           "type": "priv_modifier",
           "named": true
+        },
+        {
+          "type": "prot_modifier",
+          "named": true
         }
       ]
     }
@@ -6183,6 +6347,32 @@
           }
         ]
       }
+    },
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "abstract_modifier",
+          "named": true
+        },
+        {
+          "type": "extends_clause",
+          "named": true
+        },
+        {
+          "type": "final_modifier",
+          "named": true
+        },
+        {
+          "type": "friend_clause",
+          "named": true
+        },
+        {
+          "type": "implements_clause",
+          "named": true
+        }
+      ]
     }
   },
   {
@@ -7777,6 +7967,10 @@
     "named": false
   },
   {
+    "type": "abstract_modifier",
+    "named": true
+  },
+  {
     "type": "alias",
     "named": false
   },
@@ -7819,6 +8013,10 @@
   },
   {
     "type": "char",
+    "named": false
+  },
+  {
+    "type": "class",
     "named": false
   },
   {
@@ -7866,6 +8064,10 @@
     "named": true
   },
   {
+    "type": "ex",
+    "named": false
+  },
+  {
     "type": "f32",
     "named": false
   },
@@ -7878,11 +8080,19 @@
     "named": true
   },
   {
+    "type": "final_modifier",
+    "named": true
+  },
+  {
     "type": "float",
     "named": false
   },
   {
     "type": "for",
+    "named": false
+  },
+  {
+    "type": "friend",
     "named": false
   },
   {
@@ -7906,6 +8116,10 @@
     "named": false
   },
   {
+    "type": "impl",
+    "named": false
+  },
+  {
     "type": "in",
     "named": false
   },
@@ -7915,6 +8129,10 @@
   },
   {
     "type": "int",
+    "named": false
+  },
+  {
+    "type": "interface",
     "named": false
   },
   {
@@ -7959,6 +8177,10 @@
     "named": false
   },
   {
+    "type": "override_modifier",
+    "named": true
+  },
+  {
     "type": "preproc_directive",
     "named": true,
     "extra": true
@@ -7969,6 +8191,14 @@
   },
   {
     "type": "priv_modifier",
+    "named": true
+  },
+  {
+    "type": "prot_modifier",
+    "named": true
+  },
+  {
+    "type": "pure_modifier",
     "named": true
   },
   {
@@ -7985,6 +8215,10 @@
   },
   {
     "type": "static_assert",
+    "named": false
+  },
+  {
+    "type": "static_cast",
     "named": false
   },
   {
@@ -8042,6 +8276,10 @@
   {
     "type": "var",
     "named": false
+  },
+  {
+    "type": "virt_modifier",
+    "named": true
   },
   {
     "type": "void",

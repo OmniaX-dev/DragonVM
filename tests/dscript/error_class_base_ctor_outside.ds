@@ -1,0 +1,4 @@
+// expect-error: A::new(...) builds the A part of a B: only as a statement of B's constructor
+class A { sub new() -> void { } }
+class B ex A { sub reset() -> void { A::new(); } }
+sub main() -> i32 { return 0; }

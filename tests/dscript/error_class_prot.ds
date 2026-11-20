@@ -1,0 +1,3 @@
+// expect-error: 'x' is protected (prot): only the subs of A and of the classes derived from it can use it
+class A { prot var x: i32; }
+sub main() -> i32 { var a: A; return a.x; }

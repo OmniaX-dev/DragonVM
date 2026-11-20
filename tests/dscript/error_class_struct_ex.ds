@@ -1,0 +1,4 @@
+// expect-error: structs do not extend others
+struct S { }
+struct T ex S { }
+sub main() -> i32 { return 0; }

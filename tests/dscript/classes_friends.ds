@@ -1,0 +1,31 @@
+// expect-rv: 0
+// friend: the classes, structs and subs a class (or a struct) names have its access (priv,
+// prot, changing its readonly fields).
+#include(check.ds)
+
+sub peek(var a: Secret*) -> i32;
+
+class Secret friend Spy, peek {
+	priv var hidden: i32 = 42;
+	prot var half: i32 = 21;
+	readonly var ro: i32 = 1;
+	priv sub twice() -> i32 { return this->hidden * 2; }
+}
+
+class Spy {
+	static sub look(var s: Secret*) -> i32 { s->ro = 5; return s->hidden + s->twice() + s->half; }
+}
+
+sub peek(var a: Secret*) -> i32 { return a->hidden; }
+
+struct S friend peekS { priv var x: i32 = 3; }
+sub peekS(var s: S*) -> i32 { return s->x; }
+
+sub main() -> i32 {
+	var s: Secret;
+	check(1, Spy::look(&s) == 42 + 84 + 21);
+	check(2, peek(&s) == 42 && s.ro == 5);
+	var t: S;
+	check(3, peekS(&t) == 3);
+	return result();
+}

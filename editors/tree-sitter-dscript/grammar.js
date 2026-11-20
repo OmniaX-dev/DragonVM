@@ -52,6 +52,9 @@ module.exports = grammar({
 		[$.static_field, $.function_declaration],
 		// (Name<16>: a template's value argument or comparisons: the parse that works wins)
 		[$.template_arguments, $._expression],
+		// (final class / final sub in a class: told by what follows)
+		[$.struct_declaration, $.function_declaration],
+		[$.nested_type_declaration, $.function_declaration],
 	],
 
 	rules: {
@@ -112,12 +115,26 @@ module.exports = grammar({
 		),
 		declaration_list: $ => seq('{', repeat($._top_level), '}'),
 
+		// struct Name [friend A, f] { ... }
+		// [abstract | final] class Name [ex Base] [impl I1, I2] [friend A, f] { ... }
+		// interface Name [ex Other] { subs }
 		struct_declaration: $ => seq(
-			'struct',
+			repeat(choice($.abstract_modifier, $.final_modifier)),
+			choice('struct', 'class', 'interface'),
 			field('name', alias($.identifier, $.type_identifier)),
+			optional($.extends_clause),
+			optional($.implements_clause),
+			optional($.friend_clause),
 			field('body', $.field_list),
 			optional(';'),
 		),
+		// ex Base: the class it extends (an interface: the interface it extends)
+		extends_clause: $ => seq('ex', field('type', $._type)),
+		// impl I1, I2: the interfaces a class implements
+		implements_clause: $ => seq('impl', commaSep1(field('type', $._type))),
+		// friend A, f: the structs, classes and subs that have its access
+		friend_clause: $ => seq('friend', commaSep1(field('name', choice($.identifier, $.scoped_identifier)))),
+		abstract_modifier: _ => 'abstract',
 		// Fields and methods (subs in a struct, called as x.m() / p->m(), with this).
 		// Nested structs / enums (Outer::Inner; priv: only usable in the struct).
 		// constexpr NAME = value;: a constant of the struct.
@@ -126,13 +143,13 @@ module.exports = grammar({
 			$.struct_constant, $.conditional_member, $.static_assert, $.static_field),
 		// static var / static const: one variable for the struct (not one per instance)
 		static_field: $ => seq(
-			optional(choice($.priv_modifier, $.readonly_modifier)),
+			optional(choice($.priv_modifier, $.prot_modifier, $.readonly_modifier)),
 			$.static_modifier,
 			choice(seq($.variable_declaration, ';'), $.const_declaration),
 		),
 		conditional_member: $ => conditional($, $.conditional_member, $._member),
 		struct_constant: $ => seq(
-			optional($.priv_modifier),
+			optional(choice($.priv_modifier, $.prot_modifier)),
 			'constexpr',
 			field('name', $.identifier),
 			optional(seq(':', field('type', $._type))),
@@ -161,12 +178,12 @@ module.exports = grammar({
 		template_arguments: $ => prec.dynamic(1, seq('<', commaSep1(choice($._type, $.number_literal, $.member_expression, $.call_expression,
 			$.parenthesized_expression, $.unary_expression, $.boolean_literal, $.binary_expression)), '>')),
 		nested_type_declaration: $ => seq(
-			optional($.priv_modifier),
+			optional($.priv_modifier),		// (or for everyone)
 			choice($.struct_declaration, $.enum_declaration),
 		),
 		// const: set when the struct is built (its default, { ... }, in new), then never changed
 		field_declaration: $ => seq(
-			optional(choice($.priv_modifier, $.readonly_modifier)),
+			optional(choice($.priv_modifier, $.prot_modifier, $.readonly_modifier)),
 			choice('var', 'const'),
 			field('name', alias($.identifier, $.field_identifier)),
 			':',
@@ -240,8 +257,10 @@ module.exports = grammar({
 		function_declaration: $ => seq(
 			// static: in a struct, a sub without this (static inline / inline static)
 			// readonly: this is a const pointer; constexpr / consteval: evaluated when compiling
+			// virt / pure (no body) / override / final: a class's virtual subs; prot: its subs and
+			// its derived classes' use it
 			repeat(choice($.atomic_modifier, $.interrupt_modifier, $.inline_modifier, $.static_modifier, $.priv_modifier, $.readonly_modifier,
-				$.constexpr_modifier, $.consteval_modifier)),
+				$.constexpr_modifier, $.consteval_modifier, $.prot_modifier, $.virt_modifier, $.pure_modifier, $.override_modifier, $.final_modifier)),
 			'sub',
 			field('name', $.identifier),
 			field('parameters', $.parameter_list),
@@ -258,6 +277,12 @@ module.exports = grammar({
 		priv_modifier: _ => 'priv',
 		// readonly: a struct field everyone can read, but only the struct's own subs can change
 		readonly_modifier: _ => 'readonly',
+		// prot: a class's member its subs and those of the classes derived from it can use
+		prot_modifier: _ => 'prot',
+		virt_modifier: _ => 'virt',
+		pure_modifier: _ => 'pure',
+		override_modifier: _ => 'override',
+		final_modifier: _ => 'final',
 		// static var x: T = value;  static const X = value;  (in a sub)
 		static_declaration: $ => seq(
 			$.static_modifier,
@@ -485,8 +510,9 @@ module.exports = grammar({
 			);
 		},
 
-		// cast<T>(value): converted; bitcast<T>(value): the same bits read as a T
-		cast_expression: $ => seq(choice('cast', 'bitcast'), '<', field('type', $._type), '>', '(', field('value', $._expression), ')'),
+		// cast<T>(value): converted; bitcast<T>(value): the same bits read as a T; static_cast<T>(value):
+		// also from a class pointer to a pointer to a class derived from it
+		cast_expression: $ => seq(choice('cast', 'bitcast', 'static_cast'), '<', field('type', $._type), '>', '(', field('value', $._expression), ')'),
 
 		sizeof_expression: $ => choice(
 			seq('sizeof', '<', field('type', $._type), '>'),

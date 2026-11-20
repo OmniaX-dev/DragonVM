@@ -1,0 +1,4 @@
+// expect-error: static_cast cannot convert B* to A*
+class A { }
+class B { }
+sub main() -> i32 { var b: B; var p: A* = static_cast<A*>(&b); return 0; }

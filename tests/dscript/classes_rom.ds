@@ -1,0 +1,23 @@
+// expect-rom-rv: 0
+// Classes in a ROM program: their tables are read-only data (in the ROM).
+
+interface Shape { sub area() -> i32; }
+
+class Square impl Shape {
+	var s: i32;
+	sub new(var s: i32) -> void { this->s = s; }
+	override sub area() -> i32 { return this->s * this->s; }
+}
+
+class Cube ex Square {
+	sub new(var s: i32) -> void { Square::new(s); }
+	override sub area() -> i32 { return 6 * Square::area(); }
+}
+
+sub main() -> i32 {
+	var c: Cube(2);
+	var s: Shape* = &c;
+	var q: Square* = &c;
+	if (s->area() != 24 or q->area() != 24) return 1;
+	return 0;
+}

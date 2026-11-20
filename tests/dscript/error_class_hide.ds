@@ -1,0 +1,4 @@
+// expect-error: 'f' with these parameters is a sub of A already, and it is not virtual
+class A { sub f() -> i32 { return 1; } }
+class B ex A { sub f() -> i32 { return 2; } }
+sub main() -> i32 { return 0; }

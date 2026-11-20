@@ -1,0 +1,4 @@
+// expect-error: 'f' returns u32, but A::f (which it overrides) returns i32
+class A { virt sub f() -> i32 { return 1; } }
+class B ex A { override sub f() -> u32 { return 2; } }
+sub main() -> i32 { return 0; }

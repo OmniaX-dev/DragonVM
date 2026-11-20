@@ -1,0 +1,4 @@
+// expect-error: B::new must build its A part: A has no constructor without arguments
+class A { sub new(var x: i32) -> void { } }
+class B ex A { sub new() -> void { } }
+sub main() -> i32 { var b: B(); return 0; }

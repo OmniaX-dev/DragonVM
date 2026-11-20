@@ -45,6 +45,8 @@ namespace dscript
 			Node* parseStruct(const Node* owner = nullptr);
 			void parseStructFields(Node* decl);
 			void parseStructMember(Node* decl);
+			int parseVirtualFlag(int flags);
+			void checkVirtualFlags(int flags, const Token& name);
 			void parseDeclIf(std::vector<Node*>& out, Node* structDecl);
 			Node* parseStaticAssert(void);
 			Node* m_guard { nullptr };		// the if constexpr around the declarations being parsed

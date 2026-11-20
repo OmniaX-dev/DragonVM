@@ -1,0 +1,31 @@
+// Classes of a shared library (the program linked dynamically): derived from in the program (its
+// tables, the program's through the library's code), its global objects, its friends.
+// dsc-shared: libs/zoo.ds
+// dsc-flags: --dynamic
+// expect-rv: 0
+#import("zoo")
+#include(check.ds)
+
+class Bird ex zoo::Animal {
+	var songs: i32 = 3;
+	sub new() -> void { zoo::Animal::new(2); }
+	override readonly sub speak() -> i32 { return 2 + this->songs; }
+	override sub kind() -> i32 { return 5; }
+	override sub describe() -> i32 { return 1000 + this->legs; }
+}
+
+sub main() -> i32 {
+	var b: Bird();
+	var d: zoo::Dog();
+	check(1, zoo::talk(&b) == 5 && zoo::talk(&d) == 1);
+	check(2, zoo::describe(&b) == 1002 && zoo::describe(&d) == 704);
+	check(3, b.getLegs() == 2 && zoo::keeper(&b) == 99);
+	var s: zoo::Speaker* = &zoo::built;
+	check(4, s->speak() == 1);
+	var heap: zoo::Dog;
+	zoo::makeDog(&heap);
+	var a: zoo::Animal* = &heap;
+	check(5, a->describe() == 704);
+	check(6, static_cast<zoo::Dog*>(a) == &heap);
+	return result();
+}

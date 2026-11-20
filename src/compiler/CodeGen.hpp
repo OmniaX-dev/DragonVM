@@ -230,7 +230,9 @@ namespace dscript
 			Type* arithmeticType(Type* a, Type* b);
 			int conversionCost(Node* from, Type* to);
 			void requireConvertible(Node* from, Type* to, const std::string& context);
-			FuncInfo* resolveOverload(const std::string& name, const std::vector<Node*>& args, const SourcePos& pos);
+			FuncInfo* resolveOverload(const std::string& name, const std::vector<Node*>& args, const SourcePos& pos, const std::vector<FuncInfo*>* candidates = nullptr);
+			// The best overload (nullptr: none; ambiguous: two as good), without errors.
+			FuncInfo* bestOverload(const std::vector<FuncInfo*>& funcs, const std::vector<Node*>& args, bool& ambiguous);
 			FuncInfo* functionForType(const std::vector<FuncInfo*>& funcs, Type* fnType);
 			VarInfo* lookupVar(const std::string& name);
 			bool isTypeName(const std::string& name);
@@ -292,6 +294,56 @@ namespace dscript
 			bool isSharedData(const VarInfo* v) const;
 			// A for-in loop as the for loop it means (built once, kept in s->list).
 			Node* forInLoop(Node* s);
+
+			// ===== Classes and interfaces =====
+			// A class's layout (its base's fields, its vtable pointers): the offset of its own fields.
+			uint32_t classLayout(StructInfo* info);
+			void resolveFriends(StructInfo* info);
+			// A class without a constructor gets new() if it needs one (its vtable pointers, its base's
+			// constructor without arguments).
+			void implicitConstructor(StructInfo* info);
+			// Is `to` from, or a class / interface it extends (offset: where it is in a from; depth:
+			// how many steps up)?
+			bool derives(const StructInfo* from, const StructInfo* to, uint32_t* offset = nullptr, int* depth = nullptr);
+			// A pointer conversion between related classes: the offset added (false: not one).
+			bool pointerAdjust(Type* from, Type* to, int64_t& delta);
+			// The struct of a method (its decl's owner), or nullptr.
+			StructInfo* structOfMethod(const FuncInfo* f);
+			// The methods named `name` a struct has: its own, then those it inherits (from its base
+			// classes and its interfaces) that it does not override. Constructors: only its own.
+			std::vector<FuncInfo*> methodsOf(StructInfo* info, const std::string& name);
+			// X::m with X a struct: X (and m), or nullptr.
+			StructInfo* qualifierStruct(const std::string& name, std::string* member = nullptr);
+			// A static field / constant a class has, maybe inherited: its full name, or "".
+			std::string memberName(StructInfo* info, const std::string& name);
+			static bool sameSignature(const FuncInfo* a, const FuncInfo* b);
+			static bool isVirtualSub(const FuncInfo* f) { return (f->decl->value & (512 | 1024 | 2048)) != 0; }
+			// The table of a class / interface (slots, overrides, what an abstract class lacks).
+			void buildVtables(StructInfo* info);
+			int slotOf(StructInfo* info, const FuncInfo* f);
+			// The sub a class calls for an interface's sub (the nearest in its classes), and its class.
+			FuncInfo* finalOverrider(StructInfo* info, const FuncInfo* m, StructInfo** where);
+			// The label of a class's table for the vtable pointer at `offset` (the table is emitted).
+			std::string vtableLabel(StructInfo* info, uint32_t offset);
+			std::string typeinfoLabel(StructInfo* info);
+			void emitVtables(StructInfo* info);
+			std::set<StructInfo*> m_vtableRequests;
+			std::vector<StructInfo*> m_vtableQueue;
+			size_t m_vtablesEmitted { 0 };
+			std::set<StructInfo*> m_typeinfos;
+			// The vtable pointers of a value of type t at addr + offset.
+			void storeVptrs(const Reg& addr, Type* t, int32_t offset = 0);
+			// A struct value copied into new storage (its vtable pointers: its type's).
+			void copyValue(const Reg& dst, const Reg& src, Type* t);
+			// A class's constructor: its base's constructor (implicit: the one without arguments) and
+			// its vtable pointers, added to its body once.
+			void prepareConstructor(FuncInfo* f);
+			std::set<Node*> m_preparedCtors;
+			// Is the code being checked in a class derived from info (prot)?
+			bool insideDerived(const StructInfo* info);
+			// An interface, an abstract class: only pointers to it.
+			void requireValueType(Type* t, const SourcePos& pos, const std::string& what);
+			void collectDefaults(Type* type, int32_t offset, std::vector<std::pair<int32_t, const StructField*>>& out, std::vector<std::pair<int32_t, std::string>>* vptrs);
 
 			// ===== Templates =====
 			// A template's struct / sub (by full name: Ns::Array, Struct::map): the templates that

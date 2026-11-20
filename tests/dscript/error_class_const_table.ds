@@ -1,0 +1,4 @@
+// expect-error: constant 'K': A has virtual subs (or interfaces)
+class A { var x: i32; virt sub f() -> i32 { return 1; } }
+constexpr K: A = { 1 };
+sub main() -> i32 { return K.x; }

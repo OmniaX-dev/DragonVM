@@ -1,0 +1,4 @@
+// expect-error: A is a final class: no class extends it
+final class A { }
+class B ex A { }
+sub main() -> i32 { return 0; }

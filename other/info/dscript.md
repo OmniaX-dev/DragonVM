@@ -296,6 +296,7 @@ struct Point { var x: i32; var y: i32 = 7; }    // fields can have constant defa
 struct Box { var w: u32; sub area() -> u32 { return this->w * this->w; } }   // methods (see below)
 struct Snake { readonly var length: u32 = 3; }  // readonly: only its subs change it (see below)
 struct Id { const value: u32; readonly sub get() -> u32 { ... } }  // const fields, readonly subs
+class Dog ex Animal impl Pet { override sub speak() { ... } }   // classes, interfaces (see below)
 sub name(var a: i32, b: u8 = 0) -> i32 { ... }  // 'var' is optional; default values are constants
 sub name(var a: string) -> void { ... } // overloads: same name, other parameter types
 sub later(var x: i32) -> i32;           // a declaration (the definition can come later)
@@ -391,8 +392,8 @@ var f: sub(Counter*, i32) -> i32 = Counter::add; // the method as a sub: this co
 - The fields are used through `this->` (`this->value`); the struct's fields and methods cannot
   have the same name. A method is defined in the struct (no declaration without a body), and
   only named structs have methods.
-- For dynamic dispatch, use sub pointer fields; their default value can be a sub:
-  `var area: sub(Shape*) -> u32 = square_area;` (called as `s->area(s)`).
+- For dynamic dispatch, use a class's virtual subs (see "Classes"), or sub pointer fields (their
+  default value can be a sub: `var area: sub(Shape*) -> u32 = square_area;`, called as `s->area(s)`).
 - `priv` before a field or a sub (`priv var balance: i32;`, `priv sub add(...)`, `priv static
   sub ...`) makes it private: only the struct's own subs (methods and static subs, the lambdas
   written in them) can use it, on any instance of the struct. Everything else is public. Outside
@@ -541,6 +542,86 @@ g_origin = add(mk(1, 2), mk(3, 4)); // also in a global's value (computed before
   room for the result as a hidden first argument (`return s;` copies `s` there, before the defers
   run). So each struct argument and result is a copy: a big struct is cheaper by pointer (`T*`),
   as in C.
+
+### Classes
+A class is a struct that can extend another class (or a struct) and have virtual subs. A struct
+stays exactly its fields (no hidden data); a class adds a table pointer only when it needs one.
+```
+interface Shape {                           // only subs (all pure: no body), no fields
+    sub area() -> i32;
+}
+abstract class Figure impl Shape {          // abstract: has pure subs, only classes derived from it are built
+    prot var s: i32;                        // prot: its subs and those of the classes derived from it
+    sub new(var s: i32) { this->s = s; }
+    pure sub sides() -> i32;                // a slot in its table, no body
+    virt sub name() -> string { return "figure"; }  // virtual: a derived class can override it
+}
+final class Square ex Figure {              // final: no class extends it
+    sub new(var s: i32) { Figure::new(s); } // the base's part first
+    override sub area() -> i32 { return this->s * this->s; }
+    override sub sides() -> i32 { return 4; }
+}
+var sq: Square(3);
+var f: Figure* = &sq;                       // a class pointer converts to a pointer to a class it extends
+var sh: Shape* = &sq;                       // ... or to an interface it implements
+f->name();  sh->area();                     // through the object's table: Figure::name, Square::area
+var back = static_cast<Square*>(sh);        // back to the class (unchecked: it must point at one)
+```
+- `class Name ex Base impl I1, I2 friend A, f { ... }`: one base class (no multiple inheritance),
+  any number of interfaces. A class can extend a class or a struct; `interface Name ex Other`
+  extends one interface. `abstract class` (it may have pure subs, and is only pointed at: no
+  variables, fields, parameters or arrays of it) or `final class` (nothing extends it).
+- A class has its base's fields (first, at the same offsets) and subs: `d.x`, `d.baseSub()`,
+  inherited static subs, constants and static fields (`Derived.make()`, `Derived::KIND`, `KIND`
+  in its subs). Nothing it inherits can be hidden: a field, or a sub with the same parameters as
+  one of a class it extends, is an error, unless that sub is virtual and the new one is marked
+  `override`. A sub with the same name and other parameters is one more overload.
+- Virtual subs: `virt sub` adds a slot to the class's table, `override sub` replaces one (a
+  class's virtual, or an interface's sub: the parameters and the result the same, both readonly
+  or neither), `pure sub ...;` is a slot without a body (abstract classes), `final` (with `virt`
+  or `override`) stops the classes derived from it from overriding it. A call through a pointer
+  (`p->m()`, `this->m()`) uses the object's table, so it calls the object's own class's sub; a call
+  on a variable (`x.m()`: its type is exact), on a final class or a final sub is direct (and an
+  inline sub stays inline there). Virtual subs are not static, constructors and consteval subs are
+  not virtual, method templates neither.
+- `Base::m(args)` (or `Base.m(args)`, the form for templates: `Base<T>.m(args)`) in a class's sub
+  calls Base's `m` on `this`, directly (not through the table): what an override uses to extend
+  its base's sub. A pure sub has no body to call.
+- Constructors are not inherited. A class's `new` builds its base's part first: `Base::new(...)`
+  (or `Base.new(...)`), as one of its statements (only there, only for the class it extends);
+  without one, the base's constructor without arguments is called first (an error if the base has
+  constructors, but none without arguments). A class without a constructor gets an implicit
+  `new()` when it has a table or its base has a constructor without arguments. While the base's
+  constructor runs the object is of the base's class (its virtual calls go to the base's subs);
+  the class's own table is set right after it.
+- An object gets its tables where its fields get their defaults (`var x: C;`, `var x: C(...)`,
+  globals, fields, arrays) and in its constructor: memory from elsewhere (a heap) is built with
+  `p->new(...)` (the implicit `new()` for a class without one). A copy into a new value (a value
+  given or returned, `var b: B = *p;`) has its type's table, and an assignment (`*p = b;`) keeps
+  the object's own: a derived object never becomes a base value by accident. A derived class's
+  value does not convert to its base's value at all (`var a: A = b;` is an error): use pointers.
+- Conversions: a class pointer converts to a pointer to a class it extends or an interface it
+  implements (moving to that part of the object; `null` stays `null`); the nearest one is the
+  better overload, `void*` the worst. The other way needs `static_cast<T*>(p)` (unchecked).
+  `static_cast` does what converts anyway, numbers to numbers, and class pointers up or down;
+  `cast<T*>` between pointers to classes derived from one another is an error (it would not find
+  the part of the object). Pointers to related classes can be compared (`f == &sq`).
+- `friend A, B::C, f`: those structs, classes and subs have the access of the class's own subs
+  (`priv`, `prot`, changing `readonly` fields). Structs can have friends too. Friendship is not
+  inherited.
+- `prot` (fields, subs, static fields, constants): the class's subs, those of the classes derived
+  from it, and its friends. `priv`: only the class's own (a derived class's subs cannot use its
+  base's `priv` members).
+- Layout: a class with virtual subs has its table pointer first (when its base has none, the
+  base's fields follow it, 4 bytes on), then a table pointer for each interface it adds, then its
+  fields. An interface is 4 bytes (its table pointer). A table (read-only data) holds the class's
+  type (its name, its base's type), the offset of its pointer in the object, a slot reserved for
+  destructors, then a sub and a `this` adjustment per slot.
+- Templates can declare classes and interfaces (`class Box ex Base<T> impl Getter<T>`); classes
+  work in libraries and shared libraries (a program can extend a library's class); constant
+  values (`constexpr`, struct constants) and consteval subs cannot hold objects with tables.
+  Condition built-ins: `is_class(T)`, `is_interface(T)`, `is_abstract(T)`, `is_base_of(B, D)`;
+  `has_method` and `is_range` see inherited subs.
 
 ### Variadic subs
 A sub whose parameters end with `...` takes more arguments, of any scalar type; with
@@ -915,11 +996,13 @@ arguments are types: `T*`, `Array<u32>`, `u8`):
 | `is_value(T)` | a parameter given a value (not a type), or a constant's name |
 | `is_integer(T)`, `is_signed(T)`, `is_unsigned(T)` | an integer (not `bool`), signed, unsigned |
 | `is_float(T)` / `is_decimal(T)`, `is_numeric(T)`, `is_bool(T)` | `f32`; an integer or `f32`; `bool` |
-| `is_pointer(T)`, `is_array(T)`, `is_struct(T)`, `is_sub(T)` | the kind of type (`is_sub`: a sub pointer type) |
+| `is_pointer(T)`, `is_array(T)`, `is_struct(T)`, `is_sub(T)` | the kind of type (`is_sub`: a sub pointer type; `is_struct`: also classes, interfaces) |
+| `is_class(T)`, `is_interface(T)`, `is_abstract(T)` | a class; an interface; an abstract class or an interface (only pointed at) |
+| `is_base_of(B, D)` | `B` is `D`, a class `D` extends, or an interface it implements |
 | `is_scalar(T)`, `is_builtin(T)` | fits a register; `i8` ... `u32`, `f32`, `bool`, `void` |
 | `is_type(T, U)`, `is_one_of(T, A, B, ...)` | the same type; one of them |
 | `is_pointer_to(T, U)`, `is_convertible(T, U)` | `T` is a `U*`; a `T` converts to a `U` |
-| `has_method(T, name)`, `has_field(T, name)` | a struct (or a pointer to one) with that method (or method template) / field |
+| `has_method(T, name)`, `has_field(T, name)` | a struct (or a pointer to one) with that method (or method template; a class: also inherited) / field |
 | `has_method(T, name, sub(u32, f32) -> i32*)` | a method with that sub type (`this` not counted; one of its overloads; not a method template) |
 | `has_field(T, name, u32)` | a field of that type |
 | `is_range(T)` | an array, or a struct with `begin()` and `end()` (a for-in works on it) |
@@ -1050,6 +1133,8 @@ C operators and precedence: `= += -= *= /= %= &= |= ^= <<= >>=`, `?:`, `|| &&` (
   is `0xFFFE`), `f32`, pointers, sub pointers, and structs and arrays as values (`bitcast<u32>(pixel)`,
   `bitcast<Pixel>(0xAABBCCDDu).r`; big endian: the first byte is the top one); not to an array (not
   a value) or a `bool`. Constants give constants, and it works in constexpr subs.
+- `static_cast<T>(value)`: a conversion that happens anyway, numbers to numbers, and a class
+  pointer to a pointer to a class derived from it (see "Classes").
 - `sizeof(type or value)`, `sizeof<type>`: a `u32` constant.
 - Literals: `42`, `0x2A`, `0b101010`, `1_000` (underscores), `1.5` / `1e-3` / `2f` (`f32`), `'a'` (a `u8`), `"text"`
   (escapes `\n \t \r \0 \\ \' \" \xNN`, adjacent strings are joined), `true`, `false`, `null`.
@@ -1059,7 +1144,8 @@ C operators and precedence: `= += -= *= /= %= &= |= ^= <<= >>=`, `?:`, `|| &&` (
 - Pointer arithmetic: `p + n` / `p - n` move by `n` elements, `p - q` counts elements, `p[i]` is
   `*(p + i)`.
 - Implicit conversions: between integer types, integers to `f32`, `null` / `0` to pointers, arrays to pointers,
-  `void*` to and from pointers. Everything else needs `cast`.
+  `void*` to and from pointers, a class pointer to a pointer to a class it extends (or an interface it
+  implements). Everything else needs `cast` (or `static_cast`).
 - Structs can be assigned (copied) and initialized from another struct; they are passed to and
   returned from subs through pointers.
 
@@ -1315,6 +1401,8 @@ optimized).
 - No `switch`, `goto`, unions, 64-bit floats.
 - Arrays are passed by pointer (structs by value).
 - Lambdas do not capture the variables of the sub around them.
+- Classes have no destructors and no `dynamic_cast` yet (their tables reserve a slot for the one,
+  and hold the class's type for the other); no operator overloading.
 - Uninitialized global arrays are stored in the program (zeroes).
 - The assembler replaces data symbols line by line: very big programs assemble slowly.
 

@@ -1,0 +1,4 @@
+// expect-error: 'f' is marked override, but no class or interface B extends has a virtual sub f
+class A { virt sub f() -> i32 { return 1; } }
+class B ex A { override sub f(var x: i32) -> i32 { return 2; } }
+sub main() -> i32 { return 0; }

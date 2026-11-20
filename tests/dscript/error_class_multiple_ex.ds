@@ -1,0 +1,5 @@
+// expect-error: a class extends one class (no multiple inheritance)
+class A { }
+class B { }
+class C ex A, B { }
+sub main() -> i32 { return 0; }

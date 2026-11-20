@@ -1647,7 +1647,8 @@ namespace
 		static const char* builtinTypes[] = { "i8", "u8", "i16", "u16", "i32", "u32", "f32", "bool", "char", "int", "uint", "float", "string", "void", "value_type", nullptr };
 		static const char* keywords[] = { "var", "auto", "const", "constexpr", "consteval", "constinit", "readonly", "sub", "template", "struct", "enum", "alias", "return", "if", "else", "while", "do", "for",
 			"break", "continue", "null", "true", "false", "cast", "bitcast", "sizeof", "low", "interrupt", "inline", "static", "priv", "assert", "static_assert",
-			"debug_print", "namespace", "defer", "atomic", "and", "or", "not", nullptr };
+			"debug_print", "namespace", "defer", "atomic", "and", "or", "not",
+			"class", "interface", "ex", "impl", "friend", "prot", "virt", "pure", "override", "final", "abstract", "static_cast", nullptr };
 		if (where == General || where == TypeName)
 		{
 			if (where == General)

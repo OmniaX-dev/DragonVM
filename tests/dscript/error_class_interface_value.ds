@@ -1,0 +1,4 @@
+// expect-error: I is an interface: it cannot be a parameter
+interface I { sub f() -> i32; }
+sub use(var i: I) -> void { }
+sub main() -> i32 { return 0; }

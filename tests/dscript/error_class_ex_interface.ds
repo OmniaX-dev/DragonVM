@@ -1,0 +1,4 @@
+// expect-error: I is an interface: a class implements it with impl
+interface I { }
+class A ex I { }
+sub main() -> i32 { return 0; }

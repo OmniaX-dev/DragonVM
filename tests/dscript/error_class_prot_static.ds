@@ -1,0 +1,3 @@
+// expect-error: 'n' is protected (prot)
+class A { prot static var n: i32 = 0; }
+sub main() -> i32 { return A::n; }

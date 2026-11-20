@@ -1,0 +1,4 @@
+// expect-error: A does not implement I::f
+interface I { sub f() -> i32; }
+class A impl I { }
+sub main() -> i32 { return 0; }

@@ -1,0 +1,4 @@
+// expect-error: A::f is final: no class overrides it
+class A { virt final sub f() -> i32 { return 1; } }
+class B ex A { override sub f() -> i32 { return 2; } }
+sub main() -> i32 { return 0; }

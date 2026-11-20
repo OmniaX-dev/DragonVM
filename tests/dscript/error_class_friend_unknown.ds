@@ -1,0 +1,3 @@
+// expect-error: friend Nope: no struct, class or sub of that name
+class A friend Nope { }
+sub main() -> i32 { return 0; }

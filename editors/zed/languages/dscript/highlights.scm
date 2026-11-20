@@ -21,12 +21,18 @@
 	"constinit"
 	"sub"
 	"struct"
+	"class"
+	"interface"
+	"ex"
+	"impl"
+	"friend"
 	"enum"
 	"alias"
 	"namespace"
 	"low"
 	"cast"
 	"bitcast"
+	"static_cast"
 	"sizeof"
 	"value_type"
 ] @keyword
@@ -65,6 +71,12 @@
 (static_modifier) @keyword
 (priv_modifier) @keyword
 (readonly_modifier) @keyword
+(prot_modifier) @keyword
+(virt_modifier) @keyword
+(pure_modifier) @keyword
+(override_modifier) @keyword
+(final_modifier) @keyword
+(abstract_modifier) @keyword
 (constexpr_modifier) @keyword
 (consteval_modifier) @keyword
 

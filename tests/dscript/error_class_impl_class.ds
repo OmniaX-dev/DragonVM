@@ -1,0 +1,4 @@
+// expect-error: B is not an interface (impl takes interfaces
+class B { }
+class A impl B { }
+sub main() -> i32 { return 0; }

@@ -1,0 +1,3 @@
+// expect-error: interfaces have no fields
+interface I { var x: i32; }
+sub main() -> i32 { return 0; }

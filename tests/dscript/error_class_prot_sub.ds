@@ -1,0 +1,3 @@
+// expect-error: 'f' is protected (prot)
+class A { prot sub f() -> i32 { return 1; } }
+sub main() -> i32 { var a: A; return a.f(); }

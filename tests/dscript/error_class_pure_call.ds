@@ -1,0 +1,4 @@
+// expect-error: 'A::f' is pure: it has no body
+abstract class A { pure sub f() -> i32; }
+class B ex A { override sub f() -> i32 { return A::f(); } }
+sub main() -> i32 { return 0; }

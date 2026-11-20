@@ -1,0 +1,4 @@
+// expect-error: extends itself
+class A ex B { }
+class B ex A { }
+sub main() -> i32 { return 0; }

@@ -210,6 +210,10 @@ namespace dragon
 
 				inline static std::unordered_map<String, tSymbol> m_symbolTable;
 				inline static std::unordered_map<String, tLabel> m_labelTable;
+				// $label in a data list naming a code label (a sub's address in a table): patched once
+				// the code's labels have their addresses (entry: the data symbol, offset: in its bytes).
+				struct tCodeDataRef { String entry; u32 offset; String target; String line; };
+				inline static std::vector<tCodeDataRef> m_codeDataRefs;
 
 				inline static u32 m_fixedSize { 0 };
 				inline static u32 m_librariesSize { 0 };
