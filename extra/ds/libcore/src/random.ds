@@ -2,18 +2,22 @@
 namespace std {
 	namespace rand {
 		namespace engine {
-			struct Sfc32 {
+			interface Engine {
+				sub seed(var s: u32);
+				sub next() -> u32;
+			};
+			class Sfc32 impl Engine {
 				priv var a: u32;
 				priv var b: u32;
 				priv var c: u32;
 				priv var d: u32;
-				sub seed(var s: u32) {
+				override sub seed(var s: u32) {
 					var sm: __internal::SplitMix32 = { s };
 					this->a = sm.next(); this->b = sm.next(); this->c = sm.next();
 					this->d = 1;
 					for (var i = 0; i < 12; ++i) this->next();
 				}
-				sub next() -> u32 {
+				override sub next() -> u32 {
 					var t: u32 = this->a + this->b + this->d++;
 					this->a = this->b ^ (this->b >> 9);
 					this->b = this->c + (this->c << 3);
@@ -21,13 +25,13 @@ namespace std {
 					return t;
 				}
 			};
-			struct Xoshiro128ss {
+			class Xoshiro128ss impl Engine {
 				priv var s: u32[4];
-				sub seed(var s: u32) {
+				override sub seed(var s: u32) {
 					var sm: __internal::SplitMix32 = { s };
 					for (var i = 0; i < 4; ++i) this->s[i] = sm.next();
 				}
-				sub next() -> u32 {
+				override sub next() -> u32 {
 					var r: u32 = __internal::rotl32(this->s[1] * 5, 7) * 9;
 					var t: u32 = this->s[1] << 9;
 					this->s[2] ^= this->s[0];
@@ -39,12 +43,12 @@ namespace std {
 					return r;
 				}
 			};
-			struct MT19937 {
+			class MT19937 impl Engine {
 				constexpr N: i32 = 624;
 				constexpr M: i32 = 397;
 				priv var mt: u32[N];
 				priv var idx: i32;
-				sub seed(var s: u32) {
+				override sub seed(var s: u32) {
 					this->mt[0] = s;
 					for (var i = 1; i < N; ++i)
 						this->mt[i] = 1812433253u * (this->mt[i - 1] ^ (this->mt[i - 1] >> 30)) + cast<u32>(i);
@@ -59,7 +63,7 @@ namespace std {
 					}
 					this->idx = 0;
 				}
-				sub next() -> u32 {
+				override sub next() -> u32 {
 					if (this->idx >= N) this->twist();
 					var y: u32 = this->mt[this->idx++];
 					y ^= y >> 11;
@@ -100,43 +104,41 @@ namespace std {
 						this->mask = m;
 					}
 				}
-				template(E) where has_method(E, next, sub() -> u32) {
-					if constexpr (is_type(T, f32)) { static sub unit(var rng: E*) -> T {
-						var bits: u32 = 0x3F800000u | (rng->next() >> 9);
-						var f: f32 = bitcast<f32>(bits);
-						return f - 1.0f;
-					}}
-					readonly sub next(var rng: E*) -> T {
-						if constexpr (is_type(T, f32)) {
-							var hi: f32 = this->lo + this->span;
-							var x: f32;
-							do { x = this->lo + this->span * UniformDistribution::unit(rng); } while (x >= hi);
-							return x;
-						}
-						else
-						{
-							var r: u32;
-							do { r = rng->next() & this->mask; } while (r > this->range);
-							return cast<T>(this->base + r);
-						}
+				if constexpr (is_type(T, f32)) { static sub unit(var rng: ref engine::Engine) -> T {
+					var bits: u32 = 0x3F800000u | (rng.next() >> 9);
+					var f: f32 = bitcast<f32>(bits);
+					return f - 1.0f;
+				}}
+				readonly sub next(var rng: ref engine::Engine) -> T {
+					if constexpr (is_type(T, f32)) {
+						var hi: f32 = this->lo + this->span;
+						var x: f32;
+						do { x = this->lo + this->span * UniformDistribution::unit(rng); } while (x >= hi);
+						return x;
+					}
+					else
+					{
+						var r: u32;
+						do { r = rng.next() & this->mask; } while (r > this->range);
+						return cast<T>(this->base + r);
 					}
 				}
 			};
 		}
 
-		template(T, Seed: u32 = 0, E = engine::Sfc32) where
-				((size_of(T) <= 4 and is_integer(T)) or is_type(T, f32)) and
-				has_method(E, next, sub() -> u32) and has_method(E, seed, sub(u32)) {
-			sub uniform_distribution(var min: T, var max: T, var rng: E* = null) -> T {
-					if (not rng) {
-						static var _rng: E;
-						static var seeded: bool = false;
-						if (not seeded) { _rng.seed(Seed); seeded = true; }
-						rng = &_rng;
-					}
-					var dist: UniformDistribution<T>;
-					dist.set(min, max);
-					return dist.next(rng);
+		template(T, Seed: u32 = 0) where ((size_of(T) <= 4 and is_integer(T)) or is_type(T, f32)) {
+			sub uniform_distribution(var min: T, var max: T) -> T {
+				static var rng: engine::Sfc32;
+				static var seeded: bool = false;
+				if (not seeded) { rng.seed(Seed); seeded = true; }
+				var dist: UniformDistribution<T>;
+				dist.set(min, max);
+				return dist.next(rng);
+			}
+			sub uniform_distribution(var min: T, var max: T, var rng: ref engine::Engine) -> T {
+				var dist: UniformDistribution<T>;
+				dist.set(min, max);
+				return dist.next(rng);
 			}
 		}
 
@@ -156,7 +158,7 @@ namespace std {
 			constexpr sub rotl32(var x: u32, var k: i32) -> u32 { return (x << k) | (x >> (32 - k)); }
 		}
 
-		template(E) where has_method(E, next, sub() -> u32) and has_method(E, seed, sub(u32)) {
+		template(E) where is_base_of(engine::Engine, E) {
 			struct RandomGenerator {
 				priv var m_seed: u32 = 0;
 				priv var m_rng: E;
@@ -186,7 +188,7 @@ namespace std {
 					priv sub __get(var min: T, var max: T) -> T {
 						if (min == max) return min;
 						this->swap_if_first_is_bigger<T>(&min, &max);
-						return std::rand::uniform_distribution<T, 0, E>(min, max, &this->m_rng);
+						return std::rand::uniform_distribution<T>(min, max, this->m_rng);
 					}
 				}
 			};// TODO: Eventually add get_from_vector, noise_gen, get_string, etc.
