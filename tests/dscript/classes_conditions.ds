@@ -1,0 +1,52 @@
+// expect-rv: 0
+// The conditions' built-ins for classes: base_type(T) / absolute_base_type(T) (types), has_base,
+// has_parent, has_common_base, has_friend, and the visibility forms of has_method / has_field.
+#include(check.ds)
+
+struct Pos { var x: i32; }
+class Root ex Pos friend Spy {
+	priv var secret: i32;
+	prot var guarded: i32;
+	readonly var shown: i32;
+	var open: i32;
+	priv sub hide() -> void { }
+	prot sub guard(var n: u32) -> i32 { return 0; }
+	sub show() -> void { }
+}
+class Mid ex Root { }
+class Leaf ex Mid { var leaf: u8; }
+class Other ex Root { }
+class Alone { }
+class Spy { }
+
+template(T) where (has_base(T)) {
+	sub parentSize(var x: T*) -> u32 { return sizeof(base_type(T)); }
+	sub rootOf(var x: T*) -> absolute_base_type(T*) { return x; }
+}
+
+sub main() -> i32 {
+	var leaf: Leaf;
+	check(1, parentSize(&leaf) == sizeof(Mid));
+	var root: Pos* = rootOf(&leaf);		// (Pos: the first of Leaf's chain)
+	check(2, root == &leaf);
+	var b: base_type(Leaf);
+	var pb: base_type(Leaf*) = &b;
+	check(3, sizeof(b) == sizeof(Mid) && pb == &b);
+	var alone: absolute_base_type(Alone);		// (no base: itself)
+	if constexpr (is_type(base_type(Leaf), Mid) and is_type(absolute_base_type(Leaf), Pos) and is_type(base_type(Mid*), Root*)
+		and has_base(Leaf) and has_base(Root) and not has_base(Alone) and not has_base(Pos)
+		and has_parent(Leaf, Root) and has_parent(Leaf, Pos) and has_parent(Leaf*, Mid) and not has_parent(Leaf, Leaf) and not has_parent(Root, Leaf)
+		and has_common_base(Leaf, Other, Root) and has_common_base(Leaf, Other, Pos) and not has_common_base(Leaf, Other, Mid) and not has_common_base(Leaf, Alone, Root)
+		and has_friend(Root, Spy) and not has_friend(Root, Alone) and not has_friend(Leaf, Spy))
+		check(4, true);
+	else
+		check(4, false);
+	if constexpr (has_priv_method(Leaf, hide) and not has_pub_method(Leaf, hide) and has_prot_method(Leaf, guard, sub(u32) -> i32) and not has_prot_method(Leaf, guard, sub() -> i32)
+		and has_pub_method(Root, show) and not has_priv_method(Root, show) and not has_prot_method(Root, nothing)
+		and has_priv_field(Leaf, secret) and has_prot_field(Leaf, guarded, i32) and not has_prot_field(Leaf, guarded, u8) and has_readonly_field(Leaf, shown)
+		and has_pub_field(Leaf, shown) and has_pub_field(Leaf, open) and has_pub_field(Leaf, leaf) and not has_pub_field(Leaf, secret) and not has_readonly_field(Leaf, open))
+		check(5, true);
+	else
+		check(5, false);
+	return result();
+}

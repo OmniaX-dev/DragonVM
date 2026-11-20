@@ -1,0 +1,3 @@
+// expect-error: base_type(Alone): Alone extends no class (has_base(T) tells)
+class Alone { }
+sub main() -> i32 { var a: base_type(Alone); return 0; }

@@ -389,6 +389,7 @@ namespace dscript
 			// parameters (nullptr: an optional one not given) while its where is checked.
 			int64_t evalCondition(Node* e, const Bindings* bindings);
 			Type* conditionType(TypeSyntax* ts, const Bindings* bindings);
+			Type* baseType(Type* t, bool absolute, const SourcePos& pos);
 			void genGlobalTypes(size_t from);
 			void genGlobalValues(size_t from);
 			void convert(const Reg& r, Type* from, Type* to);

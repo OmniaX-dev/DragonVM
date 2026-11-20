@@ -947,6 +947,10 @@ twice<21>();            // 42 (an i32)
 var h: Holder<7u>;      // v: u32
 var k: Holder<u8>;      // v: u8
 ```
+- `base_type(T)` is the class `T` extends (an error if it extends none: `has_base(T)` tells), and
+  `absolute_base_type(T)` the first class of its chain (`T` itself if it extends none); for a
+  pointer to a class, a pointer to it. Types anywhere, like `value_type`
+  (`sizeof(base_type(T))`, `-> absolute_base_type(T*)`, `is_type(base_type(T), Shape)`).
 
 **if constexpr around declarations**: at the top level, in a namespace, in a struct's body, and in
 a template's body, `if constexpr (condition) { declarations } else { ... }` keeps the declarations
@@ -999,12 +1003,15 @@ arguments are types: `T*`, `Array<u32>`, `u8`):
 | `is_pointer(T)`, `is_array(T)`, `is_struct(T)`, `is_sub(T)` | the kind of type (`is_sub`: a sub pointer type; `is_struct`: also classes, interfaces) |
 | `is_class(T)`, `is_interface(T)`, `is_abstract(T)` | a class; an interface; an abstract class or an interface (only pointed at) |
 | `is_base_of(B, D)` | `B` is `D`, a class `D` extends, or an interface it implements |
+| `has_base(T)`, `has_parent(T, P)` | a class that extends a class (or a struct); `P` is up `T`'s chain of classes (not `T` itself; interfaces: `is_base_of`) |
+| `has_common_base(T, U, P)`, `has_friend(T, F)` | `P` is up the chains of both `T` and `U`; `T` names the struct / class `F` as a friend |
 | `is_scalar(T)`, `is_builtin(T)` | fits a register; `i8` ... `u32`, `f32`, `bool`, `void` |
 | `is_type(T, U)`, `is_one_of(T, A, B, ...)` | the same type; one of them |
 | `is_pointer_to(T, U)`, `is_convertible(T, U)` | `T` is a `U*`; a `T` converts to a `U` |
 | `has_method(T, name)`, `has_field(T, name)` | a struct (or a pointer to one) with that method (or method template; a class: also inherited) / field |
 | `has_method(T, name, sub(u32, f32) -> i32*)` | a method with that sub type (`this` not counted; one of its overloads; not a method template) |
 | `has_field(T, name, u32)` | a field of that type |
+| `has_priv_method`, `has_prot_method`, `has_pub_method` (and `_field`), `has_readonly_field` | as `has_method` / `has_field` (same arguments), for a `priv`, `prot`, public (neither: `readonly` fields too) or `readonly` member |
 | `is_range(T)` | an array, or a struct with `begin()` and `end()` (a for-in works on it) |
 | `size_of(T)` (= `sizeof(T)`), `array_count(T)` | numbers: the size; an array's element count (0 otherwise) |
 

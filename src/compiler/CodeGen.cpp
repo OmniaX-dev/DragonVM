@@ -559,6 +559,9 @@ namespace dscript
 			case TypeSyntax::Kind::ValueType:
 				resolveNames(ts->value, scope);
 			break;
+			case TypeSyntax::Kind::BaseType:
+				resolveTypeNames(ts->base, scope);
+			break;
 		}
 	}
 
@@ -767,6 +770,8 @@ namespace dscript
 			}
 			case TypeSyntax::Kind::Value:
 				error(ts->pos, "a value where a type is needed");
+			case TypeSyntax::Kind::BaseType:
+				return baseType(resolveType(ts->base), ts->absolute, ts->pos);
 			case TypeSyntax::Kind::ValueType:
 			{
 				if (ts->value == nullptr)
@@ -4329,6 +4334,7 @@ namespace dscript
 				return true;
 			case TypeSyntax::Kind::Value:
 			case TypeSyntax::Kind::ValueType:
+			case TypeSyntax::Kind::BaseType:
 				return true;		// (a value written in the pattern: Ring<T, 4>*: nothing to deduce)
 			case TypeSyntax::Kind::Function:
 				if (actual->kind == Type::Kind::Pointer && actual->base != nullptr && actual->base->kind == Type::Kind::Function)
@@ -4736,9 +4742,40 @@ namespace dscript
 					}
 				}
 				return resolveType(ts);
+			case TypeSyntax::Kind::BaseType:
+			{
+				Type* inner = conditionType(ts->base, bindings);
+				if (inner == nullptr)
+					error(ts->pos, "an optional template parameter that is not given");
+				return baseType(inner, ts->absolute, ts->pos);
+			}
 			default:
 				return resolveType(ts);
 		}
+	}
+
+	// base_type(T) / absolute_base_type(T): the class T extends / the first class of its chain (T
+	// itself if it extends none); a pointer to a class: a pointer to it.
+	Type* CodeGen::baseType(Type* t, bool absolute, const SourcePos& pos)
+	{
+		const char* what = absolute ? "absolute_base_type" : "base_type";
+		Type* st = t->kind == Type::Kind::Pointer ? t->base : t;
+		if (st == nullptr || st->kind != Type::Kind::Struct)
+			error(pos, std::string(what) + "(" + t->name() + "): a class (or a pointer to one) is needed");
+		resolveStruct(st->structInfo, pos);
+		StructInfo* info = st->structInfo;
+		if (!absolute && info->base == nullptr)
+			error(pos, std::string("base_type(") + t->name() + "): " + info->name + " extends no class (has_base(T) tells)");
+		while (info->base != nullptr)
+		{
+			info = info->base;
+			if (!absolute)
+				break;
+		}
+		Type* result = m_types.structType(info);
+		if (m_options.index != nullptr && !m_discarding)
+			indexName(pos, what, info->decl->namePos, std::string(what) + "(...): " + result->name(true) + comment({ absolute ? "the first class of its chain" : "the class it extends" }));
+		return t->kind == Type::Kind::Pointer ? m_types.pointer(result, t->constTarget) : result;
 	}
 
 	// The built-ins of conditions: name, arguments (T a type, N a name, * repeats), what they compute.
@@ -4750,6 +4787,83 @@ namespace dscript
 		struct Entry { ConditionBuiltin spec; Fn fn; };
 
 		static Type* structOf(Type* t) { return (t->kind == Type::Kind::Pointer && t->base != nullptr && t->base->kind == Type::Kind::Struct) ? t->base : t; }
+
+		// A struct's (or a class's, also inherited) method named n[0] that keep() accepts; with a sub
+		// type (t[1]): with those parameters (this not counted) and that result. templates: a method
+		// template counts (without a sub type).
+		template<typename Keep>
+		static int64_t hasMethod(const char* name, CodeGen& cg, const std::vector<Type*>& t, const std::vector<std::string>& n, const SourcePos& pos, bool templates, Keep keep)
+		{
+			Type* st = structOf(t[0]);
+			if (st->kind != Type::Kind::Struct) return 0;
+			const std::string m = st->structInfo->name + "::" + n[0];
+			if (st->structInfo->kind != 0)
+				cg.resolveStruct(st->structInfo, pos);
+			const std::vector<FuncInfo*> funcs = st->structInfo->kind != 0 ? cg.methodsOf(st->structInfo, n[0]) :
+				(cg.m_funcs.count(m) > 0 ? cg.m_funcs[m] : std::vector<FuncInfo*>());
+			Type* sig = nullptr;
+			if (t.size() >= 2)
+			{
+				sig = t[1]->kind == Type::Kind::Pointer && t[1]->base->isFunction() ? t[1]->base : t[1];
+				if (!sig->isFunction())
+					error(pos, std::string(name) + "'s third argument is a sub type (sub(u32, f32) -> i32*), not " + t[1]->name());
+			}
+			if (sig == nullptr && templates && cg.m_templates.count(m) > 0)
+				return 1;
+			for (FuncInfo* f : funcs)
+			{
+				if (!keep(f->decl->value))
+					continue;
+				if (sig == nullptr)
+					return 1;
+				if (f->type == nullptr && !f->instance && !f->resolving)
+				{
+					// (in the declarations, the subs have no types yet: this one's now)
+					f->resolving = true;
+					try { cg.resolveFunction(f); }
+					catch (CompileError&) { f->resolving = false; f->type = nullptr; f->paramNames.clear(); f->defaults.clear(); f->requiredParams = 0; throw; }
+					f->resolving = false;
+				}
+				if (f->type == nullptr)
+					error(pos, std::string(name) + ": the type of " + f->name + " is not known yet here");
+				const size_t skip = (f->decl->value & 8) != 0 ? 0 : 1;		// (this)
+				const auto& params = f->type->params;
+				if (params.size() < skip || params.size() - skip != sig->params.size() || f->type->base != sig->base || f->type->variadic != sig->variadic)
+					continue;
+				if (std::equal(sig->params.begin(), sig->params.end(), params.begin() + (std::ptrdiff_t)skip))
+					return 1;
+			}
+			return 0;
+		}
+
+		// A field named n[0] (also inherited) that keep() accepts, of type t[1] if given.
+		template<typename Keep>
+		static int64_t hasField(CodeGen& cg, const std::vector<Type*>& t, const std::vector<std::string>& n, const SourcePos& pos, Keep keep)
+		{
+			Type* st = structOf(t[0]);
+			if (st->kind != Type::Kind::Struct) return 0;
+			cg.resolveStruct(st->structInfo, pos);
+			const StructField* f = st->structInfo->field(n[0]);
+			return f != nullptr && keep(*f) && (t.size() < 2 || f->type == t[1]);
+		}
+
+		// A class (or a pointer to one) and its classes up its chain (not itself).
+		static StructInfo* classOf(CodeGen& cg, Type* t, const SourcePos& pos)
+		{
+			Type* st = structOf(t);
+			if (st->kind != Type::Kind::Struct) return nullptr;
+			cg.resolveStruct(st->structInfo, pos);
+			return st->structInfo;
+		}
+		static bool hasParent(StructInfo* c, StructInfo* p)
+		{
+			if (c == nullptr || p == nullptr)
+				return false;
+			for (StructInfo* b = c->base; b != nullptr; b = b->base)
+				if (b == p)
+					return true;
+			return false;
+		}
 
 		static const std::vector<Entry>& table(void)
 		{
@@ -4787,50 +4901,40 @@ namespace dscript
 					value.kind = NodeKind::TypeArg;
 					value.type = t[0];
 					return cg.conversionCost(&value, t[1]) >= 0; } },
+				// (visibility: priv, prot, or neither: pub; readonly fields)
+				{ { "has_priv_method", "TNT?", "as has_method: a priv method" }, [](CodeGen& cg, const auto& t, const auto& n, const auto& pos) -> int64_t {
+					return hasMethod("has_priv_method", cg, t, n, pos, false, [](int v) { return (v & 16) != 0; }); } },
+				{ { "has_prot_method", "TNT?", "as has_method: a prot method" }, [](CodeGen& cg, const auto& t, const auto& n, const auto& pos) -> int64_t {
+					return hasMethod("has_prot_method", cg, t, n, pos, false, [](int v) { return (v & 8192) != 0; }); } },
+				{ { "has_pub_method", "TNT?", "as has_method: a method for everyone (neither priv nor prot)" }, [](CodeGen& cg, const auto& t, const auto& n, const auto& pos) -> int64_t {
+					return hasMethod("has_pub_method", cg, t, n, pos, false, [](int v) { return (v & (16 | 8192)) == 0; }); } },
+				{ { "has_priv_field", "TNT?", "as has_field: a priv field" }, [](CodeGen& cg, const auto& t, const auto& n, const auto& pos) -> int64_t {
+					return hasField(cg, t, n, pos, [](const StructField& f) { return f.isPrivate; }); } },
+				{ { "has_prot_field", "TNT?", "as has_field: a prot field" }, [](CodeGen& cg, const auto& t, const auto& n, const auto& pos) -> int64_t {
+					return hasField(cg, t, n, pos, [](const StructField& f) { return f.isProtected; }); } },
+				{ { "has_pub_field", "TNT?", "as has_field: a field everyone reads (neither priv nor prot; readonly too)" }, [](CodeGen& cg, const auto& t, const auto& n, const auto& pos) -> int64_t {
+					return hasField(cg, t, n, pos, [](const StructField& f) { return !f.isPrivate && !f.isProtected; }); } },
+				{ { "has_readonly_field", "TNT?", "as has_field: a readonly field" }, [](CodeGen& cg, const auto& t, const auto& n, const auto& pos) -> int64_t {
+					return hasField(cg, t, n, pos, [](const StructField& f) { return f.isReadonly; }); } },
+				{ { "has_base", "T", "a class (or a pointer to one) that extends a class (or a struct)" }, [](CodeGen& cg, const auto& t, const auto&, const auto& pos) -> int64_t {
+					StructInfo* c = classOf(cg, t[0], pos);
+					return c != nullptr && c->base != nullptr; } },
+				{ { "has_parent", "TT", "a class, and a class somewhere up its chain (not itself; interfaces: is_base_of)" }, [](CodeGen& cg, const auto& t, const auto&, const auto& pos) -> int64_t {
+					return hasParent(classOf(cg, t[0], pos), classOf(cg, t[1], pos)); } },
+				{ { "has_common_base", "TTT", "two classes, and a class up the chains of both" }, [](CodeGen& cg, const auto& t, const auto&, const auto& pos) -> int64_t {
+					StructInfo* p = classOf(cg, t[2], pos);
+					return hasParent(classOf(cg, t[0], pos), p) && hasParent(classOf(cg, t[1], pos), p); } },
+				{ { "has_friend", "TT", "a struct or class, and a struct or class it names as a friend" }, [](CodeGen& cg, const auto& t, const auto&, const auto& pos) -> int64_t {
+					StructInfo* c = classOf(cg, t[0], pos);
+					StructInfo* f = classOf(cg, t[1], pos);
+					if (c == nullptr || f == nullptr) return 0;
+					cg.resolveFriends(c);
+					return std::find(c->friendClasses.begin(), c->friendClasses.end(), f->name) != c->friendClasses.end(); } },
 				// (with a sub type: a method with those parameters, this not counted, and that return type)
 				{ { "has_method", "TNT?", "a struct type, a method name, and optionally its sub type (has_method(T, find, sub(u32) -> i32*))" },
-					[](CodeGen& cg, const auto& t, const auto& n, const auto& pos) -> int64_t {
-					Type* st = structOf(t[0]);
-					if (st->kind != Type::Kind::Struct) return 0;
-					const std::string m = st->structInfo->name + "::" + n[0];
-					if (st->structInfo->kind != 0)
-						cg.resolveStruct(st->structInfo, pos);
-					const std::vector<FuncInfo*> funcs = st->structInfo->kind != 0 ? cg.methodsOf(st->structInfo, n[0]) :
-						(cg.m_funcs.count(m) > 0 ? cg.m_funcs[m] : std::vector<FuncInfo*>());
-					if (t.size() < 2)
-						return !funcs.empty() || cg.m_templates.count(m) > 0;
-					Type* sig = t[1]->kind == Type::Kind::Pointer && t[1]->base->isFunction() ? t[1]->base : t[1];
-					if (!sig->isFunction())
-						error(pos, "has_method's third argument is a sub type (sub(u32, f32) -> i32*), not " + t[1]->name());
-					if (funcs.empty())
-						return 0;		// (a method template has no type until it is instantiated)
-					for (FuncInfo* f : funcs)
-					{
-						if (f->type == nullptr && !f->instance && !f->resolving)
-						{
-							// (in the declarations, the subs have no types yet: this one's now)
-							f->resolving = true;
-							try { cg.resolveFunction(f); }
-							catch (CompileError&) { f->resolving = false; f->type = nullptr; f->paramNames.clear(); f->defaults.clear(); f->requiredParams = 0; throw; }
-							f->resolving = false;
-						}
-						if (f->type == nullptr)
-							error(pos, "has_method: the type of " + m + " is not known yet here");
-						const size_t skip = (f->decl->value & 8) != 0 ? 0 : 1;		// (this)
-						const auto& params = f->type->params;
-						if (params.size() < skip || params.size() - skip != sig->params.size() || f->type->base != sig->base || f->type->variadic != sig->variadic)
-							continue;
-						if (std::equal(sig->params.begin(), sig->params.end(), params.begin() + (std::ptrdiff_t)skip))
-							return 1;
-					}
-					return 0; } },
+					[](CodeGen& cg, const auto& t, const auto& n, const auto& pos) -> int64_t { return hasMethod("has_method", cg, t, n, pos, true, [](int) { return true; }); } },
 				{ { "has_field", "TNT?", "a struct type, a field name, and optionally its type (has_field(T, count, u32))" },
-					[](CodeGen& cg, const auto& t, const auto& n, const auto& pos) -> int64_t {
-					Type* st = structOf(t[0]);
-					if (st->kind != Type::Kind::Struct) return 0;
-					cg.resolveStruct(st->structInfo, pos);
-					const StructField* f = st->structInfo->field(n[0]);
-					return f != nullptr && (t.size() < 2 || f->type == t[1]); } },
+					[](CodeGen& cg, const auto& t, const auto& n, const auto& pos) -> int64_t { return hasField(cg, t, n, pos, [](const StructField&) { return true; }); } },
 				{ { "is_range", "T", "one type (a for-in can loop over it: an array, or a struct with begin() and end())" }, [](CodeGen& cg, const auto& t, const auto&, const auto&) -> int64_t {
 					if (t[0]->kind == Type::Kind::Array) return 1;
 					Type* st = structOf(t[0]);

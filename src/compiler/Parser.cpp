@@ -1569,8 +1569,8 @@ namespace dscript
 			return t.text == "void" || t.text == "sub" || t.text == "struct" || t.text == "const";
 		if (t.kind != TokenKind::Identifier)
 			return false;
-		if (t.text == "value_type" && isPunct("(", 1))
-			return true;		// value_type(N)
+		if ((t.text == "value_type" || t.text == "base_type" || t.text == "absolute_base_type") && isPunct("(", 1))
+			return true;		// value_type(N), base_type(T), absolute_base_type(T)
 		static const char* names[] = { "i8", "u8", "i16", "u16", "i32", "u32", "f32", "bool", "char", "string", "int", "uint", "float", nullptr };
 		for (int i = 0; names[i] != nullptr; i++)
 		{
@@ -1652,6 +1652,15 @@ namespace dscript
 			else
 				t->value = parseExpression();
 			expectPunct(")", "after value_type(...)");
+		}
+		else if (peek().kind == TokenKind::Identifier && (peek().text == "base_type" || peek().text == "absolute_base_type") && isPunct("(", 1))
+		{
+			// base_type(T): the class T extends; absolute_base_type(T): the first class of its chain.
+			t->absolute = next().text == "absolute_base_type";
+			next();
+			t->kind = TypeSyntax::Kind::BaseType;
+			t->base = parseType();
+			expectPunct(")", std::string("after ") + (t->absolute ? "absolute_base_type" : "base_type") + "(type)");
 		}
 		else if (peek().fixedType != nullptr)
 		{

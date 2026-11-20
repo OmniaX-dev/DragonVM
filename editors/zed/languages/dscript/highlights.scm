@@ -35,6 +35,8 @@
 	"static_cast"
 	"sizeof"
 	"value_type"
+	"base_type"
+	"absolute_base_type"
 ] @keyword
 
 [

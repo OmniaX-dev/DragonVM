@@ -325,6 +325,7 @@ module.exports = grammar({
 			$.struct_type,
 			$.const_type,
 			$.value_type,
+			$.base_type,
 		),
 		// A::B::Type, ::Type (the global one)
 		scoped_type_identifier: $ => seq(
@@ -358,6 +359,8 @@ module.exports = grammar({
 		const_type: $ => prec(1, seq('const', field('type', $._type))),
 		// value_type(N): the type of a value (of a template parameter given one)
 		value_type: $ => seq('value_type', '(', field('value', $._expression), ')'),
+		// base_type(T): the class T extends; absolute_base_type(T): the first class of its chain
+		base_type: $ => seq(choice('base_type', 'absolute_base_type'), '(', field('type', $._type), ')'),
 		// A nameless struct used as a type: var p: struct { var x: i32; };
 		struct_type: $ => seq('struct', field('body', $.field_list)),
 
@@ -530,7 +533,7 @@ module.exports = grammar({
 
 		call_expression: $ => prec(PREC.POSTFIX, seq(field('function', $._expression), field('arguments', $.argument_list))),
 		// (the built-ins of compile-time conditions take types: is_type(T, u32), is_pointer_to(T, u8*))
-		argument_list: $ => seq('(', commaSep(choice($._expression, $.primitive_type, $.pointer_type, $.generic_type, $.function_type, $.const_type, $.value_type)), ')'),
+		argument_list: $ => seq('(', commaSep(choice($._expression, $.primitive_type, $.pointer_type, $.generic_type, $.function_type, $.const_type, $.value_type, $.base_type)), ')'),
 
 		// max<u32>, Array<u32> (before (...) or .name): a template's instance
 		generic_expression: $ => seq(

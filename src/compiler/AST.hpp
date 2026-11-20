@@ -16,7 +16,9 @@ namespace dscript
 	{
 		// Value: a template's value argument (Array<u32, 16>): the expression in value. ValueType:
 		// value_type(expression), the type of a value (of a template parameter given one: value_type(T)).
-		enum class Kind { Named, Pointer, Array, Function, Value, ValueType };
+		// BaseType: base_type(T), the class T extends (absolute: absolute_base_type(T), the first class
+		// of T's chain); T in base.
+		enum class Kind { Named, Pointer, Array, Function, Value, ValueType, BaseType };
 		Kind kind { Kind::Named };
 		SourcePos pos;
 		std::string name;					// Named (the full name once the code generator resolved it)
@@ -30,6 +32,7 @@ namespace dscript
 		std::vector<TypeSyntax*> args;		// Named: a template's arguments (Array<u32>)
 		Type* fixed { nullptr };			// a template parameter in an instance: the type it stands for (name: the parameter)
 		struct Node* value { nullptr };		// Value, ValueType
+		bool absolute { false };			// BaseType: absolute_base_type
 	};
 
 	// template(T1, optional T2) where (condition) { structs and subs }: kept as tokens, each struct /
