@@ -1,0 +1,3 @@
+// expect-error: P has no constructor (sub new(...)): P.new() only gives its default values
+struct P { var x: i32; }
+sub main() -> i32 { var p = P.new(1); return 0; }

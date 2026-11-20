@@ -1,0 +1,52 @@
+// expect-rv: 0
+// T.new(args): a T built by its constructor, as a value (a temporary like a call's result: moved
+// into a variable, passed, returned, or destroyed when its statement ends). Without arguments
+// and constructors: its default values. As a statement of a derived class's constructor,
+// Base.new(...) still builds the base's part.
+#include(check.ds)
+
+var g_dels: i32 = 0;
+
+struct Vec {
+	var x: i32;
+	var y: i32 = 7;
+	sub new(var x: i32, var y: i32) -> void { this->x = x; this->y = y; }
+	sub new(var v: i32 = 3) -> void { this->x = v; }
+	sub operator+(var o: const Vec*) -> Vec { return Vec.new(this->x + o->x, this->y + o->y); }
+	readonly sub sum() -> i32 { return this->x + this->y; }
+}
+struct Plain { var a: i32 = 4; var b: i32; }
+struct Res {
+	var id: i32;
+	sub new(var id: i32) -> void { this->id = id; }
+	sub del() -> void { g_dels++; }
+}
+class Base {
+	var b: i32;
+	sub new(var b: i32) -> void { this->b = b; }
+}
+class Derived ex Base {
+	sub new() -> void { Base.new(5); }		// (the base's part)
+}
+namespace ns { struct P { var v: i32; sub new(var v: i32) -> void { this->v = v; } } }
+
+sub take(var v: Vec) -> i32 { return v.sum(); }
+sub make() -> Res { return Res.new(9); }
+
+sub main() -> i32 {
+	var a = Vec.new(1, 2);
+	check(1, a.x == 1 && a.y == 2);
+	check(2, Vec.new(4).sum() == 11 && Vec.new().x == 3);
+	check(3, take(Vec.new(5, 5)) == 10 && (a + Vec.new(10, 20)).sum() == 33);
+	var p = Plain.new();
+	check(4, p.a == 4 && p.b == 0);
+	{
+		var r = Res.new(1);			// (moved: destroyed once, at the end of the block)
+		check(5, Res.new(2).id == 2);
+	}
+	check(6, g_dels == 2);
+	check(7, make().id == 9);
+	var d: Derived();
+	check(8, d.b == 5 && ns::P.new(6).v == 6);
+	return result();
+}

@@ -2012,6 +2012,39 @@ namespace dscript
 			}
 			break;
 			case NodeKind::Construct:
+			if (e->a == nullptr)
+			{
+				// T.new(args): its constructor for the arguments (none, and no constructor: its
+				// defaults), on a temporary.
+				StructInfo* info = e->methodClass;
+				resolveStruct(info, e->pos);
+				Type* t = m_types.structType(info);
+				requireValueType(t, e->pos, "built");
+				for (Node* arg : e->list)
+					check(arg);
+				e->func = nullptr;
+				if (m_funcs.count(info->name + "::new") > 0)
+				{
+					Node self;
+					self.kind = NodeKind::TypeArg;
+					self.type = m_types.pointer(t);
+					std::vector<Node*> args { &self };
+					args.insert(args.end(), e->list.begin(), e->list.end());
+					FuncInfo* f = resolveOverload(info->name + "::new", args, e->pos);
+					for (size_t i = 0; i < e->list.size(); i++)
+					{
+						check(e->list[i], f->type->params[i + 1]);
+						requireConvertible(e->list[i], f->type->params[i + 1], "for parameter '" + f->paramNames[i + 1] + "' of " + f->name);
+					}
+					markUsed(f);
+					checkSubAccess(f, e->pos);
+					e->func = f;
+				}
+				else if (!e->list.empty())
+					error(e->pos, info->name + " has no constructor (sub new(...)): " + info->name + ".new() only gives its default values");
+				e->type = t;
+				break;
+			}
 			{
 				// (an object built from a value: its constructor, on a temporary)
 				check(e->a);
@@ -4269,6 +4302,21 @@ namespace dscript
 				callee->name = inst.substr(obj->name.size() + 2);
 				callee->templateArgs.clear();
 			}
+			if (callee->name == "new" && (e->callFlags & 4) == 0)
+			{
+				// T.new(args): a T built by its constructor (a temporary, as a call's result). (As a
+				// statement of a derived class's constructor, Base.new(...) builds its base's part.)
+				if (m_options.index != nullptr)
+					indexName(obj->pos, writtenName(obj), info->decl->namePos, hoverStruct(info));
+				const SourcePos pos = e->pos;
+				std::vector<Node*> args = e->list;
+				*e = Node();
+				e->kind = NodeKind::Construct;
+				e->pos = pos;
+				e->list = args;
+				e->methodClass = info;
+				return;
+			}
 			std::string method = obj->name + "::" + callee->name;
 			resolveStruct(info, callee->namePos);
 			const std::vector<FuncInfo*> funcs = methodsOf(info, callee->name);
@@ -4381,6 +4429,11 @@ namespace dscript
 	{
 		if (e->a->kind == NodeKind::Member)
 			rewriteMethodCall(e);
+		if (e->kind == NodeKind::Construct)
+		{
+			check(e);		// (T.new(args))
+			return;
+		}
 		Node* callee = e->a;
 		e->func = nullptr;
 		e->vaBuiltin = 0;
@@ -6557,6 +6610,49 @@ namespace dscript
 				emit("mov " + r + ", FP");
 				addImmediate(r, slot);
 				storeDefaults(r, t);
+				if (e->a == nullptr)
+				{
+					// T.new(args): the call, on the temporary.
+					if (FuncInfo* f = e->func)
+					{
+						markUsed(f);
+						if (f->isInline && !m_discarding)
+							f->addressTaken = true;
+						const auto& params = f->type->params;
+						emit("push " + r);
+						for (size_t i = 1; i < params.size(); i++)
+						{
+							if (i - 1 >= e->list.size())
+							{
+								Node* def = f->defaults[i];
+								emit("push " + (def->kind == NodeKind::StrLit ? "$" + stringLiteral(def->text) : imm(constConvert(def->constValue, decay(def->type), params[i]))));
+								continue;
+							}
+							Node* arg = e->list[i - 1];
+							Reg v = gen(arg);
+							if (params[i]->kind == Type::Kind::Struct)
+							{
+								Reg c = alloc(e->pos);
+								const int32_t argSlot = temporary(params[i]->size());
+								emit("mov " + c + ", FP");
+								addImmediate(c, argSlot);
+								genInitValue(c, arg, v, params[i]);
+								emit("push " + c);
+								release(c);
+								release(v);
+								addTemp(argSlot, params[i], nullptr);
+								continue;
+							}
+							convert(v, decay(arg->type), params[i]);
+							emit("push " + v);
+							release(v);
+						}
+						emit("push " + std::to_string(params.size()));
+						emit("call $" + f->label);
+					}
+					addTemp(slot, t, e);
+					return r;
+				}
 				Type* p = e->func->type->params[1];
 				Reg v = gen(e->a);
 				if (p->kind == Type::Kind::Struct)

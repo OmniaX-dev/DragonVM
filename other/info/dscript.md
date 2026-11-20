@@ -470,6 +470,11 @@ sub main() -> i32 {
   cannot also have a value. (A destructor, if the struct has one, still runs for them: it must
   accept a value that was only zeroed. A copy constructor is called for copies: see
   "Destructors, copies and moves".)
+- `Point.new(args)` is a value: a `Point` built by its constructor (a temporary, like a call's
+  result: moved into a variable, passed, returned, or destroyed when its statement ends):
+  `var p = Point.new(1, 2);`, `draw(Point.new(3))`, `a + Vec.new(1, 1)`. Without arguments, a
+  struct without constructors gives its default values (`Plain.new()`). (As a statement of a
+  derived class's constructor, `Base.new(...)` builds the base's part instead.)
 - The arguments see the names around the declaration (in `var x: Point(x);`, `x` is the outer
   one). `priv sub new` makes a struct that only its own subs can build; `new` is a method like
   the others (`p.new(3)` runs it again). It cannot be `static` or return a value.
