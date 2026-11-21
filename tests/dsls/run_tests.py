@@ -344,5 +344,28 @@ with tempfile.TemporaryDirectory() as tmp:
     c.request("shutdown", None)
     c.notify("exit", None)
     c.proc.wait(timeout=10)
+# A library's sources (<name>/src with <name>/lib next to it): analyzed together, as dsc builds them
+# (a template sub of one file called with explicit arguments in another: equals<T>(a, b)).
+with tempfile.TemporaryDirectory() as tmp:
+    src = os.path.join(tmp, "mylib", "src")
+    os.makedirs(src)
+    os.makedirs(os.path.join(tmp, "mylib", "lib"))
+    a_path = os.path.join(src, "a_compare.ds")
+    b_path = os.path.join(src, "b_use.ds")
+    with open(a_path, "w") as f:
+        f.write("namespace q {\n\ttemplate(T) {\n\t\tsub same(var a: T, var b: T) -> bool { return a == b; }\n\t}\n}\n")
+    b_text = "namespace q {\n\tsub both(var x: u32, var y: u32) -> bool {\n\t\treturn same<u32>(x, y);\n\t}\n}\n"
+    with open(b_path, "w") as f:
+        f.write(b_text)
+    c = Client()
+    c.request("initialize", {"processId": None, "rootUri": uri(tmp), "capabilities": {}})
+    c.notify("initialized", {})
+    c.notify("textDocument/didOpen", {"textDocument": {"uri": uri(b_path), "languageId": "dscript", "version": 1, "text": b_text}})
+    c.sync()
+    check("a library file: no errors (its library's other files analyzed with it)", c.diagnostics.get(uri(b_path)) == [], str(c.diagnostics.get(uri(b_path))))
+    definition_is(c, "a library file: go to a sub of another file of the library", b_path, b_text, 2, "same", a_path, 2, "same")
+    c.request("shutdown", None)
+    c.notify("exit", None)
+    c.proc.wait(timeout=10)
 print("%d passed, %d failed" % (passed, failed))
 sys.exit(1 if failed else 0)

@@ -12,7 +12,9 @@
 // never frees its memory, and a crash or an endless loop in it cannot take the server down.
 //
 // Which file is compiled: a file with a main sub is a root; any other file is analyzed as part
-// of a root that includes it (the closest one in the directory tree), or on its own.
+// of a root that includes it (the closest one in the directory tree), or on its own. A library's
+// file (<name>/src/..., with <name>/lib next to it) is analyzed with the library's other files, as
+// dsc builds it (they don't include each other: templates and subs of one file are used in others).
 //
 // Configuration: dsls.json in the workspace root (optional):
 //   {
@@ -108,6 +110,39 @@ namespace
 		return std::regex_search(text, re);
 	}
 
+	// A library's sources: <name>/src with <name>/lib next to it (libcore, dragon-sdk, stdlib).
+	// dsc builds a library from every .ds file under src together (no file includes the others),
+	// so a file there is analyzed with all of them: the src folder is its root.
+	std::string librarySourceDir(const std::string& file)
+	{
+		std::error_code ec;
+		for (fs::path d = fs::path(file).parent_path(); !d.empty() && d != d.root_path(); d = d.parent_path())
+		{
+			if (d.filename() == "src" && fs::is_directory(d.parent_path() / "lib", ec))
+				return d.string();
+		}
+		return "";
+	}
+
+	// The .ds files under a library's src folder, in order (as CMake's glob lists them); empty
+	// when root is a file.
+	std::vector<std::string> librarySources(const std::string& root)
+	{
+		std::vector<std::string> out;
+		std::error_code ec;
+		if (!fs::is_directory(root, ec))
+			return out;
+		for (fs::recursive_directory_iterator it(root, ec), end; it != end; it.increment(ec))
+		{
+			if (ec)
+				break;
+			if (it->is_regular_file(ec) && it->path().extension() == ".ds")
+				out.push_back(it->path().string());
+		}
+		std::sort(out.begin(), out.end());
+		return out;
+	}
+
 	// ====================================== Options ======================================
 	struct Options
 	{
@@ -168,6 +203,8 @@ namespace
 	{
 		using namespace dscript;
 		json out = { { "files", json::array() }, { "diagnostics", json::array() }, { "entries", json::array() }, { "symbols", json::array() } };
+		const std::vector<std::string> sources = librarySources(root);	// (a library: root is its src folder)
+		const std::string fallbackFile = sources.empty() ? root : canonical(sources.front());
 		std::map<std::string, std::string> canon;
 		auto l_canon = [&](const std::string& f) -> std::string {
 			if (f.empty() || f[0] == '<')
@@ -179,7 +216,7 @@ namespace
 		};
 		auto l_diag = [&](const SourcePos& p, const std::string& message, int severity) {
 			const bool inFile = !p.file.empty() && p.file[0] != '<';
-			out["diagnostics"].push_back({ { "file", inFile ? l_canon(p.file) : root }, { "line", inFile ? std::max(p.line, 1) : 1 },
+			out["diagnostics"].push_back({ { "file", inFile ? l_canon(p.file) : fallbackFile }, { "line", inFile ? std::max(p.line, 1) : 1 },
 				{ "column", inFile ? std::max(p.column, 1) : 1 }, { "message", message }, { "severity", severity } });
 		};
 
@@ -200,7 +237,7 @@ namespace
 		bool templateSyntaxError = false;
 		try
 		{
-			std::vector<Token> tokens = pp.processFile(root);
+			std::vector<Token> tokens = sources.empty() ? pp.processFile(root) : pp.processFiles(sources);
 			Parser parser(tokens);
 			program = parser.parseProgram();
 		}
@@ -216,6 +253,7 @@ namespace
 			cg.raw = o.raw;
 			cg.rom = o.rom;
 			cg.analysis = true;
+			cg.library = !sources.empty();
 			cg.index = &index;
 			CodeGen gen(cg);
 			try
@@ -682,7 +720,8 @@ namespace
 	}
 
 	// The root a file is analyzed in: itself if it has main, else the closest root that
-	// includes it (most leading directories in common), else itself.
+	// includes it (most leading directories in common), else its library's src folder (a
+	// library's file), else itself.
 	std::string Server::chooseRoot(const std::string& file)
 	{
 		if (m_roots.count(file) > 0)
@@ -704,7 +743,10 @@ namespace
 				bestScore = score;
 			}
 		}
-		return best.empty() ? file : best;
+		if (!best.empty())
+			return best;
+		const std::string library = librarySourceDir(file);
+		return library.empty() ? file : canonical(library);
 	}
 
 	void Server::markDirty(const std::string& file)
@@ -822,7 +864,8 @@ namespace
 		a.files.clear();
 		for (const auto& f : r["files"])
 			a.files.insert(f.get<std::string>());
-		a.files.insert(root);
+		if (!fs::is_directory(root))
+			a.files.insert(root);
 		for (const auto& d : r["diagnostics"])
 			a.diagnostics.push_back({ d["file"].get<std::string>(), d["line"].get<int>(), d["column"].get<int>(), d["message"].get<std::string>(), d["severity"].get<int>() });
 		for (const auto& e : r["entries"])
@@ -881,7 +924,8 @@ namespace
 			if (chooseRoot(f) == root)
 				perFile[f] = json::array();
 		}
-		perFile[root];
+		if (!fs::is_directory(root))
+			perFile[root];
 		for (const auto& d : a.diagnostics)
 		{
 			auto it = perFile.find(d.file);
