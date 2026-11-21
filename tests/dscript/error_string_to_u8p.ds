@@ -1,0 +1,2 @@
+// expect-error: cannot convert const u8* to u8*
+sub main() -> i32 { var p: u8* = "abc"; return 0; }

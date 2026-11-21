@@ -1,0 +1,120 @@
+// expect-rv: 0
+// p->new(...) / p->del() for any type (what a container's template needs on memory it manages):
+// new() gives a type without constructors its defaults (a number, a pointer: 0), new(value) copies a
+// value of the type itself (the copy constructor, the members' copies, or its bytes; a call's result
+// is moved in), del() on a type without a destructor does nothing (an array: its elements'). take(p)
+// moves *p out: its bytes, without the copy constructor, and *p is not destroyed.
+#include(check.ds)
+
+var g_copies: i32 = 0;
+var g_dels: i32 = 0;
+
+struct Plain { var a: i32 = 11; var b: u8 = 2; };
+struct Counted {
+	var v: i32;
+	sub new(var v: i32) { this->v = v; }
+	sub new(var o: const Counted*) { this->v = o->v; g_copies++; }
+	sub del() { g_dels++; }
+};
+struct Holder { var c: Counted; var n: u32 = 5; };	// copied member by member, destroyed by its implicit del
+struct Unique {
+	var v: i32;
+	sub new(var v: i32) { this->v = v; }
+	priv sub new(var o: const ref Unique) { }		// no copies
+	sub del() { g_dels++; }
+};
+sub make_counted(var v: i32) -> Counted { return Counted.new(v); }
+sub make_unique(var v: i32) -> Unique { return Unique.new(v); }
+
+var arena: u32[64];
+var used: u32 = 0;
+sub grab(var bytes: u32) -> void* {
+	var p: void* = &arena[used];
+	for (var i: u32 = 0; i < (bytes + 3) / 4; i++)
+		arena[used + i] = 0xEEEEEEEE;
+	used += (bytes + 3) / 4;
+	return p;
+}
+
+template(T) {
+	sub put(var slot: T*, var v: const ref T) { slot->new(v); }
+	sub fresh(var slot: T*) { slot->new(); }
+	sub drop(var slot: T*) { slot->del(); }
+}
+
+sub main() -> i32 {
+	// Numbers and pointers.
+	var n: u32* = cast<u32*>(grab(4));
+	n->new();
+	check(1, *n == 0);
+	n->new(7);
+	check(2, *n == 7);
+	n->del();
+	put(n, 9u);
+	check(3, *n == 9 and take(n) == 9);
+	var pp: u8** = cast<u8**>(grab(4));
+	pp->new();
+	check(4, *pp == null);
+
+	// A struct without constructors: its defaults, a copy of a value, its bytes taken.
+	var p: Plain* = cast<Plain*>(grab(sizeof(Plain)));
+	p->new();
+	check(5, p->a == 11 and p->b == 2);
+	var q: Plain;
+	q.a = 40;
+	p->new(q);
+	check(6, p->a == 40);
+	p->del();
+	var r = take(p);
+	check(7, r.a == 40);
+	q.new();
+	check(8, q.a == 11);
+
+	// Its copy constructor; a call's result moved in (no copy); take without the copy constructor.
+	var c: Counted* = cast<Counted*>(grab(sizeof(Counted)));
+	{
+		var src = Counted.new(3);
+		c->new(src);
+		check(9, c->v == 3 and g_copies == 1);
+	}
+	check(10, g_dels == 1);		// (src)
+	c->del();
+	check(11, g_dels == 2);
+	c->new(make_counted(4));
+	check(12, c->v == 4 and g_copies == 1 and g_dels == 2);
+	{
+		var got = take(c);			// moved out: c's memory is no longer a value
+		check(13, got.v == 4 and g_copies == 1 and g_dels == 2);
+	}
+	check(14, g_dels == 3);
+	c->new(make_counted(5));
+	take(c);						// a temporary nobody keeps: destroyed
+	check(15, g_dels == 4 and g_copies == 1);
+
+	// The members' copies (Holder has no copy constructor of its own) and its implicit destructor.
+	var h: Holder* = cast<Holder*>(grab(sizeof(Holder)));
+	fresh(h);
+	check(16, h->n == 5 and h->c.v == 0);
+	var hs: Holder;
+	hs.c.v = 8;
+	put(h, hs);
+	check(17, h->c.v == 8 and g_copies == 2);
+	drop(h);
+	check(18, g_dels == 5);
+
+	// A type that can't be copied: built from a call's result, taken out.
+	var u: Unique* = cast<Unique*>(grab(sizeof(Unique)));
+	u->new(make_unique(6));
+	{
+		var mine = take(u);
+		check(19, mine.v == 6 and g_dels == 5);
+	}
+	check(20, g_dels == 6);
+
+	// An array of values with destructors: del() destroys each.
+	var arr: Counted[3]* = cast<Counted[3]*>(grab(sizeof(Counted) * 3));
+	arr->new();
+	arr->del();
+	check(21, g_dels == 9);
+	return result();
+}

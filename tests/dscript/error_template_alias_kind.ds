@@ -1,0 +1,3 @@
+// expect-error: an alias takes no inline
+template(T) { inline alias Bad = T*; }
+sub main() -> i32 { return 0; }

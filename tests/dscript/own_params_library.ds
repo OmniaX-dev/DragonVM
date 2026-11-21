@@ -1,0 +1,14 @@
+// own parameters through a library (libs/own_lib.ds): its subs, an inline one, a sub pointer type.
+// dsc-lib: libs/own_lib.ds
+// expect-rv: 0
+#import("own_lib")
+#include(check.ds)
+sub main() -> i32 {
+	check(1, ol::consume(ol::make(3)) == 3);
+	check(2, ol::dels == 1);
+	check(3, ol::consume_inline(ol::make(4)) == 5);
+	check(4, ol::dels == 2);
+	check(5, ol::g_fn(ol::make(5)) == 5);
+	check(6, ol::dels == 3);
+	return result();
+}

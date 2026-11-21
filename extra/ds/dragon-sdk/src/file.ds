@@ -346,10 +346,10 @@ namespace dr::fs {
 		}
 
 		// Creates the file, or replaces its content, with size bytes of data.
-		sub write_all(var path: string, var data: void*, var size: u32) -> bool {
+		sub write_all(var path: string, var data: const void*, var size: u32) -> bool {
 			if (this->m_vol == null)
 				return this->fail(std::FileErrors.NotMounted);
-			var r: i32 = dr::dfs::write_file(this->m_vol, path, cast<u8*>(data), size);
+			var r: i32 = dr::dfs::write_file(this->m_vol, path, cast<const u8*>(data), size);
 			if (r >= 0 and cast<u32>(r) != size)
 				r = std::FsErrors.NoSpace;
 			return this->check(r);
@@ -361,7 +361,7 @@ namespace dr::fs {
 		}
 
 		// Adds size bytes at the end of the file (created if needed).
-		sub append(var path: string, var data: void*, var size: u32) -> bool {
+		sub append(var path: string, var data: const void*, var size: u32) -> bool {
 			var file: File;
 			if (not this->open(path, OpenMode.AppendFile, &file))
 				return false;
@@ -718,7 +718,7 @@ namespace dr::fs {
 		// Writes size bytes at the position (at the end with OpenMode.Append): the bytes
 		// written (fewer when the disk is full), -1 on errors. Writing past the end grows the
 		// file (a gap reads as zeros).
-		sub write(var data: void*, var size: u32) -> i32 {
+		sub write(var data: const void*, var size: u32) -> i32 {
 			var node: dr::dfs::Inode;
 			if (not this->load(&node))
 				return -1;
@@ -726,7 +726,7 @@ namespace dr::fs {
 				return this->fail_count(std::FileErrors.NotWritable);
 			if ((this->m_mode & OpenMode.Append) != 0)
 				this->m_pos = node.size;
-			var r: i32 = dr::dfs::inode_write(this->m_fs->volume(), this->m_ino, &node, this->m_pos, cast<u8*>(data), size);
+			var r: i32 = dr::dfs::inode_write(this->m_fs->volume(), this->m_ino, &node, this->m_pos, cast<const u8*>(data), size);
 			if (r < 0)
 				return this->fail_count(r);
 			this->m_pos += cast<u32>(r);

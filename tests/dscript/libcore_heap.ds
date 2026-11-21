@@ -1,0 +1,117 @@
+// expect-rv: 0
+// std::Heap (libcore): a heap that is a variable, merging both ways, regions extended by adjacent
+// memory, empty regions taken back, guards, and a long random run checked block by block.
+#include(check.ds)
+#import("libcore")
+
+var g_enter: u32 = 0;
+var g_leave: u32 = 0;
+struct CountGuard {
+	static sub enter() -> u32 { g_enter++; return 7; }
+	static sub leave(var saved: u32) { if (saved == 7) g_leave++; }
+}
+
+var arena: u8[64 * 1024];
+var chunks: u8[32 * 1024];
+var g_heap: std::Heap();				// a variable: no memory yet
+
+var g_seed: u32 = 12345;
+sub rnd(var n: u32) -> u32 {
+	g_seed = g_seed * 1103515245 + 12345;
+	return (g_seed >> 8) % n;
+}
+
+sub main() -> i32 {
+	// A heap that is a variable: nothing until it has memory.
+	check(1, g_heap.alloc(8) == null and g_heap.region_count() == 0 and g_heap.check());
+	check(2, g_heap.add_region(&chunks[0], 4096) and g_heap.region_count() == 1 and g_heap.check());
+	var total: u32 = g_heap.total_bytes();
+	check(3, g_heap.free_bytes() == total and g_heap.largest_free() == total - 8);
+
+	// Freed blocks merge with the free blocks on both sides.
+	var a: u8* = g_heap.alloc(40);
+	var b: u8* = g_heap.alloc(40);
+	var c: u8* = g_heap.alloc(40);
+	var d: u8* = g_heap.alloc(40);
+	check(10, a != null and b > a and c > b and d > c and g_heap.check());
+	check(11, g_heap.free(a) and g_heap.free(c) and g_heap.check());
+	check(12, g_heap.free(b) and g_heap.check());		// a, b and c: one block
+	var abc: u8* = g_heap.alloc(130);
+	check(13, abc == a and g_heap.check());
+	check(14, g_heap.free(abc) and g_heap.free(d) and g_heap.largest_free() == total - 8);
+
+	// Memory right after the region extends it: one region, one free block over both.
+	check(20, g_heap.add_region(&chunks[4096], 4096) and g_heap.region_count() == 1 and g_heap.check());
+	check(21, g_heap.total_bytes() == total + 4096 and g_heap.largest_free() == total + 4096 - 8);
+	var wide: u8* = g_heap.alloc(6000);
+	check(22, wide != null and g_heap.check() and g_heap.free(wide));
+
+	// A second region, then empty regions taken back (whole: what add_region was given).
+	check(30, g_heap.add_region(&chunks[16384], 8192) and g_heap.region_count() == 2);
+	var big: u8* = g_heap.alloc(7000);				// only fits in the second region
+	check(31, big >= &chunks[16384] and g_heap.empty_region_count() == 1);
+	var base: u32 = 0;
+	var size: u32 = 0;
+	check(32, g_heap.take_empty_region(&base, &size) and base == cast<u32>(&chunks[0]) and size == 8192);
+	check(33, g_heap.region_count() == 1 and g_heap.check() and not g_heap.take_empty_region(&base, &size));
+	check(34, g_heap.alloc(4000) == null and g_heap.free(big) and g_heap.take_empty_region(&base, &size));
+	check(35, base == cast<u32>(&chunks[16384]) and size == 8192 and g_heap.region_count() == 0 and g_heap.check());
+	check(36, g_heap.alloc(8) == null);
+
+	// create's region is never taken back (it holds the heap's header).
+	var h: std::Heap* = std::Heap::create(&arena[0], 64 * 1024);
+	check(40, std::Heap::valid(h) and h->empty_region_count() == 0 and not h->take_empty_region(&base, &size));
+
+	// The guard: entered and left around each operation. Same layout: the same heap, either way.
+	var gh: std::BasicHeap<CountGuard>* = cast<std::BasicHeap<CountGuard>*>(h);
+	var p: u8* = gh->alloc(100);
+	check(50, p != null and gh->free(p) and g_enter == 2 and g_leave == 2 and h->check());
+	p = gh->realloc(null, 50);
+	check(51, p != null and h->free(p) and g_enter == g_leave);
+
+	// A long random run: blocks of random sizes (some aligned), filled with their slot's number,
+	// checked when they are freed or resized; the whole heap checked every 64 steps.
+	var slots: u8*[64];
+	var sizes: u32[64];
+	std::memset(&slots[0], 0, sizeof(slots));
+	var ok: bool = true;
+	for (var step: u32 = 0; step < 1500 and ok; step++) {
+		var i: u32 = rnd(64);
+		if (slots[i] != null) {
+			for (var k: u32 = 0; k < sizes[i]; k += 7)
+				ok = ok and slots[i][k] == cast<u8>(i);
+			if (rnd(4) == 0) {
+				var n: u32 = 1 + rnd(300);
+				var q: u8* = h->realloc(slots[i], n);
+				if (q != null) {
+					for (var k: u32 = 0; k < (n < sizes[i] ? n : sizes[i]); k += 7)
+						ok = ok and q[k] == cast<u8>(i);
+					std::memset(q, cast<u8>(i), n);
+					slots[i] = q;
+					sizes[i] = n;
+				}
+			}
+			else {
+				ok = ok and h->free(slots[i]);
+				slots[i] = null;
+			}
+		}
+		else {
+			var n: u32 = 1 + rnd(300);
+			var align: u32 = rnd(8) == 0 ? 256 : 8;
+			slots[i] = h->alloc_aligned(n, align);
+			if (slots[i] != null) {
+				ok = ok and cast<u32>(slots[i]) % align == 0 and h->block_size(slots[i]) >= n;
+				std::memset(slots[i], cast<u8>(i), n);
+				sizes[i] = n;
+			}
+		}
+		if (step % 64 == 0)
+			ok = ok and h->check();
+	}
+	check(60, ok and h->check());
+	for (var i: u32 = 0; i < 64; i++)
+		h->free(slots[i]);
+	check(61, h->check() and h->free_bytes() == h->total_bytes() and h->largest_free() == h->total_bytes() - 8);
+	return result();
+}

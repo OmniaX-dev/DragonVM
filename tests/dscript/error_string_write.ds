@@ -1,0 +1,2 @@
+// expect-error: it points at constants (const u8*)
+sub main() -> i32 { var s: string = "abc"; s[0] = 'x'; return 0; }

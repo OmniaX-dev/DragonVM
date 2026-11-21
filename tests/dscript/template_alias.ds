@@ -1,0 +1,45 @@
+// expect-rv: 0
+// alias in a template: Name<args> is the type the alias names for them. A struct's instance is that
+// struct itself (the same type, its static subs, Name<...>.make()); other types work too.
+#include(check.ds)
+
+namespace lib {
+	template(T, A) {
+		struct BasicBox {
+			var v: T;
+			readonly sub get() -> T { return this->v; }
+			static sub make(var x: T) -> BasicBox<T, A> { var b: BasicBox<T, A>; b.v = x; return b; }
+			static sub tag() -> u32 { return A.tag(); }
+		};
+	}
+}
+struct TagA { static sub tag() -> u32 { return 7; } };
+template(T) { alias Box = lib::BasicBox<T, TagA>; }
+template(T) { alias PtrTo = T*; }
+template(T, N: u32 = 4) { alias Arr = T[N]; }
+template(T) where is_integer(T) { alias Wide = u32; }
+template(T) where is_pointer(T) { alias Wide = T; }
+template(T) { alias BoxOfBox = Box<Box<T>>; }
+
+sub read_box(var b: Box<u32>*) -> u32 { return b->v; }
+
+sub main() -> i32 {
+	var b: Box<u32>;
+	b.v = 3;
+	var c: lib::BasicBox<u32, TagA> = b;		// the same type: no conversion
+	check(1, read_box(&c) == 3);
+	var p: PtrTo<u32> = &c.v;
+	*p = 5;
+	check(2, c.v == 5);
+	var a: Arr<u8>;
+	var a8: Arr<u8, 8>;
+	check(3, sizeof(a) == 4 and sizeof(a8) == 8);
+	var d = Box<u32>.make(10u);
+	check(4, d.get() == 10 and Box<i8>.tag() == 7);
+	check(5, sizeof(Wide<u8>) == 4 and sizeof(Wide<u8*>) == 4);
+	var bb: BoxOfBox<u16>;
+	bb.v.v = 9;
+	check(6, bb.get().get() == 9);
+	static_assert(is_type(Box<u8>, lib::BasicBox<u8, TagA>));
+	return result();
+}

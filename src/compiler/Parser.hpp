@@ -63,6 +63,7 @@ namespace dscript
 			std::string parseOperatorName(void);
 			bool acceptVariadicTyped(void);
 			void parseParams(Node* fn);
+			bool acceptOwn(void);
 			Node* parseLambda(void);
 			Node* parseLow(void);
 			// template(T1, optional T2) where (condition) { ... } (owner: in a struct's body).

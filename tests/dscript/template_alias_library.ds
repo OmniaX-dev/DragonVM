@@ -1,0 +1,14 @@
+// Alias templates from a library (libs/alias_tpl.ds): in its interface as source, instantiated here.
+// dsc-lib: libs/alias_tpl.ds
+// expect-rv: 0
+#import("alias_tpl")
+#include(check.ds)
+
+sub main() -> i32 {
+	var c: atl::Cell<u16>;
+	c.v = 5;
+	var p: atl::Ptr<u16> = &c.v;
+	check(1, *p == 5 and c.tag() == 42);
+	static_assert(is_type(atl::Cell<u8>, atl::BasicCell<u8, atl::TagB>));
+	return result();
+}

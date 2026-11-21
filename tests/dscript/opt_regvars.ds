@@ -185,7 +185,7 @@ sub values(var n: i32) -> i32 {
 }
 
 // Pointers walked in registers.
-sub strlen2(var s: u8*) -> u32 {
+sub strlen2(var s: string) -> u32 {
 	var n: u32 = 0;
 	while (*s != 0) {
 		s++;

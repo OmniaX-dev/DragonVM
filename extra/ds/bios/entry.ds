@@ -93,11 +93,9 @@ sub __boot_init_part(var init_part: dr::DPTPartitionBlock*) -> i32 {
 	fs.unmount();
 	// The boot loader runs in supervisor mode, as the BIOS (and so does the kernel it loads).
 	const argc: u32 = 2;
-	var argv: u8*[argc];
-	argv[0] = dr::bios_alloc(11);	// a u32 in decimal: up to 10 digits and the terminator
-	argv[1] = dr::bios_alloc(11);
-	std::utoa(cast<u32>(load_addr), argv[0]);
-	std::utoa(info.size, argv[1]);
+	var argv: string[argc];
+	argv[0] = std::utoa(cast<u32>(load_addr), cast<u8*>(dr::bios_alloc(11)));	// a u32 in decimal: up to 10 digits and the terminator
+	argv[1] = std::utoa(info.size, cast<u8*>(dr::bios_alloc(11)));
 	dr::drx::run(entry_addr, argc, argv); // Bootloader should never return from main
 	low { hlt };
 	return 0; // Unreacheable

@@ -1,0 +1,5 @@
+// expect-error: but not the same own ones
+struct U { var v: i32; sub del() { } };
+class B { virt sub eat(var u: own U) { } }
+class D ex B { override sub eat(var u: U) { } }
+sub main() -> i32 { return 0; }

@@ -1,6 +1,42 @@
 #import("stdlib")
 
+struct Str { var data: u8[20]; };
+
+class Test {
+	priv var str: Str;
+	priv var num: u32;
+	sub del() {}
+	sub new(var a: u32, var b: const ref Str) {
+		this->num = a;
+		this->str = b;
+	}
+	readonly sub get() -> const ref Str {
+		return this->str;
+	}
+	readonly sub get_num() -> u32 {
+		return this->num;
+	}
+	sub set_num(var n: u32) { this->num = n; }
+};
+
 sub main() -> i32 {
+	var buff4: u8[20];
+	var str: Str;
+	var ptr: const Test* = null;
+	std::strcpy(str.data, "Hello World!");
+	{
+		const p = std::new<Test>(42u, str);
+		ptr = p.get();
+		auto ptr2 = p.get();
+		std::print(p->get().data);
+		std::print(std::itoa(p->get_num(), buff4));
+		ptr2->set_num(56);
+		std::print(std::itoa(p->get_num(), buff4));
+	}
+	std::print(ptr->get().data);
+	while(true);
+
+
 	std::Random::auto_seed();
 	var argv: string[1];
 	var arg: u8[12];
@@ -23,7 +59,7 @@ sub main() -> i32 {
         var j: i32 = std::Random::get_i32(0, 32 - child_count);
         for (var i: i32 = 0; i < j; i++)
         {
-	        std::itoa(std::Random::get_i32(0, 100), argv[0]);
+	        std::itoa(std::Random::get_i32(0, 100), arg);			// (argv[0] is arg)
 	        var rv: i32 = std::spawn("/bin/wingsh", 1, argv);
 			if (rv > 0) child_count++;
         }

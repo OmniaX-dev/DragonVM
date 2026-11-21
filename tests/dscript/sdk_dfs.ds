@@ -20,7 +20,7 @@ sub ram_read(var user: void*, var offset: u32, var buffer: u8*, var size: u32) -
 	return 0;
 }
 
-sub ram_write(var user: void*, var offset: u32, var buffer: u8*, var size: u32) -> i32 {
+sub ram_write(var user: void*, var offset: u32, var buffer: const u8*, var size: u32) -> i32 {
 	if (offset > DiskSize or size > DiskSize - offset) return std::FsErrors.IOError;
 	std::memcpy(g_disk + offset, buffer, size);
 	return 0;

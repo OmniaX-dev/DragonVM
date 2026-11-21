@@ -1,0 +1,40 @@
+// expect-rv: 0
+// A priv constant as the size of the struct's own array field; an alias of a template's instance used
+// as a scope (its static subs); a priv copy constructor: the struct's own subs still copy.
+#include(check.ds)
+
+struct Table {
+	priv constexpr SLOTS: u32 = 6;
+	priv var cells: u32[SLOTS];
+	priv struct Pair { var a: u8; var b: u8; };
+	var pairs: Pair[SLOTS / 2];
+	readonly sub count() -> u32 { return SLOTS; }
+}
+
+template(T) {
+	struct Box {
+		var v: T;
+		static sub make(var v: T) -> Box<T> { var b: Box<T>; b.v = v; return b; }
+		static sub zero() -> T { return 0; }
+	}
+}
+alias IntBox = Box<i32>;
+namespace N { alias ByteBox = Box<u8>; }
+
+struct Once {
+	var n: u32;
+	sub new() { }
+	priv sub new(var o: const ref Once) { this->n = o.n + 100; }
+	sub twin() -> u32 { var t: Once = *this; return t.n; }		// its own sub: may copy
+}
+
+sub main() -> i32 {
+	var t: Table;
+	check(1, sizeof(Table) == 24 + 6 and t.count() == 6);
+	var b = IntBox::make(5);
+	check(2, b.v == 5 and IntBox::zero() == 0 and IntBox.zero() == 0 and N::ByteBox::make(7).v == 7);
+	var o: Once();
+	o.n = 1;
+	check(3, o.twin() == 101);
+	return result();
+}

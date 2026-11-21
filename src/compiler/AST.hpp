@@ -30,6 +30,7 @@ namespace dscript
 		struct Node* count { nullptr };		// Array (a constant expression; nullptr: [], the size of the value)
 		std::vector<TypeSyntax*> params;	// Function
 		int variadic { 0 };					// Function: 1 ... (more arguments), 2 ...typed (with their types)
+		uint32_t owned { 0 };				// Function: bit i, parameter i is own T (the sub destroys it)
 		std::vector<TypeSyntax*> args;		// Named: a template's arguments (Array<u32>)
 		Type* fixed { nullptr };			// a template parameter in an instance: the type it stands for (name: the parameter)
 		struct Node* value { nullptr };		// Value, ValueType
@@ -43,7 +44,8 @@ namespace dscript
 	struct TemplateEntity
 	{
 		std::string name;					// as declared (Array)
-		bool isStruct { false };
+		bool isStruct { false };			// a type: a struct (class, interface) or an alias
+		bool isAlias { false };				// alias Name = type; (an instance is the type it names)
 		size_t first { 0 }, last { 0 };		// its tokens in TemplateDef::tokens: [first, last)
 		size_t nameToken { 0 };				// the token of its name
 		std::vector<Guard> guards;			// the template body's if constexpr around it (outer first)
@@ -89,8 +91,10 @@ namespace dscript
 		Member, Cast, SizeofType, SizeofExpr, PreInc, PreDec, PostInc, PostDec, InitList, TypeArg,
 		// Construct: a struct value built from a: its constructor func (a temporary; an implicit conversion)
 		// (or T.new(args): a == nullptr, list); Materialize: a's value in a temporary, its address (a
-		// value given to a const ref parameter)
-		Construct, Materialize
+		// value given to a const ref parameter). Construct with value 2: take(p), *p moved out (a = p).
+		// InPlace: p->new(...) / p->del() that the compiler does itself (a = the address, list = new's
+		// argument: none or one; value 0 new, 1 del): see CodeGen::inPlace
+		Construct, Materialize, InPlace
 	};
 
 	// One node type for the whole tree: the fields used depend on the kind (see Parser.cpp).
@@ -136,6 +140,7 @@ namespace dscript
 		Node* guard { nullptr };
 		bool guardElse { false };
 		int variadic { 0 };				// FuncDecl: 1 if the parameters end with ..., 2 with ...typed
+		bool owned { false };			// a parameter declared own T: the sub owns (and destroys) its value, not the caller
 		// Call of a variadic sub's built-in (va_count, va_start, va_types): 1, 2, 3 (0: a normal call).
 		int vaBuiltin { 0 };
 
@@ -168,7 +173,8 @@ namespace dscript
 		// methods (with those it inherits) are the candidates; callFlags 1: a call through an object
 		// (virtual subs are called through its table), 2: the object is a variable (its type is
 		// exactly the struct: no table needed). Call: callFlags 4: Base::new(...) as a statement of
-		// a constructor (it builds the base's part); vslot: a virtual call (the slot in the table of
+		// a constructor (it builds the base's part), 64: p->new(args) written in the code (the
+		// object's defaults and tables are stored first); vslot: a virtual call (the slot in the table of
 		// the struct whose sub it calls; -1: a direct call). References: callFlags 16 on an Ident of a
 		// ref parameter / a Call of a sub returning a ref: the pointer itself (not what it refers to);
 		// 32 on the & a reference argument became.

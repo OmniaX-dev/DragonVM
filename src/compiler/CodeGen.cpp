@@ -17,6 +17,12 @@
 
 namespace dscript
 {
+	// Parameter i of a sub type is own (the sub destroys it, not the caller).
+	static bool ownedParam(const Type* fn, size_t i)
+	{
+		return fn != nullptr && i < 32 && (fn->owned & (1u << i)) != 0;
+	}
+
 	static const int TempRegisters = 16;
 	static const char* ScratchCounter = "R17";
 	static const char* ScratchDst = "R18";
@@ -451,6 +457,21 @@ namespace dscript
 			const TypeSyntax* ts = it->second.decl->typeSyntax;
 			if (ts == nullptr || ts->kind != TypeSyntax::Kind::Named)
 				return full;
+			if (!ts->args.empty())
+			{
+				// An instance of a template (alias Heap = BasicHeap<Guard>): its struct.
+				AliasInfo& a = it->second;
+				if (a.type == nullptr && !a.resolving)
+				{
+					a.resolving = true;
+					a.type = resolveType(a.decl->typeSyntax);
+					a.resolving = false;
+				}
+				if (a.type == nullptr || a.type->kind != Type::Kind::Struct)
+					return full;
+				name = a.type->structInfo->name;
+				continue;
+			}
 			name = ts->resolved ? ts->name : qualify(ts->name, it->second.decl->scope);
 		}
 		return (m_structs.count(name) > 0 || m_enums.count(name) > 0) ? name : full;
@@ -696,6 +717,30 @@ namespace dscript
 		}
 	}
 
+	// An alias's type (resolved the first time it is used).
+	Type* CodeGen::aliasType(const std::string& name, const SourcePos& pos)
+	{
+		AliasInfo& a = m_aliases[name];
+		if (a.type == nullptr)
+		{
+			if (a.resolving)
+				error(pos, "alias '" + name + "' refers to itself");
+			a.resolving = true;
+			a.type = resolveType(a.decl->typeSyntax);
+			a.resolving = false;
+		}
+		return a.type;
+	}
+
+	// Name<args> as a type: a struct template's instance, or the type an alias template's names.
+	Type* CodeGen::templateType(const std::string& name, const std::vector<Type*>& args, const SourcePos& pos)
+	{
+		const std::string inst = instantiate(name, args, nullptr, nullptr, pos, true);
+		if (m_structs.count(inst) > 0)
+			return m_types.structType(m_structs[inst]);
+		return aliasType(inst, pos);
+	}
+
 	bool CodeGen::isTypeName(const std::string& name)
 	{
 		return m_types.builtin(name) != nullptr || m_structs.count(name) > 0 || m_aliases.count(name) > 0 || m_enums.count(name) > 0;
@@ -724,10 +769,10 @@ namespace dscript
 					std::vector<Type*> args;
 					for (TypeSyntax* a : ts->args)
 						args.push_back(templateArgument(a));
-					StructInfo* inst = m_structs[instantiate(ts->name, args, nullptr, nullptr, ts->pos, true)];
-					if (m_options.index != nullptr && !m_discarding)
-						indexName(ts->pos, written, inst->decl->namePos, hoverStruct(inst));
-					return m_types.structType(inst);
+					Type* t = templateType(ts->name, args, ts->pos);
+					if (t->kind == Type::Kind::Struct && m_options.index != nullptr && !m_discarding)
+						indexName(ts->pos, written, t->structInfo->decl->namePos, hoverStruct(t->structInfo));
+					return t;
 				}
 				if (Type* t = m_types.builtin(ts->name))
 				{
@@ -753,16 +798,7 @@ namespace dscript
 				{
 					if (m_options.index != nullptr)
 						indexName(ts->pos, written, m_aliases[ts->name].decl->namePos, "alias " + ts->name);
-					AliasInfo& a = m_aliases[ts->name];
-					if (a.type == nullptr)
-					{
-						if (a.resolving)
-							error(ts->pos, "alias '" + ts->name + "' refers to itself");
-						a.resolving = true;
-						a.type = resolveType(a.decl->typeSyntax);
-						a.resolving = false;
-					}
-					return a.type;
+					return aliasType(ts->name, ts->pos);
 				}
 				if (m_consts.count(ts->name) > 0 && m_consts[ts->name].decl->name.rfind("__tv_", 0) == 0)
 					error(ts->pos, "the value " + m_consts[ts->name].decl->text + " where a type is needed (a template parameter given a value: is_value(T) tells, value_type(T) is its type)");
@@ -829,7 +865,7 @@ namespace dscript
 				Type* ret = ts->base ? resolveType(ts->base) : m_types.voidType();
 				if (ret->kind != Type::Kind::Void && !ret->isScalar() && ret->kind != Type::Kind::Struct)
 					error(ts->pos, "subs return integers, pointers, structs or void (not " + ret->name() + ")");
-				return m_types.function(params, ret, ts->variadic);
+				return m_types.function(params, ret, ts->variadic, ts->owned);
 			}
 		}
 		return nullptr;
@@ -871,7 +907,13 @@ namespace dscript
 			field.isProtected = f->isProtected;
 			field.isReadonly = f->isReadonly;
 			field.isConst = f->constKind == 1;
-			field.type = resolveType(f->typeSyntax);
+			{
+				// (its type is inside the struct: priv constants as array sizes)
+				const Node* savedOwner = m_fieldOwner;
+				m_fieldOwner = info->decl;
+				field.type = resolveType(f->typeSyntax);
+				m_fieldOwner = savedOwner;
+			}
 			if (field.type->kind == Type::Kind::Void)
 				error(f->pos, "fields cannot be void");
 			rejectReference(field.type, f->pos, "fields");
@@ -1062,9 +1104,9 @@ namespace dscript
 		if (c.decl->a != nullptr && c.decl->a->kind == NodeKind::StrLit)
 		{
 			// A string constant: used as that string literal (stored once in the program).
-			Type* str = m_types.pointer(m_types.u8());
-			if (t != nullptr && !(t->kind == Type::Kind::Pointer && t->base->size() == 1 && t->base->isInteger()))
-				error(c.decl->pos, "a string constant is a string (u8* / i8*), not " + t->name());
+			Type* str = m_types.pointer(m_types.u8(), true);
+			if (t != nullptr && !(t->kind == Type::Kind::Pointer && t->base->size() == 1 && t->base->isInteger() && t->constTarget))
+				error(c.decl->pos, "a string constant is a string (const u8* / const i8*: its text is read-only), not " + t->name());
 			c.isString = true;
 			c.text = c.decl->a->text;
 			c.type = (t != nullptr ? t : str);
@@ -1323,8 +1365,8 @@ namespace dscript
 			case Type::Kind::Function:
 			{
 				std::string s = "F";
-				for (Type* p : t->params)
-					s += mangle(p);
+				for (size_t i = 0; i < t->params.size(); i++)
+					s += std::string(i < 32 && (t->owned & (1u << i)) != 0 ? "O" : "") + mangle(t->params[i]);
 				if (t->variadic != 0)
 					s += t->variadic == 2 ? "VT" : "V";
 				return s + "r" + mangle(t->base);
@@ -1338,9 +1380,20 @@ namespace dscript
 		Node* d = f->decl;
 		std::vector<Type*> params;
 		bool seenDefault = false;
+		uint32_t owned = 0;
 		for (Node* p : d->list)
 		{
 			Type* t = resolveType(p->typeSyntax);
+			if (p->owned)
+			{
+				if (t->isReference())
+					error(p->pos, "own " + t->name() + ": a reference refers to the caller's value (own takes the value itself: own " + t->base->name() + ")");
+				if (params.size() >= 32)
+					error(p->pos, "own: only the first 32 parameters can be own");
+				if ((d->value & 1) != 0)
+					error(p->pos, "an interrupt sub has no own parameters");
+				owned |= 1u << params.size();
+			}
 			if (t->kind == Type::Kind::Struct)
 			{
 				resolveStruct(t->structInfo, p->pos);		// (by value: a copy)
@@ -1377,7 +1430,7 @@ namespace dscript
 		}
 		else if (ret->kind != Type::Kind::Void && !ret->isScalar())
 			error(d->pos, "subs return integers, pointers, structs or void (not " + ret->name() + ")");
-		f->type = m_types.function(params, ret, d->variadic);
+		f->type = m_types.function(params, ret, d->variadic, owned);
 		if (d->variadic != 0)
 		{
 			if (seenDefault)
@@ -1753,7 +1806,7 @@ namespace dscript
 				e->constValue = (uint32_t)e->value;
 			break;
 			case NodeKind::StrLit:
-				e->type = m_types.pointer(m_types.u8());
+				e->type = m_types.pointer(m_types.u8(), true);		// (string: its text is read-only)
 			break;
 			case NodeKind::BoolLit:
 				e->type = m_types.boolType();
@@ -2057,7 +2110,25 @@ namespace dscript
 				e->type = m_types.pointer(t, true);
 			}
 			break;
+			case NodeKind::InPlace:
+			{
+				check(e->a);
+				Type* target = decay(e->a->type)->base;
+				for (Node* arg : e->list)
+					check(arg, target);
+				if (e->value == 0 && e->list.size() == 1 && target->kind != Type::Kind::Struct)
+					requireConvertible(e->list[0], target, "in p->new(value)");
+				e->type = m_types.voidType();
+			}
+			break;
 			case NodeKind::Construct:
+			if (e->value == 2)
+			{
+				// take(p)
+				check(e->a);
+				e->type = decay(e->a->type)->base;
+				break;
+			}
 			if (e->a == nullptr)
 			{
 				// T.new(args): its constructor for the arguments (none, and no constructor: its
@@ -2585,6 +2656,12 @@ namespace dscript
 	// lambda written in one, or an inline sub of it being expanded?
 	bool CodeGen::insideStruct(const StructInfo* info)
 	{
+		// (a field's type, while the struct is resolved)
+		for (const Node* o = m_fieldOwner; o != nullptr; o = o->owner)
+		{
+			if (o == info->decl)
+				return true;
+		}
 		FuncInfo* f = m_inline.empty() ? m_func : m_inline.back().func;
 		for (const Node* d = f ? f->decl : nullptr; d != nullptr; d = d->d)
 		{
@@ -2929,7 +3006,17 @@ namespace dscript
 		const auto& pb = b->type->params;
 		if (pa.size() < skipA || pb.size() < skipB || pa.size() - skipA != pb.size() - skipB)
 			return false;
-		return std::equal(pa.begin() + (std::ptrdiff_t)skipA, pa.end(), pb.begin() + (std::ptrdiff_t)skipB);
+		if (!std::equal(pa.begin() + (std::ptrdiff_t)skipA, pa.end(), pb.begin() + (std::ptrdiff_t)skipB))
+			return false;
+		if ((a->type->owned >> skipA) != (b->type->owned >> skipB))
+		{
+			// (the same parameters, but not the same own ones: callers would destroy a value twice, or never)
+			const FuncInfo* later = a->decl->pos.line > b->decl->pos.line || a->decl->pos.file != b->decl->pos.file ? a : b;
+			if ((a->decl->value & 8) == 0 && (b->decl->value & 8) == 0)
+				error(later->decl->namePos, "'" + a->decl->shortName + "': the same parameters as " + (later == a ? b : a)->name + ", but not the same own ones (own is part of a sub's type: they must match)");
+			return false;
+		}
+		return true;
 	}
 
 	std::vector<FuncInfo*> CodeGen::methodsOf(StructInfo* info, const std::string& name)
@@ -3570,8 +3657,12 @@ namespace dscript
 		if (ownsResources(info) && copyConstructorOf(info) == nullptr)
 			error(pos, info->name + " has a destructor (it owns something): copying it needs a copy constructor (sub new(var o: const " + info->name +
 				"*)); or pass a pointer (a call's result, a returned variable are moved, not copied)");
-		if (copyConstructorOf(info) != nullptr)
+		if (FuncInfo* cc = copyConstructorOf(info))
+		{
+			// (priv sub new(var o: const ref T): only its own subs copy it; prot: its derived classes' too)
+			checkSubAccess(cc, pos);
 			return;
+		}
 		if (info->base != nullptr)
 			requireCopyable(m_types.structType(info->base), pos);
 		for (const StructField& f : info->fields)
@@ -4292,7 +4383,18 @@ namespace dscript
 			for (size_t i = 0; i < args; i++)
 			{
 				bool a = false;
-				const int c = (member && i == 0) ? 0 : l_cost(operands[i], params[i], a);
+				int c = 0;
+				if (member && i == 0)
+				{
+					// this: a readonly operator for a constant, the other one preferred for a variable
+					// (as methods: their this is a const T* / a T*)
+					const bool readonlyOp = (f->decl->value & 64) != 0;
+					if (operands[0]->readOnly && !readonlyOp)
+						return;
+					c = (readonlyOp && !operands[0]->readOnly) ? 1 : 0;
+				}
+				else
+					c = l_cost(operands[i], params[i], a);
 				if (c < 0)
 					return;
 				cost += c;
@@ -4561,6 +4663,8 @@ namespace dscript
 		Type* t = obj->type;
 		if (t == nullptr)
 			return;
+		if ((callee->name == "new" || callee->name == "del") && inPlace(e, obj))
+			return;
 		if (callee->value == 1)
 		{
 			t = decay(t);
@@ -4619,21 +4723,227 @@ namespace dscript
 		id->callFlags = 1 | (exact ? 2 : 0);
 		e->a = id;
 		e->list.insert(e->list.begin(), self);
+		// p->new(args) / x.new(args) written in the code (not a declaration's var x: T(args), whose
+		// defaults are already there): the object's defaults and tables first, as for a new value.
+		if (callee->name == "new" && !(obj->kind == NodeKind::Ident && obj->name == " ctor"))
+			e->callFlags |= 64;
+	}
+
+	// p->new(args) / p->del() that the compiler does itself, for any type (so that a template can build
+	// and destroy its T in memory it manages): new() for a type without constructors (its defaults; a
+	// number, a pointer: 0), new(value) with a value of the type itself (a copy, moved if it is a call's
+	// result: as a variable's initialization; a number, a pointer: what converts to it), and del() for a
+	// type without a destructor (nothing; an array: its elements'). true: e became an InPlace. The others
+	// (a constructor, a destructor of the struct's) are its method calls.
+	bool CodeGen::inPlace(Node* e, Node* obj)
+	{
+		Node* callee = e->a;
+		const bool isNew = callee->name == "new";
+		if (!callee->templateArgs.empty() || (e->callFlags & 4) != 0 || (obj->kind == NodeKind::Ident && obj->name == " ctor"))
+			return false;
+		Type* t = decay(obj->type);
+		Type* target = nullptr;
+		if (callee->value == 1)
+		{
+			if (t->kind != Type::Kind::Pointer)
+				return false;
+			target = t->base;
+		}
+		else if (obj->type->kind == Type::Kind::Struct)
+			target = obj->type;
+		else
+			return false;
+		bool own = false;		// the struct's own new / del
+		if (target->kind == Type::Kind::Struct)
+		{
+			resolveStruct(target->structInfo, callee->pos);
+			if (target->structInfo->field(callee->name) != nullptr)
+				return false;
+			own = !methodsOf(target->structInfo, callee->name).empty();
+		}
+		const std::string written = (callee->value == 1 ? "p->" : "x.") + callee->name;
+		if (target->kind == Type::Kind::Void)
+			error(callee->namePos, written + "(...) on a void*: cast it to a pointer to the type first");
+		if (target->isReference())
+			error(callee->namePos, written + "(...) on a reference");
+		for (Node* arg : e->list)
+			check(arg);
+		if (isNew)
+		{
+			const bool copy = e->list.size() == 1 && (target->kind == Type::Kind::Struct ? decay(e->list[0]->type) == target : target->kind != Type::Kind::Array);
+			if (!copy)
+			{
+				if (own)
+					return false;		// (its constructors)
+				if (!e->list.empty())
+					error(e->pos, target->kind == Type::Kind::Struct ? target->name() + " has no constructor (sub new(...)): " + written + "() gives its default values, " +
+						written + "(value) copies a " + target->name() :
+						written + "(...) on a " + target->name() + "*: " + written + "() is 0 (" + written + "(value): the value)");
+			}
+		}
+		else
+		{
+			if (own)
+				return false;		// (its destructor)
+			if (!e->list.empty())
+				error(e->pos, written + "() takes no arguments");
+		}
+		if ((callee->value == 1 && t->constTarget) || (callee->value == 0 && obj->readOnly))
+			error(callee->namePos, written + "(): " + (callee->value == 1 ? "through a const " + t->name() : std::string("on a constant")) + " (it changes what is there)");
+		Node* addr = obj;
+		if (callee->value == 0)
+		{
+			addr = new Node();
+			addr->kind = NodeKind::Unary;
+			addr->name = "&";
+			addr->pos = obj->pos;
+			addr->a = obj;
+		}
+		const SourcePos pos = e->pos;
+		const std::vector<Node*> args = e->list;
+		*e = Node();
+		e->kind = NodeKind::InPlace;
+		e->pos = pos;
+		e->a = addr;
+		e->list = args;
+		e->value = isNew ? 0 : 1;
+		return true;
+	}
+
+	// take(p): the value p points at, moved out (its bytes: no copy constructor; p's memory is not
+	// destroyed: what is there is no longer a value, as after a move). A struct: a temporary, as a call's
+	// result (moved into a variable, destroyed when the statement ends if it isn't). false: not take (a
+	// variable or a sub of that name).
+	bool CodeGen::takeBuiltin(Node* e)
+	{
+		Node* callee = e->a;
+		if (callee->kind != NodeKind::Ident || callee->name != "take" || !callee->templateArgs.empty() || lookupVar(callee->name) != nullptr
+			|| m_funcs.count(callee->name) > 0 || m_templates.count(callee->name) > 0)
+			return false;
+		if (e->list.size() != 1)
+			error(e->pos, "take(p) takes one pointer: the value it points at, moved out");
+		Node* p = e->list[0];
+		check(p);
+		Type* t = decay(p->type);
+		if (t->kind != Type::Kind::Pointer || t->base->kind == Type::Kind::Void || t->base->isReference())
+			error(p->pos, "take(p) takes a pointer to a value (not " + t->name() + ")");
+		if (t->constTarget)
+			error(p->pos, "take(p) through a const " + t->name() + ": it moves the value out (what is left is no longer one)");
+		if (t->base->kind == Type::Kind::Array)
+			error(p->pos, "take(p): an array is not a value (take its elements)");
+		const SourcePos pos = e->pos;
+		*e = Node();
+		e->pos = pos;
+		e->a = p;
+		if (t->base->kind == Type::Kind::Struct)
+		{
+			e->kind = NodeKind::Construct;
+			e->value = 2;
+			e->methodClass = t->base->structInfo;
+		}
+		else
+		{
+			e->kind = NodeKind::Unary;		// (a number, a pointer: its value)
+			e->name = "*";
+		}
+		check(e);
+		e->lvalue = false;
+		return true;
+	}
+
+	// forget(v): v (a local, or an own parameter) is not destroyed when its scope ends: what it held
+	// was moved somewhere else (its bytes copied: memcpy, p->new(take(&v))...). Anywhere in v's scope
+	// (in an if, a loop...): v has a drop flag that its destructor checks (see setDropFlag). Nothing for
+	// a type without a destructor. false: not forget (a variable or a sub of that name).
+	bool CodeGen::forgetBuiltin(Node* e)
+	{
+		Node* callee = e->a;
+		if (callee->kind != NodeKind::Ident || callee->name != "forget" || !callee->templateArgs.empty() || lookupVar(callee->name) != nullptr
+			|| m_funcs.count(callee->name) > 0 || m_templates.count(callee->name) > 0)
+			return false;
+		if (e->list.size() != 1 || e->list[0]->kind != NodeKind::Ident)
+			error(e->pos, "forget(v) takes a variable: a local, or an own parameter");
+		Node* v = e->list[0];
+		check(v);
+		VarInfo* var = v->var;
+		if (var == nullptr || var->isStatic || (var->storage != VarInfo::Storage::Local && var->storage != VarInfo::Storage::Param))
+			error(v->pos, "forget(v) takes a local or an own parameter (not a global, a static or a sub)");
+		if (var->param && !var->owned && var->type->kind == Type::Kind::Struct)
+			error(v->pos, "forget(" + v->name + "): its caller destroys a parameter (forget takes a local, or an own parameter: var " + v->name + ": own " + var->type->name() + ")");
+		if (var->type->isReference())
+			error(v->pos, "forget(" + v->name + "): a reference doesn't own what it refers to");
+		e->vaBuiltin = 4;
+		e->func = nullptr;
+		e->type = m_types.voidType();
+		return true;
+	}
+
+	void CodeGen::genForget(Node* s)
+	{
+		VarInfo* var = s->a->list[0]->var;
+		if (var->hasDropFlag)
+			emit("omov *FP, 0x00000000, dword " + imm(var->dropFlag));		// (its destructor: skipped)
+		else if (destructible(var->type))
+			error(s->pos, "internal error: forget(" + var->name + ") without a drop flag");
+	}
+
+	// The names forget(name) takes in a sub's body: its variables of those names get a drop flag (a
+	// variable of the same name elsewhere too: only a flag more).
+	void CodeGen::collectForgets(Node* n, std::set<std::string>& out)
+	{
+		if (n == nullptr || n->kind == NodeKind::FuncDecl)
+			return;
+		if (n->kind == NodeKind::Call && n->a != nullptr && n->a->kind == NodeKind::Ident && n->a->name == "forget" && n->list.size() == 1 && n->list[0]->kind == NodeKind::Ident)
+			out.insert(n->list[0]->name);
+		for (Node* c : { n->a, n->b, n->c, n->d })
+			collectForgets(c, out);
+		for (Node* c : n->list)
+			collectForgets(c, out);
+	}
+
+	// v's drop flag (if forget may take it): 1 from here on, 0 once forget(v) runs; its destructor
+	// runs only while it is 1.
+	void CodeGen::setDropFlag(VarInfo* v)
+	{
+		if (m_forgetNames.count(v->name) == 0 || !destructible(v->type))
+			return;
+		v->dropFlag = temporary(4);
+		v->hasDropFlag = true;
+		emit("omov *FP, 0x00000001, dword " + imm(v->dropFlag));
+	}
+
+	// The own parameters' destructors, when the sub ends (as locals': skipped by forget, a return moves them).
+	void CodeGen::destroyOwnedParams(const std::vector<VarInfo*>& params)
+	{
+		for (VarInfo* v : params)
+		{
+			if (!v->owned || !destructible(v->type))
+				continue;
+			setDropFlag(v);
+			Node* destroy = new Node();
+			destroy->kind = NodeKind::Destroy;
+			destroy->value = 1;
+			destroy->pos = v->pos;
+			destroy->var = v;
+			m_defers.back().push_back({ destroy, m_scopes, m_atomic, v });
+		}
 	}
 
 	void CodeGen::checkCall(Node* e)
 	{
 		if (e->a->kind == NodeKind::Member)
 			rewriteMethodCall(e);
-		if (e->kind == NodeKind::Construct)
+		if (e->kind == NodeKind::Construct || e->kind == NodeKind::InPlace)
 		{
-			check(e);		// (T.new(args))
+			check(e);		// (T.new(args), p->new(...) / p->del() done in place)
 			return;
 		}
 		Node* callee = e->a;
 		e->func = nullptr;
 		e->vaBuiltin = 0;
 		e->vslot = -1;
+		if (takeBuiltin(e) || forgetBuiltin(e))
+			return;
 		if (callee->kind == NodeKind::Ident && lookupVar(callee->name) == nullptr && m_funcs.count(callee->name) == 0
 			&& (callee->name == "va_count" || callee->name == "va_start" || callee->name == "va_types"))
 		{
@@ -6210,8 +6520,16 @@ namespace dscript
 		// (overloaded subs of one template: one instance name, each instantiated when one of its calls
 		// needs it)
 		const std::string key = ent.isStruct ? full : full + "#" + std::to_string(m.c.entity);
+		// An alias template's instance is the type it names: a struct's name for a struct (so that
+		// Name<...> works wherever a struct instance does), else the alias's own (see templateType).
+		auto l_result = [&](const std::string& n) -> std::string {
+			if (!ent.isAlias)
+				return n;
+			Type* t = aliasType(n, pos);
+			return t->kind == Type::Kind::Struct ? t->structInfo->name : n;
+		};
 		if (m_instances.count(key) > 0)
-			return full;
+			return l_result(full);
 		m_instances[key] = full;
 		// The template body's static_asserts (those its if constexpr keep), for these arguments.
 		if (!def->asserts.empty())
@@ -6305,9 +6623,11 @@ namespace dscript
 			applyGuards(program);		// (if constexpr around its methods, in its struct: declared before the names are looked up)
 			resolveNames(program);
 		});
-		for (size_t i = funcsBefore; i < m_funcList.size(); i++)
+		// (only this instance's own subs: resolving them can instantiate others, e.g. a struct a sub
+		// returns, whose subs are added after them and resolved by their own instantiation)
+		const std::vector<FuncInfo*> own(m_funcList.begin() + (std::ptrdiff_t)funcsBefore, m_funcList.end());
+		for (FuncInfo* f : own)
 		{
-			FuncInfo* f = m_funcList[i];
 			f->instance = true;
 			f->instanceNote = note;
 			try
@@ -6335,6 +6655,14 @@ namespace dscript
 				if (f->type->params.empty())
 					f->label += "_void";
 			}
+		}
+		if (ent.isAlias)
+		{
+			std::string out;
+			l_withNote([&] { out = l_result(full); });
+			if (m_globalDecls.size() > globalsBefore && m_globalsTyped > 0)
+				l_withNote([&] { genGlobalTypes(m_globalsTyped); });
+			return out;
 		}
 		if (wantStruct)
 		{
@@ -6374,7 +6702,7 @@ namespace dscript
 							error(a->pos, "an optional template parameter that is not given");
 						args.push_back(t);
 					}
-					return m_types.structType(m_structs[instantiate(ts->name, args, nullptr, nullptr, ts->pos, true)]);
+					return templateType(ts->name, args, ts->pos);
 				}
 				return resolveType(ts);
 			case TypeSyntax::Kind::Pointer:
@@ -7055,7 +7383,48 @@ namespace dscript
 				release(r);
 				return v;
 			}
+			case NodeKind::InPlace:
+			{
+				Type* target = decay(e->a->type)->base;
+				Reg addr = gen(e->a);
+				if (e->value == 1)
+				{
+					if (destructible(target))
+						genDestroy(addr, target, 0);
+				}
+				else if (e->list.empty())
+					storeDefaults(addr, target);
+				else
+				{
+					Node* arg = e->list[0];
+					Reg v = gen(arg);
+					if (target->kind == Type::Kind::Struct)
+						genInitValue(addr, arg, v, target);		// (a copy, or a call's result moved in)
+					else
+					{
+						convert(v, decay(arg->type), target);
+						store(addr, v, target);
+					}
+					release(v);
+				}
+				return addr;
+			}
 			case NodeKind::Construct:
+			if (e->value == 2)
+			{
+				// take(p): *p's bytes in a temporary (moved: no copy constructor).
+				Type* t = e->type;
+				const int32_t slot = temporary(t->size());
+				Reg src = gen(e->a);
+				Reg r = alloc(e->pos);
+				emit("mov " + r + ", FP");
+				addImmediate(r, slot);
+				copyMemory(r, src, t->size());
+				emit("mov " + src + ", " + r);
+				release(r);
+				addTemp(slot, t, e);
+				return src;
+			}
 			{
 				// A temporary: its defaults, then its constructor with the value (destroyed when the
 				// statement ends, unless moved).
@@ -7095,7 +7464,8 @@ namespace dscript
 								emit("push " + c);
 								release(c);
 								release(v);
-								addTemp(argSlot, params[i], nullptr);
+								if (!ownedParam(f->type, i))
+									addTemp(argSlot, params[i], nullptr);
 								continue;
 							}
 							convert(v, decay(arg->type), params[i]);
@@ -7119,7 +7489,8 @@ namespace dscript
 					genInitValue(c, e->a, v, p);
 					callMethod(e->func, r, 0, c);
 					release(c);
-					addTemp(argSlot, p, nullptr);
+					if (!ownedParam(e->func->type, 1))
+						addTemp(argSlot, p, nullptr);
 				}
 				else
 				{
@@ -7921,6 +8292,7 @@ namespace dscript
 			error(e->pos, "inline sub '" + f->name + "' calls itself: inline subs cannot be recursive");
 		const auto& params = f->type->params;
 		std::map<std::string, VarInfo*> paramScope;
+		std::vector<VarInfo*> inlineParams;
 		for (size_t i = 0; i < params.size(); i++)
 		{
 			VarInfo* v = new VarInfo();
@@ -7955,7 +8327,16 @@ namespace dscript
 			}
 			else
 				value = argImmediate(e->list[i], params[i]);
-			if (!value.empty() && params[i]->isScalar())
+			if (i == 0 && (e->callFlags & 64) != 0)
+			{
+				// p->new(args): the object's defaults, then the constructor's body on it.
+				Reg r = gen(e->list[0]);
+				convert(r, decay(e->list[0]->type), params[0]);
+				storeDefaults(r, params[0]->base);
+				storePlace(slot, r, params[0]);
+				release(r);
+			}
+			else if (!value.empty() && params[i]->isScalar())
 				storePlace(slot, value, params[i]);
 			else if (params[i]->isScalar())
 			{
@@ -7972,8 +8353,11 @@ namespace dscript
 				varAddress(a, v);
 				if (params[i]->kind == Type::Kind::Struct)
 				{
-					genInitValue(a, e->list[i], r, params[i]);		// (destroyed when the statement ends)
-					addTemp(v->offset, params[i], nullptr);
+					genInitValue(a, e->list[i], r, params[i]);		// (destroyed when the statement ends; own: by the sub)
+					if (ownedParam(f->type, i))
+						v->owned = true;
+					else
+						addTemp(v->offset, params[i], nullptr);
 				}
 				else
 					store(a, r, params[i]);
@@ -7981,6 +8365,7 @@ namespace dscript
 				release(r);
 			}
 			paramScope[v->name] = v;
+			inlineParams.push_back(v);
 		}
 		// The body sees its parameters (and the globals), not the caller's variables or loops.
 		auto scopes = std::move(m_scopes);
@@ -7993,6 +8378,10 @@ namespace dscript
 		m_defers.clear();
 		m_defers.emplace_back();
 		m_inDefer = 0;
+		auto forgetNames = std::move(m_forgetNames);
+		m_forgetNames.clear();
+		collectForgets(f->decl->a, m_forgetNames);
+		destroyOwnedParams(inlineParams);
 		const int32_t result = returnsStruct(f->type) ? temporary(f->type->base->size()) : 0;	// (a struct result: here)
 		m_inline.push_back({ f, newLabel(), result });
 		const int stmtDepth = m_stmtDepth;
@@ -8001,6 +8390,7 @@ namespace dscript
 		Node* body = f->decl->a;
 		for (Node* s : body->list)
 			genStatement(s);
+		m_forgetNames = std::move(forgetNames);
 		const bool endsWithReturn = !body->list.empty() && body->list.back()->kind == NodeKind::Return;
 		if (!endsWithReturn)
 		{
@@ -8038,6 +8428,8 @@ namespace dscript
 
 	CodeGen::Reg CodeGen::genCall(Node* e)
 	{
+		if (e->vaBuiltin == 4)
+			error(e->pos, "forget(v) is a statement of its own (forget(v);)");
 		if (e->vaBuiltin != 0)
 		{
 			// The count the caller pushed is in the CPU's frame (FP + 104: after the 26 words of
@@ -8141,14 +8533,28 @@ namespace dscript
 				release(self);
 				continue;
 			}
+			if (i == 0 && (e->callFlags & 64) != 0)
+			{
+				// p->new(args): the object's defaults, then its constructor on it.
+				Reg self = gen(e->list[0]);
+				convert(self, decay(e->list[0]->type), params[0]);
+				storeDefaults(self, params[0]->base);
+				emit("push " + self);
+				release(self);
+				continue;
+			}
 			if (params[i]->kind == Type::Kind::Struct)
 			{
 				// By value: a copy in this frame, passed by its address (a call's result: itself),
-				// destroyed when the statement ends.
+				// destroyed when the statement ends. An own parameter: the sub destroys it (a call's
+				// result is given to it, a copy is not destroyed here).
 				Reg src = gen(e->list[i]);
-				if ((e->list[i]->kind == NodeKind::Call || e->list[i]->kind == NodeKind::Construct) && (destructible(params[i]) || customCopy(params[i])))
+				const bool own = ownedParam(fnType, i);
+				if ((e->list[i]->kind == NodeKind::Call || e->list[i]->kind == NodeKind::Construct) && (own || destructible(params[i]) || customCopy(params[i])))
 				{
 					storeVptrs(src, params[i]);
+					if (own)
+						consumeTemp(e->list[i]);
 					emit("push " + src);
 					release(src);
 					continue;
@@ -8161,7 +8567,8 @@ namespace dscript
 				emit("push " + dst);
 				release(dst);
 				release(src);
-				addTemp(slot, params[i], nullptr);
+				if (!own)
+					addTemp(slot, params[i], nullptr);
 				continue;
 			}
 			const std::string value = argImmediate(e->list[i], params[i]);
@@ -8430,6 +8837,7 @@ namespace dscript
 		m_scopes.back()[s->name] = v;
 		if (destructible(t) && !m_defers.empty())
 		{
+			setDropFlag(v);
 			// Its destructor, when its scope ends (as a defer: also by return, break, continue).
 			Node* destroy = new Node();
 			destroy->kind = NodeKind::Destroy;
@@ -8508,9 +8916,19 @@ namespace dscript
 			Reg r = alloc(s->pos);
 			if (s->value == 1)
 			{
-				// (a local's destructor, when its scope ends)
+				// (a local's destructor, when its scope ends; with a drop flag: unless forget(v) ran)
+				std::string skip;
+				if (s->var->hasDropFlag)
+				{
+					skip = newLabel();
+					emit("movo " + r + ", *FP, dword " + imm(s->var->dropFlag));
+					emit("mov ACC, " + r);
+					emit("jeq $" + skip + ", 0");
+				}
 				varAddress(r, s->var);
 				genDestroy(r, s->var->type, 0);
+				if (!skip.empty())
+					label(skip);
 			}
 			else
 			{
@@ -8599,6 +9017,11 @@ namespace dscript
 			case NodeKind::ExprStmt:
 			{
 				check(s->a);
+				if (s->a->kind == NodeKind::Call && s->a->vaBuiltin == 4)
+				{
+					genForget(s);
+					break;
+				}
 				if (s->a->kind == NodeKind::Ident && s->a->func == nullptr && s->a->var == nullptr && m_funcs.count(s->a->name))
 					error(s->pos, "'" + s->a->name + "' is a sub: call it with " + s->a->name + "()");
 				const size_t mark = beginExpr();
@@ -8615,7 +9038,7 @@ namespace dscript
 				if (s->b)
 				{
 					check(s->b);
-					requireConvertible(s->b, m_types.pointer(m_types.u8()), "the assert message");
+					requireConvertible(s->b, m_types.pointer(m_types.u8(), true), "the assert message");
 				}
 				if (m_options.noAsserts)
 					break;
@@ -8651,7 +9074,7 @@ namespace dscript
 			{
 				// The string goes to the host's terminal (the debug_print instruction).
 				check(s->a);
-				requireConvertible(s->a, m_types.pointer(m_types.u8()), "the debug_print argument");
+				requireConvertible(s->a, m_types.pointer(m_types.u8(), true), "the debug_print argument");
 				const size_t mark = beginExpr();
 				Reg r = gen(s->a);
 				emit("debug_print " + r);
@@ -8787,7 +9210,7 @@ namespace dscript
 					// A local of the sub returned: moved out (its destructor does not run); a call's
 					// result: moved; anything else: copied.
 					Node* value = s->a;
-					if (value->kind == NodeKind::Ident && value->var != nullptr && value->var->storage == VarInfo::Storage::Local && !value->var->param
+					if (value->kind == NodeKind::Ident && value->var != nullptr && ((value->var->storage == VarInfo::Storage::Local && !value->var->param) || value->var->owned)
 						&& value->var->type == ret)
 					{
 						copyValue(r, src, ret);
@@ -9364,6 +9787,7 @@ namespace dscript
 				m_lowOpaque = false;
 			}
 			std::vector<VarInfo*> regParams;
+			std::vector<VarInfo*> allParams;
 			for (size_t i = 0; i < f->paramNames.size(); i++)
 			{
 				VarInfo* v = new VarInfo();
@@ -9374,10 +9798,12 @@ namespace dscript
 				v->pos = f->decl->list[i]->pos;
 				v->defPos = f->decl->list[i]->namePos;
 				v->param = true;
+				v->owned = ownedParam(f->type, i);
 				v->isConst = f->decl->list[i]->constKind == 1;
 				if (m_options.index != nullptr)
 					indexName(v->defPos, v->name, v->defPos, hoverVar(v));
 				m_scopes.back()[v->name] = v;
+				allParams.push_back(v);
 				optRegister(v, true);
 				if (!v->reg.empty())
 					regParams.push_back(v);
@@ -9397,6 +9823,9 @@ namespace dscript
 			m_inDefer = 0;
 			m_atomic = 0;
 			m_regDepth = 0;
+			m_forgetNames.clear();
+			collectForgets(f->decl->a, m_forgetNames);
+			destroyOwnedParams(allParams);
 			// Register parameters: their values into their registers.
 			for (VarInfo* v : regParams)
 				loadVar(v->reg, v, true);
@@ -11047,6 +11476,8 @@ namespace dscript
 				ctFail(e->pos, "it builds an object from a value (a conversion: when the program runs)");
 			case NodeKind::Materialize:
 				ctFail(e->pos, "it passes a value by reference (when the program runs)");
+			case NodeKind::InPlace:
+				ctFail(e->pos, "it builds or destroys a value in memory (when the program runs)");
 			case NodeKind::Call:
 			{
 				if (e->vaBuiltin != 0)
@@ -11806,7 +12237,7 @@ namespace dscript
 			{
 				std::string s = "sub(";
 				for (size_t i = 0; i < t->params.size(); i++)
-					s += (i > 0 ? ", " : "") + interfaceType(t->params[i]);
+					s += (i > 0 ? ", " : "") + (ownedParam(t, i) ? "own (" + interfaceType(t->params[i]) + ")" : interfaceType(t->params[i]));	// ((): own ::x is own::x)
 				if (t->variadic != 0)
 					s += std::string(t->params.empty() ? "" : ", ") + (t->variadic == 2 ? "...typed" : "...");
 				return s + ") -> " + interfaceType(t->base);
@@ -11910,7 +12341,7 @@ namespace dscript
 			for (size_t i = first; i < f->type->params.size() && i < f->paramNames.size(); i++)
 			{
 				const bool constParam = i < d->list.size() && d->list[i]->constKind == 1;
-				text += (i > first ? ", " : "") + std::string(constParam ? "const " : "var ") + f->paramNames[i] + ": " + interfaceType(f->type->params[i]);
+				text += (i > first ? ", " : "") + std::string(constParam ? "const " : "var ") + f->paramNames[i] + ": " + (ownedParam(f->type, i) ? "own (" + interfaceType(f->type->params[i]) + ")" : interfaceType(f->type->params[i]));
 				if (i < f->defaults.size() && f->defaults[i] != nullptr)
 					text += " = " + interfaceValue(f->defaults[i], f->type->params[i]);
 			}

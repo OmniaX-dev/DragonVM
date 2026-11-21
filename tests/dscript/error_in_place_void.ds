@@ -1,0 +1,2 @@
+// expect-error: on a void*: cast it to a pointer to the type first
+sub main() -> i32 { var x: u32 = 1; var p: void* = &x; p->new(); return 0; }

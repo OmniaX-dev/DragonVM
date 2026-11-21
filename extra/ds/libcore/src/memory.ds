@@ -7,7 +7,7 @@ namespace std {
 	// (~2.6 instructions per 4 bytes) when dst isn't 1 - 31 bytes above src (a round reads its 8
 	// words before writing them), then a word at a time (~7 per 4 bytes; the machine takes
 	// unaligned words), the last 0 - 3 bytes one by one.
-	sub memcpy(var dst: void*, var src: void*, var size: u32) -> void* {
+	sub memcpy(var dst: void*, var src: const void*, var size: u32) -> void* {
 		var d: u8* = cast<u8*>(dst);
 		var s: u8* = cast<u8*>(src);
 		var gap: u32 = cast<u32>(d) - cast<u32>(s);
@@ -77,6 +77,25 @@ namespace std {
 		return dst;
 	}
 
+	// Copies size bytes from src to dst, which may overlap in any way (the bytes end up as they
+	// were in src): memcpy when dst is below src or they don't overlap, otherwise backward, a word
+	// at a time while it can.
+	sub memmove(var dst: void*, var src: const void*, var size: u32) -> void* {
+		var d: u8* = cast<u8*>(dst);
+		var s: u8* = cast<u8*>(src);
+		if (d <= s or d >= s + size)
+			return memcpy(dst, src, size);
+		while (size >= 4 and cast<u32>(d) - cast<u32>(s) >= 4) {
+			size -= 4;
+			*cast<u32*>(d + size) = *cast<u32*>(s + size);
+		}
+		while (size > 0) {
+			size--;
+			d[size] = s[size];
+		}
+		return dst;
+	}
+
 	// Sets size bytes at dst to value: 8 words per round (~1.5 instructions per 4 bytes), then a
 	// word at a time, the last 0 - 3 bytes one by one.
 	sub memset(var dst: void*, var value: u8, var size: u32) -> void* {
@@ -130,7 +149,7 @@ namespace std {
 		return dst;
 	}
 
-	sub memcmp(var a: void*, var b: void*, var size: u32) -> i32 {
+	sub memcmp(var a: const void*, var b: const void*, var size: u32) -> i32 {
 	    var x: u8* = cast<u8*>(a);
 	    var y: u8* = cast<u8*>(b);
 	    for (var i: u32 = 0; i < size; i++) {

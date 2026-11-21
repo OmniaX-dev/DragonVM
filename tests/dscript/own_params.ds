@@ -1,0 +1,103 @@
+// expect-rv: 0
+// own parameters: the sub owns the value (it destroys it when it ends, not the caller). A call's
+// result is given to it (no copy), a variable is copied for it. forget(v) (a local or an own
+// parameter) keeps its destructor from running: what it held was moved elsewhere. Returning an own
+// parameter moves it out. Through inline subs, sub pointers (own is part of the type),
+// constructors, methods and virtual subs.
+#include(check.ds)
+
+var g_copies: i32 = 0;
+var g_dels: i32 = 0;
+
+struct Res {
+	var v: i32;
+	sub new(var v: i32) { this->v = v; }
+	sub new(var o: const Res*) { this->v = o->v; g_copies++; }
+	sub del() { g_dels++; }
+};
+struct Unique {
+	var v: i32;
+	sub new(var v: i32) { this->v = v; }
+	priv sub new(var o: const ref Unique) { }
+	sub del() { g_dels++; }
+};
+sub make_res(var v: i32) -> Res { return Res.new(v); }
+sub make_unique(var v: i32) -> Unique { return Unique.new(v); }
+
+sub sink(var r: own Res) -> i32 { return r.v; }					// destroys r when it ends
+inline sub sink_inline(var r: own Res) -> i32 { return r.v; }
+sub pass_back(var r: own Res) -> Res { return r; }				// moved out: not destroyed here
+sub sink_u(var u: own Unique) -> i32 { return u.v; }
+
+var g_kept: Unique[4];
+var g_count: u32 = 0;
+sub keep(var u: own Unique) {								// a container's push: the bytes moved in
+	std::memcpy(&g_kept[g_count], &u, sizeof(Unique));
+	g_count++;
+	forget(u);
+}
+inline sub keep_inline(var u: own Unique) {
+	(&g_kept[g_count])->new(take(&u));
+	g_count++;
+	forget(u);
+}
+sub maybe_keep(var u: own Unique, var yes: bool) -> bool {
+	if (not yes)
+		return false;								// (before forget: destroyed)
+	keep(take(&u));
+	forget(u);
+	return true;
+}
+template(T) {
+	struct Box {
+		var item: T;
+		sub put(var v: own T) { this->item.del(); (&this->item)->new(take(&v)); forget(v); }
+	};
+}
+class Base { virt sub eat(var r: own Res) -> i32 { return r.v; } }
+class Der ex Base { override sub eat(var r: own Res) -> i32 { return r.v * 2; } }
+struct Wrap { var r: Res; sub new(var r: own Res) { (&this->r)->new(take(&r)); forget(r); } };
+
+namespace std { sub memcpy(var d: void*, var s: const void*, var n: u32) { var a: u8* = cast<u8*>(d); var b: const u8* = cast<const u8*>(s); for (var i: u32 = 0; i < n; i++) a[i] = b[i]; } }
+
+sub main() -> i32 {
+	// A call's result: given (no copy, the sub destroys it).
+	check(1, sink(make_res(1)) == 1 and g_copies == 0 and g_dels == 1);
+	check(2, sink_inline(make_res(2)) == 2 and g_copies == 0 and g_dels == 2);
+	// A variable: copied for the sub (which destroys the copy).
+	{
+		var r = Res.new(3);
+		check(3, sink(r) == 3 and g_copies == 1 and g_dels == 3);
+		check(4, sink_inline(r) == 3 and g_copies == 2 and g_dels == 4);
+	}
+	check(5, g_dels == 5);
+	// Returned: moved out of the sub.
+	{
+		var back = pass_back(make_res(4));
+		check(6, back.v == 4 and g_copies == 2 and g_dels == 5);
+	}
+	check(7, g_dels == 6);
+	// Values that can't be copied: moved in, forget.
+	check(8, sink_u(make_unique(5)) == 5 and g_dels == 7);
+	keep(make_unique(6));
+	keep_inline(make_unique(7));
+	check(9, g_count == 2 and g_kept[0].v == 6 and g_kept[1].v == 7 and g_dels == 7);
+	check(10, not maybe_keep(make_unique(8), false) and g_dels == 8);
+	check(11, maybe_keep(make_unique(9), true) and g_kept[2].v == 9 and g_dels == 8);
+	// A sub pointer: own is part of its type.
+	var f: sub(own Res) -> i32 = sink;
+	check(12, f(make_res(10)) == 10 and g_dels == 9 and g_copies == 2);
+	// A template's method, a constructor, a virtual sub.
+	{
+		var b: Box<Unique>;
+		b.put(make_unique(11));
+		check(13, b.item.v == 11 and g_dels == 10);		// (its old item)
+		var w = Wrap.new(make_res(12));
+		check(14, w.r.v == 12 and g_copies == 2 and g_dels == 10);
+		var d: Der;
+		var base: Base* = &d;
+		check(15, base->eat(make_res(13)) == 26 and g_dels == 11);
+	}
+	check(16, g_dels == 13 and g_copies == 2);		// (b's item, w's r)
+	return result();
+}

@@ -1,0 +1,2 @@
+// expect-error: take(p) through a const
+sub main() -> i32 { var x: u32 = 1; var p: const u32* = &x; return cast<i32>(take(p)); }

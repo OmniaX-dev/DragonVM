@@ -59,7 +59,7 @@ namespace dr::dfs {
 	struct Device {
 		var user: void*;
 		var read: sub(void*, u32, u8*, u32) -> i32;		// (user, offset, buffer, size): std::Ok or std::FsErrors.IOError
-		var write: sub(void*, u32, u8*, u32) -> i32;	// same
+		var write: sub(void*, u32, const u8*, u32) -> i32;	// same
 		var now: sub(void*) -> u32;						// seconds (any epoch), may be null
 	};
 
@@ -200,7 +200,7 @@ namespace dr::dfs {
 		return (node->mode & ModeTypeMask) == ModeDir;
 	}
 
-	sub is_dot_name(var name: u8*, var len: u32) -> bool {
+	sub is_dot_name(var name: string, var len: u32) -> bool {
 		return (len == 1 and name[0] == '.') or (len == 2 and name[0] == '.' and name[1] == '.');
 	}
 
@@ -220,7 +220,7 @@ namespace dr::dfs {
 	}
 
 	// Every write goes through here, so a read only volume can't write anything.
-	sub dev_write(var vol: Volume*, var offset: u32, var buffer: u8*, var size: u32) -> i32 {
+	sub dev_write(var vol: Volume*, var offset: u32, var buffer: const u8*, var size: u32) -> i32 {
 		if (vol->read_only)
 			return std::FsErrors.ReadOnly;
 		if (vol->dev.write(vol->dev.user, offset, buffer, size) < 0)
@@ -236,7 +236,7 @@ namespace dr::dfs {
 
 	// Every block write goes through here: a block the pointer caches hold, written from another
 	// buffer (e.g. freed, then reused for data), is dropped from them.
-	sub write_block(var vol: Volume*, var block: u32, var buffer: u8*) -> i32 {
+	sub write_block(var vol: Volume*, var block: u32, var buffer: const u8*) -> i32 {
 		if (block == 0 or block >= vol->layout.total_blocks)
 			return std::FsErrors.Corrupt;
 		if (block == vol->ind_block and buffer != vol->buf_ind)
@@ -517,7 +517,7 @@ namespace dr::dfs {
 		return r;
 	}
 
-	sub fill_dir_entry(var entry: u8*, var size: u32, var ino: u32, var name: u8*, var name_len: u32, var mode: u16) {
+	sub fill_dir_entry(var entry: u8*, var size: u32, var ino: u32, var name: string, var name_len: u32, var mode: u16) {
 		std::memset(entry, 0, size);
 		put32(entry + DirEntInode, ino);
 		entry[DirEntNameLen] = cast<u8>(name_len);
@@ -893,7 +893,7 @@ namespace dr::dfs {
 
 	// Bytes written (fewer when the disk fills up); grows the size and writes the inode.
 	// buf_data, buf_ind, buf_ind2, buf_zero, buf_meta, buf_inode.
-	sub inode_write(var vol: Volume*, var ino: u32, var node: Inode*, var offset: u32, var buffer: u8*, var size: u32) -> i32 {
+	sub inode_write(var vol: Volume*, var ino: u32, var node: Inode*, var offset: u32, var buffer: const u8*, var size: u32) -> i32 {
 		var l: Layout* = &vol->layout;
 		if (vol->read_only)
 			return std::FsErrors.ReadOnly;
@@ -954,7 +954,7 @@ namespace dr::dfs {
 	// The one loop over a directory's entries: finds the first entry at or after *index that
 	// matches. On success buf_dir holds its block, *index is the entry's index, and out_block /
 	// out_offset say where it is.
-	sub dir_find(var vol: Volume*, var dir: Inode*, var index: u32*, var match: u32, var name: u8*, var name_len: u32, var out_block: u32*, var out_offset: u32*) -> i32 {
+	sub dir_find(var vol: Volume*, var dir: Inode*, var index: u32*, var match: u32, var name: string, var name_len: u32, var out_block: u32*, var out_offset: u32*) -> i32 {
 		var l: Layout* = &vol->layout;
 		if ((dir->size & l->block_mask) != 0)
 			return std::FsErrors.Corrupt;
@@ -1004,7 +1004,7 @@ namespace dr::dfs {
 		return write_inode(vol, dir_ino, dir);
 	}
 
-	sub dir_lookup(var vol: Volume*, var dir: Inode*, var name: u8*, var name_len: u32, var out_ino: u32*) -> i32 {
+	sub dir_lookup(var vol: Volume*, var dir: Inode*, var name: string, var name_len: u32, var out_ino: u32*) -> i32 {
 		var index: u32 = 0;
 		var block: u32 = 0;
 		var offset: u32 = 0;
@@ -1014,7 +1014,7 @@ namespace dr::dfs {
 		return std::Ok;
 	}
 
-	sub dir_add(var vol: Volume*, var dir_ino: u32, var dir: Inode*, var name: u8*, var name_len: u32, var ino: u32, var mode: u16) -> i32 {
+	sub dir_add(var vol: Volume*, var dir_ino: u32, var dir: Inode*, var name: string, var name_len: u32, var ino: u32, var mode: u16) -> i32 {
 		var l: Layout* = &vol->layout;
 		if (name_len == 0)
 			return std::FsErrors.Invalid;
@@ -1052,7 +1052,7 @@ namespace dr::dfs {
 		return std::Ok;
 	}
 
-	sub dir_remove(var vol: Volume*, var dir_ino: u32, var dir: Inode*, var name: u8*, var name_len: u32, var out_ino: u32*) -> i32 {
+	sub dir_remove(var vol: Volume*, var dir_ino: u32, var dir: Inode*, var name: string, var name_len: u32, var out_ino: u32*) -> i32 {
 		var index: u32 = 0;
 		var block: u32 = 0;
 		var offset: u32 = 0;
@@ -1066,7 +1066,7 @@ namespace dr::dfs {
 	}
 
 	// Points the entry to another inode (a moved directory's ..).
-	sub dir_set(var vol: Volume*, var dir: Inode*, var name: u8*, var name_len: u32, var ino: u32) -> i32 {
+	sub dir_set(var vol: Volume*, var dir: Inode*, var name: string, var name_len: u32, var ino: u32) -> i32 {
 		var index: u32 = 0;
 		var block: u32 = 0;
 		var offset: u32 = 0;
@@ -1111,12 +1111,12 @@ namespace dr::dfs {
 	// ============================================================================
 	// L6: paths (absolute only; repeated '/' are collapsed)
 	// ============================================================================
-	sub walk(var vol: Volume*, var path: u8*, var parent: bool, var out_ino: u32*, var out_name: u8**, var out_name_len: u32*) -> i32 {
+	sub walk(var vol: Volume*, var path: string, var parent: bool, var out_ino: u32*, var out_name: string*, var out_name_len: u32*) -> i32 {
 		if (path == null or path[0] != '/')
 			return std::FsErrors.Invalid;
 		var ino: u32 = RootInode;
 		var node: Inode;
-		var p: u8* = path;
+		var p: string = path;
 		while (true) {
 			while (*p == '/')
 				p++;
@@ -1126,13 +1126,13 @@ namespace dr::dfs {
 				*out_ino = ino;
 				return std::Ok;
 			}
-			var name: u8* = p;
+			var name: string = p;
 			var len: u32 = 0;
 			while (p[len] != 0 and p[len] != '/')
 				len++;
 			if (len > MaxNameLength)
 				return std::FsErrors.NameTooLong;
-			var next: u8* = p + len;
+			var next: string = p + len;
 			while (*next == '/')
 				next++;
 			var r: i32 = read_inode(vol, ino, &node);
@@ -1152,13 +1152,13 @@ namespace dr::dfs {
 		return std::FsErrors.Invalid;
 	}
 
-	sub resolve(var vol: Volume*, var path: u8*, var out_ino: u32*) -> i32 {
+	sub resolve(var vol: Volume*, var path: string, var out_ino: u32*) -> i32 {
 		return walk(vol, path, false, out_ino, null, null);
 	}
 
 	// The parent directory of the path's last component, which is returned in out_name /
 	// out_name_len (pointing into path).
-	sub resolve_parent(var vol: Volume*, var path: u8*, var out_parent: u32*, var out_name: u8**, var out_name_len: u32*) -> i32 {
+	sub resolve_parent(var vol: Volume*, var path: string, var out_parent: u32*, var out_name: string*, var out_name_len: u32*) -> i32 {
 		return walk(vol, path, true, out_parent, out_name, out_name_len);
 	}
 
@@ -1175,12 +1175,12 @@ namespace dr::dfs {
 		return free_inode(vol, ino);
 	}
 
-	sub make_node(var vol: Volume*, var path: u8*, var mode: u16, var out_ino: u32*) -> i32 {
+	sub make_node(var vol: Volume*, var path: string, var mode: u16, var out_ino: u32*) -> i32 {
 		if (vol->read_only)
 			return std::FsErrors.ReadOnly;
 		var parent: u32 = 0;
 		var ino: u32 = 0;
-		var name: u8* = null;
+		var name: string = null;
 		var name_len: u32 = 0;
 		var r: i32 = resolve_parent(vol, path, &parent, &name, &name_len);
 		if (r < 0) return r;
@@ -1224,16 +1224,16 @@ namespace dr::dfs {
 		return std::Ok;
 	}
 
-	sub create(var vol: Volume*, var path: u8*, var perm: u16, var out_ino: u32* = null) -> i32 {
+	sub create(var vol: Volume*, var path: string, var perm: u16, var out_ino: u32* = null) -> i32 {
 		return make_node(vol, path, cast<u16>(ModeFile | (perm & ModePermMask)), out_ino);
 	}
 
-	sub mkdir(var vol: Volume*, var path: u8*, var perm: u16, var out_ino: u32* = null) -> i32 {
+	sub mkdir(var vol: Volume*, var path: string, var perm: u16, var out_ino: u32* = null) -> i32 {
 		return make_node(vol, path, cast<u16>(ModeDir | (perm & ModePermMask)), out_ino);
 	}
 
 	// The parent directory and the inode of the path's last component.
-	sub lookup_entry(var vol: Volume*, var path: u8*, var out_parent: u32*, var out_parent_node: Inode*, var out_name: u8**, var out_name_len: u32*, var out_ino: u32*, var out_node: Inode*) -> i32 {
+	sub lookup_entry(var vol: Volume*, var path: string, var out_parent: u32*, var out_parent_node: Inode*, var out_name: string*, var out_name_len: u32*, var out_ino: u32*, var out_node: Inode*) -> i32 {
 		var r: i32 = resolve_parent(vol, path, out_parent, out_name, out_name_len);
 		if (r < 0) return r;
 		r = read_inode(vol, *out_parent, out_parent_node);
@@ -1243,13 +1243,13 @@ namespace dr::dfs {
 		return read_inode(vol, *out_ino, out_node);
 	}
 
-	sub unlink(var vol: Volume*, var path: u8*) -> i32 {
+	sub unlink(var vol: Volume*, var path: string) -> i32 {
 		if (vol->read_only)
 			return std::FsErrors.ReadOnly;
 		var parent: u32 = 0;
 		var ino: u32 = 0;
 		var name_len: u32 = 0;
-		var name: u8* = null;
+		var name: string = null;
 		var parent_node: Inode;
 		var node: Inode;
 		var r: i32 = lookup_entry(vol, path, &parent, &parent_node, &name, &name_len, &ino, &node);
@@ -1266,13 +1266,13 @@ namespace dr::dfs {
 		return write_inode(vol, ino, &node);
 	}
 
-	sub rmdir(var vol: Volume*, var path: u8*) -> i32 {
+	sub rmdir(var vol: Volume*, var path: string) -> i32 {
 		if (vol->read_only)
 			return std::FsErrors.ReadOnly;
 		var parent: u32 = 0;
 		var ino: u32 = 0;
 		var name_len: u32 = 0;
-		var name: u8* = null;
+		var name: string = null;
 		var parent_node: Inode;
 		var node: Inode;
 		var r: i32 = lookup_entry(vol, path, &parent, &parent_node, &name, &name_len, &ino, &node);
@@ -1295,7 +1295,7 @@ namespace dr::dfs {
 	}
 
 	// The destination must not exist; a directory can't move into itself.
-	sub rename(var vol: Volume*, var from: u8*, var to: u8*) -> i32 {
+	sub rename(var vol: Volume*, var from: string, var to: string) -> i32 {
 		if (vol->read_only)
 			return std::FsErrors.ReadOnly;
 		var src_parent: u32 = 0;
@@ -1304,8 +1304,8 @@ namespace dr::dfs {
 		var dst_parent: u32 = 0;
 		var dst_len: u32 = 0;
 		var other: u32 = 0;
-		var src_name: u8* = null;
-		var dst_name: u8* = null;
+		var src_name: string = null;
+		var dst_name: string = null;
 		var src_node: Inode;
 		var dst_node: Inode;
 		var node: Inode;
@@ -1374,13 +1374,13 @@ namespace dr::dfs {
 		return write_inode(vol, ino, &node);
 	}
 
-	sub link(var vol: Volume*, var existing: u8*, var new_path: u8*) -> i32 {
+	sub link(var vol: Volume*, var existing: string, var new_path: string) -> i32 {
 		if (vol->read_only)
 			return std::FsErrors.ReadOnly;
 		var ino: u32 = 0;
 		var parent: u32 = 0;
 		var name_len: u32 = 0;
-		var name: u8* = null;
+		var name: string = null;
 		var node: Inode;
 		var parent_node: Inode;
 		var r: i32 = resolve(vol, existing, &ino);
@@ -1408,7 +1408,7 @@ namespace dr::dfs {
 		return r;
 	}
 
-	sub stat(var vol: Volume*, var path: u8*, var out: Inode*, var out_ino: u32* = null) -> i32 {
+	sub stat(var vol: Volume*, var path: string, var out: Inode*, var out_ino: u32* = null) -> i32 {
 		var ino: u32 = 0;
 		var r: i32 = resolve(vol, path, &ino);
 		if (r < 0) return r;
@@ -1417,7 +1417,7 @@ namespace dr::dfs {
 		return read_inode(vol, ino, out);
 	}
 
-	sub chmod(var vol: Volume*, var path: u8*, var perm: u16) -> i32 {
+	sub chmod(var vol: Volume*, var path: string, var perm: u16) -> i32 {
 		if (vol->read_only)
 			return std::FsErrors.ReadOnly;
 		var ino: u32 = 0;
@@ -1429,7 +1429,7 @@ namespace dr::dfs {
 		return write_inode(vol, ino, &node);
 	}
 
-	sub chown(var vol: Volume*, var path: u8*, var uid: u16, var gid: u16) -> i32 {
+	sub chown(var vol: Volume*, var path: string, var uid: u16, var gid: u16) -> i32 {
 		if (vol->read_only)
 			return std::FsErrors.ReadOnly;
 		var ino: u32 = 0;
@@ -1446,7 +1446,7 @@ namespace dr::dfs {
 	// Convenience: whole files by path
 	// ============================================================================
 	// Reads up to size bytes of the file at path into buffer: the bytes read.
-	sub read_file(var vol: Volume*, var path: u8*, var buffer: u8*, var size: u32) -> i32 {
+	sub read_file(var vol: Volume*, var path: string, var buffer: u8*, var size: u32) -> i32 {
 		var node: Inode;
 		var r: i32 = stat(vol, path, &node);
 		if (r < 0) return r;
@@ -1456,7 +1456,7 @@ namespace dr::dfs {
 	}
 
 	// Creates (or replaces the content of) the file at path: the bytes written.
-	sub write_file(var vol: Volume*, var path: u8*, var buffer: u8*, var size: u32, var perm: u16 = 0x1A4) -> i32 {	// 0644
+	sub write_file(var vol: Volume*, var path: string, var buffer: const u8*, var size: u32, var perm: u16 = 0x1A4) -> i32 {	// 0644
 		var ino: u32 = 0;
 		var node: Inode;
 		var r: i32 = stat(vol, path, &node, &ino);
@@ -1499,8 +1499,8 @@ namespace dr::dfs {
 		return disk_transfer(cast<DiskPartition*>(user), DiskMode.Read, offset, buffer, size);
 	}
 
-	sub disk_write(var user: void*, var offset: u32, var buffer: u8*, var size: u32) -> i32 {
-		return disk_transfer(cast<DiskPartition*>(user), DiskMode.Write, offset, buffer, size);
+	sub disk_write(var user: void*, var offset: u32, var buffer: const u8*, var size: u32) -> i32 {
+		return disk_transfer(cast<DiskPartition*>(user), DiskMode.Write, offset, cast<u8*>(buffer), size);	// (only read from: Write mode)
 	}
 
 	// Fills out with a device on part (which must live as long as the device is used). There is

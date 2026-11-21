@@ -1,0 +1,18 @@
+// expect-rv: 0
+// string is const u8*: string literals (and string constants) are read-only text. A u8 buffer
+// converts to a string (to read it); writing text needs a u8* (strcpy, itoa: they return it).
+#import("libcore")
+#include(check.ds)
+const GREETING = "hi";
+sub first(var s: string) -> u8 { return s[0]; }
+sub main() -> i32 {
+	var buf: u8[16];
+	var s: string = std::strcpy(buf, "abc");		// u8* to string: fine
+	var w: u8* = std::strcpy(buf, GREETING);
+	w[0] = 'H';
+	check(1, first(s) == 'H' and first("xyz") == 'x');
+	var n: u8[12];
+	check(2, std::strcmp(std::itoa(42, n), "42") == 0);
+	static_assert(is_type(string, const u8*));
+	return result();
+}

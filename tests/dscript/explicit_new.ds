@@ -1,0 +1,76 @@
+// expect-rv: 0
+// p->new(args) on memory from elsewhere: the object's default values and tables first, then its
+// constructor (as for a declared value). make<T>(args) written once per argument count, with a
+// variable whose type comes from a sub template's result (a struct instance made there first).
+#include(check.ds)
+
+var g_dels: i32 = 0;
+
+struct Thing {
+	var a: i32 = 11;
+	var b: i32 = 22;
+	var c: i32 = 33;
+	sub new() { }
+	sub new(var a: i32) { this->a = a; }
+	sub new(var a: i32, var b: i32) { this->a = a; this->b = b; }
+	sub del() { g_dels++; }
+}
+struct Fast {
+	var x: u8 = 5;
+	var y: i32 = -4;
+	inline sub new(var y: i32) { this->y = y; }		// (an inline constructor: the same)
+}
+class Base { var v: i32 = 7; virt sub kind() -> i32 { return 1; } }
+class Der ex Base { var w: i32 = 8; override sub kind() -> i32 { return 2; } }
+
+var arena: u32[64];
+var used: u32 = 0;
+sub grab(var bytes: u32) -> void* {
+	var p: void* = &arena[used];
+	used += (bytes + 3) / 4;
+	return p;
+}
+
+template(T) {
+	struct Unique {
+		priv var p: T*;
+		sub new(var p: T*) { this->p = p; }
+		priv sub new(var o: const ref Unique<T>) { }
+		sub del() { if (this->p != null) this->p->del(); }
+		sub operator->() -> T* { return this->p; }
+	}
+}
+template(T)       { sub make() -> Unique<T>                   { var p: T* = cast<T*>(grab(sizeof(T))); p->new();     return Unique<T>.new(p); } }
+template(T, A)    { sub make(var a: A) -> Unique<T>           { var p: T* = cast<T*>(grab(sizeof(T))); p->new(a);    return Unique<T>.new(p); } }
+template(T, A, B) { sub make(var a: A, var b: B) -> Unique<T> { var p: T* = cast<T*>(grab(sizeof(T))); p->new(a, b); return Unique<T>.new(p); } }
+
+sub main() -> i32 {
+	for (var i: u32 = 0; i < 64; i++)
+		arena[i] = 0xEEEEEEEE;
+	{
+		var x = make<Thing>(1, 2);
+		var y = make<Thing>(5);
+		var z = make<Thing>();
+		check(1, x->a == 1 and x->b == 2 and x->c == 33);
+		check(2, y->a == 5 and y->b == 22 and y->c == 33);
+		check(3, z->a == 11 and z->b == 22 and z->c == 33);
+	}
+	check(4, g_dels == 3);
+
+	var f: Fast* = cast<Fast*>(grab(sizeof(Fast)));
+	f->new(9);
+	check(5, f->x == 5 and f->y == 9);
+
+	// A class: its defaults (the base's too) and its table.
+	var d: Der* = cast<Der*>(grab(sizeof(Der)));
+	d->new();
+	var b: Base* = d;
+	check(6, d->v == 7 and d->w == 8 and b->kind() == 2);
+
+	// x.new(args) on a variable builds it again: its defaults, then the constructor.
+	var t: Thing(1, 2);
+	t.c = 99;
+	t.new(4);
+	check(7, t.a == 4 and t.b == 22 and t.c == 33);
+	return result();
+}

@@ -1,0 +1,10 @@
+// expect-error: private
+// A heap can't be copied (a second header for the same blocks): its copy constructor is private.
+#import("libcore")
+
+var g_heap: std::Heap();
+
+sub main() -> i32 {
+	var copy: std::Heap = g_heap;
+	return 0;
+}

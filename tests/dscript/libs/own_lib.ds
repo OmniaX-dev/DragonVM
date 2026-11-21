@@ -1,0 +1,9 @@
+// A library with own parameters (used by own_params_library.ds).
+namespace ol {
+	var dels: i32 = 0;
+	struct Item { var v: i32; sub new(var v: i32) { this->v = v; } sub del() { dels++; } };
+	sub make(var v: i32) -> Item { return Item.new(v); }
+	sub consume(var it: own Item) -> i32 { return it.v; }
+	inline sub consume_inline(var it: own Item) -> i32 { return it.v + 1; }
+	var g_fn: sub(own Item) -> i32 = consume;
+}

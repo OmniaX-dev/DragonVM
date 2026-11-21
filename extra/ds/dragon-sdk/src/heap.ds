@@ -1,359 +1,41 @@
-// heap.ds - a general purpose memory allocator over one or more regions of memory.
+// heap.ds - the SDK's heap: libcore's allocator (std::BasicHeap, see libcore/src/heap.ds), with
+// its operations protected from interrupts, and the system heap.
 //
 //     var heap: dr::Heap* = dr::Heap::create(cast<u8*>(0x01800000), 4 * 1024 * 1024);
 //     heap->add_region(cast<u8*>(boot_stack_start), boot_stack_size);	// more memory, anywhere
 //     var p: u8* = heap->alloc(100);
-//     var page: u8* = heap->alloc_aligned(4096, 4096);
-//     p = heap->realloc(p, 200);
 //     heap->free(p);
 //
-// The heap keeps its state in the memory it manages (its header at the start of the first
-// region), not in globals: the BIOS runs from ROM and has none, and the heap can be handed from
-// one program to the next (the BIOS's to the boot loader and the kernel: the system heap below).
-//
-// Each region is a list of blocks, one after the other: an 8 byte header (the block's size, the
-// header included, and a tag: free or used, which also catches bad pointers and double frees),
-// then the memory, 8 byte aligned. alloc takes the first free block that fits (merging it with
-// the free blocks after it first) and splits off the rest; free marks the block free and merges
-// it with the free blocks after it. Regions don't need to be adjacent or in any order.
-//
 // In supervisor mode every operation runs with interrupts disabled (an interrupt handler may use
-// the heap the code it interrupted is using); in user mode (where the interrupt flag is
-// privileged) they don't: a user program has no interrupt handlers of its own.
+// the heap the code it interrupted is using), and puts them back as they were; in user mode (where
+// the interrupt flag is privileged) nothing changes: a user program has no interrupt handlers of
+// its own (it can use std::Heap directly).
 #include(cpu.ds)
 
 namespace dr {
-	const HeapMaxRegions: u32 = 16;
-	const __HeapMagic: u32 = 0x48454150;		// "HEAP"
-	const __HeapTagFree: u32 = 0x46524545;		// "FREE"
-	const __HeapTagUsed: u32 = 0x55534544;		// "USED"
-	const __HeapHeader: u32 = 8;
-	const __HeapAlign: u32 = 8;
-	const __HeapMinBlock: u32 = 16;				// the smallest block worth splitting off: a header and 8 bytes
+	// The guard of a heap interrupt handlers may use (see std::BasicHeap).
+	struct InterruptGuard {
+		// Supervisor mode: disables interrupts, and says whether they were enabled. User mode: 0.
+		static sub enter() -> u32 {
+			if (not cpu::is_supervisor())
+				return 0;
+			var flags: u32 = 0;
+			low {
+				mov $flags, FL
+				zflg $CPUFlags.InterruptsEnabled
+			}
+			return flags & (1u << CPUFlags.InterruptsEnabled);
+		}
 
-	struct HeapRegion {
-		var start: u32;						// the first block
-		var end: u32;						// after the last block
+		static sub leave(var saved: u32) {
+			if (saved != 0) {
+				low { sflg $CPUFlags.InterruptsEnabled }
+			}
+		}
 	};
 
-	struct Heap {
-		priv var magic: u32;
-		priv var count: u32;
-		priv var list: HeapRegion[HeapMaxRegions];
-
-		// A heap over [start, start + size): its header first, the rest is the first region.
-		// null if the memory is too small.
-		static sub create(var start: u8*, var size: u32) -> Heap* {
-			var a: u32 = (cast<u32>(start) + __HeapAlign - 1) & ~(__HeapAlign - 1);
-			var pad: u32 = a - cast<u32>(start);
-			var header: u32 = (sizeof(Heap) + __HeapAlign - 1) & ~(__HeapAlign - 1);
-			if (size < pad + header + __HeapMinBlock)
-				return null;
-			var h: Heap* = cast<Heap*>(a);
-			h->magic = __HeapMagic;
-			h->count = 0;
-			h->add_region(cast<u8*>(a + header), size - pad - header);
-			return h;
-		}
-
-		// A heap made by create (the header is intact).
-		static sub valid(var h: Heap*) -> bool {
-			return h != null and h->magic == __HeapMagic and h->count >= 1 and h->count <= HeapMaxRegions;
-		}
-
-		// More memory: [start, start + size), which must not overlap the heap's other regions or its
-		// header. False if it does, if it's too small, or if the heap has HeapMaxRegions already.
-		sub add_region(var start: u8*, var size: u32) -> bool {
-			var s: u32 = (cast<u32>(start) + __HeapAlign - 1) & ~(__HeapAlign - 1);
-			var e: u32 = (cast<u32>(start) + size) & ~(__HeapAlign - 1);
-			if (cast<u32>(start) + size < cast<u32>(start))
-				return false;					// past the end of the address space
-			if (e <= s or e - s < __HeapMinBlock or this->count >= HeapMaxRegions)
-				return false;
-			var me: u32 = cast<u32>(this);
-			if (s < me + sizeof(Heap) and me < e)
-				return false;
-			for (var i: u32 = 0; i < this->count; i++) {
-				if (s < this->list[i].end and this->list[i].start < e)
-					return false;
-			}
-			var b: u32* = cast<u32*>(s);
-			b[0] = e - s;
-			b[1] = __HeapTagFree;
-			this->list[this->count].start = s;
-			this->list[this->count].end = e;
-			this->count++;
-			return true;
-		}
-
-		sub region_count() -> u32 { return this->count; }
-		sub region(var i: u32) -> HeapRegion* { return &this->list[i]; }
-
-		// size bytes, 8 byte aligned; null if there is no room (or size is 0).
-		sub alloc(var size: u32) -> void* {
-			return this->alloc_aligned(size, __HeapAlign);
-		}
-
-		// size bytes at an address that is a multiple of align (a power of 2: 4096 for a page).
-		sub alloc_aligned(var size: u32, var align: u32) -> void* {
-			if (not cpu::is_supervisor())
-				return this->__alloc(size, align);
-			var p: void* = null;
-			atomic { p = this->__alloc(size, align); }
-			return p;
-		}
-
-		// size bytes, zeroed.
-		sub alloc_zeroed(var size: u32) -> void* {
-			var p: void* = this->alloc(size);
-			if (p != null)
-				std::memset(p, 0, size);
-			return p;
-		}
-
-		// False for a pointer the heap didn't give (or gave and took back already). null: true.
-		sub free(var p: void*) -> bool {
-			if (p == null)
-				return true;
-			if (not cpu::is_supervisor())
-				return this->__free(p);
-			var ok: bool = false;
-			atomic { ok = this->__free(p); }
-			return ok;
-		}
-
-		// p's memory, grown or shrunk to size bytes (in place when it can, else moved: the
-		// contents are copied, up to the smaller size). null p: alloc; size 0: free (null). null
-		// if there is no room (p is still valid then) or p is not the heap's.
-		sub realloc(var p: void*, var size: u32) -> void* {
-			if (p == null)
-				return this->alloc(size);
-			if (size == 0) {
-				this->free(p);
-				return null;
-			}
-			var done: bool = false;
-			if (not cpu::is_supervisor()) {
-				done = this->__resize(p, size);
-			}
-			else {
-				atomic { done = this->__resize(p, size); }
-			}
-			if (done)
-				return p;
-			var old: u32 = this->block_size(p);
-			if (old == 0)
-				return null;
-			var q: void* = this->alloc(size);
-			if (q == null)
-				return null;
-			std::memcpy(q, p, old < size ? old : size);
-			this->free(p);
-			return q;
-		}
-
-		// The usable size of p's block (at least what was asked for); 0 if p is not the heap's.
-		sub block_size(var p: void*) -> u32 {
-			var b: u32 = this->__used_block(p);
-			if (b == 0)
-				return 0;
-			return *cast<u32*>(b) - __HeapHeader;
-		}
-
-		// p is in one of the heap's regions.
-		sub owns(var p: void*) -> bool {
-			return this->__region_of(cast<u32>(p)) < this->count;
-		}
-
-		// All the regions' bytes, the headers included.
-		sub total_bytes() -> u32 {
-			var n: u32 = 0;
-			for (var i: u32 = 0; i < this->count; i++)
-				n += this->list[i].end - this->list[i].start;
-			return n;
-		}
-
-		// The bytes in free blocks (headers included: the most a single alloc could get is
-		// largest_free).
-		sub free_bytes() -> u32 {
-			var n: u32 = 0;
-			for (var i: u32 = 0; i < this->count; i++) {
-				var b: u32 = this->list[i].start;
-				while (b < this->list[i].end) {
-					if (cast<u32*>(b)[1] == __HeapTagFree)
-						n += *cast<u32*>(b);
-					b += *cast<u32*>(b);
-				}
-			}
-			return n;
-		}
-
-		// The largest alloc that would succeed now (free neighbours counted as one).
-		sub largest_free() -> u32 {
-			var best: u32 = 0;
-			for (var i: u32 = 0; i < this->count; i++) {
-				var b: u32 = this->list[i].start;
-				var run: u32 = 0;
-				while (b < this->list[i].end) {
-					if (cast<u32*>(b)[1] == __HeapTagFree) {
-						run += *cast<u32*>(b);
-						if (run - __HeapHeader > best)
-							best = run - __HeapHeader;
-					}
-					else
-						run = 0;
-					b += *cast<u32*>(b);
-				}
-			}
-			return best;
-		}
-
-		// Walks every block: true if the heap is consistent (each header has a valid tag and size,
-		// and each region's blocks add up to it exactly). For debugging: after a buffer overrun,
-		// the next block's header is usually what breaks.
-		sub check() -> bool {
-			if (not Heap::valid(this))
-				return false;
-			for (var i: u32 = 0; i < this->count; i++) {
-				var b: u32 = this->list[i].start;
-				var e: u32 = this->list[i].end;
-				while (b < e) {
-					var size: u32 = *cast<u32*>(b);
-					var tag: u32 = cast<u32*>(b)[1];
-					if ((tag != __HeapTagFree and tag != __HeapTagUsed) or size < __HeapHeader
-						or (size & (__HeapAlign - 1)) != 0 or size > e - b)
-						return false;
-					b += size;
-				}
-			}
-			return true;
-		}
-
-		// ===== The implementation (interrupts handled by the callers) =====
-
-		// The region with address, or region_count.
-		priv sub __region_of(var address: u32) -> u32 {
-			for (var i: u32 = 0; i < this->count; i++) {
-				if (address >= this->list[i].start and address < this->list[i].end)
-					return i;
-			}
-			return this->count;
-		}
-
-		// The block p came from (its header's address), 0 if p is not a used block of the heap.
-		priv sub __used_block(var p: void*) -> u32 {
-			var b: u32 = cast<u32>(p) - __HeapHeader;
-			if (cast<u32>(p) < __HeapHeader or (cast<u32>(p) & (__HeapAlign - 1)) != 0)
-				return 0;
-			var r: u32 = this->__region_of(b);
-			if (r == this->count)
-				return 0;
-			var size: u32 = *cast<u32*>(b);
-			if (cast<u32*>(b)[1] != __HeapTagUsed or size < __HeapHeader or size > this->list[r].end - b)
-				return 0;
-			return b;
-		}
-
-		// Merges the free blocks right after b into b (b: any block, end: its region's end).
-		priv static sub __merge_next(var b: u32, var end: u32) {
-			var next: u32 = b + *cast<u32*>(b);
-			while (next < end and cast<u32*>(next)[1] == __HeapTagFree) {
-				var size: u32 = *cast<u32*>(next);
-				cast<u32*>(next)[1] = 0;		// (a stale header no longer looks like a block)
-				*cast<u32*>(b) += size;
-				next += size;
-			}
-		}
-
-		// Cuts b down to size bytes; the rest becomes a free block (if it's big enough for one).
-		priv static sub __split(var b: u32, var size: u32, var end: u32) {
-			var total: u32 = *cast<u32*>(b);
-			if (total - size < __HeapMinBlock)
-				return;
-			*cast<u32*>(b) = size;
-			var rest: u32 = b + size;
-			*cast<u32*>(rest) = total - size;
-			cast<u32*>(rest)[1] = __HeapTagFree;
-			Heap::__merge_next(rest, end);
-		}
-
-		priv sub __alloc(var size: u32, var align: u32) -> void* {
-			if (size == 0 or size > 0x7FFFFFF0)
-				return null;
-			if (align < __HeapAlign)
-				align = __HeapAlign;
-			if ((align & (align - 1)) != 0)
-				return null;
-			var need: u32 = (size + __HeapAlign - 1) & ~(__HeapAlign - 1);
-			for (var i: u32 = 0; i < this->count; i++) {
-				var end: u32 = this->list[i].end;
-				var b: u32 = this->list[i].start;
-				while (b < end) {
-					if (cast<u32*>(b)[1] != __HeapTagFree) {
-						b += *cast<u32*>(b);
-						continue;
-					}
-					Heap::__merge_next(b, end);
-					var block_end: u32 = b + *cast<u32*>(b);
-					// The memory's address: aligned; if that leaves a gap before it, the gap must
-					// hold a free block of its own.
-					var p: u32 = (b + __HeapHeader + align - 1) & ~(align - 1);
-					if (p != b + __HeapHeader and p - __HeapHeader - b < __HeapMinBlock)
-						p = (b + __HeapHeader + __HeapMinBlock + align - 1) & ~(align - 1);
-					if (p < block_end and block_end - p >= need) {
-						var u: u32 = p - __HeapHeader;
-						if (u != b) {
-							*cast<u32*>(u) = block_end - u;		// the gap stays free
-							*cast<u32*>(b) = u - b;
-						}
-						cast<u32*>(u)[1] = __HeapTagUsed;
-						Heap::__split(u, need + __HeapHeader, end);
-						return cast<void*>(p);
-					}
-					b = block_end;
-				}
-			}
-			return null;
-		}
-
-		priv sub __free(var p: void*) -> bool {
-			var b: u32 = this->__used_block(p);
-			if (b == 0)
-				return false;
-			cast<u32*>(b)[1] = __HeapTagFree;
-			Heap::__merge_next(b, this->list[this->__region_of(b)].end);
-			return true;
-		}
-
-		// p's block resized in place (shrunk, or grown into the free blocks after it).
-		priv sub __resize(var p: void*, var size: u32) -> bool {
-			var b: u32 = this->__used_block(p);
-			if (b == 0 or size > 0x7FFFFFF0)
-				return false;
-			var need: u32 = ((size + __HeapAlign - 1) & ~(__HeapAlign - 1)) + __HeapHeader;
-			var end: u32 = this->list[this->__region_of(b)].end;
-			if (*cast<u32*>(b) < need) {
-				// Take the free blocks after it, then give back what isn't needed.
-				var total: u32 = *cast<u32*>(b);
-				var next: u32 = b + total;
-				while (next < end and cast<u32*>(next)[1] == __HeapTagFree and total < need) {
-					total += *cast<u32*>(next);
-					next = b + total;
-				}
-				if (total < need)
-					return false;
-				var n: u32 = b + *cast<u32*>(b);
-				while (n < next) {
-					var s: u32 = *cast<u32*>(n);
-					cast<u32*>(n)[1] = 0;
-					n += s;
-				}
-				*cast<u32*>(b) = total;
-			}
-			Heap::__split(b, need, end);
-			return true;
-		}
-	};
+	alias Heap = std::BasicHeap<InterruptGuard>;
+	alias HeapRegion = std::HeapRegion;
 
 	// The system heap: the one dr::bios_alloc and dr::bios_free use (through the BIOS's int 0x20), its
 	// header's address in the CMOS (HeapStart; HeapEnd: the end of its first region). The BIOS
@@ -370,6 +52,22 @@ namespace dr {
 	// Supervisor mode only (the CMOS).
 	sub set_system_heap(var h: Heap*) {
 		write_cmos(CMOSRegisters.HeapStart, cast<u32>(h));
-		write_cmos(CMOSRegisters.HeapEnd, h == null ? 0 : h->region(0)->end);
+		write_cmos(CMOSRegisters.HeapEnd, h == null ? 0 : h->first_region()->end);
 	}
+
+	// libcore's containers on the system heap (a kernel's: after set_system_heap):
+	//     var procs: std::BasicVector<Process*, dr::SystemAllocator>;
+	//     var name: std::BasicString<dr::SystemAllocator> = "init";
+	// (null: no system heap, or no room in it.)
+	struct SystemAllocator {
+		static sub alloc(var size: u32) -> void* {
+			var h: Heap* = system_heap();
+			return h != null ? h->alloc(size) : null;
+		}
+		static sub free(var p: void*) {
+			var h: Heap* = system_heap();
+			if (h != null)
+				h->free(p);
+		}
+	};
 }

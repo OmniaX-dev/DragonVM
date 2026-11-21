@@ -1,0 +1,4 @@
+// expect-error: cannot convert
+struct U { var v: i32; sub del() { } };
+sub sink(var u: own U) { }
+sub main() -> i32 { var f: sub(U) -> void = sink; return 0; }

@@ -30,6 +30,9 @@ namespace dscript
 		SourcePos pos;
 		SourcePos defPos;			// where the name is declared
 		bool param { false };		// a parameter (also those of an expanded inline sub)
+		bool owned { false };		// an own parameter: the sub destroys it (a scope-end destructor, as a local's)
+		bool hasDropFlag { false };	// a drop flag at FP + dropFlag: 1 while it is to be destroyed (forget(v) clears it)
+		int32_t dropFlag { 0 };
 		bool isStatic { false };	// a static variable / constant array of a sub (<sub>::<name>)
 		bool external { false };	// in a library (#import): only declared here
 		const Node* decl { nullptr };	// globals: the declaration
@@ -244,6 +247,16 @@ namespace dscript
 			FuncInfo* functionForType(const std::vector<FuncInfo*>& funcs, Type* fnType);
 			VarInfo* lookupVar(const std::string& name);
 			bool isTypeName(const std::string& name);
+			Type* aliasType(const std::string& name, const SourcePos& pos);
+			bool inPlace(Node* e, Node* obj);
+			bool takeBuiltin(Node* e);
+			bool forgetBuiltin(Node* e);
+			void genForget(Node* s);
+			void destroyOwnedParams(const std::vector<VarInfo*>& params);
+			std::set<std::string> m_forgetNames;	// the names forget(...) takes in the sub being generated (those variables get a drop flag)
+			void collectForgets(Node* n, std::set<std::string>& out);
+			void setDropFlag(VarInfo* v);
+			Type* templateType(const std::string& name, const std::vector<Type*>& args, const SourcePos& pos);
 
 			// ===== code generation =====
 			void genFunction(FuncInfo* f);
@@ -541,6 +554,7 @@ namespace dscript
 			static bool returnsStruct(const Type* fn) { return fn != nullptr && fn->base != nullptr && fn->base->kind == Type::Kind::Struct; }
 			int32_t temporary(uint32_t size);
 			std::vector<InlineCall> m_inline;
+			const Node* m_fieldOwner = nullptr;		// the struct whose fields' types are being resolved (insideStruct)
 			bool m_discarding { false };	// checking an inline sub whose code is not kept
 			// --no-inline: the calls between subs declared inline (caller -> callee, at), so that
 			// recursion through them is still an error (it would be when inlining).

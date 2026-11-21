@@ -10,7 +10,7 @@ inline sub clamp(var v: i32, var lo: i32 = 0, var hi: i32 = 100) -> i32 {
     return v;
 }
 
-inline sub first_zero(var s: u8*) -> u32 {
+inline sub first_zero(var s: string) -> u32 {
     var i: u32 = 0;
     while (s[i] != 0) {
         if (s[i] == ' ')

@@ -1,0 +1,4 @@
+// expect-error: a reference refers to the caller's value
+struct U { var v: i32; };
+sub f(var u: own ref U) { }
+sub main() -> i32 { return 0; }

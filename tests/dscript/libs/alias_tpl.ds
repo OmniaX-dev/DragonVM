@@ -1,0 +1,9 @@
+// A library with a struct template and alias templates over it (used by template_alias_library.ds).
+namespace atl {
+	template(T, A) {
+		struct BasicCell { var v: T; readonly sub tag() -> u32 { return A.tag(); } };
+	}
+	struct TagB { static sub tag() -> u32 { return 42; } };
+	template(T) { alias Cell = BasicCell<T, TagB>; }
+	template(T) { alias Ptr = T*; }
+}

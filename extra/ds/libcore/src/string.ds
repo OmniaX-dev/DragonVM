@@ -15,8 +15,8 @@ namespace std {
 	    return cast<i32>(*a) - cast<i32>(*b);
 	}
 
-	sub strcpy(var dst: string, var src: string) -> string {
-	    var d: string = dst;
+	sub strcpy(var dst: u8*, var src: string) -> u8* {
+	    var d: u8* = dst;
 	    while (*src != 0) {
 	        *d = *src;
 	        d++;

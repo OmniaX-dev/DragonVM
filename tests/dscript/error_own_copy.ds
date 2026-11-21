@@ -1,0 +1,4 @@
+// expect-error: copying it needs a copy constructor
+struct U { var v: i32; sub del() { } };
+sub sink(var u: own U) { }
+sub main() -> i32 { var x: U; sink(x); return 0; }

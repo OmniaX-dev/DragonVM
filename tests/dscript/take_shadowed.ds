@@ -1,0 +1,20 @@
+// expect-rv: 0
+// take is a built-in only where nothing else has that name: a sub take (also in a namespace, called
+// from inside it), a variable take (a sub pointer) are what they are.
+#include(check.ds)
+namespace ns {
+	sub take(var p: u32*) -> u32 { return *p + 100; }
+	sub use(var p: u32*) -> u32 { return take(p); }
+}
+sub twice(var p: u32*) -> u32 { return *p * 2; }
+sub main() -> i32 {
+	var x: u32 = 5;
+	check(1, ns::use(&x) == 105);
+	check(2, ns::take(&x) == 105);
+	check(3, take(&x) == 5);
+	{
+		var take: sub(u32*) -> u32 = twice;
+		check(4, take(&x) == 10);
+	}
+	return result();
+}

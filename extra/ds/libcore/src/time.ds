@@ -282,7 +282,7 @@ namespace std::time {
 		inline sub getFormat() -> string { return this->m_format; }
 
 		// The DateTime as text in its format, cut to fit out (size bytes, with the terminator).
-		sub toString(var out: u8*, var size: u32) -> string {
+		sub toString(var out: u8*, var size: u32) -> u8* {
 			if (size == 0)
 				return out;
 			var year: i32;
@@ -293,7 +293,7 @@ namespace std::time {
 			var second: u32;
 			this->getFields(&year, &month, &day, &hour, &minute, &second);
 			var pos: u32 = 0;
-			var f: u8* = this->m_format;
+			var f: string = this->m_format;
 			while (*f != 0) {
 				var length: u32;
 				var token: u32 = __format_token(f, &length);
@@ -326,7 +326,7 @@ namespace std::time {
 			var second: u32 = 0;
 			var pos: u32 = 0;
 			var ok: bool = true;
-			var f: u8* = this->m_format;
+			var f: string = this->m_format;
 			while (ok and *f != 0) {
 				var length: u32;
 				var token: u32 = __format_token(f, &length);

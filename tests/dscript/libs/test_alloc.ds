@@ -1,0 +1,53 @@
+// The containers' tests: TestAlloc, an allocator over a std::Heap in an array, counting what is
+// allocated and freed (live() == 0: nothing leaked), and failing on demand (fail_after).
+#once
+var __ta_arena: u8[96 * 1024];
+var __ta_heap: std::Heap();
+var __ta_ready: bool = false;
+var __ta_live: i32 = 0;
+var __ta_allocs: u32 = 0;
+var __ta_fail_after: i32 = -1;		// -1: never; n: the next n allocations work, then they fail
+struct TestAlloc {
+	static sub alloc(var size: u32) -> void* {
+		if (not __ta_ready) {
+			__ta_heap.add_region(&__ta_arena[0], 96 * 1024);
+			__ta_ready = true;
+		}
+		if (__ta_fail_after == 0)
+			return null;
+		if (__ta_fail_after > 0)
+			__ta_fail_after--;
+		var p: void* = __ta_heap.alloc(size);
+		if (p != null) { __ta_live++; __ta_allocs++; }
+		return p;
+	}
+	static sub free(var p: void*) {
+		if (p == null) return;
+		__ta_heap.free(p);
+		__ta_live--;
+	}
+	static sub live() -> i32 { return __ta_live; }
+	static sub fail_after(var n: i32) { __ta_fail_after = n; }
+};
+
+// An element that counts its copies and destructions (a container must destroy each value once).
+var g_copies: i32 = 0;
+var g_dels: i32 = 0;
+struct Tracked {
+	var v: i32;
+	sub new() { this->v = 0; }
+	sub new(var v: i32) { this->v = v; }
+	sub new(var o: const ref Tracked) { this->v = o.v; g_copies++; }
+	sub del() { g_dels++; }
+	readonly sub operator==(var o: const ref Tracked) -> bool { return this->v == o.v; }
+	readonly sub operator<(var o: const ref Tracked) -> bool { return this->v < o.v; }
+	readonly sub hash() -> u32 { return std::hash_u32(cast<u32>(this->v)); }
+};
+// One that can't be copied (only moved).
+struct Solo {
+	var v: i32;
+	sub new(var v: i32) { this->v = v; }
+	priv sub new(var o: const ref Solo) { }
+	sub del() { g_dels++; }
+};
+sub solo(var v: i32) -> Solo { return Solo.new(v); }

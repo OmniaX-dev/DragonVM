@@ -1,0 +1,4 @@
+// expect-error: its caller destroys a parameter
+struct U { var v: i32; sub del() { } };
+sub keep(var u: U) { forget(u); }
+sub main() -> i32 { var x: U; keep(x); return 0; }

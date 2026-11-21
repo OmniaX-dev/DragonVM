@@ -46,7 +46,7 @@ namespace dscript
 			{
 				std::string s = "sub(";
 				for (size_t i = 0; i < params.size(); i++)
-					s += (i > 0 ? ", " : "") + params[i]->name(brief);
+					s += (i > 0 ? ", " : "") + std::string(i < 32 && (owned & (1u << i)) != 0 ? "own " : "") + params[i]->name(brief);
 				if (variadic != 0)
 					s += std::string(params.empty() ? "" : ", ") + (variadic == 2 ? "...typed" : "...");
 				return s + ") -> " + base->name(brief);
@@ -143,17 +143,18 @@ namespace dscript
 		return t;
 	}
 
-	Type* TypeTable::function(const std::vector<Type*>& params, Type* ret, int variadic)
+	Type* TypeTable::function(const std::vector<Type*>& params, Type* ret, int variadic, uint32_t owned)
 	{
 		for (Type* t : m_types)
 		{
-			if (t->kind == Type::Kind::Function && t->base == ret && t->params == params && t->variadic == variadic)
+			if (t->kind == Type::Kind::Function && t->base == ret && t->params == params && t->variadic == variadic && t->owned == owned)
 				return t;
 		}
 		Type* t = make(Type::Kind::Function);
 		t->base = ret;
 		t->params = params;
 		t->variadic = variadic;
+		t->owned = owned;
 		return t;
 	}
 
@@ -180,7 +181,7 @@ namespace dscript
 		if (name == "i32" || name == "int") return m_i32;
 		if (name == "u32" || name == "uint") return m_u32;
 		if (name == "f32" || name == "float") return m_f32;
-		if (name == "string") return pointer(m_u8);
+		if (name == "string") return pointer(m_u8, true);		// const u8*: text to read (literals are)
 		return nullptr;
 	}
 }

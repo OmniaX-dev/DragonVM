@@ -1,0 +1,555 @@
+// heap.ds - a general purpose memory allocator over regions of memory, independent of the machine.
+//
+//     var heap: std::Heap* = std::Heap::create(cast<u8*>(0x01800000), 4 * 1024 * 1024);
+//     heap->add_region(cast<u8*>(more), more_size);		// more memory, anywhere
+//     var p: u8* = heap->alloc(100);
+//     var page: u8* = heap->alloc_aligned(4096, 4096);
+//     p = heap->realloc(p, 200);
+//     heap->free(p);
+//
+//     var g_heap: std::Heap();							// or a heap that is a variable (no regions yet)
+//
+// std::Heap is std::BasicHeap<std::NoGuard>: nothing protects its operations from being
+// interrupted. A heap shared with interrupt handlers takes a guard that does (the SDK's
+// dr::Heap is std::BasicHeap<dr::InterruptGuard>). A guard is a struct with two static subs:
+//     static sub enter() -> u32           before every operation that changes the heap
+//     static sub leave(var saved: u32)    after it, with what enter returned
+// The guard doesn't change the heap's layout: heaps with different guards can use the same memory.
+//
+// The heap's state is in memory, never in globals: a heap made by create keeps its header at the
+// start of its memory (so code without globals, in ROM, can have one, and it can be handed from one
+// program to another); a heap that is a variable keeps it there.
+//
+// Regions: each one starts with its HeapRegion (a list: no limit on their number), then its
+// blocks, then an end marker (an 8 byte block that is never free). Memory added right after a
+// region's end (add_region with start == its base + size) extends that region. A region whose
+// memory is all free again can be taken back (take_empty_region: to give it back to whoever gave it,
+// e.g. the kernel), except the one create made (it shares its memory with the heap's header).
+//
+// Blocks: an 8 byte header (the block's size, header included, a multiple of 8, with a flag in
+// bit 0: the block before it is free; and a tag: free or used, which also catches bad pointers and
+// double frees), then the memory, 8 byte aligned. A free block also holds its links in a free list
+// and, in its last word, its size again (so the block after it finds it). Free blocks are always
+// merged with free neighbours when they are made, so no two free blocks are ever next to each other.
+// The free lists are one per size class (powers of two): alloc takes the first block that fits,
+// from the class of the size asked upwards; free merges the block with both its neighbours at once.
+
+namespace std {
+	// The guard of a heap nothing interrupts (a program without interrupt handlers of its own: user
+	// mode programs, or code that disables interrupts itself).
+	struct NoGuard {
+		inline static sub enter() -> u32 { return 0; }
+		inline static sub leave(var saved: u32) { }
+	};
+
+	// A heap's region: at the start of the memory given to add_region (8 byte aligned).
+	struct HeapRegion {
+		var next: HeapRegion*;			// the next region (in the order they were added)
+		var base: u32;					// the memory given to add_region (both, if it was extended)
+		var size: u32;
+		var start: u32;					// the first block
+		var end: u32;					// the end marker: the blocks are [start, end)
+	};
+
+	template(G) where has_method(G, enter) and has_method(G, leave) {
+		struct BasicHeap {
+			priv constexpr MAGIC: u32 = 0x48454150;		// "HEAP"
+			priv constexpr ALIGN: u32 = 8;
+			priv constexpr HEADER: u32 = 8;
+			priv constexpr MIN_BLOCK: u32 = 24;			// a header, the free list links and the size at its end
+			priv constexpr PREV_FREE: u32 = 1;			// in a block's info: the block before it is free
+			priv constexpr BINS: u32 = 24;				// the size classes: < 32, < 64, < 128, ... (the last: the rest)
+			priv constexpr MAX_SIZE: u32 = 0x7FFFFFF0;
+			priv constexpr REGION: u32 = (sizeof(HeapRegion) + 7) & ~7u;
+
+			priv enum Tag: u32 { None = 0, Free = 0x46524545, Used = 0x55534544, End = 0x454E4421 }	// "FREE" "USED" "END!"
+
+			priv struct Block {
+				var info: u32;				// the size (header included) | PREV_FREE
+				var tag: u32;
+				var next: Block*;			// free blocks: the free list
+				var prev: Block*;
+			};
+
+			priv var magic: u32;
+			priv var count: u32;
+			priv var first: HeapRegion*;
+			priv var last: HeapRegion*;
+			priv var pinned: HeapRegion*;		// create's region: never taken back
+			priv var bins: Block*[BINS];
+
+			// An empty heap (no regions: add_region gives it memory).
+			sub new() { this->init(); }
+
+			// (a copy would be a second header for the same blocks)
+			priv sub new(var o: const ref BasicHeap<G>) { }
+
+			// Makes this an empty heap (whatever it was: its memory is forgotten, not freed).
+			sub init() {
+				std::memset(this, 0, sizeof(*this));
+				this->magic = MAGIC;
+			}
+
+			// A heap over [start, start + size): its header first, the rest is its first region.
+			// null if the memory is too small.
+			static sub create(var start: u8*, var size: u32) -> BasicHeap<G>* {
+				var a: u32 = (cast<u32>(start) + ALIGN - 1) & ~(ALIGN - 1);
+				var header: u32 = (sizeof(BasicHeap<G>) + ALIGN - 1) & ~(ALIGN - 1);
+				var pad: u32 = a - cast<u32>(start);
+				if (cast<u32>(start) + size < cast<u32>(start) or size < pad + header)
+					return null;
+				var h: BasicHeap<G>* = cast<BasicHeap<G>*>(a);
+				h->init();
+				if (not h->add_region(cast<u8*>(a + header), size - pad - header))
+					return null;
+				h->pinned = h->first;
+				return h;
+			}
+
+			// A heap made by create (its header is intact and it has memory).
+			static sub valid(var h: const BasicHeap<G>*) -> bool {
+				return h != null and h->magic == MAGIC and h->count >= 1 and h->first != null;
+			}
+
+			// More memory: [start, start + size), which must not overlap the heap's regions or its
+			// header. Right after a region (start == its base + size), it extends that region. False if
+			// it overlaps, or is too small to hold a block.
+			sub add_region(var start: u8*, var size: u32) -> bool {
+				var saved: u32 = G.enter();
+				defer G.leave(saved);
+				var from: u32 = cast<u32>(start);
+				if (from + size < from)
+					return false;					// past the end of the address space
+				var me: u32 = cast<u32>(this);
+				if (from < me + sizeof(*this) and me < from + size)
+					return false;
+				for (var r: HeapRegion* = this->first; r != null; r = r->next) {
+					if (from < r->base + r->size and r->base < from + size)
+						return false;
+				}
+				for (var r: HeapRegion* = this->first; r != null; r = r->next) {
+					if (r->base + r->size == from)
+						return this->extend(r, from, size);
+				}
+				var s: u32 = (from + ALIGN - 1) & ~(ALIGN - 1);
+				var e: u32 = (from + size) & ~(ALIGN - 1);
+				if (e <= s or e - s < REGION + MIN_BLOCK + HEADER)
+					return false;
+				var r: HeapRegion* = cast<HeapRegion*>(s);
+				r->next = null;
+				r->base = from;
+				r->size = size;
+				r->start = s + REGION;
+				r->end = e - HEADER;
+				var marker: Block* = BasicHeap<G>.at(r->end);
+				marker->info = HEADER;
+				marker->tag = Tag.End;
+				this->set_free(r->start, r->end - r->start, 0);
+				if (this->last == null)
+					this->first = r;
+				else
+					this->last->next = r;
+				this->last = r;
+				this->count++;
+				return true;
+			}
+
+			readonly sub region_count() -> u32 { return this->count; }
+			readonly sub first_region() -> const HeapRegion* { return this->first; }
+
+			// The i-th region (in the order they were added); null past the last.
+			readonly sub region(var i: u32) -> const HeapRegion* {
+				var r: HeapRegion* = this->first;
+				while (r != null and i > 0) {
+					r = r->next;
+					i--;
+				}
+				return r;
+			}
+
+			// size bytes, 8 byte aligned; null if there is no room (or size is 0).
+			sub alloc(var size: u32) -> void* {
+				return this->alloc_aligned(size, ALIGN);
+			}
+
+			// size bytes at an address that is a multiple of align (a power of 2: 4096 for a page).
+			sub alloc_aligned(var size: u32, var align: u32) -> void* {
+				var saved: u32 = G.enter();
+				defer G.leave(saved);
+				return this->take(size, align);
+			}
+
+			// size bytes, zeroed.
+			sub alloc_zeroed(var size: u32) -> void* {
+				var p: void* = this->alloc(size);
+				if (p != null)
+					std::memset(p, 0, size);
+				return p;
+			}
+
+			// False for a pointer the heap didn't give (or gave and took back already). null: true.
+			sub free(var p: void*) -> bool {
+				if (p == null)
+					return true;
+				var saved: u32 = G.enter();
+				defer G.leave(saved);
+				var b: u32 = this->used_block(p);
+				if (b == 0)
+					return false;
+				this->release(b);
+				return true;
+			}
+
+			// p's memory, grown or shrunk to size bytes (in place when it can, else moved: the contents
+			// are copied, up to the smaller size). null p: alloc; size 0: free (null). null if there is
+			// no room (p is still valid then) or p is not the heap's.
+			sub realloc(var p: void*, var size: u32) -> void* {
+				if (p == null)
+					return this->alloc(size);
+				if (size == 0) {
+					this->free(p);
+					return null;
+				}
+				var done: bool = false;
+				{
+					var saved: u32 = G.enter();
+					defer G.leave(saved);
+					done = this->resize(p, size);
+				}
+				if (done)
+					return p;
+				var old: u32 = this->block_size(p);
+				if (old == 0)
+					return null;
+				var q: void* = this->alloc(size);
+				if (q == null)
+					return null;
+				std::memcpy(q, p, old < size ? old : size);
+				this->free(p);
+				return q;
+			}
+
+			// The usable size of p's block (at least what was asked for); 0 if p is not the heap's.
+			readonly sub block_size(var p: void*) -> u32 {
+				var b: u32 = this->used_block(p);
+				if (b == 0)
+					return 0;
+				return BasicHeap<G>.size_at(b) - HEADER;
+			}
+
+			// p is in one of the heap's regions.
+			readonly sub owns(var p: void*) -> bool {
+				return this->region_of(cast<u32>(p)) != null;
+			}
+
+			// The bytes of every region's blocks (their headers included).
+			readonly sub total_bytes() -> u32 {
+				var n: u32 = 0;
+				for (var r: HeapRegion* = this->first; r != null; r = r->next)
+					n += r->end - r->start;
+				return n;
+			}
+
+			// The bytes in free blocks (headers included: the most a single alloc can get is largest_free).
+			readonly sub free_bytes() -> u32 {
+				var n: u32 = 0;
+				for (auto i in 0..BINS) {
+					for (var b: Block* = this->bins[i]; b != null; b = b->next)
+						n += b->info & ~7u;
+				}
+				return n;
+			}
+
+			// The largest alloc that would succeed now.
+			readonly sub largest_free() -> u32 {
+				var best: u32 = 0;
+				var i: u32 = BINS;
+				while (i > 0 and best == 0) {
+					i--;
+					for (var b: Block* = this->bins[i]; b != null; b = b->next) {
+						if ((b->info & ~7u) > best)
+							best = b->info & ~7u;
+					}
+				}
+				return best == 0 ? 0 : best - HEADER;
+			}
+
+			// The regions whose memory is all free (create's region not counted).
+			readonly sub empty_region_count() -> u32 {
+				var n: u32 = 0;
+				for (var r: HeapRegion* = this->first; r != null; r = r->next) {
+					if (this->is_empty(r))
+						n++;
+				}
+				return n;
+			}
+
+			// Takes a region whose memory is all free out of the heap, and says which memory it was (what
+			// add_region was given: both parts, if it was extended): to give it back. False if there is
+			// none.
+			sub take_empty_region(var base: u32*, var size: u32*) -> bool {
+				var saved: u32 = G.enter();
+				defer G.leave(saved);
+				var prev: HeapRegion* = null;
+				for (var r: HeapRegion* = this->first; r != null; r = r->next) {
+					if (this->is_empty(r)) {
+						this->unlink(BasicHeap<G>.at(r->start));
+						if (prev == null)
+							this->first = r->next;
+						else
+							prev->next = r->next;
+						if (this->last == r)
+							this->last = prev;
+						this->count--;
+						*base = r->base;
+						*size = r->size;
+						return true;
+					}
+					prev = r;
+				}
+				return false;
+			}
+
+			// Walks every block and every free list: true if the heap is consistent. For debugging:
+			// after a buffer overrun, the next block's header is usually what breaks.
+			readonly sub check() -> bool {
+				if (this->magic != MAGIC)
+					return false;
+				var regions: u32 = 0;
+				var free_blocks: u32 = 0;
+				for (var r: HeapRegion* = this->first; r != null; r = r->next) {
+					regions++;
+					if (regions > this->count)
+						return false;
+					var a: u32 = r->start;
+					var prev_free: bool = false;
+					while (a < r->end) {
+						var b: Block* = BasicHeap<G>.at(a);
+						var size: u32 = b->info & ~7u;
+						if ((b->tag != Tag.Free and b->tag != Tag.Used) or size < MIN_BLOCK or (size & 7) != 0
+							or size > r->end - a or ((b->info & PREV_FREE) != 0) != prev_free)
+							return false;
+						if (b->tag == Tag.Free) {
+							if (prev_free or *cast<u32*>(a + size - 4) != size)
+								return false;
+							free_blocks++;
+						}
+						prev_free = b->tag == Tag.Free;
+						a += size;
+					}
+					var marker: Block* = BasicHeap<G>.at(r->end);
+					if (a != r->end or marker->tag != Tag.End or ((marker->info & PREV_FREE) != 0) != prev_free)
+						return false;
+				}
+				if (regions != this->count)
+					return false;
+				var listed: u32 = 0;
+				for (auto i in 0..BINS) {
+					var prev: Block* = null;
+					for (var b: Block* = this->bins[i]; b != null; b = b->next) {
+						listed++;
+						if (listed > free_blocks or b->tag != Tag.Free or b->prev != prev
+							or BasicHeap<G>.bin_of(b->info & ~7u) != i)
+							return false;
+						prev = b;
+					}
+				}
+				return listed == free_blocks;
+			}
+
+			// ===== The implementation (the callers enter the guard) =====
+
+			priv inline static sub at(var address: u32) -> Block* { return cast<Block*>(address); }
+			priv inline static sub size_at(var address: u32) -> u32 { return cast<Block*>(address)->info & ~7u; }
+
+			// The size class of a block of size bytes.
+			priv static sub bin_of(var size: u32) -> u32 {
+				var i: u32 = 0;
+				var s: u32 = size >> 5;
+				while (s != 0 and i < BINS - 1) {
+					s >>= 1;
+					i++;
+				}
+				return i;
+			}
+
+			priv readonly sub region_of(var address: u32) -> HeapRegion* {
+				for (var r: HeapRegion* = this->first; r != null; r = r->next) {
+					if (address >= r->start and address < r->end)
+						return r;
+				}
+				return null;
+			}
+
+			priv readonly sub is_empty(var r: const HeapRegion*) -> bool {
+				var b: Block* = BasicHeap<G>.at(r->start);
+				return r != this->pinned and b->tag == Tag.Free and (b->info & ~7u) == r->end - r->start;
+			}
+
+			// The block p came from (its header's address), 0 if p is not a used block of the heap.
+			priv readonly sub used_block(var p: void*) -> u32 {
+				var a: u32 = cast<u32>(p) - HEADER;
+				if (cast<u32>(p) < HEADER or (cast<u32>(p) & (ALIGN - 1)) != 0)
+					return 0;
+				var r: HeapRegion* = this->region_of(a);
+				if (r == null)
+					return 0;
+				var b: Block* = BasicHeap<G>.at(a);
+				var size: u32 = b->info & ~7u;
+				if (b->tag != Tag.Used or size < MIN_BLOCK or size > r->end - a)
+					return 0;
+				return a;
+			}
+
+			priv sub link(var b: Block*) {
+				var i: u32 = BasicHeap<G>.bin_of(b->info & ~7u);
+				b->prev = null;
+				b->next = this->bins[i];
+				if (b->next != null)
+					b->next->prev = b;
+				this->bins[i] = b;
+			}
+
+			priv sub unlink(var b: Block*) {
+				if (b->prev != null)
+					b->prev->next = b->next;
+				else
+					this->bins[BasicHeap<G>.bin_of(b->info & ~7u)] = b->next;
+				if (b->next != null)
+					b->next->prev = b->prev;
+			}
+
+			// Makes [a, a + size) a free block (its neighbours are not free), in its list.
+			priv sub set_free(var a: u32, var size: u32, var prev_free: u32) {
+				var b: Block* = BasicHeap<G>.at(a);
+				b->info = size | prev_free;
+				b->tag = Tag.Free;
+				*cast<u32*>(a + size - 4) = size;
+				this->link(b);
+				BasicHeap<G>.at(a + size)->info |= PREV_FREE;
+			}
+
+			// Frees the block at a: merged with the free blocks before and after it.
+			priv sub release(var a: u32) {
+				var b: Block* = BasicHeap<G>.at(a);
+				var size: u32 = b->info & ~7u;
+				var prev_free: u32 = b->info & PREV_FREE;
+				var next: Block* = BasicHeap<G>.at(a + size);
+				if (next->tag == Tag.Free) {
+					this->unlink(next);
+					next->tag = Tag.None;			// (a stale header no longer looks like a block)
+					size += next->info & ~7u;
+				}
+				if (prev_free != 0) {
+					var before: u32 = *cast<u32*>(a - 4);
+					var p: Block* = BasicHeap<G>.at(a - before);
+					this->unlink(p);
+					b->tag = Tag.None;
+					a -= before;
+					size += before;
+					prev_free = p->info & PREV_FREE;
+				}
+				this->set_free(a, size, prev_free);
+			}
+
+			// Cuts the used block at a down to size bytes; the rest becomes free (if it can be a block).
+			priv sub split(var a: u32, var size: u32) {
+				var b: Block* = BasicHeap<G>.at(a);
+				var total: u32 = b->info & ~7u;
+				if (total - size < MIN_BLOCK) {
+					BasicHeap<G>.at(a + total)->info &= ~PREV_FREE;
+					return;
+				}
+				b->info = size | (b->info & PREV_FREE);
+				var rest: Block* = BasicHeap<G>.at(a + size);
+				rest->info = total - size;
+				rest->tag = Tag.Used;
+				this->release(a + size);
+			}
+
+			// The block size for size bytes: header included, 8 byte aligned, at least MIN_BLOCK.
+			priv inline static sub block_for(var size: u32) -> u32 {
+				var need: u32 = ((size + ALIGN - 1) & ~(ALIGN - 1)) + HEADER;
+				return need < MIN_BLOCK ? MIN_BLOCK : need;
+			}
+
+			priv sub take(var size: u32, var align: u32) -> void* {
+				if (size == 0 or size > MAX_SIZE)
+					return null;
+				if (align < ALIGN)
+					align = ALIGN;
+				if ((align & (align - 1)) != 0)
+					return null;
+				var need: u32 = BasicHeap<G>.block_for(size);
+				for (var i: u32 = BasicHeap<G>.bin_of(need); i < BINS; i++) {
+					for (var b: Block* = this->bins[i]; b != null; b = b->next) {
+						var a: u32 = cast<u32>(b);
+						var end: u32 = a + (b->info & ~7u);
+						// The memory's address: aligned; if that leaves a gap before it, the gap must hold
+						// a free block of its own.
+						var p: u32 = (a + HEADER + align - 1) & ~(align - 1);
+						if (p != a + HEADER and p - HEADER - a < MIN_BLOCK)
+							p = (a + HEADER + MIN_BLOCK + align - 1) & ~(align - 1);
+						var u: u32 = p - HEADER;
+						if (p >= end or end - u < need)
+							continue;
+						this->unlink(b);
+						if (u != a) {
+							// The gap stays free (in its own list).
+							b->info = (u - a) | (b->info & PREV_FREE);
+							*cast<u32*>(u - 4) = u - a;
+							this->link(b);
+							BasicHeap<G>.at(u)->info = (end - u) | PREV_FREE;
+						}
+						BasicHeap<G>.at(u)->tag = Tag.Used;
+						this->split(u, need);
+						return cast<void*>(p);
+					}
+				}
+				return null;
+			}
+
+			// p's block resized in place (shrunk, or grown into the free block after it).
+			priv sub resize(var p: void*, var size: u32) -> bool {
+				var a: u32 = this->used_block(p);
+				if (a == 0 or size > MAX_SIZE)
+					return false;
+				var need: u32 = BasicHeap<G>.block_for(size);
+				var b: Block* = BasicHeap<G>.at(a);
+				var total: u32 = b->info & ~7u;
+				if (total < need) {
+					var next: Block* = BasicHeap<G>.at(a + total);
+					if (next->tag != Tag.Free or total + (next->info & ~7u) < need)
+						return false;
+					this->unlink(next);
+					next->tag = Tag.None;
+					total += next->info & ~7u;
+					b->info = total | (b->info & PREV_FREE);
+				}
+				this->split(a, need);
+				return true;
+			}
+
+			// More memory right after r's end: the end marker becomes a block, merged with what was free
+			// before it.
+			priv sub extend(var r: HeapRegion*, var from: u32, var size: u32) -> bool {
+				var e: u32 = ((from + size) & ~(ALIGN - 1)) - HEADER;
+				if (e < r->end + MIN_BLOCK)
+					return false;
+				var old: Block* = BasicHeap<G>.at(r->end);
+				old->info = (e - r->end) | (old->info & PREV_FREE);
+				old->tag = Tag.Used;
+				var marker: Block* = BasicHeap<G>.at(e);
+				marker->info = HEADER;
+				marker->tag = Tag.End;
+				var a: u32 = r->end;
+				r->end = e;
+				r->size += size;
+				this->release(a);
+				return true;
+			}
+		};
+	}
+
+	alias Heap = BasicHeap<NoGuard>;
+}

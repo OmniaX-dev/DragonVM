@@ -46,7 +46,7 @@ namespace std {
 	// 1e9 on, in scientific notation: 1.234568e+12. Also "inf", "-inf", "nan" (and -0.000000).
 	// result needs 24 bytes. An f32 has about 7 significant digits (and this is computed in
 	// f32): the digits after those are not meaningful.
-	sub ftoa(var value: f32, var result: u8*, var decimals: u32 = 6) -> string {
+	sub ftoa(var value: f32, var result: u8*, var decimals: u32 = 6) -> u8* {
 		var p: u8* = result;
 		if (value != value) {
 			p[0] = 'n'; p[1] = 'a'; p[2] = 'n'; p[3] = 0;
@@ -113,7 +113,7 @@ namespace std {
 		return result;
 	}
 
-	sub itoa(var value: i32, var result: u8*, var base: i32 = 10) -> string
+	sub itoa(var value: i32, var result: u8*, var base: i32 = 10) -> u8*
 	{
 		// check that the base if valid
 		if (base < 2 or base > 36) { *result = '\0'; return result; }
@@ -143,7 +143,7 @@ namespace std {
 	}
 
 	// Like itoa, for an unsigned integer (result: up to 33 bytes, in base 2; 11 in base 10).
-	sub utoa(var value: u32, var result: u8*, var base: i32 = 10) -> string
+	sub utoa(var value: u32, var result: u8*, var base: i32 = 10) -> u8*
 	{
 		// check that the base if valid
 		if (base < 2 or base > 36) { *result = '\0'; return result; }
@@ -175,7 +175,7 @@ namespace std {
 
 	// "4096", "0x1000", "  12 " (no sign).
 	sub atou(var text: string, var out: u32*, var base: i32 = 10) -> bool {
-		var p: u8* = text;
+		var p: string = text;
 		while (__internal::isspace(*p))
 			p++;
 		var b: u32 = __internal::number_base(&p, base);
@@ -186,7 +186,7 @@ namespace std {
 
 	// "-12", "+7", "-0x80000000" (-2147483648..2147483647).
 	sub atoi(var text: string, var out: i32*, var base: i32 = 10) -> bool {
-		var p: u8* = text;
+		var p: string = text;
 		while (__internal::isspace(*p))
 			p++;
 		var negative: bool = *p == '-';
@@ -205,7 +205,7 @@ namespace std {
 	// "3.5", "-0.25", ".5", "2.", "1e9", "1.5E-3", "inf", "-inf", "nan" (what ftoa writes). Computed
 	// in f32 (about 7 significant digits); too big gives inf, too small 0.
 	sub atof(var text: string, var out: f32*) -> bool {
-		var p: u8* = text;
+		var p: string = text;
 		while (__internal::isspace(*p))
 			p++;
 		var negative: bool = *p == '-';
@@ -253,7 +253,7 @@ namespace std {
 			if (*p == 'e' or *p == 'E') {
 				p++;
 				var e: i32 = 0;
-				var q: u8* = p;
+				var q: string = p;
 				var eNegative: bool = *q == '-';
 				if (*q == '-' or *q == '+')
 					q++;
@@ -353,7 +353,7 @@ namespace std {
 		if (!skipUnit)
 		{
 			*p++ = ' ';
-			for (var u: u8* = __units[unit]; *u; )
+			for (var u: string = __units[unit]; *u; )
 				*p++ = *u++;
 		}
 		*p = '\0';
@@ -374,8 +374,8 @@ namespace std {
 		}
 
 		// The base (0 when it isn't valid), *pp moved past its prefix.
-		sub number_base(var pp: u8**, var base: i32) -> u32 {
-			var p: u8* = *pp;
+		sub number_base(var pp: string*, var base: i32) -> u32 {
+			var p: string = *pp;
 			if (base == 0 or base == 16) {
 				if (p[0] == '0' and (p[1] == 'x' or p[1] == 'X')) {
 					*pp = p + 2;
@@ -400,8 +400,8 @@ namespace std {
 
 		// The digits at *pp (then moved past them), up to the end of the text and its spaces: false
 		// when there are none, something else follows or the number is bigger than limit.
-		sub parse_digits(var pp: u8**, var base: u32, var limit: u32, var out: u32*) -> bool {
-			var p: u8* = *pp;
+		sub parse_digits(var pp: string*, var base: u32, var limit: u32, var out: u32*) -> bool {
+			var p: string = *pp;
 			var value: u32 = 0;
 			var any: bool = false;
 			while (true) {

@@ -12,8 +12,8 @@ sub sum(var values: i32*, var count: u32) -> i32 {
     return total;
 }
 
-sub swap(var a: u8**, var b: u8**) -> void {
-    var t: u8* = *a;
+sub swap(var a: string*, var b: string*) -> void {
+    var t: string = *a;
     *a = *b;
     *b = t;
 }

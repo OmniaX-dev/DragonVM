@@ -1,0 +1,43 @@
+// expect-rv: 0
+// forget(v) anywhere in v's scope: in an if, a loop, a defer (v gets a drop flag that its
+// destructor checks); only the variables forget takes have one.
+#include(check.ds)
+var g_dels: i32 = 0;
+struct U { var v: i32; sub new(var v: i32) { this->v = v; } sub del() { g_dels++; } };
+sub mk(var v: i32) -> U { return U.new(v); }
+var g_kept: i32 = 0;
+sub maybe(var u: own U, var keep: bool) {
+	if (keep) {
+		g_kept = u.v;
+		forget(u);
+	}
+}
+inline sub maybe_inline(var u: own U, var keep: bool) { if (keep) forget(u); }
+sub main() -> i32 {
+	maybe(mk(1), false);
+	check(1, g_dels == 1);
+	maybe(mk(2), true);
+	check(2, g_dels == 1 and g_kept == 2);
+	maybe_inline(mk(3), true);
+	maybe_inline(mk(4), false);
+	check(3, g_dels == 2);
+	for (var i: i32 = 0; i < 4; i++) {
+		var u = U.new(i);
+		if (i % 2 == 0)
+			forget(u);
+	}
+	check(4, g_dels == 4);
+	{
+		var u = U.new(9);
+		defer forget(u);		// (runs before u's destructor: the last declared, first)
+	}
+	check(5, g_dels == 4);
+	{
+		var u = U.new(10);
+		if (g_dels > 100)
+			return 1;
+		forget(u);
+	}
+	check(6, g_dels == 4);
+	return result();
+}

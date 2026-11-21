@@ -70,7 +70,7 @@ namespace dscript
 				const Token& t = m_tokens[j];
 				if (t.kind == TokenKind::Punct && t.text == "{") depth++;
 				else if (t.kind == TokenKind::Punct && t.text == "}" && --depth == 0) break;
-				else if (depth == 1 && t.kind == TokenKind::Keyword && (t.text == "struct" || t.text == "sub" || t.text == "class" || t.text == "interface") && j + 1 < m_tokens.size()
+				else if (depth == 1 && t.kind == TokenKind::Keyword && (t.text == "struct" || t.text == "sub" || t.text == "class" || t.text == "interface" || t.text == "alias") && j + 1 < m_tokens.size()
 						 && m_tokens[j + 1].kind == TokenKind::Identifier)
 					m_templateNames.insert(m_tokens[j + 1].text);
 			}
@@ -347,11 +347,15 @@ namespace dscript
 					error(tk[i].pos, "a method template is not virtual (each instance is a sub of its own: there is no slot for it in the class's table)");
 				i++;
 			}
-			const bool structLike = l_is(i, TokenKind::Keyword, "struct") || l_is(i, TokenKind::Keyword, "class") || l_is(i, TokenKind::Keyword, "interface");
+			const bool isAlias = l_is(i, TokenKind::Keyword, "alias");
+			const bool structLike = l_is(i, TokenKind::Keyword, "struct") || l_is(i, TokenKind::Keyword, "class") || l_is(i, TokenKind::Keyword, "interface") || isAlias;
 			if (!(l_is(i, TokenKind::Keyword, "sub") || (structLike && owner == nullptr)) || i + 1 >= tk.size() || tk[i + 1].kind != TokenKind::Identifier)
 				error(i < tk.size() ? tk[i].pos : open, owner != nullptr ? "a template in a struct holds methods (sub ...)" :
-					"a template holds structs and subs (struct ... / sub ...; around them, if constexpr (...) { ... }; static_assert(...)), found " + describe(i < tk.size() ? tk[i] : peek()));
+					"a template holds structs, subs and aliases (struct ... / sub ... / alias ... = ...; around them, if constexpr (...) { ... }; static_assert(...)), found " + describe(i < tk.size() ? tk[i] : peek()));
+			if (isAlias && i > e.first)
+				error(tk[e.first].pos, "an alias takes no " + tk[e.first].text);
 			e.isStruct = structLike;
+			e.isAlias = isAlias;
 			e.nameToken = i + 1;
 			e.name = tk[i + 1].text;
 			i += 2;
@@ -1524,6 +1528,19 @@ namespace dscript
 		return true;
 	}
 
+	// own before a parameter's type (var v: own T, sub(own T)): not a keyword, only there (own::x,
+	// a type named own: what they are).
+	bool Parser::acceptOwn(void)
+	{
+		if (peek().kind != TokenKind::Identifier || peek().text != "own")
+			return false;
+		const Token& after = peek(1);
+		if (after.kind == TokenKind::Punct && (after.text == "::" || after.text == "," || after.text == ")" || after.text == "=" || after.text == "<" || after.text == "*" || after.text == "["))
+			return false;
+		next();
+		return true;
+	}
+
 	void Parser::parseParams(Node* n)
 	{
 		if (isKeyword("void") && isPunct(")", 1))
@@ -1550,6 +1567,7 @@ namespace dscript
 			p->name = expectIdentifier("(parameter name)");
 			p->namePos = lastPos();
 			expectPunct(":", "after the parameter name (parameters need a type)");
+			p->owned = acceptOwn();
 			p->typeSyntax = parseType();
 			if (acceptPunct("="))
 				p->a = parseTernary();
@@ -1693,6 +1711,12 @@ namespace dscript
 					t->variadic = acceptVariadicTyped() ? 2 : 1;
 					expectPunct(")", "after '...' (it ends the parameter types)");
 					break;
+				}
+				if (acceptOwn())
+				{
+					if (t->params.size() >= 32)
+						error(lastPos(), "own: only the first 32 parameters can be own");
+					t->owned |= 1u << t->params.size();
 				}
 				t->params.push_back(parseType());
 				if (!acceptPunct(","))

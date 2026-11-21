@@ -1,0 +1,3 @@
+// expect-error: Plain has no constructor (sub new(...))
+struct Plain { var a: i32; };
+sub main() -> i32 { var x: Plain; var p: Plain* = &x; p->new(1, 2); return 0; }

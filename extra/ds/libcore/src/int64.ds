@@ -224,7 +224,7 @@ namespace std {
 		}
 
 		// The magnitude in text (base 2 - 36), after an optional '-': buffer gets at most 66 bytes.
-		constexpr sub to_text(var h: u32, var l: u32, var negative: bool, var buffer: u8*, var base: u32) -> string {
+		constexpr sub to_text(var h: u32, var l: u32, var negative: bool, var buffer: u8*, var base: u32) -> u8* {
 			if (base < 2 or base > 36) {
 				*buffer = 0;
 				return buffer;
@@ -253,7 +253,7 @@ namespace std {
 		constexpr sub from_text(var text: string, var base: u32, var maxh: u32, var maxl: u32, var out: U64*) -> bool {
 			if (not text or base < 2 or base > 36)
 				return false;
-			var p: u8* = text;
+			var p: string = text;
 			if (base == 16 and p[0] == '0' and (p[1] == 'x' or p[1] == 'X'))
 				p = p + 2;
 			if (*p == 0)
@@ -395,7 +395,7 @@ namespace std {
 		// ---- Text ----
 		// The value in text (base 2 - 36, lowercase digits): buffer needs 21 bytes in base 10,
 		// 65 in base 2. Returns buffer.
-		readonly inline constexpr sub str(var buffer: u8*, var base: u32 = 10) -> string { return int64::to_text(this->hi, this->lo, false, buffer, base); }
+		readonly inline constexpr sub str(var buffer: u8*, var base: u32 = 10) -> u8* { return int64::to_text(this->hi, this->lo, false, buffer, base); }
 		// The value of a text of digits (base 16 also takes 0x): false (and no change) on an empty
 		// or invalid text, or over 2^64 - 1.
 		inline constexpr sub parse(var text: string, var base: u32 = 10) -> bool { return int64::from_text(text, base, 0xFFFFFFFF, 0xFFFFFFFF, this); }
@@ -554,7 +554,7 @@ namespace std {
 
 		// ---- Text ----
 		// The value in text (base 2 - 36, with a '-'): buffer needs 21 bytes in base 10, 66 in base 2.
-		readonly constexpr sub str(var buffer: u8*, var base: u32 = 10) -> string {
+		readonly constexpr sub str(var buffer: u8*, var base: u32 = 10) -> u8* {
 			var m: U64(*this);
 			if (this->is_neg())
 				m.neg();
@@ -566,7 +566,7 @@ namespace std {
 			if (not text)
 				return false;
 			var negative: bool = (text[0] == '-');
-			var p: u8* = text;
+			var p: string = text;
 			if (text[0] == '-' or text[0] == '+')
 				p = p + 1;
 			var m: U64;

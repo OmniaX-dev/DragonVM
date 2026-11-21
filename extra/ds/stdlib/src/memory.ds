@@ -1,0 +1,129 @@
+#import("libcore")
+
+#include(syscall.ds)
+
+namespace std {
+	const PAGE_SIZE: u32 = 4096; //TODO: Once the SysInfo syscall is in, this should come from the kernel
+
+	namespace __internal {
+		class MemUtils friend malloc, free {
+			priv static var g_heap: std::Heap(); // empty until the first malloc: no system call before that
+			priv static var g_chunk: u32 = 64 * 1024;
+			// bytes rounded up to a whole number of pages (0 stays 0).
+			priv inline static sub round_to_pages(var bytes: u32) -> u32 {
+				return (bytes + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+			}
+		};
+	}
+
+	sub malloc(var n: u32) -> void* {
+		var p: void* = __internal::MemUtils::g_heap.alloc(n);
+		if (p != null) return p;
+		if (n > 0x7FFF0000) return null;
+		var bytes: u32 = __internal::MemUtils::round_to_pages(std::math::max(__internal::MemUtils::g_chunk, n + 64));   // room for the region header, end marker and block header
+		var addr: i32 = syscall4(SystemCalls.AllocPages, bytes / PAGE_SIZE);
+		if ((addr & 0xFFF) != 0) return null;                    // an error code
+		__internal::MemUtils::g_heap.add_region(cast<u8*>(addr), bytes);               // extends the last region when adjacent
+		if (__internal::MemUtils::g_chunk < 1024 * 1024) __internal::MemUtils::g_chunk *= 2;
+		return __internal::MemUtils::g_heap.alloc(n);
+	}
+
+	sub free(var p: void*) {
+		__internal::MemUtils::g_heap.free(p);
+		var base: u32;
+		var size: u32;
+		while (__internal::MemUtils::g_heap.empty_region_count() > 1 and __internal::MemUtils::g_heap.take_empty_region(&base, &size))   // keep one spare
+			syscall4(SystemCalls.FreePages, base, size / PAGE_SIZE);
+	}
+
+	template(T) {
+		struct Ptr {
+			priv var m_ptr: T*;
+			sub new(var ptr: T*) { this->m_ptr = ptr; }
+			priv sub new(var o: const ref Ptr<T>) { }      // no copies (moves still work)
+			sub del() {
+				if (this->m_ptr == null) return;
+				if constexpr (has_method(T, del)) this->m_ptr->del();
+				free(this->m_ptr);
+				this->m_ptr = null;
+			}
+			readonly sub operator->() -> T* { return this->m_ptr; }
+			implicit readonly sub operator cast() -> bool { return this->m_ptr != null; }
+			sub release() -> T* {
+				var old: T* = this->m_ptr;
+				this->m_ptr = null;
+				return old;
+			}
+			sub reset(var ptr: T* = null) {
+				this->del();
+				this->m_ptr = ptr;
+			}
+			readonly sub get() -> T* { return this->m_ptr; }
+		}
+	}
+
+	template(T) { sub new() -> Ptr<T> {
+			var p: T* = cast<T*>(malloc(sizeof(T)));
+			if (not p) return Ptr<T>.new(null);
+			if constexpr (has_method(T, new)) p->new();
+			else std::memset(p, 0, sizeof(T));
+			return Ptr<T>.new(p);
+		}
+	}
+	template(T, A) { sub new(var a: const ref A) -> Ptr<T> {
+			var p: T* = cast<T*>(malloc(sizeof(T)));
+			if (not p) return Ptr<T>.new(null);
+			p->new(a);
+			return Ptr<T>.new(p);
+		}
+	}
+	template(T, A, B) { sub new(var a: const ref A, var b: const ref B) -> Ptr<T> {
+			var p: T* = cast<T*>(malloc(sizeof(T)));
+			if (not p) return Ptr<T>.new(null);
+			p->new(a, b);
+			return Ptr<T>.new(p);
+		}
+	}
+	template(T, A, B, C) { sub new(var a: const ref A, var b: const ref B, var c: const ref C) -> Ptr<T> {
+			var p: T* = cast<T*>(malloc(sizeof(T)));
+			if (not p) return Ptr<T>.new(null);
+			p->new(a, b, c);
+			return Ptr<T>.new(p);
+		}
+	}
+	template(T, A, B, C, D) { sub new(var a: const ref A, var b: const ref B, var c: const ref C, var d: const ref D) -> Ptr<T> {
+			var p: T* = cast<T*>(malloc(sizeof(T)));
+			if (not p) return Ptr<T>.new(null);
+			p->new(a, b, c, d);
+			return Ptr<T>.new(p);
+		}
+	}
+	template(T, A, B, C, D, E) { sub new(var a: const ref A, var b: const ref B, var c: const ref C, var d: const ref D, var e: const ref E) -> Ptr<T> {
+			var p: T* = cast<T*>(malloc(sizeof(T)));
+			if (not p) return Ptr<T>.new(null);
+			p->new(a, b, c, d, e);
+			return Ptr<T>.new(p);
+		}
+	}
+	template(T, A, B, C, D, E, F) { sub new(var a: const ref A, var b: const ref B, var c: const ref C, var d: const ref D, var e: const ref E, var f: const ref F) -> Ptr<T> {
+			var p: T* = cast<T*>(malloc(sizeof(T)));
+			if (not p) return Ptr<T>.new(null);
+			p->new(a, b, c, d, e, f);
+			return Ptr<T>.new(p);
+		}
+	}
+	template(T, A, B, C, D, E, F, G) { sub new(var a: const ref A, var b: const ref B, var c: const ref C, var d: const ref D, var e: const ref E, var f: const ref F, var g: const ref G) -> Ptr<T> {
+			var p: T* = cast<T*>(malloc(sizeof(T)));
+			if (not p) return Ptr<T>.new(null);
+			p->new(a, b, c, d, e, f, g);
+			return Ptr<T>.new(p);
+		}
+	}
+	template(T, A, B, C, D, E, F, G, H) { sub new(var a: const ref A, var b: const ref B, var c: const ref C, var d: const ref D, var e: const ref E, var f: const ref F, var g: const ref G, var h: const ref H) -> Ptr<T> {
+			var p: T* = cast<T*>(malloc(sizeof(T)));
+			if (not p) return Ptr<T>.new(null);
+			p->new(a, b, c, d, e, f, g, h);
+			return Ptr<T>.new(p);
+		}
+	}
+}
