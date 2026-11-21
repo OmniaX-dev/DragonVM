@@ -63,6 +63,10 @@
 	"debug_print"
 	"defer"
 	"atomic"
+	"throws"
+	"throw"
+	"try"
+	"catch"
 ] @keyword
 
 [
@@ -85,6 +89,7 @@
 (final_modifier) @keyword
 (abstract_modifier) @keyword
 (implicit_modifier) @keyword
+(own_modifier) @keyword
 (constexpr_modifier) @keyword
 (consteval_modifier) @keyword
 
@@ -191,6 +196,7 @@
 	"++"
 	"--"
 	"->"
+	"=>"
 	"."
 	".."
 	"::"

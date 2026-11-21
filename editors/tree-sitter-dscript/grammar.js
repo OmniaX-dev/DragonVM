@@ -21,6 +21,9 @@ const PREC = {
 	POSTFIX: 14,
 };
 
+// An argument of a template's instance (Array<u32>, Ring<T, 4>).
+const templateArgument = ($) => choice($._type, $.number_literal, $.member_expression, $.call_expression,
+	$.parenthesized_expression, $.unary_expression, $.boolean_literal, $.binary_expression);
 const commaSep = (rule) => optional(commaSep1(rule));
 const commaSep1 = (rule) => seq(rule, repeat(seq(',', rule)));
 // if constexpr (condition) { items } [else { items } | else if constexpr ...] around declarations.
@@ -43,6 +46,12 @@ module.exports = grammar({
 		[$.scoped_identifier, $.scoped_type_identifier],
 		// (Name<...>: a template's arguments or a comparison: the parse that works wins)
 		[$.member_expression],
+		// (catch (e) value or catch (value); a switch statement or a switch's value: told by what follows)
+		[$.catch_binding, $._expression],
+		[$.switch_statement, $.switch_expression],
+		// (Box<Box<T>>: the inner arguments end with '>>')
+		[$.template_arguments, $._shift_arguments],
+		[$._generic_type_shift, $.generic_type, $._expression, $.generic_expression],
 		[$._expression, $.generic_expression],
 		[$.generic_type, $.generic_expression],
 		[$.generic_type, $._expression, $.generic_expression],
@@ -172,11 +181,19 @@ module.exports = grammar({
 			optional(seq('=', field('default', choice($._type, $._expression)))),
 		),
 		template_body: $ => seq('{', repeat($._template_item), '}'),
-		_template_item: $ => choice($.struct_declaration, $.function_declaration, $.conditional_template_item, $.static_assert),
+		_template_item: $ => choice($.struct_declaration, $.function_declaration, $.alias_declaration, $.conditional_template_item, $.static_assert),
 		conditional_template_item: $ => conditional($, $.conditional_template_item, $._template_item),
 		// <u32, Point*, 16, CONFIG> after a template's name (in a type or an expression)
-		template_arguments: $ => prec.dynamic(1, seq('<', commaSep1(choice($._type, $.number_literal, $.member_expression, $.call_expression,
-			$.parenthesized_expression, $.unary_expression, $.boolean_literal, $.binary_expression)), '>')),
+		template_arguments: $ => prec.dynamic(1, choice(
+			seq('<', commaSep1(templateArgument($)), '>'),
+			// Box<Box<T>>: the last argument's '>' and this one's, as one '>>' token
+			seq('<', optional(seq(commaSep1(templateArgument($)), ',')), alias($._generic_type_shift, $.generic_type)),
+		)),
+		_generic_type_shift: $ => seq(
+			field('name', choice(alias($.identifier, $.type_identifier), $.scoped_type_identifier)),
+			field('arguments', alias($._shift_arguments, $.template_arguments)),
+		),
+		_shift_arguments: $ => seq('<', commaSep1($._type), '>>'),
 		nested_type_declaration: $ => seq(
 			optional($.priv_modifier),		// (or for everyone)
 			choice($.struct_declaration, $.enum_declaration),
@@ -265,8 +282,14 @@ module.exports = grammar({
 			field('name', choice($.identifier, $.operator_name)),
 			field('parameters', $.parameter_list),
 			optional(seq('->', field('return_type', $._param_type))),
+			optional($.throws_clause),
 			choice(field('body', $.block), ';'),
 		),
+		// own T: the sub owns (and destroys) the value (not the caller)
+		own_modifier: _ => 'own',
+		_function_type_param: $ => seq(optional($.own_modifier), $._param_type),
+		// throws E: the sub can fail with an error of the enum E
+		throws_clause: $ => seq('throws', field('errors', $._type)),
 		// operator+, operator[], operator(), operator post++, operator cast
 		operator_name: _ => seq('operator', choice(
 			seq(optional('post'), choice('++', '--')),
@@ -308,6 +331,7 @@ module.exports = grammar({
 			optional(choice('var', 'const')),
 			field('name', $.identifier),
 			':',
+			optional($.own_modifier),
 			field('type', $._param_type),
 			optional(seq('=', field('default', $._expression))),
 		),
@@ -356,12 +380,13 @@ module.exports = grammar({
 			'(',
 			choice(
 				alias('void', $.primitive_type),
-				commaSep($._param_type),
-				seq(commaSep1($._param_type), ',', $.variadic_parameter),
+				commaSep($._function_type_param),
+				seq(commaSep1($._function_type_param), ',', $.variadic_parameter),
 				$.variadic_parameter,
 			),
 			')',
 			optional(seq('->', field('return_type', $._param_type))),
+			optional($.throws_clause),
 		)),
 		parenthesized_type: $ => seq('(', $._type, ')'),
 		// const T*: what the pointer points at is constant (const u8* groups as const (u8*))
@@ -391,6 +416,7 @@ module.exports = grammar({
 			$.for_in_statement,
 			$.switch_statement,
 			$.return_statement,
+			$.throw_statement,
 			$.break_statement,
 			$.continue_statement,
 			$.low_block,
@@ -456,12 +482,20 @@ module.exports = grammar({
 		),
 		switch_case: $ => seq('is', $._case_value, repeat(seq('or', $._case_value)), field('body', $.block)),
 		// (a value: no || / or, which separate the values)
-		_case_value: $ => prec(PREC.OR + 1, choice($.range_expression, $._expression)),
+		_case_value: $ => prec(PREC.OR + 1, choice(alias($._case_range, $.range_expression), $._expression)),
+		// (a case's range ends before 'or': is 'a'..'z' + 1 or 'A'..'Z' + 1)
+		_case_range: $ => prec.left(PREC.OR + 1, choice(
+			seq(field('start', $._expression), '..', field('end', $._expression)),
+			seq(field('start', alias($._number_dotdot, $.number_literal)), field('end', $._expression)),
+		)),
 		switch_else: $ => seq('else', field('body', $.block)),
 		return_statement: $ => seq('return', optional($._expression), ';'),
+		throw_statement: $ => seq('throw', $._expression, ';'),
 		break_statement: _ => seq('break', ';'),
 		continue_statement: _ => seq('continue', ';'),
-		expression_statement: $ => seq($._expression, ';'),
+		// (no ';' needed after a catch block: f() catch (e) { ... })
+		// (a ';' after it is an empty statement)
+		expression_statement: $ => choice(seq($._expression, ';'), prec(1, alias($._catch_block, $.catch_expression))),
 		empty_statement: _ => ';',
 
 		// ===== Expressions =====
@@ -475,6 +509,9 @@ module.exports = grammar({
 			$.sizeof_expression,
 			$.generic_expression,
 			$.lambda_expression,
+			$.try_expression,
+			$.catch_expression,
+			$.switch_expression,
 			$.call_expression,
 			$.index_expression,
 			$.member_expression,
@@ -550,7 +587,27 @@ module.exports = grammar({
 			'sub',
 			field('parameters', $.parameter_list),
 			optional(seq('->', field('return_type', $._type))),
+			optional($.throws_clause),
 			field('body', $.block),
+		),
+
+		// try f(...): an error is thrown on; f(...) catch value / catch (e) value / catch { ... } /
+		// catch (e) { ... } (catch's value is one operand)
+		try_expression: $ => prec.right(PREC.UNARY, seq('try', field('call', $._expression))),
+		catch_expression: $ => choice(
+			$._catch_block,
+			prec.right(PREC.UNARY, seq(field('call', $._expression), 'catch', optional($.catch_binding), field('value', $._expression))),
+		),
+		_catch_block: $ => prec.right(PREC.UNARY, seq(field('call', $._expression), 'catch', optional($.catch_binding), field('body', $.block))),
+		catch_binding: $ => prec.dynamic(1, seq('(', field('name', $.identifier), ')')),
+		// switch (x) { is A or B => a, is C..D => { ... }, else => b }: a value
+		switch_expression: $ => seq(
+			'switch', '(', field('value', $._expression), ')',
+			'{', commaSep($.switch_arm), optional(','), '}',
+		),
+		switch_arm: $ => seq(
+			choice(seq('is', $._case_value, repeat(seq('or', $._case_value))), 'else'),
+			'=>', field('value', choice($.block, $._expression)),
 		),
 
 		call_expression: $ => prec(PREC.POSTFIX, seq(field('function', $._expression), field('arguments', $.argument_list))),

@@ -1561,3 +1561,67 @@ sub f(var n: i32) { switch (n) fall { is 1 or 2..5 { } else { } } var is: i32 = 
         (identifier)
         (primitive_type)
         (number_literal)))))
+
+================================================================================
+errors and switch values
+================================================================================
+
+sub f(var s: string) -> u32 throws E {
+	var a: u32 = parse(s) catch (e) switch (e) { is E.A => 1, else => 2 };
+	save() catch { retry(); }
+	throw E.B;
+	return try parse(s);
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    (identifier)
+    (parameter_list
+      (parameter
+        (identifier)
+        (primitive_type)))
+    (primitive_type)
+    (throws_clause
+      (type_identifier))
+    (block
+      (variable_declaration
+        (identifier)
+        (primitive_type)
+        (catch_expression
+          (call_expression
+            (identifier)
+            (argument_list
+              (identifier)))
+          (catch_binding
+            (identifier))
+          (switch_expression
+            (identifier)
+            (switch_arm
+              (member_expression
+                (identifier)
+                (field_identifier))
+              (number_literal))
+            (switch_arm
+              (number_literal)))))
+      (expression_statement
+        (catch_expression
+          (call_expression
+            (identifier)
+            (argument_list))
+          (block
+            (expression_statement
+              (call_expression
+                (identifier)
+                (argument_list))))))
+      (throw_statement
+        (member_expression
+          (identifier)
+          (field_identifier)))
+      (return_statement
+        (try_expression
+          (call_expression
+            (identifier)
+            (argument_list
+              (identifier))))))))
