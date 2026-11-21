@@ -1,9 +1,20 @@
 #!/bin/bash
 
+PROJ_DIR="$(pwd)"
+
 backtrack_changes() {
 	cp dragon/disk.drd ../extra/dragon/disk.drd
 	cp dragon/cmos.dr ../extra/dragon/cmos.dr
 	cp dragon/bios.bin ../extra/dragon/bios.bin
+}
+
+update_remote() {
+	if [[ -f "$PROJ_DIR/update_remote.sh" ]]; then
+		DIR="$(pwd)"
+		cd $PROJ_DIR
+		./update_remote.sh &
+		cd $DIR
+	fi
 }
 
 set -e
@@ -17,6 +28,7 @@ if [ "$(expr substr $(uname -s) 1 10)" == "MINGW64_NT" ]; then
 fi
 
 if [[ "$1" == "debug" || "$1" == "release" ]]; then
+	update_remote
     BUILD_TYPE="$(tr '[:lower:]' '[:upper:]' <<< ${1:0:1})${1:1}"
     rm -rf bin
     cmake -B bin -S ./ -G "$MAKEFILE_TYPE" -DCMAKE_BUILD_TYPE=$BUILD_TYPE
@@ -27,11 +39,13 @@ if [[ "$1" == "debug" || "$1" == "release" ]]; then
     truncate -s 0 other/build.nr
     echo $build_number >> other/build.nr
 elif [[ "$1" == "dependencies" ]]; then
+	update_remote
     cd other
     chmod +x build_dependencies.sh
     ./build_dependencies.sh
     cd ..
 else
+	update_remote
     cp -r extra/* bin/
     printf "\n\033[0;32mBuilding Changes...\n\n\033[0m"
     $MAKE_COMMAND -C bin -j$(nproc) --no-print-directory
