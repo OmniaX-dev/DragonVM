@@ -135,9 +135,22 @@ namespace dr {
 		var Mode: u32							= MemoryLayout.CPUControl + 0x001C;	// read-only: 1 supervisor, 0 user
 		var PermissionMap: u32					= MemoryLayout.CPUControl + 0x0020;	// what user mode may access (0: everything)
 	};
+	// The last event (ModifiersBitfield, KeyCode: what the keyboard interrupts read), and a buffer of
+	// the last 48 events (presses, releases, text characters), kept also while interrupts are disabled:
+	// read a word at BufferPop to take the oldest (0: none): bits 0-15 the key code (text: the
+	// character), 16-26 the modifiers, 27-28 the kind (KeyboardEventKinds): positive as an i32.
 	const KeyboardRegisters: struct {
 		var ModifiersBitfield: u32				= MemoryLayout.Keyboard + 0x0000;
 		var KeyCode: u32						= MemoryLayout.Keyboard + 0x0004;
+		var BufferCount: u32					= MemoryLayout.Keyboard + 0x0008;	// events waiting (read-only)
+		var BufferPop: u32						= MemoryLayout.Keyboard + 0x000C;	// a word read: the oldest event, removed
+		var BufferDropped: u32					= MemoryLayout.Keyboard + 0x0010;	// events lost (the buffer was full)
+		var BufferControl: u32					= MemoryLayout.Keyboard + 0x0014;	// write 1 (supervisor): emptied, BufferDropped 0
+	};
+	const KeyboardEventKinds: struct {
+		var Pressed: u32						= 1;
+		var Released: u32						= 2;
+		var Text: u32							= 3;
 	};
 	const VGAVideoModes: struct {
 		var TextSingleColor: u8					= 0x00;

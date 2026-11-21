@@ -1,6 +1,6 @@
 #import("libcore")
 
-#include(syscall.ds)
+#include(os/syscall.ds)
 
 namespace std {
 	const PAGE_SIZE: u32 = 4096; //TODO: Once the SysInfo syscall is in, this should come from the kernel

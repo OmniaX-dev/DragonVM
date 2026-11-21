@@ -222,11 +222,36 @@ namespace dragon
 				inline static constexpr u8 NumLock = 9;
 				inline static constexpr u8 ScrolLLock = 10;
 			};
+			// The last event (Modifiers, KeyCode: what the interrupts read), and a buffer of the
+			// events (a ring in the device's memory, so the debugger's history restores it too):
+			// every key press, release and text character is kept until it is read, also while
+			// interrupts are disabled, for code that polls instead.
+			//   0x08 BufferCount: events waiting (read-only)
+			//   0x0C BufferPop: reading a word removes the oldest event and gives it (0: none);
+			//        bits 0-15 the key code (a text event: the character), 16-26 the modifiers
+			//        (tModifierBits), 27-28 the kind (tEventKinds: never 0); positive as an i32
+			//   0x10 BufferDropped: events lost because the buffer was full (read-only)
+			//   0x14 BufferControl: write 1 (supervisor): the buffer emptied, BufferDropped 0
+			//   0x18 BufferHead: where the oldest event is in the ring (read-only)
+			//   0x20 the ring: BufferCapacity words
 			public: struct tRegisters
 			{
 				inline static constexpr u32 Modifiers = 0x00;    // 4 bytes
 				inline static constexpr u32 KeyCode = 0x04;        // 4 bytes
+				inline static constexpr u32 BufferCount = 0x08;
+				inline static constexpr u32 BufferPop = 0x0C;
+				inline static constexpr u32 BufferDropped = 0x10;
+				inline static constexpr u32 BufferControl = 0x14;
+				inline static constexpr u32 BufferHead = 0x18;
+				inline static constexpr u32 BufferRing = 0x20;
 			};
+			public: struct tEventKinds
+			{
+				inline static constexpr u32 Pressed = 1;
+				inline static constexpr u32 Released = 2;
+				inline static constexpr u32 Text = 3;
+			};
+			inline static constexpr u32 BufferCapacity = 48;	// (the ring fills the device's memory: 0x20..0xDF)
 
 			public:
 				inline VirtualKeyboard(void) {  }
@@ -244,12 +269,18 @@ namespace dragon
 				// When disabled, key events are ignored (e.g. while typing in a debugger's text field).
 				inline void enableInput(bool enable = true) { m_inputEnabled = enable; }
 				inline bool isInputEnabled(void) const { return m_inputEnabled; }
+				// An event into the buffer, as if typed (no interrupt; drun --keys).
+				inline void pushEvent(u32 kind, u16 code, u16 modifiers) { __push_event(kind, code, modifiers); }
 
 			private:
 				ostd::BitField_16 __construct_modifiers_bitfield(void);
 				i8 __write8(u32 addr, i8 value);
 				i32 __write32(u32 addr, i32 value);
 				i16 __sdl_key_code_convert(i32 keyCode);
+				// An event into the buffer (dropped, and counted, when it is full).
+				void __push_event(u32 kind, u16 code, u16 modifiers);
+				u32 __pop_event(void);
+				u32 __reg(u32 addr) const;
 
 			private:
 				ostd::ByteStream m_data;

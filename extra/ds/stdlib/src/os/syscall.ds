@@ -70,27 +70,6 @@ namespace std {
 		}
 		return rv;
 	}
-
-	inline sub wait(var pid: i32 = -1, var out_code: i32* = null) -> i32 {
-		return syscall4(SystemCalls.Wait, cast<u32>(pid), cast<u32>(out_code));
-	}
-
-	inline sub spawn(var path: string, var argc: u32 = 0, var argv: string* = null) -> i32 {
-        return syscall4(SystemCalls.Spawn, cast<u32>(path), argc, cast<u32>(argv));
-	}
-
-	inline sub print(var path: string, var nl: bool = true) -> i32 {
-    	return syscall4(SystemCalls.Print, cast<u32>(path), (nl ? 1 : 0));
-	}
-
-	inline sub sleep(var ms: u32) -> i32 {
-   		return syscall4(SystemCalls.Sleep, ms);
-	}
-
-	inline sub random_entropy() -> u32 {
-		return cast<u32>(syscall4(SystemCalls.RandomEntropy));
-	}
-
 	// TODO: out_rv should be i32*
 	sub syscall(var function: u32, var out_rv: u32*, ...typed) -> bool {
 		var l_is_simple_call = sub(var fn: u32) -> bool {
@@ -118,4 +97,13 @@ namespace std {
 		else return false; // TODO: Add cases when new syscalls with more than 4 parameter exist
 		return true;
 	}
+
+	inline sub print(var path: string, var nl: bool = true) -> i32 {
+    	return syscall4(SystemCalls.Print, cast<u32>(path), (nl ? 1 : 0));
+	}
+
+	inline sub random_entropy() -> u32 {
+		return cast<u32>(syscall4(SystemCalls.RandomEntropy));
+	}
+
 }

@@ -443,7 +443,43 @@ namespace dragon
 
 		i32 VirtualKeyboard::read32(u32 addr)
 		{
+			if (addr == tRegisters::BufferPop)
+				return cast<i32>(__pop_event());		// (a word read only: the debugger's byte views don't take events)
 			return stream_read32(m_data, addr, data::ErrorCodes::IntVector_InvalidAddress, "KeyboardController");
+		}
+
+		u32 VirtualKeyboard::__reg(u32 addr) const
+		{
+			i32 value = 0;
+			bytes::read32(m_data, addr, value);
+			return cast<u32>(value);
+		}
+
+		void VirtualKeyboard::__push_event(u32 kind, u16 code, u16 modifiers)
+		{
+			const u32 count = __reg(tRegisters::BufferCount);
+			if (count >= BufferCapacity)
+			{
+				__write32(tRegisters::BufferDropped, cast<i32>(__reg(tRegisters::BufferDropped) + 1));
+				return;
+			}
+			const u32 slot = (__reg(tRegisters::BufferHead) + count) % BufferCapacity;
+			const u32 event = ((kind & 3) << 27) | (cast<u32>(modifiers & 0x07FF) << 16) | code;
+			__write32(tRegisters::BufferRing + slot * 4, cast<i32>(event));
+			__write32(tRegisters::BufferCount, cast<i32>(count + 1));
+		}
+
+		u32 VirtualKeyboard::__pop_event(void)
+		{
+			const u32 count = __reg(tRegisters::BufferCount);
+			if (count == 0)
+				return 0;
+			const u32 head = __reg(tRegisters::BufferHead) % BufferCapacity;
+			const u32 event = __reg(tRegisters::BufferRing + head * 4);
+			__write32(tRegisters::BufferHead, cast<i32>((head + 1) % BufferCapacity));
+			__write32(tRegisters::BufferCount, cast<i32>(count - 1));
+			__write32(tRegisters::BufferPop, cast<i32>(event));		// (what the last pop gave: for the debugger's views)
+			return event;
 		}
 
 		i8 VirtualKeyboard::write8(u32 addr, i8 value)
@@ -462,6 +498,16 @@ namespace dragon
 			{
 				data::ErrorHandler::pushError(data::ErrorCodes::AccessViolation_SupervisorRequired, String("Attempting to write word to KeyboardController in user mode. Address: ").add(String::getHexStr(addr, true, 4)));
 				return 0;
+			}
+			if (addr == tRegisters::BufferControl)
+			{
+				if ((value & 1) != 0)
+				{
+					__write32(tRegisters::BufferCount, 0);
+					__write32(tRegisters::BufferHead, 0);
+					__write32(tRegisters::BufferDropped, 0);
+				}
+				return value;
 			}
 			return stream_write32(m_data, addr, value, data::ErrorCodes::IntVector_InvalidAddress, "KeyboardController");
 		}
@@ -482,12 +528,19 @@ namespace dragon
 					return;
 				ogfx::KeyEventData& ked = (ogfx::KeyEventData&)*signal.userData;
 				m_modifiersBitFiels = __construct_modifiers_bitfield();
+				const u16 code = cast<u16>(__sdl_key_code_convert(ked.keyCode));
 				__write32(tRegisters::Modifiers, cast<i32>(cast<u16>(m_modifiersBitFiels.value)));
-				__write32(tRegisters::KeyCode, cast<i32>(cast<u16>(__sdl_key_code_convert(ked.keyCode))));
+				__write32(tRegisters::KeyCode, cast<i32>(code));
 				if (ked.eventType == ogfx::KeyEventData::eKeyEvent::Pressed)
+				{
+					__push_event(tEventKinds::Pressed, code, cast<u16>(m_modifiersBitFiels.value));
 					cpu.handleInterrupt(data::InterruptCodes::KeyPressed, true);
+				}
 				else if (ked.eventType == ogfx::KeyEventData::eKeyEvent::Released)
+				{
+					__push_event(tEventKinds::Released, code, cast<u16>(m_modifiersBitFiels.value));
 					cpu.handleInterrupt(data::InterruptCodes::KeyReleased, true);
+				}
 			}
 			else if (signal.ID == ostd::BuiltinSignals::TextEntered)
 			{
@@ -497,6 +550,7 @@ namespace dragon
 				m_modifiersBitFiels = __construct_modifiers_bitfield();
 				__write32(tRegisters::Modifiers, cast<i32>(cast<u16>(m_modifiersBitFiels.value)));
 				__write32(tRegisters::KeyCode, cast<i32>(cast<u8>(ked.text[0])));
+				__push_event(tEventKinds::Text, cast<u8>(ked.text[0]), cast<u16>(m_modifiersBitFiels.value));
 				cpu.handleInterrupt(data::InterruptCodes::TextEntered, true);
 			}
 		}

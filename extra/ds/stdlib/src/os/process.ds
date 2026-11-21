@@ -1,0 +1,22 @@
+#include(syscall.ds)
+
+namespace std {
+	inline sub sleep(var ms: u32) -> i32 {
+		return syscall4(SystemCalls.Sleep, ms);
+	}
+	inline sub wait(var pid: i32 = -1, var out_code: i32* = null) -> i32 {
+		return syscall4(SystemCalls.Wait, cast<u32>(pid), cast<u32>(out_code));
+	}
+	inline sub spawn(var path: string, var argc: u32 = 0, var argv: string* = null) -> i32 {
+        return syscall4(SystemCalls.Spawn, cast<u32>(path), argc, cast<u32>(argv));
+	}
+	inline sub yield() -> i32 {
+        return syscall4(SystemCalls.Yield);
+	}
+	inline sub get_pid() -> i32 {
+        return syscall4(SystemCalls.GetPid);
+	}
+	inline sub get_parent_pid() -> i32 {
+        return syscall4(SystemCalls.GetParentPid);
+	}
+}

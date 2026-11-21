@@ -12,7 +12,7 @@
 //         dr::assert_fail_halt(file, line, condition, message);
 //     }
 
-#include(syscall.ds)
+#include(os/syscall.ds)
 #import("libcore")
 
 namespace std {

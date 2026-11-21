@@ -1,0 +1,27 @@
+// expect-rv: 0
+// drun-flags: --keys abcdefghijklmnopq
+// The keyboard's buffer (drun --keys: 17 characters typed before the program starts, each a press,
+// its text and a release: 51 events, 3 more than the buffer holds): read by polling, the oldest
+// first; the events that didn't fit are counted; BufferControl empties it.
+#import("dragon-sdk")
+#include(check.ds)
+
+sub reg(var addr: u32) -> u32 { return *cast<u32*>(addr); }
+
+sub main() -> i32 {
+	check(1, reg(dr::KeyboardRegisters.BufferCount) == 48);
+	check(2, reg(dr::KeyboardRegisters.BufferDropped) == 3);
+	var kinds: u32[3] = { dr::KeyboardEventKinds.Pressed, dr::KeyboardEventKinds.Text, dr::KeyboardEventKinds.Released };
+	for (var i: u32 = 0; i < 48; i++) {
+		var e: u32 = reg(dr::KeyboardRegisters.BufferPop);
+		check(3, ((e >> 27) & 3) == kinds[i % 3]);
+		check(9, cast<i32>(e) > 0);
+		check(4, (e & 0xFFFF) == 'a' + i / 3);
+		check(5, ((e >> 16) & 0x7FF) == 0);
+	}
+	check(6, reg(dr::KeyboardRegisters.BufferCount) == 0);
+	check(7, reg(dr::KeyboardRegisters.BufferPop) == 0);		// (empty: 0)
+	*cast<u32*>(dr::KeyboardRegisters.BufferControl) = 1;
+	check(8, reg(dr::KeyboardRegisters.BufferDropped) == 0);
+	return result();
+}

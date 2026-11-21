@@ -148,6 +148,23 @@ static void printScreen(void)
 // screen_redraw_rate_per_second); 0 = never.
 static u64 s_vsyncCycles = 0;
 
+// --keys / --keys-at: typed into the keyboard's buffer (each character a press, its text and a
+// release; no interrupts) when the machine reaches s_keysAt cycles (0: before it starts).
+static std::string s_keys;
+static u64 s_keysAt = 0;
+static bool s_keysPending = false;
+static void typeKeys(void)
+{
+	for (char c : s_keys)
+	{
+		const u16 code = cast<u8>(c);
+		DragonRuntime::vKeyboard.pushEvent(hw::VirtualKeyboard::tEventKinds::Pressed, code, 0);
+		DragonRuntime::vKeyboard.pushEvent(hw::VirtualKeyboard::tEventKinds::Text, code, 0);
+		DragonRuntime::vKeyboard.pushEvent(hw::VirtualKeyboard::tEventKinds::Released, code, 0);
+	}
+	s_keysPending = false;
+}
+
 static bool step(u64& cycles)
 {
 	auto& cpu = DragonRuntime::cpu;
@@ -156,6 +173,8 @@ static bool step(u64& cycles)
 	DragonRuntime::vTimer.cycleStep();
 	processVideoSignal();
 	cycles++;
+	if (s_keysPending && cycles >= s_keysAt)
+		typeKeys();
 	// As VirtualDisplay raises it: skipped while the previous VSync handler is still running.
 	if (s_vsyncCycles != 0 && cycles % s_vsyncCycles == 0 && !cpu.isInterruptInService(data::InterruptCodes::VSync))
 		cpu.handleInterrupt(data::InterruptCodes::VSync, true);
@@ -188,6 +207,9 @@ static void usage(void)
 				 "  --user                 Runs the program in user mode (default: supervisor mode, like the BIOS,\n"
 				 "                         a boot loader or a kernel: privileged instructions work); a hlt in\n"
 				 "                         user mode (privileged) then ends the run, as a halt\n"
+				 "  --keys <text>          Typed before the program starts, into the keyboard's buffer (each\n"
+				 "                         character: a press, its text, a release; no interrupts)\n"
+				 "  --keys-at <cycles>     Type --keys when the machine reaches this many cycles instead\n"
 				 "  --unix-time <seconds>  The Unix time at the start (the Timer's UnixTime; default: the host's\n"
 				 "                         clock), then running on with the machine's time\n"
 				 "  -- <arguments>         The program's arguments (main(argc, argv); argv[0] is its path)\n"
@@ -237,6 +259,8 @@ int main(int argc, char** argv)
 		else if (a == "--drx-events") drxEvents = true;
 		else if (a == "--user") userMode = true;
 		else if (a == "--unix-time") unixTime = (i64)std::strtoull(l_value().c_str(), nullptr, 0);
+		else if (a == "--keys") { s_keys = l_value(); s_keysPending = true; }
+		else if (a == "--keys-at") s_keysAt = std::strtoull(l_value().c_str(), nullptr, 0);
 		else if (a == "--vsync") vsyncCycles = (i64)std::strtoull(l_value().c_str(), nullptr, 0);
 		else if (a == "--max-cycles") maxCycles = std::strtoull(l_value().c_str(), nullptr, 0);
 		else if (a == "--dump")
@@ -286,6 +310,8 @@ int main(int argc, char** argv)
 		DragonRuntime::vTimer.setTimeSource(hw::VirtualTimer::eTimeSource::MachineTime, config.clock_rate_sec);
 		if (unixTime >= 0)
 			DragonRuntime::vTimer.setUnixTime(cast<u32>(unixTime));
+		if (s_keysPending && s_keysAt == 0)
+			typeKeys();		// (before the program starts)
 		s_vsyncCycles = (vsyncCycles >= 0 ? (u64)vsyncCycles
 			: std::max<u64>(1, cast<u64>(config.clock_rate_sec) / std::max<u64>(1, config.screen_redraw_rate_per_second)));
 	}

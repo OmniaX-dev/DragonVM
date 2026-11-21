@@ -2,19 +2,21 @@
 
 #include(fault.ds)
 #include(sched.ds)
+#include(sched_sys.ds)
+
 const MAX_PRINT_LEN = 512;
 const SYSCALL: u32 										= 0x40;
 
 const SYSCALL_EXIT: u32 								= 0x00_10;
 const SYSCALL_PRINT: u32 								= 0x00_11;
 
-// const SYSCALL_GET_PID: u32 								= 0x01_00;
-// const SYSCALL_GET_PARENT_PID: u32 						= 0x01_01;
-// const SYSCALL_YIELD: u32 								= 0x01_02;
+const SYSCALL_GET_PID: u32 								= 0x01_00;
+const SYSCALL_GET_PARENT_PID: u32 						= 0x01_01;
+const SYSCALL_YIELD: u32 								= 0x01_02;
 const SYSCALL_SPAWN: u32 								= 0x01_03;
 const SYSCALL_WAIT: u32 								= 0x01_04;
 const SYSCALL_SLEEP: u32 								= 0x01_05;
-// const SYSCALL_KILL: u32 								= 0x01_06;
+const SYSCALL_KILL: u32 								= 0x01_06;
 
 const SYSCALL_ALLOC_PAGES: u32							= 0x02_00;
 const SYSCALL_FREE_PAGES: u32							= 0x02_01;
@@ -110,76 +112,37 @@ namespace __internal {
 		var f: SyscallFrame* = current_syscall_frame();
 		var function: u32 = f->regs.R(9);
 		var rv: i32 = std::Ok;
+
+		switch(function) {
+			is SYSCALL_EXIT 							{ proc::process_exit(proc::g_current, cast<i32>(f->regs.R(8))); }
+			is SYSCALL_PRINT 							{ rv = vga::sys_print(cast<string>(f->regs.R(8)), f->regs.R(7) != 0); }
 // ===========================================================================
-		if (function == SYSCALL_EXIT)
-		{
-        	proc::process_exit(proc::g_current, cast<i32>(f->regs.R(8))); // doesn't return
-		}
-		else if (function == SYSCALL_PRINT)
-		{
-			rv = vga::sys_print(cast<string>(f->regs.R(8)), f->regs.R(7) != 0);
-		}
+			is SYSCALL_GET_PID 							{ rv = proc::sys_get_pid(); }
+			is SYSCALL_GET_PARENT_PID 					{ rv = proc::sys_get_parent_pid(); }
+			is SYSCALL_YIELD 							{ rv = 0; }
+			is SYSCALL_SPAWN 							{ rv = proc::sys_spawn(f->regs.R(8), f->regs.R(7), f->regs.R(6)); }
+			is SYSCALL_WAIT 							{ rv = proc::sys_wait(cast<i32>(f->regs.R(8)), f->regs.R(7)); }
+			is SYSCALL_SLEEP 							{ rv = proc::sys_sleep(f->regs.R(8)); }
+			is SYSCALL_KILL 							{  }
 // ===========================================================================
-		else if (function == SYSCALL_SPAWN)
-		{
-			rv = proc::sys_spawn(f->regs.R(8), f->regs.R(7), f->regs.R(6));
-		}
-		else if (function == SYSCALL_WAIT)
-		{
-			rv = proc::sys_wait(cast<i32>(f->regs.R(8)), f->regs.R(7));      // R8 = pid, R7 = out_code
-		}
-		else if (function == SYSCALL_SLEEP)
-		{
-			rv = proc::sys_sleep(f->regs.R(8));
-		}
+			is SYSCALL_ALLOC_PAGES 						{ rv = proc::sys_alloc_pages(f->regs.R(8)); }
+			is SYSCALL_FREE_PAGES 						{ rv = proc::sys_free_pages(f->regs.R(8), f->regs.R(7)); }
 // ===========================================================================
-		else if (function == SYSCALL_ALLOC_PAGES)
-		{
-			rv = proc::sys_alloc_pages(f->regs.R(8));
-		}
-		else if (function == SYSCALL_FREE_PAGES)
-		{
-			rv = proc::sys_free_pages(f->regs.R(8), f->regs.R(7));
-		}
-// ===========================================================================
-		else if (function == SYSCALL_RANDOM)
-		{
-			rv = *cast<u32*>(dr::RandomRegisters.Int);
-		}
-		else if (function == SYSCALL_RANDOM_F32)
-		{
-			rv = *cast<u32*>(dr::RandomRegisters.Float);
-		}
-		else if (function == SYSCALL_SEED_RANDOM)
-		{
+			is SYSCALL_RANDOM 							{ rv = *cast<u32*>(dr::RandomRegisters.Int); }
+			is SYSCALL_RANDOM_F32 						{ rv = *cast<u32*>(dr::RandomRegisters.Float); }
 			// TODO: lets any process reseed the one shared random generator, which changes every other process’s numbers
 			// and makes them predictable. That’s fine for now. Eventually the seed should be kernel-only, or each process
 			// should get its own generator state.
-			*cast<u32*>(dr::RandomRegisters.Seed) = f->regs.R(8);
-		}
-		else if (function == SYSCALL_RANDOM_ENTROPY)
-		{
-			rv = *cast<u32*>(dr::RandomRegisters.Entropy);
-		}
+			is SYSCALL_SEED_RANDOM 						{ *cast<u32*>(dr::RandomRegisters.Seed) = f->regs.R(8); }
+			is SYSCALL_RANDOM_ENTROPY 					{ rv = *cast<u32*>(dr::RandomRegisters.Entropy); }
 // ===========================================================================
-		else if (function == SYSCALL_TIME_MILLIS)
-		{
-			rv = *cast<u32*>(dr::TimerRegisters.Milliseconds);
-		}
-		else if (function == SYSCALL_TIME_CYCLES)
-		{
-			rv = *cast<u32*>(dr::TimerRegisters.CyclesLow);
-		}
-		else if (function == SYSCALL_TIME_UNIX)
-		{
-			rv = *cast<u32*>(dr::TimerRegisters.UnixTime);
-		}
+			is SYSCALL_TIME_MILLIS 						{ rv = *cast<u32*>(dr::TimerRegisters.Milliseconds); }
+			is SYSCALL_TIME_CYCLES 						{ rv = *cast<u32*>(dr::TimerRegisters.CyclesLow); }
+			is SYSCALL_TIME_UNIX 						{ rv = *cast<u32*>(dr::TimerRegisters.UnixTime); }
 // ===========================================================================
-		else
-		{
-			rv = std::SystemErrors.NoSuchCall;
+			else 										{ rv = std::SystemErrors.NoSuchCall; }
 		}
-		if (proc::g_slice_left == 0) {                           // the turn ran out during the call
+		if (proc::g_slice_left == 0 or function == SYSCALL_YIELD) {
 		    proc::g_current->rv = cast<u32>(rv);                 // switch_to puts it in RV when it runs again
 		    proc::g_current->state = proc::ProcessState.Ready;
 		    proc::schedule();                                    // doesn't return
