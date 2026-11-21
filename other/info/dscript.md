@@ -88,7 +88,7 @@ the source refers to (`src/compiler/Index.hpp`).
 | `f32` | 4 | IEEE 754 single precision (`float` = `f32`), see "Floating point" |
 | `bool` | 1 | `true` / `false` |
 | `T*` | 4 | pointers; `void*` converts to and from any pointer |
-| `string` | 4 | the same as `u8*` (null-terminated) |
+| `string` | 4 | the same as `const u8*` (null-terminated text to read; a `u8*` converts to it) |
 | `T[N]` | N * size | arrays; they decay to `T*` |
 | `T[]` | the value's | in a declaration with a value: `{ 1, 2, 3 }` -> 3, `"text"` -> 5 (with the 0) |
 | `struct Name` | sum of the fields | packed (no padding) |
@@ -230,29 +230,93 @@ dr::cpu::enter_user_mode(program_main, stack_top, stack_size);   // doesn't retu
   `release_boot_stack()` sets StackSize to 0 (SP there is a stack overflow from then on; a reset
   gives it back) and the memory can go to a heap. It returns false while SP is still on it.
 
-### Memory: dr::Heap (SDK)
+### Memory: std::Heap (libcore) and dr::Heap (SDK)
 
-`heap.ds`: an allocator over one or more regions of memory, its state in a header at the start of
-the first one (no globals: it works from ROM, and can be handed from program to program).
+libcore's `heap.ds`: an allocator over regions of memory, independent of the machine. Its state is
+in memory, never in globals: a header at the start of the memory `create` was given (it works from
+ROM, and can be handed from program to program), or a variable (`var g_heap: std::Heap();`).
 ```
-var heap: dr::Heap* = dr::Heap::create(start, size);   // null: too small
-heap->add_region(other_start, other_size);             // up to dr::HeapMaxRegions (16), no overlaps
-var p: u8* = heap->alloc(100);                         // 8 byte aligned; null: no room
+var heap: std::Heap* = std::Heap::create(start, size);  // null: too small
+heap->add_region(other_start, other_size);              // any number; no overlaps; right after a
+                                                        // region (start == its base + size): extends it
+var p: u8* = heap->alloc(100);                          // 8 byte aligned; null: no room
 var page: u8* = heap->alloc_aligned(4096, 4096);
-p = heap->realloc(p, 200);                             // in place when it can, else moved
-heap->free(p);                                         // false: not the heap's, or freed already
+p = heap->realloc(p, 200);                              // in place when it can, else moved
+heap->free(p);                                          // false: not the heap's, or freed already
+var base: u32; var size: u32;
+if (heap->take_empty_region(&base, &size)) { ... }      // an all-free region out (give it back)
 ```
 - Also `alloc_zeroed`, `block_size(p)`, `owns(p)`, `total_bytes()`, `free_bytes()`,
-  `largest_free()`, `check()` (walks every block: false after a header was overwritten),
-  `region_count()`, `region(i)`, `dr::Heap::valid(h)`.
-- In supervisor mode each operation runs with interrupts disabled (handlers may allocate); in user
-  mode they don't (the interrupt flag is privileged there).
+  `largest_free()`, `empty_region_count()`, `check()` (walks every block and free list: false
+  after a header was overwritten), `region_count()`, `first_region()`, `region(i)`,
+  `std::Heap::valid(h)`. A heap can't be copied (its copy constructor is private).
+- Blocks: an 8 byte header (size and tag: catches bad pointers and double frees); free blocks
+  are in free lists by size class (powers of two) and always merged with free neighbours (on both
+  sides, at once: the size is repeated at the end of free blocks). `create`'s region (it holds the
+  header) is never taken back.
+- `std::Heap` is `std::BasicHeap<std::NoGuard>`: nothing protects it from interrupts. The guard
+  (a struct with `static sub enter() -> u32` and `static sub leave(var saved: u32)`, called
+  around every operation) doesn't change the layout.
+- The SDK's `dr::Heap` is `std::BasicHeap<dr::InterruptGuard>`: in supervisor mode each operation
+  runs with interrupts disabled (handlers may allocate) and puts them back as they were; in user
+  mode nothing changes (the interrupt flag is privileged there).
 - `dr::bios_alloc` / `dr::bios_free` use the system heap through the BIOS (int 0x20):
   `dr::system_heap()`, its address in CMOS HeapStart. The BIOS makes it (4 MiB below the boot
   stack); a kernel can make its own and `dr::set_system_heap(heap)` (supervisor mode): from then
   on `dr::bios_alloc` everywhere serves the kernel's heap. A kernel calls its heap directly where it
   can: no interrupt (and `int` does nothing in supervisor mode while interrupts are disabled: in
   an atomic block, or before the kernel enables them).
+
+### Containers and String (libcore, stdlib)
+
+libcore has growable containers as templates over an allocator `A`: any struct with
+`static sub alloc(var size: u32) -> void*` (null: no memory) and `static sub free(var p: void*)`.
+stdlib names them with `malloc` / `free`; the SDK's `dr::SystemAllocator` uses the system heap (a
+kernel's).
+
+| libcore | stdlib | |
+|---|---|---|
+| `std::BasicVector<T, A>` | `std::Vector<T>` | a growable array |
+| `std::BasicStack<T, A>` | `std::Stack<T>` | last in, first out |
+| `std::BasicMap<K, V, A>` | `std::Map<K, V>` | keys in order (an AVL tree) |
+| `std::BasicHashMap<K, V, A>` | `std::HashMap<K, V>` | a hash table (open addressing) |
+| `std::BasicString<A>` | `std::String` | a growable text that owns its memory |
+```
+var v: std::Vector<u32>;
+v.push(5);                                  // false: no memory
+for (auto x in v) { ... }                   // auto& x: a pointer to the element
+var last = v.pop();                         // moved out
+var ages: std::Map<std::String, u32>;
+ages.set("bob", 31);                        // a new entry, or its value replaced
+var a: u32* = ages.get("bob");              // null: not there
+for (auto& e in ages) { ... e->key ... e->value ... }   // in key order (a HashMap: none)
+var s: std::String = "Hello";
+s += ", ";
+s.appendf("{} times", 3);
+std::print(s);                              // a String is a string where one is expected
+```
+- Elements, keys and values are values: `push` / `set` take theirs (`own` parameters: a call's
+  result is moved in, a variable copied), `pop` / `remove` give them back (moved out), and the
+  container destroys what it still has. Growing moves elements by their bytes. A type that can't
+  be copied works (only copying the container needs copies of its elements).
+- When the allocator has no memory, the subs returning `bool` return false and change nothing.
+- `BasicVector`: `size`, `capacity`, `empty`, `[i]`, `at`, `front`, `back`, `data`, `push`, `pop`,
+  `insert(i, v)`, `remove(i)` (moved out), `erase(i)` (destroyed), `swap_remove(i)`, `resize`,
+  `reserve`, `shrink`, `clear`, `find(v)` / `contains(v)` (std::equals), `copy_from`.
+- `BasicStack`: `push`, `pop`, `top`, `size`, `empty`, `clear`, `reserve`, for-in bottom to top.
+- `BasicMap` / `BasicHashMap`: `set(key, value)`, `get(key) -> V*`, `find(key) -> MapEntry<K, V>*`,
+  `contains`, `remove`, `size`, `empty`, `clear`, `copy_from`; a Map also `first()` / `last()`, a
+  HashMap `reserve(n)` and `capacity()`. Elements of a for-in: `std::MapEntry<K, V>` (`key`,
+  `value`: don't change the key). HashMap entry pointers stay valid until a new key is set.
+- Keys: `std::less` (Map), `std::equals` and `std::hash_of` (HashMap): numbers, pointers and
+  enums as they are; a `string` (`const u8*`) by its text (the map keeps the pointer, not a copy:
+  `std::String` keys own their text); a struct by its `operator<`, `operator==` and
+  `readonly sub hash() -> u32`.
+- `BasicString`: from a `string` (implicit), copies, `= "text"`, `c_str()` (never null) and the
+  implicit conversion to `string`, `len`, `empty`, `[i]`, `append`, `append_n`, `append_char`,
+  `append_int`, `append_uint(v, base)`, `appendf(fmt, ...)` (std::format), `+=` (a string or a
+  `u8`), `truncate`, `clear`, `reserve`, `find`, `find_char`, `contains`, `starts_with`,
+  `ends_with`, `substr(from, n)`, `==` / `<` with a string, `hash()`.
 
 ### Text formatting (libcore)
 
@@ -351,7 +415,7 @@ array) visible only there (one whose value is not a compile-time constant is a v
 never changes: see "const, constexpr, constinit"); `static var` is a variable that lives for
 the whole program, like a global, but is only visible there:
 ```
-sub size_text(var bytes: u32, var buff: u8*) -> string {
+sub size_text(var bytes: u32, var buff: u8*) -> u8* {
     const units: string[] = { "B", "KiB", "MiB", "GiB" };     // stored once, in the data
     static var calls: u32 = 0;                                // keeps its value between calls
     calls++;
@@ -477,7 +541,8 @@ sub main() -> i32 {
   derived class's constructor, `Base.new(...)` builds the base's part instead.)
 - The arguments see the names around the declaration (in `var x: Point(x);`, `x` is the outer
   one). `priv sub new` makes a struct that only its own subs can build; `new` is a method like
-  the others (`p.new(3)` runs it again). It cannot be `static` or return a value.
+  the others (`p.new(3)` builds it again: its defaults, then the constructor). It cannot be
+  `static` or return a value.
 - `--rom`: globals (and so global constructors) are errors, as before.
 
 ### Nested structs and enums
@@ -603,7 +668,8 @@ var back = static_cast<Square*>(sh);        // back to the class (unchecked: it 
   the class's own table is set right after it.
 - An object gets its tables where its fields get their defaults (`var x: C;`, `var x: C(...)`,
   globals, fields, arrays) and in its constructor: memory from elsewhere (a heap) is built with
-  `p->new(...)` (the implicit `new()` for a class without one). A copy into a new value (a value
+  `p->new(...)` (the implicit `new()` for a class without one), which stores its defaults and
+  tables first, as a declaration does. A copy into a new value (a value
   given or returned, `var b: B = *p;`) has its type's table, and an assignment (`*p = b;`) keeps
   the object's own: a derived object never becomes a base value by accident. A derived class's
   value does not convert to its base's value at all (`var a: A = b;` is an error): use pointers.
@@ -659,6 +725,33 @@ sub main() {
   (the last built first; not a library's); the fields of a struct after its destructor's body
   (the last first), then a class's base's destructor; an array's elements (the last first).
   Memory from elsewhere: `p->del()` (with `p->new(...)`).
+- `p->new(...)` / `p->del()` work for any type (a template's `T` in memory it manages): `p->new()`
+  on a type without constructors gives its defaults (a number, a pointer: 0); `p->new(value)` with a
+  value of the type itself copies it as a variable's initialization would (a call's result: moved
+  in; a number, a pointer: what converts to it); `p->del()` on a type without a destructor does
+  nothing (an array: its elements'). The others are the struct's own methods.
+- `take(p)`: `*p` moved out (its bytes, no copy constructor; what is left is not a value: not
+  destroyed). A struct is a temporary, as a call's result (moved into a variable, destroyed when
+  the statement ends if nothing keeps it). Not through a `const T*`. A built-in only where nothing
+  else is named `take`.
+- `own` parameters (`sub push(var v: own T)`): the sub owns the value and destroys it when it
+  ends (a value passed to a normal parameter is the caller's: destroyed when its statement ends).
+  A call's result is given to it (no copy); a variable is copied for it. Returning it moves it
+  out. own is part of the sub's type (`sub(own T) -> void`; an override has the same own
+  parameters). `own` is not a keyword: only before a parameter's type (`own::x` is a name; write
+  `own ns::T`, not `own ::ns::T`).
+- `forget(v)`: v (a local, or an own parameter) is not destroyed when its scope ends: what it held
+  was moved elsewhere (`std::memcpy(slot, &v, sizeof(T)); forget(v);`, or
+  `slot->new(take(&v)); forget(v);`). Anywhere in v's scope (an if, a loop, a defer): a variable
+  forget takes has a drop flag (set when it is built, cleared by forget) that its destructor
+  checks. Nothing for a type without a destructor. A built-in where nothing else is named `forget`.
+```
+template(T) { struct Stack {
+    ...
+    sub push(var v: own T) { (&this->items[this->count])->new(take(&v)); forget(v); this->count++; }
+    sub pop() -> T { this->count--; return take(&this->items[this->count]); }
+} }
+```
 - A struct whose fields (or base) have destructors gets an implicit `del()` for them. Destructors
   are not inherited (each struct has its own), are never static, and take nothing.
 - In a class with a table, `del` is virtual by itself (the table's destructor slot): `p->del()`
@@ -891,7 +984,8 @@ var s: const u8** = &p;                 // a pointer to a const u8* (const (u8*)
   pointer can still point elsewhere: as in C, it protects one level).
 - `&` of something that cannot change (a constant, a const or readonly field, through a const
   pointer) is a const pointer; constant arrays still give their elements' plain pointers (as
-  before), and string literals are `string` (`u8*`).
+  before), and string literals are `string` (`const u8*`: their text is read-only, as in C; a
+  sub that writes text takes a `u8*` buffer, and returns it as a `u8*`: `strcpy`, `itoa`).
 - Methods: see `readonly sub` (under Methods); `this` of a readonly sub is a `const T*`.
 - Templates: `T*` matched with a `const u8*` gives `T = u8` (then the const is an error: use
   `const T*` for parameters that only read).
@@ -1035,6 +1129,9 @@ var nested: Array<Array<u32>*>;
   names of every template first); `>>` closes two of them.
 - In a library, the templates are in its interface (as source, like inline subs): a program makes
   its own instances. The instances are never exported (each user has its own copy).
+- Aliases: `template(T) { alias Vector = BasicVector<T, MallocAlloc>; }`: `Vector<u32>` is the type
+  the alias names for those arguments (a struct: that struct itself, `Vector<u32>.make()` too; also
+  other types: `template(T) { alias PtrTo = T*; }`).
 
 **Optional parameters**: `template(K, optional V)`: `optional` once, the parameters after it are
 optional too. An instance gives the types it needs:

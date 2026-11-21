@@ -1,0 +1,24 @@
+// containers.ds - libcore's containers with the program's heap (malloc / free):
+//
+//     std::Vector<T>        std::BasicVector<T, std::MallocAllocator>
+//     std::Stack<T>         std::BasicStack<T, std::MallocAllocator>
+//     std::Map<K, V>        std::BasicMap<K, V, std::MallocAllocator>      (ordered)
+//     std::HashMap<K, V>    std::BasicHashMap<K, V, std::MallocAllocator>
+//     std::String           std::BasicString<std::MallocAllocator>
+//
+// (A kernel uses the Basic ones with dr::SystemAllocator, from the SDK; any other allocator is a
+// struct with static alloc(size) -> void* and free(p).)
+#include(memory.ds)
+
+namespace std {
+	struct MallocAllocator {
+		static inline sub alloc(var size: u32) -> void* { return std::malloc(size); }
+		static inline sub free(var p: void*) { std::free(p); }
+	};
+
+	template(T) { alias Vector = BasicVector<T, MallocAllocator>; }
+	template(T) { alias Stack = BasicStack<T, MallocAllocator>; }
+	template(K, V) { alias Map = BasicMap<K, V, MallocAllocator>; }
+	template(K, V) { alias HashMap = BasicHashMap<K, V, MallocAllocator>; }
+	alias String = BasicString<MallocAllocator>;
+}

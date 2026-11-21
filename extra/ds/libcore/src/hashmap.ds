@@ -1,0 +1,226 @@
+// hashmap.ds - std::BasicHashMap<K, V, A>: keys to values in a hash table (no order), in memory from
+// the allocator A (static alloc(size) -> void* and free(p), as BasicVector's). stdlib's
+// std::HashMap<K, V> is BasicHashMap<K, V, std::MallocAllocator>.
+//
+//     var ids: std::HashMap<std::String, u32>;
+//     ids.set("eth0", 1);
+//     var id: u32* = ids.get("eth0");     // null when it isn't there
+//     for (auto& e in ids) { ... e->key ... e->value ... }      // in no particular order
+//
+// The keys are hashed by std::hash_of (numbers, pointers, enums; a string's text; a struct's
+// hash()) and compared by std::equals (==; strings: strcmp). set, get, remove: O(1) on average.
+// Open addressing: one block holds the entries and a byte per slot (empty, full, removed); the
+// table doubles when it is 3/4 used (removed slots count until the next growth cleans them up),
+// and growing moves the entries by their bytes.
+//
+// Keys and values are values (as BasicVector's elements). A string key (const u8*) is a pointer:
+// the map keeps the pointer, not a copy of the text (std::String keys own their text). Entry
+// pointers (get, find, for-in) stay valid until the next set of a new key or a growth.
+namespace std {
+	template(K, V, A) {
+		struct BasicHashMap {
+			priv var m_entries: MapEntry<K, V>*;
+			priv var m_state: u8*;			// per slot: 0 empty, 1 full, 2 removed (after the entries)
+			priv var m_capacity: u32;		// 0, or a power of two
+			priv var m_size: u32;			// full slots
+			priv var m_used: u32;			// full and removed slots
+
+			sub new() { this->m_entries = null; this->m_state = null; this->m_capacity = 0; this->m_size = 0; this->m_used = 0; }
+			sub new(var o: const ref BasicHashMap<K, V, A>) {
+				this->m_entries = null;
+				this->m_state = null;
+				this->m_capacity = 0;
+				this->m_size = 0;
+				this->m_used = 0;
+				this->copy_from(o);
+			}
+			sub del() {
+				this->clear();
+				if (this->m_entries != null)
+					A.free(this->m_entries);
+				this->m_entries = null;
+				this->m_state = null;
+				this->m_capacity = 0;
+			}
+
+			readonly inline sub size() -> u32 { return this->m_size; }
+			readonly inline sub empty() -> bool { return this->m_size == 0; }
+			readonly inline sub capacity() -> u32 { return this->m_capacity; }
+
+			// key's value set (a new entry, or the value of the one there replaced: the new key is then
+			// destroyed). false: no memory (nothing changes; key and value are destroyed).
+			sub set(var key: own K, var value: own V) -> bool {
+				var i: i32 = this->find_slot(key);
+				if (i >= 0) {
+					var e: MapEntry<K, V>* = &this->m_entries[i];
+					(&e->value)->del();
+					(&e->value)->new(take(&value));
+					forget(value);
+					return true;
+				}
+				if ((this->m_used + 1) * 4 > this->m_capacity * 3) {
+					// 3/4 used: twice the room, or the same once the removed slots are cleaned up
+					var want: u32 = this->m_capacity == 0 ? 8 : this->m_capacity;
+					if ((this->m_size + 1) * 2 > want)
+						want *= 2;
+					if (not this->rehash(want))
+						return false;
+				}
+				var mask: u32 = this->m_capacity - 1;
+				var s: u32 = hash_of<K>(key) & mask;
+				while (this->m_state[s] == 1)
+					s = (s + 1) & mask;
+				if (this->m_state[s] == 0)
+					this->m_used++;
+				this->m_state[s] = 1;
+				var e: MapEntry<K, V>* = &this->m_entries[s];
+				(&e->key)->new(take(&key));
+				forget(key);
+				(&e->value)->new(take(&value));
+				forget(value);
+				this->m_size++;
+				return true;
+			}
+
+			// key's value (null: no entry).
+			inline sub get(var key: const ref K) -> V* {
+				var i: i32 = this->find_slot(key);
+				return i >= 0 ? &this->m_entries[i].value : null;
+			}
+			readonly inline sub contains(var key: const ref K) -> bool { return this->find_slot(key) >= 0; }
+			// key's entry (null: none).
+			inline sub find(var key: const ref K) -> MapEntry<K, V>* {
+				var i: i32 = this->find_slot(key);
+				return i >= 0 ? &this->m_entries[i] : null;
+			}
+
+			// key's entry destroyed. false: there was none.
+			sub remove(var key: const ref K) -> bool {
+				var i: i32 = this->find_slot(key);
+				if (i < 0)
+					return false;
+				(&this->m_entries[i])->del();
+				this->m_state[i] = 2;
+				this->m_size--;
+				return true;
+			}
+
+			// Every entry destroyed (the table stays).
+			sub clear() {
+				for (var i: u32 = 0; i < this->m_capacity; i++) {
+					if (this->m_state[i] == 1)
+						(&this->m_entries[i])->del();
+					this->m_state[i] = 0;
+				}
+				this->m_size = 0;
+				this->m_used = 0;
+			}
+
+			// Room for n entries without growing. false: no memory.
+			sub reserve(var n: u32) -> bool {
+				var want: u32 = 8;
+				while (want * 3 < n * 4) {
+					if (want >= 0x40000000)
+						return false;
+					want *= 2;
+				}
+				return want <= this->m_capacity or this->rehash(want);
+			}
+
+			// Its entries replaced by copies of o's. false: no memory (it is then empty).
+			sub copy_from(var o: const ref BasicHashMap<K, V, A>) -> bool {
+				if (&o == this)
+					return true;
+				this->clear();
+				if (o.m_size == 0)
+					return true;
+				if (this->m_capacity != o.m_capacity) {
+					if (this->m_entries != null)
+						A.free(this->m_entries);
+					this->m_entries = null;
+					this->m_state = null;
+					this->m_capacity = 0;
+					if (not this->allocate(o.m_capacity))
+						return false;
+				}
+				// (the same slots: o's hashes are these)
+				for (var i: u32 = 0; i < o.m_capacity; i++) {
+					if (o.m_state[i] != 1)
+						continue;
+					(&this->m_entries[i].key)->new(o.m_entries[i].key);
+					(&this->m_entries[i].value)->new(o.m_entries[i].value);
+					this->m_state[i] = 1;
+				}
+				this->m_size = o.m_size;
+				this->m_used = o.m_size;
+				return true;
+			}
+
+			// for (auto& e in map): the full slots (the cursor: an entry pointer, so that get(key) with a
+			// number key is not get(cursor)).
+			readonly sub begin() -> MapEntry<K, V>* { return this->next_full(0); }
+			readonly inline sub end() -> MapEntry<K, V>* { return this->m_entries + this->m_capacity; }
+			readonly inline sub next(var e: MapEntry<K, V>*) -> MapEntry<K, V>* { return this->next_full(cast<u32>(e - this->m_entries) + 1); }
+			inline sub get(var e: MapEntry<K, V>*) -> MapEntry<K, V>* { return e; }
+
+			priv readonly sub next_full(var i: u32) -> MapEntry<K, V>* {
+				while (i < this->m_capacity and this->m_state[i] != 1)
+					i++;
+				return this->m_entries + i;
+			}
+			// key's slot (-1: none).
+			priv readonly sub find_slot(var key: const ref K) -> i32 {
+				if (this->m_size == 0)
+					return -1;
+				var mask: u32 = this->m_capacity - 1;
+				var s: u32 = hash_of<K>(key) & mask;
+				while (this->m_state[s] != 0) {		// (there is always an empty slot: at most 3/4 used)
+					if (this->m_state[s] == 1 and equals<K>(this->m_entries[s].key, key))
+						return cast<i32>(s);
+					s = (s + 1) & mask;
+				}
+				return -1;
+			}
+			// An empty table of n slots (the old one must be gone).
+			priv sub allocate(var n: u32) -> bool {
+				var bytes: u32 = n * sizeof(MapEntry<K, V>);
+				if (bytes / n != sizeof(MapEntry<K, V>) or bytes + n < bytes)
+					return false;
+				var mem: u8* = cast<u8*>(A.alloc(bytes + n));
+				if (mem == null)
+					return false;
+				this->m_entries = cast<MapEntry<K, V>*>(mem);
+				this->m_state = mem + bytes;
+				memset(this->m_state, 0, n);
+				this->m_capacity = n;
+				return true;
+			}
+			// The entries moved to a table of n slots (their bytes). false: no memory (nothing changes).
+			priv sub rehash(var n: u32) -> bool {
+				var old_entries: MapEntry<K, V>* = this->m_entries;
+				var old_state: u8* = this->m_state;
+				var old_capacity: u32 = this->m_capacity;
+				if (not this->allocate(n)) {
+					this->m_entries = old_entries;
+					this->m_state = old_state;
+					this->m_capacity = old_capacity;
+					return false;
+				}
+				var mask: u32 = n - 1;
+				for (var i: u32 = 0; i < old_capacity; i++) {
+					if (old_state[i] != 1)
+						continue;
+					var s: u32 = hash_of<K>(old_entries[i].key) & mask;
+					while (this->m_state[s] != 0)
+						s = (s + 1) & mask;
+					memcpy(&this->m_entries[s], &old_entries[i], sizeof(MapEntry<K, V>));
+					this->m_state[s] = 1;
+				}
+				this->m_used = this->m_size;
+				if (old_entries != null)
+					A.free(old_entries);
+				return true;
+			}
+		};
+	}
+}

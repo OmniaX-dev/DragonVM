@@ -1,0 +1,211 @@
+// vector.ds - std::BasicVector<T, A>: a growable array of T, in memory from the allocator A.
+//
+// A is any struct with two static subs (no state: the kernel's heap, malloc, an arena of your own):
+//     static sub alloc(var size: u32) -> void*     (null: no memory)
+//     static sub free(var p: void*)
+// stdlib's std::Vector<T> is BasicVector<T, std::MallocAllocator>; the SDK has dr::SystemAllocator.
+//
+//     var v: std::Vector<u32>;
+//     v.push(5);
+//     v.push(7);
+//     for (auto x in v) { ... }          // (auto& x: a pointer to the element)
+//     var last = v.pop();
+//
+// Elements are values: push takes its own (a call's result is moved in, a variable copied), pop
+// and remove give theirs back (moved out), and the vector destroys the ones it still has. Growing
+// moves the elements to the new memory by their bytes (as every move does). A T that can't be
+// copied works too: only copying the vector itself (and copy_from) needs T's copies.
+//
+// When the allocator has no memory: push / insert / reserve / resize return false and change
+// nothing (the value given to push / insert is destroyed). Indices are not checked (as an array's):
+// i < size().
+namespace std {
+	template(T, A) {
+		struct BasicVector {
+			priv var m_data: T*;
+			priv var m_size: u32;
+			priv var m_capacity: u32;
+
+			sub new() { this->m_data = null; this->m_size = 0; this->m_capacity = 0; }
+			sub new(var o: const ref BasicVector<T, A>) {
+				this->m_data = null;
+				this->m_size = 0;
+				this->m_capacity = 0;
+				this->copy_from(o);
+			}
+			sub del() {
+				this->clear();
+				if (this->m_data != null)
+					A.free(this->m_data);
+				this->m_data = null;
+				this->m_capacity = 0;
+			}
+
+			readonly inline sub size() -> u32 { return this->m_size; }
+			readonly inline sub capacity() -> u32 { return this->m_capacity; }
+			readonly inline sub empty() -> bool { return this->m_size == 0; }
+			inline sub data() -> T* { return this->m_data; }
+			readonly inline sub data() -> const T* { return this->m_data; }
+
+			inline sub operator[](var i: u32) -> T* { return &this->m_data[i]; }
+			readonly inline sub operator[](var i: u32) -> const T* { return &this->m_data[i]; }
+			inline sub at(var i: u32) -> T* { return &this->m_data[i]; }
+			inline sub front() -> T* { return &this->m_data[0]; }
+			inline sub back() -> T* { return &this->m_data[this->m_size - 1]; }
+
+			// Room for n elements (no element changes). false: no memory.
+			sub reserve(var n: u32) -> bool {
+				if (n <= this->m_capacity)
+					return true;
+				if (n > 0xFFFFFFFF / sizeof(T))
+					return false;
+				var mem: T* = cast<T*>(A.alloc(n * sizeof(T)));
+				if (mem == null)
+					return false;
+				if (this->m_data != null) {
+					memcpy(mem, this->m_data, this->m_size * sizeof(T));		// moved: their bytes
+					A.free(this->m_data);
+				}
+				this->m_data = mem;
+				this->m_capacity = n;
+				return true;
+			}
+
+			// At the end. false: no memory (v is destroyed).
+			sub push(var v: own T) -> bool {
+				if (not this->grow_for(1))
+					return false;
+				(&this->m_data[this->m_size])->new(take(&v));
+				forget(v);
+				this->m_size++;
+				return true;
+			}
+
+			// The last element, moved out (the vector must not be empty).
+			sub pop() -> T {
+				this->m_size--;
+				return take(&this->m_data[this->m_size]);
+			}
+
+			// Before element i (i == size(): at the end). false: no memory (v is destroyed).
+			sub insert(var i: u32, var v: own T) -> bool {
+				if (i > this->m_size or not this->grow_for(1))
+					return false;
+				memmove(&this->m_data[i + 1], &this->m_data[i], (this->m_size - i) * sizeof(T));
+				(&this->m_data[i])->new(take(&v));
+				forget(v);
+				this->m_size++;
+				return true;
+			}
+
+			// Element i, moved out; the ones after it move down.
+			sub remove(var i: u32) -> T {
+				var p: T* = &this->m_data[i];
+				var out = take(p);
+				memmove(p, p + 1, (this->m_size - i - 1) * sizeof(T));
+				this->m_size--;
+				return out;
+			}
+
+			// Element i destroyed; the ones after it move down.
+			sub erase(var i: u32) {
+				var p: T* = &this->m_data[i];
+				p->del();
+				memmove(p, p + 1, (this->m_size - i - 1) * sizeof(T));
+				this->m_size--;
+			}
+
+			// Element i, moved out; the last element takes its place (no shifting: the order changes).
+			sub swap_remove(var i: u32) -> T {
+				var out = take(&this->m_data[i]);
+				this->m_size--;
+				if (i != this->m_size)
+					memcpy(&this->m_data[i], &this->m_data[this->m_size], sizeof(T));
+				return out;
+			}
+
+			// n elements: the new ones get T's defaults (T.new() for a struct with a constructor
+			// taking nothing), the extra ones are destroyed. false: no memory.
+			sub resize(var n: u32) -> bool {
+				while (this->m_size > n) {
+					this->m_size--;
+					(&this->m_data[this->m_size])->del();
+				}
+				if (n > this->m_size and not this->reserve(n))
+					return false;
+				while (this->m_size < n) {
+					(&this->m_data[this->m_size])->new();
+					this->m_size++;
+				}
+				return true;
+			}
+
+			// Every element destroyed (the memory stays: capacity() doesn't change).
+			sub clear() {
+				while (this->m_size > 0) {
+					this->m_size--;
+					(&this->m_data[this->m_size])->del();
+				}
+			}
+
+			// The memory fitted to the elements (none: freed). false: no memory (nothing changes).
+			sub shrink() -> bool {
+				if (this->m_size == this->m_capacity)
+					return true;
+				if (this->m_size == 0) {
+					A.free(this->m_data);
+					this->m_data = null;
+					this->m_capacity = 0;
+					return true;
+				}
+				var mem: T* = cast<T*>(A.alloc(this->m_size * sizeof(T)));
+				if (mem == null)
+					return false;
+				memcpy(mem, this->m_data, this->m_size * sizeof(T));
+				A.free(this->m_data);
+				this->m_data = mem;
+				this->m_capacity = this->m_size;
+				return true;
+			}
+
+			// Its elements replaced by copies of o's. false: no memory (it is then empty).
+			sub copy_from(var o: const ref BasicVector<T, A>) -> bool {
+				if (&o == this)
+					return true;
+				this->clear();
+				if (not this->reserve(o.m_size))
+					return false;
+				for (var i: u32 = 0; i < o.m_size; i++)
+					(&this->m_data[i])->new(o.m_data[i]);
+				this->m_size = o.m_size;
+				return true;
+			}
+
+			// The first i with element i equal to v (std::equals), or -1.
+			readonly sub find(var v: const ref T) -> i32 {
+				for (var i: u32 = 0; i < this->m_size; i++) {
+					if (equals<T>(this->m_data[i], v))
+						return cast<i32>(i);
+				}
+				return -1;
+			}
+			readonly inline sub contains(var v: const ref T) -> bool { return this->find(v) >= 0; }
+
+			// for (auto x in v) / for (auto& x in v)
+			readonly inline sub begin() -> u32 { return 0; }
+			readonly inline sub end() -> u32 { return this->m_size; }
+			readonly inline sub next(var i: u32) -> u32 { return i + 1; }
+			inline sub get(var i: u32) -> T* { return &this->m_data[i]; }
+
+			// Room for n more: the capacity doubles (at least 4).
+			priv sub grow_for(var n: u32) -> bool {
+				if (this->m_size + n <= this->m_capacity)
+					return true;
+				var want: u32 = this->m_capacity < 4 ? 4 : this->m_capacity * 2;
+				if (want < this->m_size + n)
+					want = this->m_size + n;
+				return this->reserve(want);
+			}
+		};
+	}
+}

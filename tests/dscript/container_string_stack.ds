@@ -1,0 +1,67 @@
+// expect-rv: 0
+// std::BasicString<A> (a growable text) and std::BasicStack<T, A> (libcore).
+#import("libcore")
+#include(check.ds)
+#include(libs/test_alloc.ds)
+alias Str = std::BasicString<TestAlloc>;
+
+sub takes_string(var s: string) -> u32 { return std::strlen(s); }
+sub make_str(var s: string) -> Str { return Str.new(s); }
+
+sub main() -> i32 {
+	{
+		var e: Str;
+		check(1, e.empty() and e.len() == 0 and std::strcmp(e.c_str(), "") == 0 and e == "");
+		var s: Str = "Hello";
+		check(2, s.len() == 5 and s == "Hello" and takes_string(s) == 5);
+		s += ", ";
+		s.append("world");
+		s += '!';
+		check(3, s == "Hello, world!" and s.len() == 13);
+		check(4, s.appendf(" {} + {} = {:03}", 2, 3, 5) and s == "Hello, world! 2 + 3 = 005");
+		check(5, s.find("world") == 7 and s.find("x") == -1 and s.find_char('o', 5) == 8);
+		check(6, s.starts_with("Hello") and s.ends_with("005") and not s.starts_with("hello") and s.contains("2 + 3"));
+		var part = s.substr(7, 5);
+		check(7, part == "world" and s.substr(100) == "" and s.substr(20) == "= 005");
+		var copy = s;
+		copy[0] = 'J';
+		check(8, copy[0] == 'J' and s[0] == 'H');
+		copy = "short";
+		check(9, copy == "short" and copy.len() == 5);
+		copy = copy.c_str() + 2;				// (its own text)
+		check(10, copy == "ort");
+		s.truncate(5);
+		check(11, s == "Hello");
+		for (var i: u32 = 0; i < 200; i++)
+			s.append(s.c_str() + s.len() - 1);	// (the end of its own text, while it grows)
+		check(12, s.len() == 205 and s[204] == 'o');
+		var n = Str.new();
+		check(13, n.append_int(-42) and n.append_uint(255, 16) and n == "-42ff");
+		check(14, make_str("abc") < "abd" and not (make_str("b") < "a") and make_str("x").hash() == std::hash_text("x"));
+		s.clear();
+		check(15, s.empty() and s == "");
+	}
+	check(16, TestAlloc.live() == 0);
+
+	{
+		var st: std::BasicStack<Tracked, TestAlloc>;
+		g_dels = 0;
+		for (var i: i32 = 0; i < 10; i++)
+			check(20, st.push(Tracked.new(i)));
+		check(21, st.size() == 10 and st.top()->v == 9 and g_copies == 0);
+		{
+			var t = st.pop();
+			check(22, t.v == 9 and st.size() == 9 and g_dels == 0);
+		}
+		var sum: i32 = 0;
+		for (auto& t in st)
+			sum += t->v;
+		check(23, sum == 36 and g_dels == 1);
+		var strs: std::BasicStack<Str, TestAlloc>;
+		strs.push("one");
+		strs.push(make_str("two"));
+		check(24, strs.pop() == "two" and *strs.top() == "one");
+	}
+	check(25, g_dels == 10 and TestAlloc.live() == 0);
+	return result();
+}

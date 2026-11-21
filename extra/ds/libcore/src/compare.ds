@@ -1,0 +1,64 @@
+// compare.ds - what the containers ask of their keys and elements: equality (HashMap, Vector's
+// find), order (Map) and a hash (HashMap).
+//
+//   std::equals(a, b)   a == b; for a string (const u8*): the same text (strcmp)
+//   std::less(a, b)     a < b; for a string: strcmp order
+//   std::hash_of(v)     a u32 hash: numbers, pointers and enums mixed; a string's text (FNV-1a);
+//                       a struct: its readonly sub hash() -> u32
+//
+// A struct key gives operator== (and operator< for a Map) and, for a HashMap, hash(). Values that
+// are equal must have the same hash.
+namespace std {
+	// FNV-1a over the bytes of a zero-terminated text.
+	sub hash_text(var s: string) -> u32 {
+		var h: u32 = 0x811C9DC5;
+		while (*s != 0) {
+			h = (h ^ *s) * 0x01000193;
+			s++;
+		}
+		return h;
+	}
+
+	// A 32-bit integer mixed so that close numbers land far apart (murmur3's finalizer).
+	inline sub hash_u32(var x: u32) -> u32 {
+		x = (x ^ (x >> 16)) * 0x85EBCA6B;
+		x = (x ^ (x >> 13)) * 0xC2B2AE35;
+		return x ^ (x >> 16);
+	}
+
+	template(T) {
+		sub hash_of(var v: const ref T) -> u32 {
+			if constexpr (is_type(T, string)) {
+				return hash_text(v);
+			} else if constexpr (is_struct(T)) {
+				static_assert(has_method(T, hash), "a HashMap key that is a struct needs a readonly sub hash() -> u32");
+				return v.hash();
+			} else {
+				return hash_u32(cast<u32>(v));
+			}
+		}
+		inline sub equals(var a: const ref T, var b: const ref T) -> bool {
+			if constexpr (is_type(T, string))
+				return strcmp(a, b) == 0;
+			else
+				return a == b;
+		}
+		inline sub less(var a: const ref T, var b: const ref T) -> bool {
+			if constexpr (is_type(T, string))
+				return strcmp(a, b) < 0;
+			else
+				return a < b;
+		}
+	}
+}
+
+namespace std {
+	// A Map's / HashMap's element: for (auto& e in map) { e->key ... e->value ... }. The key must
+	// not be changed (the container would no longer find it).
+	template(K, V) {
+		struct MapEntry {
+			var key: K;
+			var value: V;
+		};
+	}
+}

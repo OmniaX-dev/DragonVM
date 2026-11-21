@@ -1,0 +1,263 @@
+// map.ds - std::BasicMap<K, V, A>: keys to values, kept in key order (a balanced binary tree: AVL),
+// in memory from the allocator A (static alloc(size) -> void* and free(p), as BasicVector's).
+// stdlib's std::Map<K, V> is BasicMap<K, V, std::MallocAllocator>.
+//
+//     var ages: std::Map<std::String, u32>;
+//     ages.set("bob", 31);
+//     ages.set("alice", 29);
+//     var a: u32* = ages.get("alice");    // null when it isn't there
+//     for (auto& e in ages) { ... e->key ... e->value ... }      // alice, then bob
+//
+// The keys are ordered by std::less (a < b; strings: strcmp; a struct: its operator<), and two
+// keys are the same when neither is less. set, get, remove: O(log n); a for-in step is O(log n)
+// too (the next key is searched from the root: the nodes don't point at their parents).
+//
+// Keys and values are values (as BasicVector's elements): set takes its own, the map destroys
+// them. A string key (const u8*) is a pointer: the map keeps the pointer, not a copy of the text
+// (it has to live as long as the entry; std::String keys own their text).
+namespace std {
+	template(K, V, A) {
+		struct BasicMapNode {
+			var entry: MapEntry<K, V>;		// first: a node pointer is its entry's
+			var left: BasicMapNode<K, V, A>*;
+			var right: BasicMapNode<K, V, A>*;
+			var height: u32;
+		};
+
+		struct BasicMap {
+			priv var m_root: BasicMapNode<K, V, A>*;
+			priv var m_size: u32;
+
+			sub new() { this->m_root = null; this->m_size = 0; }
+			sub new(var o: const ref BasicMap<K, V, A>) {
+				this->m_root = null;
+				this->m_size = 0;
+				this->copy_from(o);
+			}
+			sub del() { this->clear(); }
+
+			readonly inline sub size() -> u32 { return this->m_size; }
+			readonly inline sub empty() -> bool { return this->m_size == 0; }
+
+			// key's value set (a new entry, or the value of the one there replaced: the new key is then
+			// destroyed, the entry keeps its own). false: no memory (nothing changes; key and value are
+			// destroyed).
+			sub set(var key: own K, var value: own V) -> bool {
+				var found: BasicMapNode<K, V, A>* = this->find_node(key);
+				if (found != null) {
+					(&found->entry.value)->del();
+					(&found->entry.value)->new(take(&value));
+					forget(value);
+					return true;
+				}
+				var n: BasicMapNode<K, V, A>* = cast<BasicMapNode<K, V, A>*>(A.alloc(sizeof(BasicMapNode<K, V, A>)));
+				if (n == null)
+					return false;
+				(&n->entry.key)->new(take(&key));
+				forget(key);
+				(&n->entry.value)->new(take(&value));
+				forget(value);
+				n->left = null;
+				n->right = null;
+				n->height = 1;
+				this->m_root = this->insert_node(this->m_root, n);
+				this->m_size++;
+				return true;
+			}
+
+			// key's value (null: no entry). It stays valid until that entry is removed.
+			inline sub get(var key: const ref K) -> V* {
+				var n: BasicMapNode<K, V, A>* = this->find_node(key);
+				return n != null ? &n->entry.value : null;
+			}
+			readonly inline sub contains(var key: const ref K) -> bool { return this->find_node(key) != null; }
+			// key's entry (null: none).
+			inline sub find(var key: const ref K) -> MapEntry<K, V>* { return &this->find_node(key)->entry; }
+
+			// key's entry destroyed. false: there was none.
+			sub remove(var key: const ref K) -> bool {
+				var removed: BasicMapNode<K, V, A>* = null;
+				this->m_root = this->remove_node(this->m_root, key, &removed);
+				if (removed == null)
+					return false;
+				(&removed->entry)->del();
+				A.free(removed);
+				this->m_size--;
+				return true;
+			}
+
+			// Every entry destroyed.
+			sub clear() {
+				this->destroy(this->m_root);
+				this->m_root = null;
+				this->m_size = 0;
+			}
+
+			// Its entries replaced by copies of o's. false: no memory (it is then empty).
+			sub copy_from(var o: const ref BasicMap<K, V, A>) -> bool {
+				if (&o == this)
+					return true;
+				this->clear();
+				var ok: bool = true;
+				this->m_root = this->clone(o.m_root, &ok);
+				if (not ok) {
+					this->clear();
+					return false;
+				}
+				this->m_size = o.m_size;
+				return true;
+			}
+
+			// The entries with the smallest and the largest key (null: empty).
+			inline sub first() -> MapEntry<K, V>* { return &this->leftmost(this->m_root)->entry; }
+			sub last() -> MapEntry<K, V>* {
+				var n: BasicMapNode<K, V, A>* = this->m_root;
+				while (n != null and n->right != null)
+					n = n->right;
+				return &n->entry;
+			}
+
+			// for (auto& e in map): in key order.
+			readonly inline sub begin() -> BasicMapNode<K, V, A>* { return this->leftmost(this->m_root); }
+			readonly inline sub end() -> BasicMapNode<K, V, A>* { return null; }
+			readonly sub next(var c: BasicMapNode<K, V, A>*) -> BasicMapNode<K, V, A>* {
+				if (c->right != null)
+					return this->leftmost(c->right);
+				// (the smallest key larger than c's: from the root)
+				var n: BasicMapNode<K, V, A>* = this->m_root;
+				var after: BasicMapNode<K, V, A>* = null;
+				while (n != null) {
+					if (less<K>(c->entry.key, n->entry.key)) {
+						after = n;
+						n = n->left;
+					} else
+						n = n->right;
+				}
+				return after;
+			}
+			inline sub get(var c: BasicMapNode<K, V, A>*) -> MapEntry<K, V>* { return &c->entry; }
+
+			priv readonly sub find_node(var key: const ref K) -> BasicMapNode<K, V, A>* {
+				var n: BasicMapNode<K, V, A>* = this->m_root;
+				while (n != null) {
+					if (less<K>(key, n->entry.key))
+						n = n->left;
+					else if (less<K>(n->entry.key, key))
+						n = n->right;
+					else
+						return n;
+				}
+				return null;
+			}
+			priv readonly sub leftmost(var n: BasicMapNode<K, V, A>*) -> BasicMapNode<K, V, A>* {
+				while (n != null and n->left != null)
+					n = n->left;
+				return n;
+			}
+
+			// ---- AVL: each node's subtrees differ in height by at most 1 ----
+			priv static inline sub height_of(var n: BasicMapNode<K, V, A>*) -> u32 { return n == null ? 0 : n->height; }
+			priv static sub update(var n: BasicMapNode<K, V, A>*) {
+				var l: u32 = BasicMap.height_of(n->left);
+				var r: u32 = BasicMap.height_of(n->right);
+				n->height = 1 + (l > r ? l : r);
+			}
+			priv static sub rotate_right(var n: BasicMapNode<K, V, A>*) -> BasicMapNode<K, V, A>* {
+				var l: BasicMapNode<K, V, A>* = n->left;
+				n->left = l->right;
+				l->right = n;
+				BasicMap.update(n);
+				BasicMap.update(l);
+				return l;
+			}
+			priv static sub rotate_left(var n: BasicMapNode<K, V, A>*) -> BasicMapNode<K, V, A>* {
+				var r: BasicMapNode<K, V, A>* = n->right;
+				n->right = r->left;
+				r->left = n;
+				BasicMap.update(n);
+				BasicMap.update(r);
+				return r;
+			}
+			// n with its subtrees balanced again (after one of them changed by one level).
+			priv static sub balance(var n: BasicMapNode<K, V, A>*) -> BasicMapNode<K, V, A>* {
+				BasicMap.update(n);
+				var l: u32 = BasicMap.height_of(n->left);
+				var r: u32 = BasicMap.height_of(n->right);
+				if (l > r + 1) {
+					if (BasicMap.height_of(n->left->left) < BasicMap.height_of(n->left->right))
+						n->left = BasicMap.rotate_left(n->left);
+					return BasicMap.rotate_right(n);
+				}
+				if (r > l + 1) {
+					if (BasicMap.height_of(n->right->right) < BasicMap.height_of(n->right->left))
+						n->right = BasicMap.rotate_right(n->right);
+					return BasicMap.rotate_left(n);
+				}
+				return n;
+			}
+			priv sub insert_node(var at: BasicMapNode<K, V, A>*, var n: BasicMapNode<K, V, A>*) -> BasicMapNode<K, V, A>* {
+				if (at == null)
+					return n;
+				if (less<K>(n->entry.key, at->entry.key))
+					at->left = this->insert_node(at->left, n);
+				else
+					at->right = this->insert_node(at->right, n);
+				return BasicMap.balance(at);
+			}
+			// The subtree without its smallest node (in *out).
+			priv static sub remove_min(var at: BasicMapNode<K, V, A>*, var out: BasicMapNode<K, V, A>**) -> BasicMapNode<K, V, A>* {
+				if (at->left == null) {
+					*out = at;
+					return at->right;
+				}
+				at->left = BasicMap.remove_min(at->left, out);
+				return BasicMap.balance(at);
+			}
+			priv sub remove_node(var at: BasicMapNode<K, V, A>*, var key: const ref K, var out: BasicMapNode<K, V, A>**) -> BasicMapNode<K, V, A>* {
+				if (at == null)
+					return null;
+				if (less<K>(key, at->entry.key))
+					at->left = this->remove_node(at->left, key, out);
+				else if (less<K>(at->entry.key, key))
+					at->right = this->remove_node(at->right, key, out);
+				else {
+					*out = at;
+					if (at->left == null)
+						return at->right;
+					if (at->right == null)
+						return at->left;
+					var m: BasicMapNode<K, V, A>* = null;
+					var rest: BasicMapNode<K, V, A>* = BasicMap.remove_min(at->right, &m);
+					m->left = at->left;
+					m->right = rest;
+					return BasicMap.balance(m);
+				}
+				return BasicMap.balance(at);
+			}
+			priv sub destroy(var n: BasicMapNode<K, V, A>*) {
+				if (n == null)
+					return;
+				this->destroy(n->left);
+				this->destroy(n->right);
+				(&n->entry)->del();
+				A.free(n);
+			}
+			// A copy of the subtree (same shape). *ok false: no memory (the copy made so far is returned).
+			priv sub clone(var n: const BasicMapNode<K, V, A>*, var ok: bool*) -> BasicMapNode<K, V, A>* {
+				if (n == null or not *ok)
+					return null;
+				var c: BasicMapNode<K, V, A>* = cast<BasicMapNode<K, V, A>*>(A.alloc(sizeof(BasicMapNode<K, V, A>)));
+				if (c == null) {
+					*ok = false;
+					return null;
+				}
+				(&c->entry.key)->new(n->entry.key);
+				(&c->entry.value)->new(n->entry.value);
+				c->height = n->height;
+				c->left = this->clone(n->left, ok);
+				c->right = this->clone(n->right, ok);
+				return c;
+			}
+		};
+	}
+}

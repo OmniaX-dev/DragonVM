@@ -1,0 +1,97 @@
+// expect-rv: 0
+// std::BasicVector<T, A> (libcore): push / pop / insert / remove / erase / swap_remove / resize /
+// reserve / shrink / clear, copies, for-in, find; every value destroyed once, nothing leaked,
+// running out of memory changes nothing.
+#import("libcore")
+#include(check.ds)
+#include(libs/test_alloc.ds)
+
+sub main() -> i32 {
+	{
+		var v: std::BasicVector<u32, TestAlloc>;
+		check(1, v.empty() and v.size() == 0 and v.capacity() == 0);
+		for (var i: u32 = 0; i < 100; i++)
+			check(2, v.push(i * 3));
+		check(3, v.size() == 100 and v[50] == 150 and *v.back() == 297 and *v.front() == 0);
+		var sum: u32 = 0;
+		for (auto x in v)
+			sum += x;
+		check(4, sum == 3 * 4950);
+		for (auto& x in v)
+			*x += 1;
+		check(5, v[0] == 1 and v.pop() == 298 and v.size() == 99);
+		check(6, v.insert(0, 1000u) and v[0] == 1000 and v[1] == 1 and v.size() == 100);
+		check(7, v.remove(0) == 1000 and v[0] == 1 and v.size() == 99);
+		check(8, v.find(31u) == 10 and v.find(2u) == -1 and v.contains(4u));
+		v.erase(0);
+		check(9, v[0] == 4 and v.size() == 98);
+		check(10, v.swap_remove(0) == 4 and v[0] == 295 and v.size() == 97);
+		check(11, v.resize(3) and v.size() == 3 and v.resize(5) and v[4] == 0);
+		check(12, v.shrink() and v.capacity() == 5);
+		var w = v;					// a copy
+		w[0] = 77;
+		check(13, v[0] == 295 and w[0] == 77 and w.size() == 5);
+		v.clear();
+		check(14, v.empty() and v.capacity() == 5 and v.shrink() and v.capacity() == 0);
+	}
+	check(15, TestAlloc.live() == 0);
+
+	// Values with destructors and copies: each destroyed once; moves don't copy.
+	{
+		var v: std::BasicVector<Tracked, TestAlloc>;
+		for (var i: i32 = 0; i < 20; i++)
+			v.push(Tracked.new(i));
+		check(20, g_copies == 0 and g_dels == 0 and v.size() == 20);
+		var t = Tracked.new(100);
+		v.push(t);					// a variable: copied for push
+		check(21, g_copies == 1 and g_dels == 0);
+		{
+			var last = v.pop();
+			check(22, last.v == 100 and g_dels == 0);
+		}
+		check(23, g_dels == 1);
+		v.erase(0);
+		check(24, g_dels == 2 and v[0].v == 1);
+		{
+			var r = v.remove(0);
+			check(25, r.v == 1 and g_dels == 2);
+		}
+		check(26, g_dels == 3 and v.size() == 18 and v.find(Tracked.new(10)) == 8);
+		check(27, g_dels == 4);	// (the temporary given to find)
+		var copy = v;
+		check(28, g_copies == 1 + 18 and copy.size() == 18);
+		check(29, v.resize(10) and g_dels == 4 + 8);
+	}
+	check(30, g_dels == 4 + 8 + 10 + 18 + 1 and TestAlloc.live() == 0);	// v, copy, t
+
+	// Values that can't be copied.
+	g_dels = 0;
+	{
+		var v: std::BasicVector<Solo, TestAlloc>;
+		for (var i: i32 = 0; i < 10; i++)
+			v.push(solo(i));
+		check(40, v.insert(5, solo(50)) and v[5].v == 50 and v.size() == 11);
+		{
+			var s = v.remove(5);
+			check(41, s.v == 50 and g_dels == 0);
+		}
+		check(42, g_dels == 1);
+	}
+	check(43, g_dels == 11 and TestAlloc.live() == 0);
+
+	// No memory: nothing changes (the value given is destroyed).
+	g_dels = 0;
+	{
+		var v: std::BasicVector<Tracked, TestAlloc>;
+		check(50, v.push(Tracked.new(1)));		// capacity 4
+		TestAlloc.fail_after(0);
+		for (var i: i32 = 0; i < 3; i++)
+			check(51, v.push(Tracked.new(i)));
+		check(52, not v.push(Tracked.new(9)) and v.size() == 4 and g_dels == 1);
+		check(53, not v.reserve(100) and v.capacity() == 4);
+		TestAlloc.fail_after(-1);
+		check(54, v.push(Tracked.new(9)) and v.size() == 5);
+	}
+	check(55, g_dels == 6 and TestAlloc.live() == 0);
+	return result();
+}

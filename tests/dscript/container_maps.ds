@@ -1,0 +1,132 @@
+// expect-rv: 0
+// std::BasicMap<K, V, A> (ordered: AVL) and std::BasicHashMap<K, V, A> (libcore): set / get /
+// remove / contains / clear, for-in (the Map in key order), copies, String and string keys, struct
+// keys; every key and value destroyed once, nothing leaked, no memory changes nothing.
+#import("libcore")
+#include(check.ds)
+#include(libs/test_alloc.ds)
+alias Str = std::BasicString<TestAlloc>;
+
+var g_seed: u32 = 99;
+sub rnd(var n: u32) -> u32 { g_seed = g_seed * 1103515245 + 12345; return (g_seed >> 8) % n; }
+
+sub main() -> i32 {
+	// Map: 300 keys in a random order, in order afterwards, half removed.
+	{
+		var m: std::BasicMap<u32, u32, TestAlloc>;
+		var keys: u32[300];
+		for (var i: u32 = 0; i < 300; i++)
+			keys[i] = i;
+		for (var i: u32 = 299; i > 0; i--) {
+			var j: u32 = rnd(i + 1);
+			var t: u32 = keys[i]; keys[i] = keys[j]; keys[j] = t;
+		}
+		for (var i: u32 = 0; i < 300; i++)
+			check(1, m.set(keys[i], keys[i] * 10));
+		check(2, m.size() == 300 and *m.get(123u) == 1230 and m.get(300u) == null and m.contains(0u));
+		check(3, m.set(5u, 55u) and *m.get(5u) == 55 and m.size() == 300);
+		var expect: u32 = 0;
+		var ordered: bool = true;
+		for (auto& e in m) {
+			ordered = ordered and e->key == expect;
+			expect++;
+		}
+		check(4, ordered and expect == 300 and m.first()->key == 0 and m.last()->key == 299);
+		for (var i: u32 = 0; i < 300; i += 2)
+			check(5, m.remove(i));
+		check(6, not m.remove(0u) and m.size() == 150 and m.get(4u) == null and *m.get(7u) == 70);
+		expect = 1;
+		ordered = true;
+		for (auto& e in m) {
+			ordered = ordered and e->key == expect;
+			expect += 2;
+		}
+		check(7, ordered and expect == 301);
+		var copy = m;
+		check(8, copy.size() == 150 and *copy.get(299u) == 2990);
+		m.clear();
+		check(9, m.empty() and copy.size() == 150 and m.begin() == m.end());
+	}
+	check(10, TestAlloc.live() == 0);
+
+	// HashMap: the same, in no order.
+	{
+		var h: std::BasicHashMap<u32, i32, TestAlloc>;
+		for (var i: u32 = 0; i < 500; i++)
+			check(20, h.set(i * 7, cast<i32>(i)));
+		check(21, h.size() == 500 and *h.get(70u) == 10 and h.get(71u) == null and h.capacity() == 1024);
+		var count: u32 = 0;
+		var sum: i32 = 0;
+		for (auto& e in h) {
+			count++;
+			sum += e->value;
+		}
+		check(22, count == 500 and sum == 124750);
+		for (var i: u32 = 0; i < 500; i++) {
+			if (i % 3 != 0)
+				check(23, h.remove(i * 7));
+		}
+		check(24, h.size() == 167 and h.contains(21u) and not h.contains(7u) and not h.remove(7u));
+		for (var round: u32 = 0; round < 20; round++) {		// removed slots are reused / cleaned up
+			for (var i: u32 = 0; i < 100; i++)
+				h.set(100000 + i, 1);
+			for (var i: u32 = 0; i < 100; i++)
+				h.remove(100000 + i);
+		}
+		check(25, h.size() == 167 and h.capacity() <= 1024 and *h.get(21u) == 3);
+		var copy = h;
+		check(26, copy.size() == 167 and *copy.get(21u) == 3);
+		check(27, copy.set(21u, 99) and *copy.get(21u) == 99 and *h.get(21u) == 3);
+	}
+	check(28, TestAlloc.live() == 0);
+
+	// String keys and values (owned text), string keys (pointers, by their text), struct keys.
+	g_dels = 0;
+	g_copies = 0;
+	{
+		var m: std::BasicMap<Str, Str, TestAlloc>;
+		check(30, m.set("bob", "builder") and m.set("alice", "wonderland") and m.set(Str.new("carol"), "singer"));
+		check(31, *m.get("alice") == "wonderland" and m.get("dave") == null and m.first()->key == "alice");
+		var h: std::BasicHashMap<Str, u32, TestAlloc>;
+		var buf: u8[16];
+		for (var i: i32 = 0; i < 50; i++) {
+			var k: Str = "key";
+			k.append_int(i);
+			check(32, h.set(k, cast<u32>(i)));
+		}
+		check(33, *h.get("key42") == 42 and h.get("key50") == null and h.remove("key7") and h.size() == 49);
+		var raw: std::BasicHashMap<string, u32, TestAlloc>;
+		std::strcpy(buf, "two");
+		raw.set("one", 1u);
+		raw.set(buf, 2u);
+		check(34, *raw.get("two") == 2 and *raw.get("one") == 1);	// another pointer, the same text
+		var t: std::BasicHashMap<Tracked, Tracked, TestAlloc>;
+		var o: std::BasicMap<Tracked, Tracked, TestAlloc>;
+		for (var i: i32 = 0; i < 30; i++) {
+			t.set(Tracked.new(i), Tracked.new(i * 2));
+			o.set(Tracked.new(i), Tracked.new(i * 2));
+		}
+		check(35, g_copies == 0 and g_dels == 0 and t.get(Tracked.new(4))->v == 8 and o.get(Tracked.new(29))->v == 58);
+		check(36, g_dels == 2);			// (the keys given to get)
+		t.set(Tracked.new(4), Tracked.new(0));	// replaced: the new key and the old value destroyed
+		check(37, g_dels == 4 and t.size() == 30);
+		check(38, o.remove(Tracked.new(3)) and g_dels == 4 + 2);	// (the key given: when the statement ends)
+	}
+	check(39, g_dels == 4 + 3 + 60 + 58 and g_copies == 0 and TestAlloc.live() == 0);
+
+	// No memory: nothing changes.
+	{
+		var m: std::BasicMap<u32, u32, TestAlloc>;
+		var h: std::BasicHashMap<u32, u32, TestAlloc>;
+		check(40, m.set(1u, 1u) and h.set(1u, 1u));
+		TestAlloc.fail_after(0);
+		check(41, not m.set(2u, 2u) and m.size() == 1 and m.set(1u, 5u) and *m.get(1u) == 5);
+		for (var i: u32 = 2; i <= 6; i++)
+			check(42, h.set(i, i));			// (8 slots: 6 fit)
+		check(43, not h.set(7u, 7u) and h.size() == 6 and h.get(7u) == null and *h.get(6u) == 6);
+		TestAlloc.fail_after(-1);
+		check(44, h.set(7u, 7u) and h.size() == 7 and h.capacity() == 16);
+	}
+	check(45, TestAlloc.live() == 0);
+	return result();
+}

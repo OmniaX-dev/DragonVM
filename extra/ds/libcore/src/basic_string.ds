@@ -1,0 +1,201 @@
+// basic_string.ds - std::BasicString<A>: a growable text that owns its memory (from the allocator A:
+// a struct with static alloc(size) -> void* and free(p), as BasicVector's). stdlib's std::String is
+// BasicString<std::MallocAllocator>.
+//
+//     var s: std::String = "Hello";      // from a string (implicit)
+//     s += ", ";
+//     s.append("world");
+//     s.appendf(" {} times", 3);          // std::format's {} and % specs
+//     std::print(s);                      // a String is a string where one is expected (c_str())
+//     if (s == "Hello, world 3 times") ...
+//
+// The text always ends with a 0, so c_str() (and the implicit conversion) is a string for any sub
+// that reads one; it stays valid until the String changes or ends. Empty, it is "" (never null).
+// Copies copy the text; as a HashMap / Map key it compares and hashes by its text.
+//
+// When the allocator has no memory: the subs returning bool return false and leave the text as it
+// was; a constructor or an assignment leaves it empty.
+namespace std {
+	template(A) {
+		struct BasicString {
+			priv var m_data: u8*;		// null while it has no memory (the text is then "")
+			priv var m_len: u32;
+			priv var m_capacity: u32;	// bytes for the text, not counting the 0
+
+			sub new() { this->m_data = null; this->m_len = 0; this->m_capacity = 0; }
+			implicit sub new(var s: string) {
+				this->m_data = null;
+				this->m_len = 0;
+				this->m_capacity = 0;
+				this->append(s);
+			}
+			sub new(var o: const ref BasicString<A>) {
+				this->m_data = null;
+				this->m_len = 0;
+				this->m_capacity = 0;
+				this->append_n(o.c_str(), o.m_len);
+			}
+			sub del() {
+				if (this->m_data != null)
+					A.free(this->m_data);
+				this->m_data = null;
+				this->m_len = 0;
+				this->m_capacity = 0;
+			}
+
+			// s = "text" (and s = other: a copy, with the copy constructor)
+			sub operator=(var s: string) {
+				if (s >= this->c_str() and s <= this->c_str() + this->m_len) {
+					// (its own text, or part of it: moved to the start)
+					var n: u32 = strlen(s);
+					memmove(this->m_data, s, n + 1);
+					this->m_len = n;
+					return;
+				}
+				this->m_len = 0;
+				if (this->m_data != null)
+					this->m_data[0] = 0;
+				this->append(s);
+			}
+
+			readonly inline sub c_str() -> string { return this->m_data != null ? this->m_data : ""; }
+			implicit readonly inline sub operator cast() -> string { return this->c_str(); }
+			readonly inline sub len() -> u32 { return this->m_len; }
+			readonly inline sub empty() -> bool { return this->m_len == 0; }
+			readonly inline sub capacity() -> u32 { return this->m_capacity; }
+			// Its bytes, to change them (not past len(); null while it has no memory).
+			inline sub data() -> u8* { return this->m_data; }
+
+			inline sub operator[](var i: u32) -> u8* { return &this->m_data[i]; }
+			readonly inline sub operator[](var i: u32) -> const u8* { return &this->c_str()[i]; }
+
+			// Room for a text of n bytes. false: no memory.
+			sub reserve(var n: u32) -> bool {
+				if (n <= this->m_capacity)
+					return true;
+				if (n == 0xFFFFFFFF)
+					return false;
+				var mem: u8* = cast<u8*>(A.alloc(n + 1));
+				if (mem == null)
+					return false;
+				memcpy(mem, this->c_str(), this->m_len + 1);
+				if (this->m_data != null)
+					A.free(this->m_data);
+				this->m_data = mem;
+				this->m_capacity = n;
+				return true;
+			}
+
+			// The first n bytes of s added (s may be part of this text). false: no memory.
+			sub append_n(var s: string, var n: u32) -> bool {
+				if (n == 0)
+					return true;
+				if (this->m_len + n < this->m_len)
+					return false;
+				if (this->m_len + n > this->m_capacity) {
+					var want: u32 = this->m_capacity * 2;
+					if (want < this->m_len + n)
+						want = this->m_len + n;
+					if (want < 15)
+						want = 15;
+					// A new block: s is read before the old one is freed (s may be in it).
+					var mem: u8* = cast<u8*>(A.alloc(want + 1));
+					if (mem == null)
+						return false;
+					memcpy(mem, this->c_str(), this->m_len);
+					memcpy(mem + this->m_len, s, n);
+					if (this->m_data != null)
+						A.free(this->m_data);
+					this->m_data = mem;
+					this->m_capacity = want;
+				} else
+					memmove(this->m_data + this->m_len, s, n);
+				this->m_len += n;
+				this->m_data[this->m_len] = 0;
+				return true;
+			}
+			inline sub append(var s: string) -> bool { return this->append_n(s, strlen(s)); }
+			sub append_char(var c: u8) -> bool {
+				var one: u8[2];
+				one[0] = c;
+				one[1] = 0;
+				return this->append_n(&one[0], 1);
+			}
+			sub append_int(var v: i32) -> bool {
+				var digits: u8[12];
+				return this->append(itoa(v, &digits[0]));
+			}
+			sub append_uint(var v: u32, var base: i32 = 10) -> bool {
+				var digits: u8[34];
+				return this->append(utoa(v, &digits[0], base));
+			}
+			// std::format's text added ({}, {:spec}, %spec: see va.ds).
+			sub appendf(var fmt: string, ...typed) -> bool {
+				var args: VaList(va_start(), va_count(), va_types());
+				var one: u8[1];
+				var n: u32 = vformat(&one[0], 1, fmt, &args);		// (its length)
+				if (not this->reserve(this->m_len + n))
+					return false;
+				vformat(this->m_data + this->m_len, n + 1, fmt, &args);
+				this->m_len += n;
+				return true;
+			}
+			inline sub operator+=(var s: string) { this->append(s); }
+			inline sub operator+=(var c: u8) { this->append_char(c); }
+
+			// The text cut to n bytes (n >= len(): nothing changes).
+			sub truncate(var n: u32) {
+				if (n < this->m_len) {
+					this->m_len = n;
+					this->m_data[n] = 0;
+				}
+			}
+			inline sub clear() { this->truncate(0); }
+
+			// Where s first is, from byte `from` on (-1: not there; "" is at `from`).
+			readonly sub find(var s: string, var from: u32 = 0) -> i32 {
+				var n: u32 = strlen(s);
+				var text: string = this->c_str();
+				if (n > this->m_len)
+					return -1;
+				for (var i: u32 = from; i + n <= this->m_len; i++) {
+					if (memcmp(text + i, s, n) == 0)
+						return cast<i32>(i);
+				}
+				return -1;
+			}
+			readonly sub find_char(var c: u8, var from: u32 = 0) -> i32 {
+				var text: string = this->c_str();
+				for (var i: u32 = from; i < this->m_len; i++) {
+					if (text[i] == c)
+						return cast<i32>(i);
+				}
+				return -1;
+			}
+			readonly inline sub contains(var s: string) -> bool { return this->find(s) >= 0; }
+			readonly sub starts_with(var s: string) -> bool {
+				var n: u32 = strlen(s);
+				return n <= this->m_len and memcmp(this->c_str(), s, n) == 0;
+			}
+			readonly sub ends_with(var s: string) -> bool {
+				var n: u32 = strlen(s);
+				return n <= this->m_len and memcmp(this->c_str() + this->m_len - n, s, n) == 0;
+			}
+
+			// n bytes from byte `from` (fewer at the end of the text), as a new text.
+			readonly sub substr(var from: u32, var n: u32 = 0xFFFFFFFF) -> BasicString<A> {
+				var out: BasicString<A>;
+				if (from < this->m_len) {
+					if (n > this->m_len - from)
+						n = this->m_len - from;
+					out.append_n(this->c_str() + from, n);
+				}
+				return out;
+			}
+
+			readonly inline sub operator==(var s: string) -> bool { return strcmp(this->c_str(), s) == 0; }
+			readonly inline sub operator<(var s: string) -> bool { return strcmp(this->c_str(), s) < 0; }
+			readonly inline sub hash() -> u32 { return hash_text(this->c_str()); }
+		};
+	}
+}
