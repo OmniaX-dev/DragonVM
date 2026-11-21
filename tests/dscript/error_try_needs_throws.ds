@@ -1,0 +1,5 @@
+// expect-error: must throw E too
+// try throws the error on: the sub it is in must throw the same errors.
+enum E { Bad };
+sub f() -> i32 throws E { throw E.Bad; }
+sub main() -> i32 { return try f(); }

@@ -536,6 +536,8 @@ namespace dscript
 			return;
 		if (n->typeSyntax != nullptr)
 			resolveTypeNames(n->typeSyntax, scope);
+		if (n->throwsSyntax != nullptr)
+			resolveTypeNames(n->throwsSyntax, scope);
 		for (TypeSyntax* t : n->templateArgs)
 			resolveTypeNames(t, scope);
 		if (n->kind == NodeKind::Ident && !n->resolved)
@@ -591,6 +593,7 @@ namespace dscript
 				for (TypeSyntax* p : ts->params)
 					resolveTypeNames(p, scope);
 				resolveTypeNames(ts->base, scope);
+				resolveTypeNames(ts->throws, scope);
 			break;
 			case TypeSyntax::Kind::Value:
 			case TypeSyntax::Kind::ValueType:
@@ -865,7 +868,9 @@ namespace dscript
 				Type* ret = ts->base ? resolveType(ts->base) : m_types.voidType();
 				if (ret->kind != Type::Kind::Void && !ret->isScalar() && ret->kind != Type::Kind::Struct)
 					error(ts->pos, "subs return integers, pointers, structs or void (not " + ret->name() + ")");
-				return m_types.function(params, ret, ts->variadic, ts->owned);
+				std::string errorName;
+				Type* errors = ts->throws != nullptr ? errorType(ts->throws, errorName) : nullptr;
+				return m_types.function(params, ret, ts->variadic, ts->owned, errors, errorName);
 			}
 		}
 		return nullptr;
@@ -1369,10 +1374,27 @@ namespace dscript
 					s += std::string(i < 32 && (t->owned & (1u << i)) != 0 ? "O" : "") + mangle(t->params[i]);
 				if (t->variadic != 0)
 					s += t->variadic == 2 ? "VT" : "V";
-				return s + "r" + mangle(t->base);
+				return s + "r" + mangle(t->base) + (t->throws != nullptr ? "X" + t->throwsName : "");
 			}
 			default: return t->name();
 		}
+	}
+
+	// throws E: E's integer type and its full name (an enum: its members are the errors).
+	Type* CodeGen::errorType(TypeSyntax* ts, std::string& name)
+	{
+		Type* t = resolveType(ts);
+		std::string full = ts->kind == TypeSyntax::Kind::Named && ts->fixed == nullptr ? ts->name : "";
+		for (int depth = 0; depth < 16 && m_aliases.count(full) > 0; depth++)
+		{
+			const Node* decl = m_aliases[full].decl;
+			const TypeSyntax* target = decl != nullptr ? decl->typeSyntax : nullptr;
+			full = target != nullptr && target->kind == TypeSyntax::Kind::Named && target->fixed == nullptr ? target->name : "";
+		}
+		if (full.empty() || m_enums.count(full) == 0)
+			error(ts->pos, "throws takes an enum (its members are the errors), not " + t->name());
+		name = full;
+		return t;
 	}
 
 	void CodeGen::resolveFunction(FuncInfo* f)
@@ -1430,7 +1452,22 @@ namespace dscript
 		}
 		else if (ret->kind != Type::Kind::Void && !ret->isScalar())
 			error(d->pos, "subs return integers, pointers, structs or void (not " + ret->name() + ")");
-		f->type = m_types.function(params, ret, d->variadic, owned);
+		std::string errorName;
+		Type* errors = nullptr;
+		if (d->throwsSyntax != nullptr)
+		{
+			errors = errorType(d->throwsSyntax, errorName);
+			const std::string& sn = d->shortName;
+			const bool isOperator = sn.rfind("operator", 0) == 0 && sn.size() > 8 && !std::isalnum((unsigned char)sn[8]) && sn[8] != '_';
+			const char* why = (d->value & 1) != 0 ? "an interrupt sub" : (d->value & 4) != 0 && sn == "new" ? "a constructor (it builds a value: make a static sub that throws)"
+				: (d->value & 4) != 0 && sn == "del" ? "a destructor" : isOperator ? "an operator" : f->name == "main" ? "main (it returns the program's result)"
+				: d->constKind == 2 ? "a constexpr sub" : d->constKind == 3 ? "a consteval sub" : nullptr;
+			if (why != nullptr)
+				error(d->throwsSyntax->pos, std::string(why) + " cannot throw");
+		}
+		if (errors != nullptr && ret->isReference())
+			error(d->throwsSyntax->pos, "a sub returning a reference cannot throw (return a pointer: null when there is nothing)");
+		f->type = m_types.function(params, ret, d->variadic, owned, errors, errorName);
 		if (d->variadic != 0)
 		{
 			if (seenDefault)
@@ -1830,7 +1867,39 @@ namespace dscript
 			break;
 			case NodeKind::Binary: checkBinary(e); break;
 			case NodeKind::Assign: checkAssign(e); break;
-			case NodeKind::Call: checkCall(e); break;
+			case NodeKind::Call:
+				checkCall(e);
+				if (e->kind == NodeKind::Call)
+				{
+					Type* fn = calleeType(e);
+					if (e->handler != nullptr)
+						checkHandler(e, expected);
+					else if (fn != nullptr && fn->throws != nullptr)
+						error(e->pos, (e->func != nullptr ? e->func->name : std::string("this sub")) + " can fail (it throws " + fn->throwsName +
+							"): handle its errors: try (they are thrown on) or catch (f(...) catch value, f(...) catch (e) { ... })");
+				}
+			break;
+			case NodeKind::Try:
+			case NodeKind::Catch:
+			{
+				// The call itself, with the Try / Catch as its handler (so that it is still a call:
+				// its result is moved, not copied).
+				Node* call = e->a;
+				const bool isTry = e->kind == NodeKind::Try;
+				if (call == nullptr || call->kind != NodeKind::Call || call->handler != nullptr)
+					error(e->pos, std::string(isTry ? "try" : "catch") + " is for a call of a sub that throws (" + (isTry ? "try f(...)" : "f(...) catch ...") + ")");
+				Node* h = new Node(*e);
+				h->a = nullptr;
+				*e = *call;
+				e->handler = h;
+				check(e, expected);
+			}
+			break;
+			case NodeKind::Switch:
+				if (e->value != 2)
+					error(e->pos, "expression expected");
+				checkSwitchValue(e, expected);
+			break;
 			case NodeKind::Member: checkMember(e, placeWanted); break;
 			case NodeKind::Ternary:
 			{
@@ -3016,6 +3085,15 @@ namespace dscript
 				error(later->decl->namePos, "'" + a->decl->shortName + "': the same parameters as " + (later == a ? b : a)->name + ", but not the same own ones (own is part of a sub's type: they must match)");
 			return false;
 		}
+		if (a->type->throwsName != b->type->throwsName)
+		{
+			// (the callers of one would not handle the other's errors)
+			const FuncInfo* later = a->decl->pos.line > b->decl->pos.line || a->decl->pos.file != b->decl->pos.file ? a : b;
+			const FuncInfo* other = later == a ? b : a;
+			auto l_throws = [](const FuncInfo* f) { return f->type->throws != nullptr ? "throws " + f->type->throwsName : std::string("throws nothing"); };
+			error(later->decl->namePos, "'" + a->decl->shortName + "': the same parameters as " + other->name + ", but it " + l_throws(later) + " and " + other->name + " " +
+				l_throws(other) + " (throws is part of a sub's type: they must match)");
+		}
 		return true;
 	}
 
@@ -3940,10 +4018,111 @@ namespace dscript
 		return false;
 	}
 
+	// The type of the sub a call calls (nullptr: not a call of a sub).
+	Type* CodeGen::calleeType(const Node* e)
+	{
+		if (e == nullptr || e->kind != NodeKind::Call || e->vaBuiltin != 0)
+			return nullptr;
+		if (e->func != nullptr)
+			return e->func->type;
+		Type* t = e->a != nullptr ? decay(e->a->type) : nullptr;
+		if (t != nullptr && t->kind == Type::Kind::Pointer && t->base != nullptr)
+			t = t->base;
+		return t != nullptr && t->kind == Type::Kind::Function ? t : nullptr;
+	}
+
+	// The slots before a sub's parameters: a struct result's address, then the address of its
+	// caller's error slot (a sub that throws).
+	size_t CodeGen::hiddenSlots(const Type* fn)
+	{
+		return (returnsStruct(fn) ? 1 : 0) + (fn != nullptr && fn->throws != nullptr ? 1 : 0);
+	}
+
+	// Does the statement always leave (return, throw, break, continue, at its end)?
+	bool CodeGen::leaves(const Node* s)
+	{
+		if (s == nullptr)
+			return false;
+		switch (s->kind)
+		{
+			case NodeKind::Return: case NodeKind::Throw: case NodeKind::Break: case NodeKind::Continue: return true;
+			case NodeKind::Block: return !s->list.empty() && leaves(s->list.back());
+			case NodeKind::If: return s->c != nullptr && leaves(s->b) && leaves(s->c);
+			default: return false;
+		}
+	}
+
+	// A call of a sub that throws, with its handler (try / catch): the handler's checks. Its error
+	// goes in a slot of this frame (8 bytes: 1 when it failed, then the error; the handler's
+	// constValue), which catch (e) names.
+	void CodeGen::checkHandler(Node* e, Type* expected)
+	{
+		Node* h = e->handler;
+		const bool isTry = h->kind == NodeKind::Try;
+		Type* fn = calleeType(e);
+		if (fn == nullptr || fn->throws == nullptr)
+			error(h->pos, std::string(isTry ? "try" : "catch") + ": " + (e->func != nullptr ? e->func->name : std::string("this sub")) + " doesn't throw (" +
+				(isTry ? "try" : "catch") + " is for the calls of subs that throw)");
+		const int32_t slot = temporary(8);
+		h->constValue = slot;
+		Type* ret = fn->base;
+		if (isTry)
+		{
+			FuncInfo* self = m_inline.empty() ? m_func : m_inline.back().func;
+			if (self == nullptr || self->type == nullptr || self->type->throws == nullptr)
+				error(h->pos, "try throws the error on: " + (self != nullptr ? self->name : std::string("the code here")) + " must throw " + fn->throwsName +
+					" too (sub ...() throws " + fn->throwsName + "), or catch it here (f(...) catch ...)");
+			if (self->type->throwsName != fn->throwsName)
+				error(h->pos, "try: the call throws " + fn->throwsName + ", " + self->name + " throws " + self->type->throwsName +
+					" (catch it: f(...) catch (e) { throw ...; })");
+			if (m_inDefer > 0)
+				error(h->pos, "try cannot leave a defer (catch the error there)");
+			return;
+		}
+		// catch (e): the error, in the slot's second word (its last bytes for a smaller enum).
+		h->var = nullptr;
+		if (!h->name.empty())
+		{
+			VarInfo* v = new VarInfo();
+			v->name = h->name;
+			v->type = fn->throws;
+			v->storage = VarInfo::Storage::Local;
+			v->offset = slot + 4 + (int32_t)(4 - fn->throws->size());
+			v->pos = h->pos;
+			v->defPos = h->namePos;
+			v->isConst = true;
+			h->var = v;
+			if (m_options.index != nullptr && !m_discarding)
+			{
+				indexName(v->defPos, v->name, v->defPos, hoverVar(v));
+				completeLocal(v);
+			}
+		}
+		if (h->c != nullptr)
+		{
+			if (ret->kind != Type::Kind::Void && !leaves(h->c))
+				error(h->c->endPos.line > 0 ? h->c->endPos : h->pos, "this catch block must leave (return, throw, break or continue): the call has a value (" + ret->name() +
+					") it cannot give otherwise (f(...) catch value gives one)");
+			return;		// (its statements: when it is generated)
+		}
+		if (ret->kind == Type::Kind::Void)
+			error(h->pos, "catch value: the call returns nothing (catch { ... } runs a block)");
+		m_scopes.push_back({});
+		if (h->var != nullptr)
+			m_scopes.back()[h->name] = h->var;
+		check(h->b, ret);
+		requireConvertible(h->b, ret, "as the catch value");
+		m_scopes.pop_back();
+		if (ret->isReference())
+			error(h->pos, "catch value: the call returns a reference");
+	}
+
 	bool CodeGen::makesTemps(Node* e)
 	{
 		if (e == nullptr)
 			return false;
+		if (e->kind == NodeKind::Call && e->handler != nullptr && makesTemps(e->handler->b))
+			return true;
 		if (e->kind == NodeKind::Construct && destructible(e->type))
 			return true;
 		if (e->kind == NodeKind::Call)
@@ -7364,6 +7543,12 @@ namespace dscript
 			case NodeKind::Binary: return genBinary(e);
 			case NodeKind::Assign: return genAssign(e);
 			case NodeKind::Call: return genCall(e);
+			case NodeKind::Switch:
+			{
+				Reg out = alloc(e->pos);
+				genSwitch(e, &out);
+				return out;
+			}
 			case NodeKind::Materialize:
 			{
 				Type* t = e->type->base;
@@ -8383,7 +8568,15 @@ namespace dscript
 		collectForgets(f->decl->a, m_forgetNames);
 		destroyOwnedParams(inlineParams);
 		const int32_t result = returnsStruct(f->type) ? temporary(f->type->base->size()) : 0;	// (a struct result: here)
-		m_inline.push_back({ f, newLabel(), result });
+		int32_t errorSlot = 0;
+		if (f->type->throws != nullptr)
+		{
+			if (e->handler == nullptr)
+				error(e->pos, "internal error: a call of a sub that throws without try / catch");
+			errorSlot = (int32_t)e->handler->constValue;
+			emit("omov *FP, 0x00000000, dword " + imm(errorSlot));
+		}
+		m_inline.push_back({ f, newLabel(), result, errorSlot, m_temps.size() });
 		const int stmtDepth = m_stmtDepth;
 		m_stmtDepth = m_regDepth;	// the caller's temporaries stay in their registers
 		const Loc callerLoc = m_loc;
@@ -8391,7 +8584,7 @@ namespace dscript
 		for (Node* s : body->list)
 			genStatement(s);
 		m_forgetNames = std::move(forgetNames);
-		const bool endsWithReturn = !body->list.empty() && body->list.back()->kind == NodeKind::Return;
+		const bool endsWithReturn = !body->list.empty() && (body->list.back()->kind == NodeKind::Return || body->list.back()->kind == NodeKind::Throw);
 		if (!endsWithReturn)
 		{
 			loc(body->endPos);
@@ -8413,16 +8606,24 @@ namespace dscript
 		m_defers = std::move(defers);
 		m_inDefer = inDefer;
 		if (f->type->base->kind == Type::Kind::Void)
+		{
+			if (f->type->throws != nullptr)
+				genCallError(e, "");
 			return "";
+		}
 		Reg r = alloc(e->pos);
 		if (returnsStruct(f->type))
 		{
 			emit("mov " + r + ", FP");
 			addImmediate(r, result);
+			if (f->type->throws != nullptr)
+				genCallError(e, r);
 			addTemp(result, f->type->base, e);
 			return r;
 		}
 		emit("mov " + r + ", RV");
+		if (f->type->throws != nullptr)
+			genCallError(e, r);
 		return r;
 	}
 
@@ -8435,7 +8636,7 @@ namespace dscript
 			// The count the caller pushed is in the CPU's frame (FP + 104: after the 26 words of
 			// the frame); the arguments are at PP - 4 * i, the extra ones after the parameters,
 			// then (...typed) their types.
-			const int64_t fixed = (int64_t)m_func->type->params.size() + (returnsStruct(m_func->type) ? 1 : 0);
+			const int64_t fixed = (int64_t)m_func->type->params.size() + (int64_t)hiddenSlots(m_func->type);
 			const bool typed = m_func->type->variadic == 2;
 			Reg r = alloc(e->pos);
 			if (e->vaBuiltin == 2)
@@ -8496,6 +8697,19 @@ namespace dscript
 			Reg r = alloc(e->pos);
 			emit("mov " + r + ", FP");
 			addImmediate(r, result);
+			emit("push " + r);
+			release(r);
+		}
+		// A sub that throws: the address of the error slot (cleared: the sub only writes it when it fails).
+		if (fnType->throws != nullptr)
+		{
+			if (e->handler == nullptr)
+				error(e->pos, "internal error: a call of a sub that throws without try / catch");
+			const int32_t slot = (int32_t)e->handler->constValue;
+			emit("omov *FP, 0x00000000, dword " + imm(slot));
+			Reg r = alloc(e->pos);
+			emit("mov " + r + ", FP");
+			addImmediate(r, slot);
 			emit("push " + r);
 			release(r);
 		}
@@ -8590,7 +8804,7 @@ namespace dscript
 			else
 				emit("push " + imm(constConvert(def->constValue, decay(def->type), params[i])));
 		}
-		size_t slots = params.size() + (returnsStruct(fnType) ? 1 : 0);
+		size_t slots = params.size() + hiddenSlots(fnType);
 		if (fnType->variadic != 0 && e->list.size() > params.size())
 		{
 			const size_t extra = e->list.size() - params.size();
@@ -8610,19 +8824,26 @@ namespace dscript
 		if (fnType->base->kind == Type::Kind::Void)
 		{
 			release(fr);
+			if (fnType->throws != nullptr)
+				genCallError(e, "");
 			return "";
 		}
 		if (fr.empty())
 			fr = alloc(e->pos);
 		if (returnsStruct(fnType))
 		{
-			// The value: the caller's copy (a struct value is its address).
+			// The value: the caller's copy (a struct value is its address; a temporary only if the
+			// call didn't fail).
 			emit("mov " + fr + ", FP");
 			addImmediate(fr, result);
+			if (fnType->throws != nullptr)
+				genCallError(e, fr);
 			addTemp(result, fnType->base, e);
 			return fr;
 		}
 		emit("mov " + fr + ", RV");
+		if (fnType->throws != nullptr)
+			genCallError(e, fr);
 		return fr;
 	}
 
@@ -9114,7 +9335,7 @@ namespace dscript
 				m_loopDepth++;
 				label(lStart);
 				genCondBranch(s->a, lEnd, false);
-				m_loops.push_back({ lEnd, lStart, m_defers.size() });
+				m_loops.push_back({ lEnd, lStart, m_defers.size(), SIZE_MAX, m_temps.size() });
 				genStatement(s->b);
 				m_loops.pop_back();
 				emit("jmp $" + lStart);	// (the body's last line: then the condition, on the while's line)
@@ -9127,7 +9348,7 @@ namespace dscript
 				std::string lStart = newLabel(), lCont = newLabel(), lEnd = newLabel();
 				m_loopDepth++;
 				label(lStart);
-				m_loops.push_back({ lEnd, lCont, m_defers.size() });
+				m_loops.push_back({ lEnd, lCont, m_defers.size(), SIZE_MAX, m_temps.size() });
 				genStatement(s->b);
 				m_loops.pop_back();
 				label(lCont);
@@ -9160,7 +9381,7 @@ namespace dscript
 					checkCondition(s->b);
 					genCondBranch(s->b, lEnd, false);
 				}
-				m_loops.push_back({ lEnd, lCont, m_defers.size() });
+				m_loops.push_back({ lEnd, lCont, m_defers.size(), SIZE_MAX, m_temps.size() });
 				genStatement(s->d);
 				m_loops.pop_back();
 				loc(s->pos);
@@ -9249,8 +9470,9 @@ namespace dscript
 					error(s->pos, fn->name + " must return a value (" + ret->name() + ")");
 				// The value first, then its temporaries, then every defer of the sub (it stays in its
 				// register: calls keep them).
-				const bool temps = m_temps.size() > exprMark;
+				const bool temps = m_temps.size() > exprMark || m_temps.size() > exitTempBase();
 				endExpr(exprMark);
+				genExitTemps(exitTempBase());		// (from a catch block / a switch's case in an expression: the expression's)
 				const bool deferred = hasDefers(0);
 				if (deferred)
 				{
@@ -9296,6 +9518,23 @@ namespace dscript
 					emit(m_func->interrupt ? "rti" : "ret");
 			}
 			break;
+			case NodeKind::Throw:
+			{
+				FuncInfo* fn = m_inline.empty() ? m_func : m_inline.back().func;
+				if (fn == nullptr || fn->type == nullptr || fn->type->throws == nullptr)
+					error(s->pos, "throw: " + (fn != nullptr ? fn->name : std::string("the code here")) + " doesn't throw (sub ...() throws E { ... throw E.Member; })");
+				if (m_inDefer > 0)
+					error(s->pos, "throw cannot leave a defer");
+				check(s->a, fn->type->throws);
+				requireConvertible(s->a, fn->type->throws, "as the error (" + fn->type->throwsName + ")");
+				const size_t exprMark = beginExpr();
+				Reg r = gen(s->a);
+				convert(r, decay(s->a->type), fn->type->throws);
+				endExpr(exprMark);
+				genThrowExit(r, s->pos);
+				release(r);
+			}
+			break;
 			case NodeKind::Break:
 			case NodeKind::Continue:
 			{
@@ -9303,6 +9542,7 @@ namespace dscript
 				if (m_loops.empty() || (!isBreak && m_loops.back().continueLabel.empty()))
 					error(s->pos, std::string(isBreak ? "break" : "continue") + (m_inDefer > 0 ? " cannot leave a defer" : isBreak ? " outside of a loop or a switch" : " outside of a loop"));
 				const size_t depth = isBreak || m_loops.back().continueDepth == SIZE_MAX ? m_loops.back().deferDepth : m_loops.back().continueDepth;
+				genExitTemps(isBreak || m_loops.back().continueTempBase == SIZE_MAX ? m_loops.back().tempBase : m_loops.back().continueTempBase);
 				if (hasDefers(depth))
 				{
 					genDefers(depth);
@@ -9319,6 +9559,115 @@ namespace dscript
 		}
 		if (m_regDepth != m_stmtDepth)
 			error(s->pos, "internal error: temporaries left after a statement");
+	}
+
+	// ======================================== Errors ========================================
+	void CodeGen::genExitTemps(size_t base)
+	{
+		for (size_t i = m_temps.size(); i-- > base; )
+		{
+			const Temp temp = m_temps[i];
+			if (temp.consumed)
+				continue;
+			Reg r = alloc({});
+			std::string skip;
+			if (temp.flag != 0)
+			{
+				// (made in a branch: only if it was; its flag is cleared at its expression's start)
+				skip = newLabel();
+				emit("movo " + r + ", *FP, dword " + imm(temp.flag));
+				emit("mov ACC, " + r);
+				emit("jeq $" + skip + ", 0");
+			}
+			emit("mov " + r + ", FP");
+			genDestroy(r, temp.type, temp.offset);
+			if (!skip.empty())
+				label(skip);
+			release(r);
+		}
+	}
+
+	void CodeGen::genThrowExit(const Reg& value, const SourcePos& pos)
+	{
+		// The error into the caller's slot (inline: in this frame): the error, then the flag.
+		Reg p = alloc(pos);
+		if (!m_inline.empty())
+		{
+			emit("mov " + p + ", FP");
+			addImmediate(p, m_inline.back().errorOffset);
+		}
+		else
+			emit("movo " + p + ", *PP, dword " + imm(-4 * (int64_t)errorSlotIndex(m_func->type)));
+		emit("omov *" + p + ", " + value + ", dword " + imm(4));
+		emit("omov *" + p + ", 0x00000001, dword " + imm(0));
+		release(p);
+		// The temporaries of the expressions it is in, then every defer of the sub.
+		genExitTemps(exitTempBase());
+		if (hasDefers(0))
+		{
+			const int stmtDepth = m_stmtDepth;
+			m_stmtDepth = m_regDepth;
+			genDefers(0);
+			m_stmtDepth = stmtDepth;
+			loc(pos);
+		}
+		if (!m_inline.empty())
+			emit("jmp $" + m_inline.back().endLabel);
+		else
+			emit(m_func->interrupt ? "rti" : "ret");
+	}
+
+	void CodeGen::genCallError(Node* call, const Reg& r)
+	{
+		Node* h = call->handler;
+		if (h == nullptr)
+			error(call->pos, "internal error: a call of a sub that throws without try / catch");
+		const int32_t slot = (int32_t)h->constValue;
+		const std::string ok = newLabel();
+		Reg t = alloc(call->pos);
+		emit("movo " + t + ", *FP, dword " + imm(slot));
+		emit("mov ACC, " + t);
+		emit("jeq $" + ok + ", 0");
+		if (h->kind == NodeKind::Try)
+		{
+			emit("movo " + t + ", *FP, dword " + imm(slot + 4));
+			genThrowExit(t, h->pos);
+			release(t);
+			label(ok);
+			return;
+		}
+		release(t);
+		Type* ret = calleeType(call)->base;
+		if (h->c != nullptr)
+		{
+			// catch { ... }: its block, with the error's variable (the caller's registers stay).
+			m_scopes.push_back({});
+			if (h->var != nullptr)
+				m_scopes.back()[h->name] = h->var;
+			m_scopeEnds.push_back(h->c->endPos);
+			const int stmtDepth = m_stmtDepth;
+			m_stmtDepth = m_regDepth;
+			genStatement(h->c);
+			m_stmtDepth = stmtDepth;
+			m_scopeEnds.pop_back();
+			m_scopes.pop_back();
+		}
+		else
+		{
+			// catch value: in r (a struct: built where the call's result goes).
+			m_condDepth++;
+			Reg v = gen(h->b);
+			if (ret->kind == Type::Kind::Struct)
+				genInitValue(r, h->b, v, ret);
+			else
+			{
+				convert(v, decay(h->b->type), ret);
+				emit("mov " + r + ", " + v);
+			}
+			release(v);
+			m_condDepth--;
+		}
+		label(ok);
 	}
 
 	// ======================================== switch ========================================
@@ -9377,7 +9726,7 @@ namespace dscript
 			if (entries[i].lo <= entries[i - 1].hi)
 				error(entries[i].pos, "this value is a case already (" + posString(entries[i - 1].pos) + ")");
 		}
-		if (elseCase < 0 && allEnum && !enumName.empty() && !m_discarding && m_warnedSwitches.insert(posKey(s->pos)).second)
+		if (elseCase < 0 && allEnum && !enumName.empty() && (s->value == 2 || (!m_discarding && m_warnedSwitches.insert(posKey(s->pos)).second)))
 		{
 			std::string missing;
 			for (const Node* m : m_enums[enumName].decl->list)
@@ -9388,13 +9737,88 @@ namespace dscript
 					missing += (missing.empty() ? "" : ", ") + m->name;
 			}
 			if (!missing.empty())
+			{
+				if (s->value == 2)
+					error(s->pos, "this switch's value: no case for " + missing + " (add them, or else => value)");
 				warning(s->pos, "switch on " + enumName + " without else: no case for " + missing);
+			}
 		}
+		else if (elseCase < 0 && s->value == 2 && !(allEnum && !enumName.empty()))
+			error(s->pos, "a switch used as a value needs else => value (or a case for every member of an enum)");
 	}
 
-	void CodeGen::genSwitch(Node* s)
+	// switch (x) { is A => a, else => b }: its value's type (the cases' values: one type, as ?:'s
+	// two; a case's block must leave). Without else, the cases cover an enum's members.
+	void CodeGen::checkSwitchValue(Node* e, Type* expected)
 	{
-		check(s->a);
+		check(e->a);
+		Type* t = decay(e->a->type);
+		if (t != nullptr && t->kind == Type::Kind::Struct)
+		{
+			requireConvertible(e->a, m_types.i32(), "as a switch's value");
+			t = decay(e->a->type);
+		}
+		if (t == nullptr || !t->isInteger())
+			error(e->a->pos, "a switch takes an integer, a character, a bool or an enum (not " + (t ? t->name() : std::string("?")) + ")");
+		std::vector<SwitchEntry> entries;
+		int elseCase = -1;
+		switchEntries(e, t, entries, elseCase);
+		Type* result = nullptr;
+		Node* first = nullptr;
+		for (Node* c : e->list)
+		{
+			if (c->a == nullptr)
+			{
+				if (!leaves(c->b))
+					error(c->b->endPos.line > 0 ? c->b->endPos : c->pos, "this case's block must leave (return, throw, break or continue): the switch needs a value (is A => value)");
+				continue;
+			}
+			check(c->a, expected);
+			Type* ct = decay(c->a->type);
+			if (ct == nullptr || ct->kind == Type::Kind::Void)
+				error(c->a->pos, "a case's value: this gives none");
+			if (result == nullptr)
+			{
+				result = ct;
+				first = c->a;
+				continue;
+			}
+			Type* common = nullptr;
+			if (result->isArithmetic() && ct->isArithmetic())
+				common = (result == ct ? ct : arithmeticType(result, ct));
+			else if (result == ct)
+				common = ct;
+			else if (samePointee(result, ct))
+				common = m_types.pointer(result->base, true);
+			else if (result->isPointer() && ct->kind == Type::Kind::Null)
+				common = result;
+			else if (ct->isPointer() && result->kind == Type::Kind::Null)
+				common = ct;
+			else if ((result->isFunction() && ct->kind == Type::Kind::Null) || (ct->isFunction() && result->kind == Type::Kind::Null))
+				common = result->isFunction() ? result : ct;
+			if (common == nullptr)
+				error(c->a->pos, "the switch's values have different types: " + result->name() + " (" + posString(first->pos) + ") and " + ct->name());
+			result = common;
+		}
+		if (result == nullptr)
+			error(e->pos, "a switch used as a value needs a case with a value (is A => value)");
+		if (result->kind == Type::Kind::Struct)
+		{
+			for (Node* c : e->list)
+			{
+				if (c->a != nullptr)
+					requireConvertible(c->a, result, "as the switch's value");
+			}
+		}
+		e->type = result;
+	}
+
+	void CodeGen::genSwitch(Node* s, const Reg* out)
+	{
+		// out: a switch used as a value (checked already: checkSwitchValue); each case gives it.
+		const bool asValue = out != nullptr;
+		if (!asValue)
+			check(s->a);
 		Type* t = decay(s->a->type);
 		if (t != nullptr && t->kind == Type::Kind::Struct)
 		{
@@ -9412,7 +9836,10 @@ namespace dscript
 		for (size_t i = 0; i < s->list.size(); i++)
 			labels.push_back(newLabel());
 		const std::string lEnd = newLabel();
-		const std::string lDefault = elseCase >= 0 ? labels[(size_t)elseCase] : lEnd;
+		// (a value without else: its cases cover an enum; anything else gets the last case's)
+		const std::string lDefault = elseCase >= 0 ? labels[(size_t)elseCase] : asValue ? labels.back() : lEnd;
+		Type* valueType = asValue ? s->type : nullptr;
+		const int32_t resultSlot = asValue && valueType->kind == Type::Kind::Struct ? temporary(valueType->size()) : 0;
 		const std::string less = isSigned ? "jgr" : "jgru", more = isSigned ? "jls" : "jlsu";	// (r < x: x > ACC; r > x: x < ACC)
 
 		// The value (its temporaries destroyed), then the case it is.
@@ -9487,15 +9914,63 @@ namespace dscript
 			l_chain(0, entries.size());
 		release(r);
 
+		if (asValue)
+		{
+			// Each case: its value into out (a struct: built in the frame), or its block (it leaves).
+			// break / continue in a block are the loop's around the switch.
+			for (size_t i = 0; i < s->list.size(); i++)
+			{
+				Node* c = s->list[i];
+				label(labels[i]);
+				if (c->a == nullptr)
+				{
+					const int stmtDepth = m_stmtDepth;
+					m_stmtDepth = m_regDepth;
+					genStatement(c->b);
+					m_stmtDepth = stmtDepth;
+					continue;
+				}
+				m_condDepth++;
+				Reg v = gen(c->a);
+				if (valueType->kind == Type::Kind::Struct)
+				{
+					Reg a = alloc(c->a->pos);
+					emit("mov " + a + ", FP");
+					addImmediate(a, resultSlot);
+					genInitValue(a, c->a, v, valueType);
+					release(a);
+				}
+				else
+				{
+					convert(v, decay(c->a->type), valueType);
+					emit("mov " + *out + ", " + v);
+				}
+				release(v);
+				m_condDepth--;
+				if (i + 1 < s->list.size())
+					emit("jmp $" + lEnd);
+			}
+			label(lEnd);
+			if (valueType->kind == Type::Kind::Struct)
+			{
+				emit("mov " + *out + ", FP");
+				addImmediate(*out, resultSlot);
+				addTemp(resultSlot, valueType, s);
+			}
+			return;
+		}
+
 		// The cases: break leaves the switch (continue: the loop around it); without fall, a case ends it.
 		size_t continueDepth = 0;
+		size_t continueTempBase = 0;
 		std::string continueLabel;
 		if (!m_loops.empty())
 		{
 			continueLabel = m_loops.back().continueLabel;
 			continueDepth = m_loops.back().continueDepth == SIZE_MAX ? m_loops.back().deferDepth : m_loops.back().continueDepth;
+			continueTempBase = m_loops.back().continueTempBase == SIZE_MAX ? m_loops.back().tempBase : m_loops.back().continueTempBase;
 		}
-		m_loops.push_back({ lEnd, continueLabel, m_defers.size(), continueDepth });
+		m_loops.push_back({ lEnd, continueLabel, m_defers.size(), continueDepth, m_temps.size(), continueTempBase });
 		for (size_t i = 0; i < s->list.size(); i++)
 		{
 			label(labels[i]);
@@ -9504,7 +9979,7 @@ namespace dscript
 			{
 				const auto& body = s->list[i]->b->list;
 				const NodeKind last = body.empty() ? NodeKind::Block : body.back()->kind;
-				if (last != NodeKind::Return && last != NodeKind::Break && last != NodeKind::Continue)
+				if (last != NodeKind::Return && last != NodeKind::Break && last != NodeKind::Continue && last != NodeKind::Throw)
 					emit("jmp $" + lEnd);
 			}
 		}
@@ -9794,7 +10269,7 @@ namespace dscript
 				v->name = f->paramNames[i];
 				v->type = f->type->params[i];
 				v->storage = VarInfo::Storage::Param;
-				v->offset = (int32_t)i + (returnsStruct(f->type) ? 1 : 0);	// (slot 0: the result's address)
+				v->offset = (int32_t)i + (int32_t)hiddenSlots(f->type);	// (slot 0: the result's address; then the error slot's)
 				v->pos = f->decl->list[i]->pos;
 				v->defPos = f->decl->list[i]->namePos;
 				v->param = true;
@@ -11482,6 +11957,8 @@ namespace dscript
 			{
 				if (e->vaBuiltin != 0)
 					ctFail(e->pos, "va_count / va_start / va_types are not evaluated when compiling");
+				if (e->handler != nullptr)
+					ctFail(e->pos, "it calls a sub that throws (errors: when the program runs)");
 				FuncInfo* f = e->func;
 				if (f == nullptr)
 					ctFail(e->pos, "it calls a sub through a pointer");
@@ -12240,7 +12717,7 @@ namespace dscript
 					s += (i > 0 ? ", " : "") + (ownedParam(t, i) ? "own (" + interfaceType(t->params[i]) + ")" : interfaceType(t->params[i]));	// ((): own ::x is own::x)
 				if (t->variadic != 0)
 					s += std::string(t->params.empty() ? "" : ", ") + (t->variadic == 2 ? "...typed" : "...");
-				return s + ") -> " + interfaceType(t->base);
+				return s + ") -> " + interfaceType(t->base) + (t->throws != nullptr ? " throws ::" + t->throwsName : "");
 			}
 			case Type::Kind::Null: return "void*";
 			default: return t->name();
@@ -12350,6 +12827,8 @@ namespace dscript
 			text += ")";
 			if (f->type->base->kind != Type::Kind::Void)
 				text += " -> " + interfaceType(f->type->base);
+			if (f->type->throws != nullptr)
+				text += " throws ::" + f->type->throwsName;
 			if (((d->value & 2) == 0 && d->constKind == 0) || d->bodyTokens.empty())
 			{
 				l_line(text + ";", &d->namePos, head.size());

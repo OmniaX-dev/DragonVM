@@ -1,0 +1,7 @@
+// expect-error: the call throws E, g throws F
+// try: the sub must throw the same enum.
+enum E { Bad };
+enum F { Worse };
+sub f() -> i32 throws E { throw E.Bad; }
+sub g() -> i32 throws F { return try f(); }
+sub main() -> i32 { return g() catch 0; }

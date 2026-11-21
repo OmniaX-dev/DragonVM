@@ -1,0 +1,5 @@
+// expect-error: a constructor (it builds a value
+// A constructor cannot throw.
+enum E { Bad };
+struct S { var v: i32; sub new() throws E { this->v = 0; } };
+sub main() -> i32 { return 0; }

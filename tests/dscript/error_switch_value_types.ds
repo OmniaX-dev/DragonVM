@@ -1,0 +1,7 @@
+// expect-error: the switch's values have different types
+// The cases' values have one type (as ?:'s two).
+sub main() -> i32 {
+	var k: i32 = 2;
+	var p = switch (k) { is 1 => "one", else => 2 };
+	return 0;
+}

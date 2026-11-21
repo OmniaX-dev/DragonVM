@@ -1353,6 +1353,27 @@ switch (n) fall {                           // fall: a case runs into the next o
   up to 1024) jump through a table; sparse ones are found by a binary search. A switch also works
   in constexpr subs.
 
+A switch is also a value, where an expression is expected: each case gives its value after `=>`
+(cases separated by commas):
+```
+var name: string = switch (c) {
+    is Color.Red => "red",
+    is Color.Green or Color.Blue => "cool",
+};                                          // an enum's every member: no else needed
+var w: i32 = switch (ch) {
+    is 'a'..'z' + 1 => 1,
+    is '\n' => { return 0; },               // a block instead of a value: it must leave
+    else => -1
+};
+```
+- The values have one type, as `?:`'s two (numbers: the wider, pointers: the same, `null` with a
+  pointer); structs too (all of the same struct). A case can have a block instead, which must
+  leave (`return`, `throw`, `break`, `continue` at its end): `break` / `continue` are the loop's
+  around the switch.
+- It needs `else`, unless its cases are every member of an enum (a value that is none of them gets
+  the last case's value). No `fall`.
+- Not evaluated in constexpr subs (a statement switch is).
+
 ### defer
 `defer <statement or block>` runs that code when the block it is in is left, on every way out:
 the end of the block, `return`, `break` and `continue` (each runs the defers of the blocks it
@@ -1378,6 +1399,59 @@ sub copy(var path: string) -> i32 {
   the body of `if` / `while` / ...: it needs a block (`if (c) { defer ...; }`).
 - The code is generated at every exit (like an inline sub), so a long defer in a sub with many
   `return`s makes it bigger. Jumping out of a low block skips the defers.
+
+### Errors: throws, try, catch
+
+A sub that can fail says so, with an enum whose members are its errors; its callers must handle
+them (the compiler checks it):
+```
+enum ParseError { Empty, BadDigit };
+
+sub parse(var s: string) -> u32 throws ParseError {
+    if (s[0] == 0)
+        throw ParseError.Empty;             // leaves the sub (its defers and destructors run)
+    ...
+    return n;
+}
+
+sub sum(var a: string, var b: string) -> u32 throws ParseError {
+    return try parse(a) + try parse(b);     // try: an error is thrown on (same enum)
+}
+
+var n: u32 = parse(s) catch 0;              // a value when it fails
+var k: i32 = parse(s) catch (e) switch (e) { is ParseError.Empty => -1, else => -2 };
+var m: u32 = parse(s) catch (e) {           // a block, with the error: it must leave, as the call
+    log(e);                                 // has a value
+    return 0;
+};
+save(file) catch { retry(); }               // a call without a value: its block can end
+```
+- `throws E` after the result (`sub f() throws E`, `-> T throws E`), also in sub types
+  (`sub(string) -> u32 throws E`), lambdas and methods (virtual ones too: an override throws the
+  same errors). E is an enum; throws is part of the sub's type (sub pointers must match). A
+  constructor, a destructor, an operator, an interrupt sub, `main` and constexpr / consteval subs
+  cannot throw, nor a sub returning a reference.
+- `throw x;` in a sub that throws: x converts to the enum (`throw E.Member;`). The sub's
+  temporaries, defers and destructors (and its own parameters) are done on the way out, as for
+  return. Not in a defer.
+- Every call of a sub that throws is handled, right where it is:
+  - `try f(...)`: the error is thrown on (the sub it is in must throw the same enum); not in a defer.
+  - `f(...) catch value`: the value when it fails (it converts to the call's type, a struct too).
+    `catch (e) value` names the error (a constant of the enum's type). catch binds tightly: its
+    value is one operand (`catch -1`, `catch (e) (x + 1)`, `catch switch (e) { ... }`), and
+    `f() catch 0 == 5` compares the result. `catch (e)` names the error when a value follows it
+    that does not start with an operator (`catch (e) (-1)`).
+  - `f(...) catch { ... }` / `catch (e) { ... }`: a block run when it fails. If the call has a value,
+    the block must leave (`return`, `throw`, `break`, `continue` at its end); for a call without
+    one, it can end (the code goes on after the call). A statement ending with a catch block needs
+    no `;`.
+- Leaving through an error (`try`, `throw`, `return` / `break` from a catch block) destroys the
+  temporaries of the expressions it leaves (a call's arguments, values made before the call); a
+  struct result exists only when the call didn't fail.
+- Code: the caller clears an 8-byte error slot in its frame and passes its address after the struct
+  result's (a hidden argument); a failing sub writes the error and 1 there, and the caller checks
+  the 1 after the call. Nothing else costs anything: no tables, no unwinding.
+- Not evaluated when compiling: a constexpr call reaching a sub that throws is a normal call.
 
 ### atomic
 `atomic { ... }` runs the block with interrupts disabled, and puts them back as they were on
@@ -1514,7 +1588,8 @@ var m: i32 = MAX(x, y + 1);
 - **Calling convention** (the machine's own `call`): the arguments are pushed left to right as
   32-bit slots, then their count; `call` saves R1..R20, ACC, PP, IP and FP (the CPU's stack
   frame) and `ret` restores them. Parameter `i` is at `PP - 4 * i` (values smaller than 4 bytes
-  are in the slot's last bytes). The return value is in RV. A variadic sub's extra arguments
+  are in the slot's last bytes). Hidden first slots: a struct result's address, then (a sub that
+  throws) the address of the caller's error slot (8 bytes: 1 when it failed, then the error). The return value is in RV. A variadic sub's extra arguments
   follow (`...typed`: then their type codes, in the same order), and the count is all the slots
   pushed; the callee reads it in the CPU's frame (`FP + 104`, the word after the 26 of the frame).
 - **Locals** are at `FP + offset` (offset <= 0): the sub moves SP below them first.

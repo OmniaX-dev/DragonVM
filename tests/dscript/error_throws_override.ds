@@ -1,0 +1,6 @@
+// expect-error: but it throws nothing and Base::area throws E
+// throws is part of a sub's type: an override throws the same errors.
+enum E { Bad };
+class Base { virt sub area() -> i32 throws E { return 1; } };
+class Derived ex Base { override sub area() -> i32 { return 2; } };
+sub main() -> i32 { return 0; }

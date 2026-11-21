@@ -1,0 +1,23 @@
+// A library with subs that throw (used by errors_library.ds).
+namespace el {
+	enum IoError: u16 { NotFound = 2, Denied = 13 };
+	sub open(var name: string) -> u32 throws IoError {
+		if (name[0] == 0)
+			throw IoError.NotFound;
+		if (name[0] == '/')
+			throw IoError.Denied;
+		return 3;
+	}
+	inline sub open_twice(var name: string) -> u32 throws IoError {
+		return try open(name) + try open(name);
+	}
+	struct File {
+		var fd: u32;
+		sub read(var n: u32) -> u32 throws IoError {
+			if (this->fd == 0)
+				throw IoError.NotFound;
+			return n;
+		}
+	};
+	var g_open: sub(string) -> u32 throws IoError = open;
+}

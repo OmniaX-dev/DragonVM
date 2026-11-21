@@ -31,6 +31,7 @@ namespace dscript
 		std::vector<TypeSyntax*> params;	// Function
 		int variadic { 0 };					// Function: 1 ... (more arguments), 2 ...typed (with their types)
 		uint32_t owned { 0 };				// Function: bit i, parameter i is own T (the sub destroys it)
+		TypeSyntax* throws { nullptr };		// Function: throws E (nullptr: none)
 		std::vector<TypeSyntax*> args;		// Named: a template's arguments (Array<u32>)
 		Type* fixed { nullptr };			// a template parameter in an instance: the type it stands for (name: the parameter)
 		struct Node* value { nullptr };		// Value, ValueType
@@ -83,9 +84,11 @@ namespace dscript
 		// Destroy: value 0, a destructor's fields (in reverse) and its base's part; 1, a variable (var).
 		// Switch: a = the value, list = its cases (SwitchCase: list = the values (a range: a Binary
 		// "..", a..b without b), b = the body (a Block); value 1: else), value 1: fall (a case runs
-		// into the next one).
+		// into the next one); value 2: a switch expression (switch (x) { is 1 => a, else => b }: each
+		// case's value in its a, or a block in b that leaves: return, throw, break, continue).
+		// Throw: throw a; (a: the error, a member of the enum the sub throws).
 		Block, If, While, DoWhile, For, ForIn, Return, Break, Continue, ExprStmt, LowBlock, Assert, DebugPrint, Defer, SetVtables, Destroy,
-		Switch, SwitchCase,
+		Switch, SwitchCase, Throw,
 		// Expressions
 		IntLit, FloatLit, StrLit, BoolLit, Null, Ident, Unary, Binary, Assign, Ternary, Call, Index,
 		Member, Cast, SizeofType, SizeofExpr, PreInc, PreDec, PostInc, PostDec, InitList, TypeArg,
@@ -94,7 +97,12 @@ namespace dscript
 		// value given to a const ref parameter). Construct with value 2: take(p), *p moved out (a = p).
 		// InPlace: p->new(...) / p->del() that the compiler does itself (a = the address, list = new's
 		// argument: none or one; value 0 new, 1 del): see CodeGen::inPlace
-		Construct, Materialize, InPlace
+		Construct, Materialize, InPlace,
+		// Try: try a (a: a call of a sub that throws; its error is thrown on, the sub must throw the
+		// same errors). Catch: a catch b / a catch { c } (name: the error's variable, catch (e) ...;
+		// "": none): b, a value when the call fails, or c, a block run then (it must leave unless the
+		// call returns nothing). The call's handler points at the Try / Catch.
+		Try, Catch
 	};
 
 	// One node type for the whole tree: the fields used depend on the kind (see Parser.cpp).
@@ -140,6 +148,8 @@ namespace dscript
 		Node* guard { nullptr };
 		bool guardElse { false };
 		int variadic { 0 };				// FuncDecl: 1 if the parameters end with ..., 2 with ...typed
+		TypeSyntax* throwsSyntax { nullptr };	// FuncDecl: throws E (nullptr: it doesn't throw)
+		Node* handler { nullptr };		// Call: the Try / Catch around it (its sub throws)
 		bool owned { false };			// a parameter declared own T: the sub owns (and destroys) its value, not the caller
 		// Call of a variadic sub's built-in (va_count, va_start, va_types): 1, 2, 3 (0: a normal call).
 		int vaBuiltin { 0 };

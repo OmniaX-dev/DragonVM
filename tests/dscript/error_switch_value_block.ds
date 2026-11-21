@@ -1,0 +1,7 @@
+// expect-error: this case's block must leave
+// A case's block (instead of a value) must leave.
+sub main() -> i32 {
+	var k: i32 = 2;
+	var x: i32 = switch (k) { is 1 => { k = 3; }, else => 2 };
+	return x;
+}

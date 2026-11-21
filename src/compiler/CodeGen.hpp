@@ -146,7 +146,9 @@ namespace dscript
 			struct AliasInfo { Node* decl { nullptr }; bool resolving { false }; Type* type { nullptr }; };
 			// deferDepth: the defer frames outside the loop (break / continue run the ones above).
 			// (a switch: continue is its loop's, with that loop's defer depth: continueDepth; SIZE_MAX: deferDepth)
-			struct Loop { std::string breakLabel; std::string continueLabel; size_t deferDepth { 0 }; size_t continueDepth { SIZE_MAX }; };
+			// tempBase: the temporaries (m_temps) outside the loop (break / continue from an expression's
+			// catch block destroy those above; continueTempBase: the loop a switch continues).
+			struct Loop { std::string breakLabel; std::string continueLabel; size_t deferDepth { 0 }; size_t continueDepth { SIZE_MAX }; size_t tempBase { 0 }; size_t continueTempBase { SIZE_MAX }; };
 			// A defer: its statement, and the variables it sees (those declared before it).
 			// destroys: a local's destructor (skipped when a return moves the local out).
 			struct Deferred { Node* body; std::vector<std::map<std::string, VarInfo*>> scopes; int atomic; VarInfo* destroys { nullptr }; };
@@ -208,6 +210,7 @@ namespace dscript
 			void resolveEnum(EnumInfo& info);
 			Type* enumType(EnumInfo& info);
 			void resolveFunction(FuncInfo* f);
+			Type* errorType(TypeSyntax* ts, std::string& name);
 			int64_t constExpr(Node* e, const std::string& what);
 			void constStructValues(StructInfo* info, Node* init, const std::string& prefix, ConstInfo& c, const std::string& constName);
 			ConstInfo* constStructRef(Node* e, Type*& structType, std::string& path);
@@ -408,6 +411,21 @@ namespace dscript
 			void addTemp(int32_t offset, Type* t, Node* node);
 			bool consumeTemp(Node* n);
 			bool makesTemps(Node* e);
+			// ===== Errors (throws, try, catch) =====
+			Type* calleeType(const Node* e);
+			static size_t hiddenSlots(const Type* fn);
+			static size_t errorSlotIndex(const Type* fn) { return returnsStruct(fn) ? 1 : 0; }
+			static bool leaves(const Node* s);
+			void checkHandler(Node* e, Type* expected);
+			// After a call of a sub that throws: its handler (r: the call's value, "" if none).
+			void genCallError(Node* call, const Reg& r);
+			// Leaves the sub with the error in `value` (its temporaries and defers first).
+			void genThrowExit(const Reg& value, const SourcePos& pos);
+			// The destructors of the temporaries from `base` up (a way out of the expressions they are in).
+			void genExitTemps(size_t base);
+			size_t exitTempBase(void) const { return m_inline.empty() ? 0 : m_inline.back().tempBase; }
+			// switch (x) { is A => a, else => b } (check: its type).
+			void checkSwitchValue(Node* e, Type* expected);
 			// A condition: its temporaries destroyed before the jump.
 			void genCondBranch(Node* e, const std::string& target, bool jumpIfTrue);
 			// The program's globals with destructors: destroyed after main (__ds_fini), the last first.
@@ -435,7 +453,7 @@ namespace dscript
 			// ===== switch =====
 			struct SwitchEntry { int64_t lo; int64_t hi; size_t c; SourcePos pos; };
 			void switchEntries(Node* s, Type* t, std::vector<SwitchEntry>& entries, int& elseCase);
-			void genSwitch(Node* s);
+			void genSwitch(Node* s, const Reg* out = nullptr);
 			std::set<std::string> m_warnedSwitches;
 
 			// ===== Templates in analysis (the language server) =====
@@ -547,7 +565,8 @@ namespace dscript
 			int m_inDefer { 0 };		// generating a defer's statement (return / break / continue cannot leave it)
 			// Inline subs being expanded (innermost last): return jumps to endLabel.
 			// resultOffset: a struct result's place in the caller's frame (FP + offset).
-			struct InlineCall { FuncInfo* func; std::string endLabel; int32_t resultOffset { 0 }; };
+			// errorOffset: a sub that throws, its error slot in the frame; tempBase: the caller's temporaries.
+			struct InlineCall { FuncInfo* func; std::string endLabel; int32_t resultOffset { 0 }; int32_t errorOffset { 0 }; size_t tempBase { 0 }; };
 			// Structs by value: a sub returning a struct gets the address of its caller's result
 			// (a hidden first argument: the parameters' slots are one further); a struct argument is
 			// a copy in the caller's frame, passed by its address. temporary: room in the frame.

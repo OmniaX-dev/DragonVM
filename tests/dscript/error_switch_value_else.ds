@@ -1,0 +1,6 @@
+// expect-error: needs else => value
+// A switch used as a value needs else (but for an enum's every member).
+sub main() -> i32 {
+	var k: i32 = 2;
+	return switch (k) { is 1 => 10, is 2 => 20 };
+}

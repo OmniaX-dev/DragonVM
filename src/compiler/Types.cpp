@@ -49,7 +49,7 @@ namespace dscript
 					s += (i > 0 ? ", " : "") + std::string(i < 32 && (owned & (1u << i)) != 0 ? "own " : "") + params[i]->name(brief);
 				if (variadic != 0)
 					s += std::string(params.empty() ? "" : ", ") + (variadic == 2 ? "...typed" : "...");
-				return s + ") -> " + base->name(brief);
+				return s + ") -> " + base->name(brief) + (throws != nullptr ? " throws " + throwsName : "");
 			}
 		}
 		return "?";
@@ -143,11 +143,12 @@ namespace dscript
 		return t;
 	}
 
-	Type* TypeTable::function(const std::vector<Type*>& params, Type* ret, int variadic, uint32_t owned)
+	Type* TypeTable::function(const std::vector<Type*>& params, Type* ret, int variadic, uint32_t owned, Type* throws, const std::string& throwsName)
 	{
 		for (Type* t : m_types)
 		{
-			if (t->kind == Type::Kind::Function && t->base == ret && t->params == params && t->variadic == variadic && t->owned == owned)
+			if (t->kind == Type::Kind::Function && t->base == ret && t->params == params && t->variadic == variadic && t->owned == owned
+				&& t->throws == throws && t->throwsName == throwsName)
 				return t;
 		}
 		Type* t = make(Type::Kind::Function);
@@ -155,6 +156,8 @@ namespace dscript
 		t->params = params;
 		t->variadic = variadic;
 		t->owned = owned;
+		t->throws = throws;
+		t->throwsName = throwsName;
 		return t;
 	}
 

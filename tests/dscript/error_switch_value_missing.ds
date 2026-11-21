@@ -1,0 +1,7 @@
+// expect-error: no case for Blue
+// Without else, a switch value has a case for every member of the enum.
+enum Color { Red, Green, Blue };
+sub main() -> i32 {
+	var c: Color = Color.Red;
+	return switch (c) { is Color.Red => 1, is Color.Green => 2 };
+}

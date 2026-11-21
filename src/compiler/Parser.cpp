@@ -1446,6 +1446,8 @@ namespace dscript
 			n->shortName += " " + tokenText(returnFrom, m_pos);
 			n->name = (n->scope.empty() ? "" : n->scope + "::") + n->shortName;
 		}
+		if (acceptKeyword("throws"))
+			n->throwsSyntax = parseType();
 		if ((flags & 16384) != 0 && n->shortName != "new" && n->shortName.rfind("operator cast", 0) != 0)
 			error(n->namePos, "implicit is for constructors (implicit sub new(var x: T)) and conversions (implicit sub operator cast() -> T)");
 		if ((flags & 1024) != 0)
@@ -1596,6 +1598,8 @@ namespace dscript
 		parseParams(n);
 		if (acceptPunct("->"))
 			n->typeSyntax = parseType();
+		if (acceptKeyword("throws"))
+			n->throwsSyntax = parseType();
 		if (!isPunct("{"))
 			error(peek().pos, "'{' expected: a lambda needs a body (sub(...) -> type { ... })");
 		n->d = m_currentFunc;
@@ -1727,6 +1731,8 @@ namespace dscript
 			}
 			if (acceptPunct("->"))
 				t->base = parseType();
+			if (acceptKeyword("throws"))
+				t->throws = parseType();
 		}
 		else if (isKeyword("struct"))
 		{
@@ -2169,7 +2175,7 @@ namespace dscript
 		if (isKeyword("var") || isKeyword("auto"))
 		{
 			Node* v = parseVarDecl();
-			expectPunct(";", "after the variable declaration");
+			endStatement(v->a, "after the variable declaration");
 			declareLocal(v->name);
 			return v;
 		}
@@ -2307,7 +2313,16 @@ namespace dscript
 			Node* n = make(NodeKind::Return, pos);
 			if (!isPunct(";"))
 				n->a = parseExpression();
-			expectPunct(";", "after return");
+			endStatement(n->a, "after return");
+			return n;
+		}
+		if (acceptKeyword("throw"))
+		{
+			Node* n = make(NodeKind::Throw, pos);
+			if (isPunct(";"))
+				error(peek().pos, "throw needs the error (throw E.Member;)");
+			n->a = parseExpression();
+			expectPunct(";", "after throw");
 			return n;
 		}
 		if (acceptKeyword("break"))
@@ -2325,8 +2340,19 @@ namespace dscript
 			error(pos, "'" + peek().text + "' declarations are only allowed at the top level");
 		Node* n = make(NodeKind::ExprStmt, pos);
 		n->a = parseExpression();
-		expectPunct(";", "after the statement");
+		endStatement(n->a, "after the statement");
 		return n;
+	}
+
+	// The ';' that ends a statement (optional after a catch block: f() catch (e) { ... }).
+	void Parser::endStatement(const Node* expr, const std::string& context)
+	{
+		const bool block = expr != nullptr && m_pos > 0 && m_tokens[m_pos - 1].kind == TokenKind::Punct && m_tokens[m_pos - 1].text == "}"
+			&& (expr->kind == NodeKind::Catch || (expr->kind == NodeKind::Assign && expr->b != nullptr && expr->b->kind == NodeKind::Catch));
+		if (block)
+			acceptPunct(";");
+		else
+			expectPunct(";", context);
 	}
 
 	// ===================================== Expressions ======================================
@@ -2416,6 +2442,12 @@ namespace dscript
 				return n->a;
 			return n;
 		}
+		if (acceptKeyword("try"))
+		{
+			Node* n = make(NodeKind::Try, pos);
+			n->a = parseUnary();
+			return n;
+		}
 		if (acceptPunct("++"))
 		{
 			Node* n = make(NodeKind::PreInc, pos);
@@ -2470,7 +2502,95 @@ namespace dscript
 			expectPunct(")", "after sizeof(...)");
 			return n;
 		}
-		return parsePostfix(parsePrimary());
+		return parseCatch(parsePostfix(parsePrimary()));
+	}
+
+	// expr catch value, expr catch (e) value, expr catch { ... }, expr catch (e) { ... } (after a call
+	// of a sub that throws). catch (name) binds the error when what follows can start a value (not
+	// an operator: catch (e) (-1)); otherwise (name) is the value.
+	Node* Parser::parseCatch(Node* expr)
+	{
+		if (!isKeyword("catch"))
+			return expr;
+		Node* n = make(NodeKind::Catch, next().pos);
+		n->a = expr;
+		bool bind = false;
+		if (isPunct("(") && peek(1).kind == TokenKind::Identifier && isPunct(")", 2))
+		{
+			const Token& after = peek(3);
+			bind = (after.kind == TokenKind::Punct && (after.text == "{" || after.text == "(" || after.text == "::"))
+				|| after.kind == TokenKind::Identifier || after.kind == TokenKind::Integer || after.kind == TokenKind::Float || after.kind == TokenKind::String
+				|| (after.kind == TokenKind::Keyword && after.text != "and" && after.text != "or");
+		}
+		pushScope();
+		if (bind)
+		{
+			next();
+			n->name = expectIdentifier("(the error's variable: catch (e) ...)");
+			n->namePos = lastPos();
+			next();
+			declareLocal(n->name);
+		}
+		if (isPunct("{"))
+			n->c = parseBlock();
+		else
+			n->b = parseUnary();
+		popScope();
+		return n;
+	}
+
+	// switch (x) { is 1 or 2 => a, is 3..9 => b, else => c } as a value (each case's value, or a block
+	// that leaves: return, throw, break, continue).
+	Node* Parser::parseSwitchValue(void)
+	{
+		Node* n = make(NodeKind::Switch, next().pos);
+		n->value = 2;
+		expectPunct("(", "after 'switch'");
+		n->a = parseExpression();
+		expectPunct(")", "after the switch's value");
+		if (peek().kind == TokenKind::Identifier && peek().text == "fall" && isPunct("{", 1))
+			error(peek().pos, "a switch used as a value has no fall (each case gives the value)");
+		expectPunct("{", "to start the switch's cases (switch (value) { is A => a, else => b })");
+		while (!acceptPunct("}"))
+		{
+			Node* c = make(NodeKind::SwitchCase, peek().pos);
+			if (acceptKeyword("else"))
+				c->value = 1;
+			else if (peek().kind == TokenKind::Identifier && peek().text == "is")
+			{
+				next();
+				do
+				{
+					Node* v = parseBinary(2);
+					if (isPunct(".."))
+					{
+						Node* r = make(NodeKind::Binary, next().pos);
+						r->name = "..";
+						r->a = v;
+						r->b = parseBinary(2);
+						v = r;
+					}
+					c->list.push_back(v);
+				}
+				while (acceptKeyword("or"));
+			}
+			else
+				error(peek().pos, "'is' (a case: is A or B => value) or 'else' expected in the switch, found " + describe(peek()));
+			expectPunct("=>", c->value == 1 ? "after else (else => value)" : "after the case's values (is A or B => value)");
+			if (isPunct("{"))
+				c->b = parseBlock();
+			else
+				c->a = parseTernary();
+			n->list.push_back(c);
+			if (c->value == 1 && !isPunct("}") && !(isPunct(",") && isPunct("}", 1)))
+				error(peek().pos, "else is the switch's last case");
+			if (!acceptPunct(","))
+			{
+				expectPunct("}", "after the case (cases are separated by ',')");
+				break;
+			}
+		}
+		return n;
 	}
 
 	Node* Parser::parsePostfix(Node* expr)
@@ -2655,6 +2775,8 @@ namespace dscript
 			return make(NodeKind::Null, t.pos);
 		if (isKeyword("sub") || (isKeyword("interrupt") && isKeyword("sub", 1)))
 			return parseLambda();
+		if (isKeyword("switch"))
+			return parseSwitchValue();
 		if (acceptPunct("("))
 		{
 			Node* n = parseExpression();

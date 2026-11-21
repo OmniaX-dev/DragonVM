@@ -1,0 +1,5 @@
+// expect-error: can fail (it throws E)
+// A call of a sub that throws needs try or catch.
+enum E { Bad };
+sub f() -> i32 throws E { throw E.Bad; }
+sub main() -> i32 { return f(); }

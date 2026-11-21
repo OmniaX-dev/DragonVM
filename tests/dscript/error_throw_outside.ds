@@ -1,0 +1,4 @@
+// expect-error: throw: main doesn't throw
+// throw is for the subs that throw.
+enum E { Bad };
+sub main() -> i32 { throw E.Bad; }

@@ -17,6 +17,11 @@ namespace dscript
 		std::vector<Type*> params;			// Function
 		int variadic { 0 };					// Function: 1 ... (more arguments), 2 ...typed
 		uint32_t owned { 0 };				// Function: bit i, parameter i is own (the sub destroys it, not the caller)
+		// Function: throws E (the sub can fail with an error of the enum E instead of returning):
+		// throws is E's integer type (nullptr: it doesn't throw), throwsName E's full name (two
+		// subs throw the same errors when they name the same enum).
+		Type* throws { nullptr };
+		std::string throwsName;
 		// Pointer: what it points at is constant (const T*: reading it is fine, changing it through
 		// the pointer is an error). Values have no const of their own: only what a pointer points at.
 		bool constTarget { false };
@@ -128,7 +133,7 @@ namespace dscript
 			Type* valueArg(Type* type, const std::string& text, const std::string& constName);
 			Type* findValueArg(Type* type, const std::string& text);
 			Type* array(Type* base, uint32_t count);
-			Type* function(const std::vector<Type*>& params, Type* ret, int variadic = 0, uint32_t owned = 0);
+			Type* function(const std::vector<Type*>& params, Type* ret, int variadic = 0, uint32_t owned = 0, Type* throws = nullptr, const std::string& throwsName = "");
 			Type* structType(StructInfo* info);
 			// The builtin type named `name` (i32, u8, string, ...), or nullptr.
 			Type* builtin(const std::string& name);

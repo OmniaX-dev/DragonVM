@@ -1,0 +1,4 @@
+// expect-error: throws takes an enum
+// The errors are an enum's members.
+sub f() -> i32 throws u32 { return 1; }
+sub main() -> i32 { return f() catch 0; }

@@ -1,0 +1,8 @@
+// expect-error: this catch block must leave
+// A catch block of a call with a value must leave (or the value would be missing).
+enum E { Bad };
+sub f() -> i32 throws E { throw E.Bad; }
+sub main() -> i32 {
+	var x: i32 = f() catch { x = 1; };
+	return x;
+}

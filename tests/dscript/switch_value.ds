@@ -1,0 +1,105 @@
+// expect-rv: 0
+// switch as a value: is A or B => a, ranges, else => b; an enum's every member without else; one
+// type from the cases' values (as ?:); a struct value; a case's block that leaves (return, break,
+// continue, throw); temporaries in a case; inside other expressions.
+#include(check.ds)
+
+enum Color { Red, Green, Blue };
+enum Fail { Bad };
+
+var g_live: i32 = 0;
+struct Tracked {
+	var v: i32;
+	sub new(var v: i32) { this->v = v; g_live++; }
+	sub new(var o: const ref Tracked) { this->v = o.v; g_live++; }
+	sub del() { g_live--; }
+	readonly sub get() -> i32 { return this->v; }
+};
+
+sub name(var c: Color) -> string {
+	return switch (c) {
+		is Color.Red => "red",
+		is Color.Green => "green",
+		is Color.Blue => "blue",
+	};
+}
+
+sub classify(var ch: u8) -> i32 {
+	return switch (ch) {
+		is 'a'..'z' + 1 or 'A'..'Z' + 1 => 1,
+		is '0'..'9' + 1 => 2,
+		is ' ' or '\t' => 3,
+		else => 0
+	};
+}
+
+sub dense(var n: i32) -> i32 {
+	return switch (n) { is 0 => 10, is 1 => 11, is 2 => 12, is 3 => 13, is 4 => 14, is 5 => 15, else => -1 };
+}
+
+sub early(var n: i32) -> i32 {
+	var x: i32 = switch (n) {
+		is 1 => 100,
+		is 2 => { return -2; },
+		else => n * 2
+	};
+	return x + 1;
+}
+
+sub make(var n: i32) -> Tracked {
+	var t: Tracked(n);
+	return t;
+}
+
+sub pick(var n: i32) -> Tracked {
+	return switch (n) {
+		is 0 => make(5),
+		is 1 => Tracked.new(6),
+		else => make(n)
+	};
+}
+
+sub loops(var n: i32) -> i32 {
+	var total: i32 = 0;
+	for (var i: i32 = 0; i < n; i++) {
+		total += switch (i % 4) {
+			is 0 => make(1).get(),
+			is 1 => { continue; },
+			is 2 => 10,
+			else => { if (i > 6) { break; } else { continue; } }
+		};
+	}
+	return total;
+}
+
+sub thrower(var n: i32) -> i32 throws Fail {
+	return switch (n) {
+		is 0 => { throw Fail.Bad; },
+		else => n
+	};
+}
+
+sub main() -> i32 {
+	check(1, name(Color.Green)[0] == 'g' and name(Color.Blue)[0] == 'b');
+	check(2, classify('q') == 1 and classify('Q') == 1 and classify('5') == 2 and classify('\t') == 3 and classify('#') == 0);
+	check(3, dense(0) == 10 and dense(5) == 15 and dense(6) == -1 and dense(-3) == -1);
+	check(4, early(1) == 101 and early(2) == -2 and early(5) == 11);
+	{
+		var a: Tracked = pick(0);
+		var b: Tracked = pick(1);
+		var c: Tracked = pick(9);
+		check(5, a.v == 5 and b.v == 6 and c.v == 9 and g_live == 3);
+	}
+	check(6, g_live == 0);
+	check(7, pick(1).get() == 6);
+	check(13, g_live == 0);
+	check(8, loops(12) == 1 + 10 + 1 + 10 and g_live == 0);
+	check(9, (thrower(3) catch 0) == 3 and (thrower(0) catch -1) == -1);
+	var k: i32 = 3;
+	var mixed = switch (k) { is 3 => 2, else => 1.5 };		// i32 and f32: f32
+	check(10, mixed == 2.0);
+	check(11, 1 + switch (k) { is 3 => 4, else => 0 } * 2 == 9);
+	var p: string = switch (k) { is 1 => "one", else => null };
+	check(12, p == null);
+	return result();
+}

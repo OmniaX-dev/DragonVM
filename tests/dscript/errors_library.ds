@@ -1,0 +1,25 @@
+// Subs that throw through a library (libs/errors_lib.ds): a sub, an inline one, a method, a sub
+// pointer; its enum's errors caught here.
+// dsc-lib: libs/errors_lib.ds
+// expect-rv: 0
+#import("errors_lib")
+#include(check.ds)
+
+sub open_both(var a: string, var b: string) -> u32 throws el::IoError {
+	return try el::open(a) + try el::open(b);
+}
+
+sub main() -> i32 {
+	check(1, (el::open("x") catch 0) == 3);
+	check(2, (el::open("") catch (e) cast<u32>(e)) == 2);
+	check(3, (el::open("/") catch (e) cast<u32>(e)) == 13);
+	check(4, (el::open_twice("x") catch 0) == 6 and (el::open_twice("") catch 1) == 1);
+	var f: el::File;
+	f.fd = 0;
+	check(5, (f.read(4) catch 9) == 9);
+	f.fd = 1;
+	check(6, (f.read(4) catch 9) == 4);
+	check(7, (el::g_open("/") catch (e) switch (e) { is el::IoError.Denied => 1, else => 0 }) == 1);
+	check(8, (open_both("a", "b") catch 0) == 6 and (open_both("a", "") catch (e) cast<u32>(e)) == 2);
+	return result();
+}

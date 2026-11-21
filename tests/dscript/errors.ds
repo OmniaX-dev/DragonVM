@@ -1,0 +1,196 @@
+// expect-rv: 0
+// Errors as values: throws E (an enum), throw, try (thrown on), catch value / catch (e) value /
+// catch { ... } / catch (e) { ... }; defers, destructors and temporaries on the way out; inline
+// subs, methods, virtual subs and sub pointers that throw; a struct result.
+#include(check.ds)
+
+enum ParseError { Empty, BadDigit, TooBig };
+enum Small: u8 { A = 1, B = 200 };
+
+var g_live: i32 = 0;		// Tracked values alive
+var g_defers: i32 = 0;
+
+struct Tracked {
+	var v: i32;
+	sub new() { this->v = 0; g_live++; }
+	sub new(var v: i32) { this->v = v; g_live++; }
+	sub new(var o: const ref Tracked) { this->v = o.v; g_live++; }
+	sub del() { g_live--; }
+};
+
+sub parse(var s: string) -> u32 throws ParseError {
+	if (s[0] == 0)
+		throw ParseError.Empty;
+	var n: u32 = 0;
+	for (var i: u32 = 0; s[i] != 0; i++) {
+		if (s[i] < '0' or s[i] > '9')
+			throw ParseError.BadDigit;
+		if (n > 100000)
+			throw ParseError.TooBig;
+		n = n * 10 + (s[i] - '0');
+	}
+	return n;
+}
+
+// try: the error is thrown on (this sub throws the same errors).
+sub sum(var a: string, var b: string) -> u32 throws ParseError {
+	defer { g_defers++; }
+	var t: Tracked(1);
+	return try parse(a) + try parse(b);
+}
+
+sub kind(var s: string) -> i32 {
+	return parse(s) catch (e) switch (e) {
+		is ParseError.Empty => -1,
+		is ParseError.BadDigit => -2,
+		is ParseError.TooBig => -3,
+	};
+}
+
+sub first_good(var a: string, var b: string) -> u32 {
+	var n: u32 = parse(a) catch {
+		return parse(b) catch 7;
+	};
+	return n;
+}
+
+// A void sub that throws; its catch block ends normally.
+var g_count: u32 = 0;
+sub bump(var by: u32) throws Small {
+	if (by > 10)
+		throw Small.B;
+	g_count += by;
+}
+
+// A struct result (built only when the call doesn't fail).
+sub make(var v: i32) -> Tracked throws ParseError {
+	if (v < 0)
+		throw ParseError.BadDigit;
+	var t: Tracked(v);
+	return t;
+}
+
+// A struct argument (a temporary) and an own parameter, when the call fails.
+sub take_value(var t: Tracked, var fail: bool) -> i32 throws ParseError {
+	if (fail)
+		throw ParseError.Empty;
+	return t.v;
+}
+sub take_own(var t: own Tracked, var fail: bool) -> i32 throws ParseError {
+	if (fail)
+		throw ParseError.Empty;
+	return t.v;
+}
+sub through(var fail: bool) -> i32 throws ParseError {
+	return try take_value(Tracked.new(5), fail) + 1;
+}
+
+inline sub half(var n: u32) -> u32 throws ParseError {
+	if (n % 2 != 0)
+		throw ParseError.BadDigit;
+	return n / 2;
+}
+
+class Shape {
+	virt sub area(var scale: i32) -> i32 throws ParseError { return scale; }
+};
+class Square ex Shape {
+	var side: i32;
+	sub new(var s: i32) { this->side = s; }
+	override sub area(var scale: i32) -> i32 throws ParseError {
+		if (scale == 0)
+			throw ParseError.Empty;
+		return this->side * this->side * scale;
+	}
+};
+
+struct Counter {
+	var n: u32;
+	sub add(var by: u32) -> u32 throws Small {
+		if (by == 0)
+			throw Small.A;
+		this->n += by;
+		return this->n;
+	}
+};
+
+sub small_error(var by: u32) -> u32 {
+	var c: Counter;
+	c.n = 0;
+	return c.add(by) catch (e) (cast<u32>(e) + 1000);
+}
+
+sub loop_sum(var items: string*, var n: u32) -> u32 {
+	var total: u32 = 0;
+	for (var i: u32 = 0; i < n; i++) {
+		var v: u32 = parse(items[i]) catch (e) {
+			if (e == ParseError.TooBig)
+				break;
+			continue;
+		};
+		total += v;
+	}
+	return total;
+}
+
+// try in an inline sub (thrown on to its caller's handler), temporaries made before the call.
+inline sub quarter(var n: u32) -> u32 throws ParseError {
+	var h: u32 = try half(n);
+	return try half(h);
+}
+sub with_temps(var s: string) -> i32 throws ParseError {
+	return Tracked.new(2).v + cast<i32>(try parse(s));
+}
+sub block_temps(var s: string) -> i32 {
+	var x: i32 = Tracked.new(1).v + cast<i32>(parse(s) catch { return -1; });
+	return x;
+}
+
+sub main() -> i32 {
+	check(1, (parse("123") catch 0) == 123);
+	check(2, (parse("") catch 9) == 9);
+	check(3, kind("") == -1 and kind("1x") == -2 and kind("99999999") == -3 and kind("42") == 42);
+	check(4, (sum("40", "2") catch 0) == 42);
+	check(5, g_defers == 1 and g_live == 0);
+	check(6, (sum("40", "x") catch 1) == 1);
+	check(7, g_defers == 2 and g_live == 0);
+	check(8, first_good("12", "34") == 12 and first_good("", "34") == 34 and first_good("", "") == 7);
+
+	var failed: bool = false;
+	bump(3) catch { failed = true; }
+	check(9, not failed and g_count == 3);
+	bump(30) catch (e) { failed = e == Small.B; }
+	check(10, failed and g_count == 3);
+
+	{
+		var t: Tracked = make(4) catch Tracked.new(-1);
+		check(11, t.v == 4 and g_live == 1);
+		var u: Tracked = make(-4) catch Tracked.new(-1);
+		check(12, u.v == -1 and g_live == 2);
+	}
+	check(13, g_live == 0);
+	check(14, (through(false) catch 0) == 6 and g_live == 0);
+	check(15, (through(true) catch 0) == 0 and g_live == 0);
+	check(16, (take_own(Tracked.new(3), false) catch 0) == 3 and g_live == 0);
+	check(17, (take_own(Tracked.new(3), true) catch 0) == 0 and g_live == 0);
+
+	check(18, (half(10) catch 0) == 5 and (half(7) catch 99) == 99);
+	var sq: Square(3);
+	var shape: Shape* = &sq;
+	check(19, (shape->area(2) catch 0) == 18 and (shape->area(0) catch -5) == -5);
+	check(20, small_error(4) == 4 and small_error(0) == 1001);
+
+	var items: string[5] = { "1", "x", "20", "9999999", "300" };
+	check(21, loop_sum(&items[0], 5) == 21);
+
+	var p: sub(string) -> u32 throws ParseError = parse;
+	check(22, (p("77") catch 0) == 77 and (p("") catch 1) == 1);
+	var q = sub(var x: i32) -> i32 throws Small { if (x < 0) throw Small.A; return x * 2; };
+	check(23, (q(4) catch 0) == 8 and (q(-1) catch (e) cast<i32>(e)) == 1);
+	check(24, (quarter(12) catch 0) == 3 and (quarter(6) catch 99) == 99);
+	check(25, (with_temps("5") catch 0) == 7 and g_live == 0);
+	check(26, (with_temps("z") catch -9) == -9 and g_live == 0);
+	check(27, block_temps("4") == 5 and g_live == 0);
+	check(28, block_temps("") == -1 and g_live == 0);
+	return result();
+}

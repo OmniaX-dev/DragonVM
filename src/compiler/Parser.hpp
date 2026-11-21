@@ -80,6 +80,7 @@ namespace dscript
 			Node* parseInitializer(void);
 
 			Node* parseStatement(void);
+			void endStatement(const Node* expr, const std::string& context);
 			Node* parseSwitch(void);
 			Node* parseBlock(void);
 			Node* atomicBlock(Node* body, const SourcePos& pos);
@@ -102,6 +103,8 @@ namespace dscript
 			Node* parseBinary(int minPrec);
 			Node* parseUnary(void);
 			Node* parsePostfix(Node* expr);
+			Node* parseCatch(Node* expr);
+			Node* parseSwitchValue(void);
 			Node* parsePrimary(void);
 
 		private:

@@ -223,7 +223,7 @@ details.sec.flash { animation: flash 1.4s ease-out; }
 -->
 
 <script type="text/x-dsdoc" data-id="intro" data-group="Start" data-title="Introduction">
-DScript is a compiled, statically typed language in the C family. If you know C, most of it will look familiar right away: there are functions (called **subs**), structs, pointers, arrays and the usual operators, and the compiled code is as direct as what a C compiler would produce. On top of that foundation DScript adds the things that make larger programs pleasant to write: namespaces, overloading, templates, classes with virtual subs and interfaces, references, operator overloading, destructors with automatic moves, compile-time evaluation, a `switch` without accidental fallthrough, and a preprocessor that works on tokens.
+DScript is a compiled, statically typed language in the C family. If you know C, most of it will look familiar right away: there are functions (called **subs**), structs, pointers, arrays and the usual operators, and the compiled code is as direct as what a C compiler would produce. On top of that foundation DScript adds the things that make larger programs pleasant to write: namespaces, overloading, templates, classes with virtual subs and interfaces, references, operator overloading, destructors with automatic moves, compile-time evaluation, checked errors returned as values (`throws`, `try`, `catch`), a `switch` without accidental fallthrough that can also be a value, and a preprocessor that works on tokens.
 
 The language was designed alongside DragonVM, a virtual machine with its own CPU and toolchain, and its compiler `dsc` produces programs for that machine. The language itself, however, is described here independently of it: everything under the language sections is about DScript as a language, while the [Toolchain](#tc-overview) section explains how to compile, link, run and debug programs on DragonVM.
 
@@ -764,7 +764,7 @@ Expressions made of constants are computed while compiling, also for floats (`co
 </script>
 
 <script type="text/x-dsdoc" data-id="control" data-group="Control flow" data-title="if, loops and blocks">
-DScript's control flow statements are C's: `if` and `else`, `while`, `do ... while`, and the three-part `for` loop. On top of those there are the [for-in loop](#forin) over ranges, [switch](#switch), [defer](#defer), and `if constexpr`, which decides between branches while compiling.
+DScript's control flow statements are C's: `if` and `else`, `while`, `do ... while`, and the three-part `for` loop. On top of those there are the [for-in loop](#forin) over ranges, [switch](#switch) (also as a value), [defer](#defer), [errors](#errors) (`throws`, `try`, `catch`), and `if constexpr`, which decides between branches while compiling.
 
 ```ds
 if (n > 0) { ... } else if (n < 0) { ... } else { ... }
@@ -902,6 +902,27 @@ The compiler chooses the best code for each switch. A few values are compared on
 ::: is and fall are not keywords
 `is` and `fall` only mean something inside a switch, so they remain usable as names everywhere else.
 :::
+
+::: switch as a value
+Where an expression is expected, a switch gives a value: each case writes its value after `=>`, and the cases are separated by commas.
+
+```ds
+var name: string = switch (c) {
+    is Color.Red => "red",
+    is Color.Green or Color.Blue => "cool",
+};                                          // every member of the enum: no else needed
+
+var width: i32 = switch (ch) {
+    is 'a'..'z' + 1 => 1,
+    is '\n' => { return 0; },               // a block instead of a value: it must leave
+    else => -1
+};
+```
+
+The values must have one type, with the same rules as the two values of `?:`: numbers of different types give the wider type, two pointers must point at the same type, and `null` goes with any pointer. Struct values work too, as long as every case gives the same struct. Instead of a value, a case can have a block, which must leave at its end with `return`, `throw`, `break` or `continue`; `break` and `continue` belong to the loop around the switch.
+
+A switch used as a value needs `else`, unless its cases cover every member of an enum (a value that is none of them gets the last case's value). It can't use `fall`, and unlike a switch statement it isn't evaluated inside constexpr subs.
+:::
 </script>
 
 <script type="text/x-dsdoc" data-id="defer" data-group="Control flow" data-title="defer">
@@ -932,6 +953,57 @@ On `return x;`, the value `x` is computed first, then the defers run, and then t
 
 ::: Defers and destructors
 Locals that have [destructors](#destructors) are destroyed in exactly the same way, as if a defer calling their destructor had been written right after their declaration. Defers and destructors interleave correctly: everything runs in the reverse order of declaration.
+:::
+</script>
+
+<script type="text/x-dsdoc" data-id="errors" data-group="Control flow" data-title="Errors: throws, try, catch">
+A sub that can fail says so in its signature with `throws E`, where `E` is an enum whose members are the errors. Every call of such a sub must handle the error right where the call is, and the compiler checks it. There are no exceptions flying around: an error is returned to the caller, and the caller decides.
+
+```ds
+enum ParseError { Empty, BadDigit };
+
+sub parse(var s: string) -> u32 throws ParseError {
+    if (s[0] == 0)
+        throw ParseError.Empty;             // leaves the sub: defers and destructors run
+    ...
+    return n;
+}
+
+sub sum(var a: string, var b: string) -> u32 throws ParseError {
+    return try parse(a) + try parse(b);     // try: an error is thrown on to our caller
+}
+
+var n: u32 = parse(s) catch 0;              // a value to use when it fails
+var k: i32 = parse(s) catch (e) switch (e) { is ParseError.Empty => -1, else => -2 };
+var m: u32 = parse(s) catch (e) {           // a block, with the error
+    log(e);
+    return 0;                               // (it must leave: the call has a value)
+};
+save(file) catch { retry(); }               // no value: the block can just end
+```
+
+::: throws
+`throws E` comes after the result type (`-> T throws E`), or after the parameters when there is no result (`sub save() throws E`). It works for methods, virtual subs (an override must throw the same errors), lambdas and sub types (`sub(string) -> u32 throws E`). It is part of the sub's type, so a sub pointer's type must say it too. Constructors, destructors, operators, interrupt subs, `main`, constexpr and consteval subs can't throw, and neither can a sub that returns a reference.
+:::
+
+::: throw
+`throw x;` leaves a sub that throws with the error `x`, which converts to the enum (normally `throw E.Member;`). Just like `return`, it destroys the sub's temporaries, runs its defers and destructors, and destroys its `own` parameters on the way out. It can't be used inside a defer.
+:::
+
+::: try
+`try f(...)` passes an error on: when the call fails, the sub it's written in fails with the same error. That sub must throw the same enum. When the error goes through, the temporaries of the expression being computed are destroyed too, so `make().size() + try parse(s)` doesn't leak the result of `make()`.
+:::
+
+::: catch
+`f(...) catch value` gives a value to use when the call fails. The value converts to the call's type, which can also be a struct. `catch (e) value` names the error first: `e` is a constant of the enum's type.
+
+`catch` binds tightly: its value is a single operand, such as `catch -1`, `catch (e) (x + 1)` or `catch switch (e) { ... }`. This way `parse(s) catch 0 == 5` compares the result with 5, as it reads. `catch (e)` names the error only when the value that follows doesn't start with an operator, so a negative value is written `catch (e) (-1)`.
+
+`f(...) catch { ... }` and `catch (e) { ... }` run a block when the call fails. If the call has a value, the block must leave at its end with `return`, `throw`, `break` or `continue`, since there would be no value to go on with. For a call without a value, the block can end normally, and the code continues after the call. A statement that ends with a catch block doesn't need a `;` after it.
+:::
+
+::: What it costs
+The caller clears an 8-byte error slot in its frame and passes its address to the sub as a hidden argument. A sub that fails writes the error there and a 1, and the caller checks that 1 right after the call. That's all: there are no tables and no stack unwinding, and errors work the same in the BIOS, the kernel and user programs.
 :::
 </script>
 
@@ -2478,7 +2550,7 @@ These words are reserved and can't be used as names:
 
 ```ds
 var auto const constexpr consteval constinit sub template struct enum alias namespace
-return if else while do for switch break continue defer
+return if else while do for switch break continue defer throws throw try catch
 null true false cast bitcast static_cast dynamic_cast sizeof
 inline static priv readonly operator implicit
 class interface ex impl friend prot virt pure override final abstract
