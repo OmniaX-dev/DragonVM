@@ -1150,10 +1150,13 @@ namespace dragon
 						std::cout << "Invalid array data entry size (must be greater than 0): " << line << "\n";
 						continue;
 					}
-					lineEdit = "";
-					for (i32 i = 0; i < array_size; i++)
-						lineEdit.add("0x00, ");
-					lineEdit.trim().substr(0, lineEdit.len() - 1).trim();
+					// $name:N: N zero bytes, reserved directly (not as an "0x00, 0x00, ..." list to parse:
+					// that was very slow for big arrays, e.g. the kernel's process table)
+					symbol.bytes.assign(array_size, 0x00);
+					symbol.address = m_currentDataAddr;
+					m_currentDataAddr += array_size;
+					m_symbolTable[symbolName] = symbol;
+					continue;
 				}
 
 				if (lineEdit.isNumeric())
