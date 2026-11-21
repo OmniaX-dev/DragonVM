@@ -3,9 +3,9 @@
 namespace proc {
 	const TICK_MS: u32 = 10;                 		// dr::set_interrupt_interval(TICK_MS)
     const SLICE_TICKS: u32 = 3;              		// a turn: 30 ms (≈ 5400 cycles at 180k/s)
-    const MAX_PATH: u32 = 256;
-	const MAX_ARGS: u32 = 16;
-	const ARGS_BYTES: u32 = 1024;
+    const MAX_PATH: u32 = 1024;
+	const MAX_ARGS: u32 = 128;                     // push_args keeps MAX_ARGS + 1 words on the kernel stack
+	const ARGS_BYTES: u32 = 16 * 1024;             // copied to the top of the 64 KiB user stack
 
     var g_slice_left: u32 = SLICE_TICKS;
     var g_spawn_path: u8[MAX_PATH];
@@ -212,6 +212,88 @@ namespace proc {
 	    g_sleepers++;
 	    block_current(BlockReason.Sleep);                     // doesn't return: wake() sets its rv
 	    return std::Ok;
+	}
+
+	sub sys_alloc_pages(var count: u32) -> i32 {
+	    var as: AddressSpace* = &g_current->as;
+	    if (count == 0 or count > g_pages.total_pages())  return std::SystemErrors.InvalidArgument;   // (also keeps count * PAGE_SIZE from wrapping)
+	    var addr: u32 = g_pages.alloc(count);
+	    if (addr == 0) return std::SystemErrors.NoMemory;
+	    std::memset(cast<void*>(addr), 0, count * PAGE_SIZE);    // these pages may have held another process's data
+	    if (not as_map_heap(as, addr, count)) {
+	        g_pages.free(addr, count);
+	        return std::SystemErrors.TooMany;
+	    }
+	    return cast<i32>(addr);
+	}
+
+	// Gives back [start, start + count * PAGE_SIZE): it has to lie entirely inside the process's own Heap
+	// regions (it may span several of them, or only part of one). All or nothing: a failed call changes nothing.
+	sub sys_free_pages(var start: u32, var count: u32) -> i32 {
+        var as: AddressSpace* = &g_current->as;
+        if ((start & (PAGE_SIZE - 1)) != 0 or start == 0 or count == 0)
+            return std::SystemErrors.InvalidArgument;
+        if (count >= (0u - start) / PAGE_SIZE)                  // the range would wrap past the top of memory
+            return std::SystemErrors.BadAddress;
+        var end: u32 = start + count * PAGE_SIZE;
+
+        // 1. Check: the Heap regions overlapping the range have to cover all of it. Regions never overlap
+        //    each other, so "the overlaps add up to the whole range" means no gaps, and no Image, Stack or
+        //    Shared pages inside it. A region that sticks out on both sides has to be split, which needs a slot.
+        var covered: u32 = 0;
+        var split: bool = false;
+        for (var i: u32 = 0; i < as->count; i++) {
+            var r: Region* = &as->regions[i];
+            if (r->kind != RegionKind.Heap or not r->owned)
+                continue;
+            var r_end: u32 = r->start + r->pages * PAGE_SIZE;
+            var lo: u32 = r->start > start ? r->start : start;
+            var hi: u32 = r_end < end ? r_end : end;
+            if (lo < hi) {
+                covered += hi - lo;
+                split = split or (r->start < start and r_end > end);
+            }
+        }
+        if (covered != end - start)
+            return std::SystemErrors.BadAddress;
+        if (split and as->count == AS_MAX_REGIONS)
+            return std::SystemErrors.TooMany;
+
+        // 2. Apply: each overlapping region is removed, shortened at one end, or split in two.
+        var i: u32 = 0;
+        while (i < as->count) {
+            var r: Region* = &as->regions[i];
+            var r_end: u32 = r->start + r->pages * PAGE_SIZE;
+            if (r->kind != RegionKind.Heap or not r->owned or r_end <= start or r->start >= end) {
+                i++;
+                continue;
+            }
+            if (r->start >= start and r_end <= end) {               // all of it: remove
+                as->regions[i] = as->regions[as->count - 1];        // the last one moves in: look at slot i again
+                as->count--;
+                continue;
+            }
+            if (r->start < start and r_end > end) {                  // the middle: split, the tail gets a new slot
+                var tail: Region* = &as->regions[as->count];
+                *tail = *r;
+                tail->start = end;
+                tail->pages = (r_end - end) / PAGE_SIZE;
+                as->count++;
+                r->pages = (start - r->start) / PAGE_SIZE;
+            }
+            else if (r->start < start)                               // its end: shorten
+                r->pages = (start - r->start) / PAGE_SIZE;
+            else {                                                   // its beginning: move the start up
+                r->pages = (r_end - end) / PAGE_SIZE;
+                r->start = end;
+            }
+            i++;
+        }
+
+        // 3. The pages: no access for the process any more, then back to the allocator in one go.
+        dr::cpu::set_page_permissions(as->map, start, count * PAGE_SIZE, dr::cpu::Permissions.None);
+        g_pages.free(start, count);
+        return 0;
 	}
 
 	namespace __internal {

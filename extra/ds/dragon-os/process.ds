@@ -3,8 +3,8 @@
 #include(memory.ds)
 
 namespace proc {
-	const AS_MAX_REGIONS: u32 = 16;
-	const MAX_PROCESSES: u32 = 32;
+	const AS_MAX_REGIONS: u32 = 256;               // heap regions merge when adjacent: this is for scattered ones
+	const MAX_PROCESSES: u32 = 256;                // RAM runs out first: each process needs ~100 KiB of pages
 	const KSTACK_PAGES: u32 = 2;                    // 8 KiB: traps and syscalls only
 	const USTACK_PAGES: u32 = 16;                   // 64 KiB
 	const FRAME_WORDS: u32 = 34;
@@ -119,10 +119,32 @@ namespace proc {
 		as->map = null;
 	}
 
+	// Heap pages for the process: if they start right where one of its Heap regions ends,
+	// or end right where one starts, that region grows. Otherwise they get a new slot (as_map).
+	sub as_map_heap(var as: AddressSpace*, var start: u32, var pages: u32) -> bool {
+        if ((start & (PAGE_SIZE - 1)) != 0 or pages == 0)
+            return false;
+        var end: u32 = start + pages * PAGE_SIZE;
+        for (var i: u32 = 0; i < as->count; i++) {
+            var r: Region* = &as->regions[i];
+            if (r->kind != RegionKind.Heap or not r->owned)
+                continue;
+            var r_end: u32 = r->start + r->pages * PAGE_SIZE;
+            if (r_end == start or r->start == end) {
+                if (r->start == end)
+                    r->start = start;             // growing downwards
+                r->pages += pages;
+                dr::cpu::set_page_permissions(as->map, start, pages * PAGE_SIZE, dr::cpu::Permissions.ReadWrite);
+                return true;
+            }
+        }
+        return as_map(as, start, pages, dr::cpu::Permissions.ReadWrite, RegionKind.Heap, true);
+	}
+	
 	inline sub user_readable(var as: proc::AddressSpace*, var ptr: u32, var size: u32) -> bool { return __internal::as_check_user_permission(as, ptr, size, dr::cpu::Permissions.Read); }
 	inline sub user_writable(var as: proc::AddressSpace*, var ptr: u32, var size: u32) -> bool { return __internal::as_check_user_permission(as, ptr, size, dr::cpu::Permissions.Write); }
 
-	sub switch_to(var p: Process*) {                                // never returns
+	sub switch_to(var p: Process*) { // never returns
 		dr::disable_interrupts();
 		g_current = p;
 		p->state = ProcessState.Running;

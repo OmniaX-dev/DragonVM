@@ -16,8 +16,8 @@ const SYSCALL_WAIT: u32 								= 0x01_04;
 const SYSCALL_SLEEP: u32 								= 0x01_05;
 // const SYSCALL_KILL: u32 								= 0x01_06;
 
-// const SYSCALL_ALLOC_PAGES: u32							= 0x02_00;
-// const SYSCALL_FREE_PAGES: u32							= 0x02_01;
+const SYSCALL_ALLOC_PAGES: u32							= 0x02_00;
+const SYSCALL_FREE_PAGES: u32							= 0x02_01;
 
 // const SYSCALL_READ_KEY: u32 							= 0x03_00;
 // const SYSCALL_CONSOLE_CLEAR: u32						= 0x03_01;
@@ -131,6 +131,15 @@ namespace __internal {
 		else if (function == SYSCALL_SLEEP)
 		{
 			rv = proc::sys_sleep(f->regs.R(8));
+		}
+// ===========================================================================
+		else if (function == SYSCALL_ALLOC_PAGES)
+		{
+			rv = proc::sys_alloc_pages(f->regs.R(8));
+		}
+		else if (function == SYSCALL_FREE_PAGES)
+		{
+			rv = proc::sys_free_pages(f->regs.R(8), f->regs.R(7));
 		}
 // ===========================================================================
 		else if (function == SYSCALL_RANDOM)
