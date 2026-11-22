@@ -6,9 +6,9 @@ A simplified ext2: superblock, inode bitmap, block bitmap, inode table, data blo
 a single-indirect and a double-indirect one; directories are files made of fixed size entries.
 
 - Core (C++): `src/storage/dfs/DfsCore.hpp/.cpp`
-- Core (DScript, in the SDK): `extra/ds/dragon-sdk/src/dfs.ds`, `dr::dfs`. A function for function port of the C++
+- Core (DScript, in the SDK): `extra/ds/machine/dragon-sdk/src/dfs.ds`, `dr::dfs`. A function for function port of the C++
   core: a change to one goes into the other.
-- High level API (DScript, in the SDK): `extra/ds/dragon-sdk/src/file.ds`, `dr::fs` (paths, open files, directories)
+- High level API (DScript, in the SDK): `extra/ds/machine/dragon-sdk/src/file.ds`, `dr::fs` (paths, open files, directories)
 - fsck (host only): `src/storage/dfs/DfsCheck.hpp/.cpp`
 - Resizing (host only): `src/storage/dfs/DfsResize.hpp/.cpp`
 - `storage::DFS` (detection for the Partition Manager, a device on a `Disk`): `src/storage/DFS.hpp/.cpp`

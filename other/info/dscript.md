@@ -5,7 +5,7 @@ assembler is linked in), producing a relocatable **DRX** program (the default) o
 binary (`--raw`).
 
 ```
-dsc program.ds -L extra/ds/dragon-sdk/lib         -> program.drx (relocatable)
+dsc program.ds -L extra/ds/machine/dragon-sdk/lib         -> program.drx (relocatable)
 dsc kernel.ds --raw --load 0x01012000 --fixed 1024,0xFF --header KERNEL0_BOOT
 dsc program.ds --emit-dasm program.dasm           (also writes the generated dasm)
 dsc program.ds -O                                 (optimized: locals in registers)
@@ -162,13 +162,13 @@ console.print(&a);                      // TextSingle / Text16 / Text16Console p
 - The cost: add / sub / compare / bits are a few instructions on each word, `mul` about 20,
   `div` / `mod` up to several hundred (a divisor under 65536 takes a faster path).
 
-### Time and dates (SDK, libcore, stdlib)
+### Time and dates (SDK, libcore, libstd)
 
 The clock: in supervisor mode, the SDK reads the timer directly: `dr::time_get_millis()` (since
 the machine started), `dr::time_get_cycles()`, `dr::time_sleep(ms)`, `dr::time_get_unix()`
 (seconds since 1970-01-01 00:00 UTC: the host's clock when the machine started, running on with
 it; `drun --unix-time <seconds>` fixes it for tests). A DragonOS program asks the kernel with the
-stdlib's `std::time::millis()`, `cycles()`, `unix_time()`, `sleep(ms)` and `std::time::Timer`
+libstd's `std::time::millis()`, `cycles()`, `unix_time()`, `sleep(ms)` and `std::time::Timer`
 (system calls).
 
 The calendar is libcore's (no clock: it works with the times it is given): `std::time::DateTime`,
@@ -267,14 +267,14 @@ if (heap->take_empty_region(&base, &size)) { ... }      // an all-free region ou
   can: no interrupt (and `int` does nothing in supervisor mode while interrupts are disabled: in
   an atomic block, or before the kernel enables them).
 
-### Containers and String (libcore, stdlib)
+### Containers and String (libcore, libstd)
 
 libcore has growable containers as templates over an allocator `A`: any struct with
 `static sub alloc(var size: u32) -> void*` (null: no memory) and `static sub free(var p: void*)`.
-stdlib names them with `malloc` / `free`; the SDK's `dr::SystemAllocator` uses the system heap (a
+libstd names them with `malloc` / `free`; the SDK's `dr::SystemAllocator` uses the system heap (a
 kernel's).
 
-| libcore | stdlib | |
+| libcore | libstd | |
 |---|---|---|
 | `std::BasicVector<T, A>` | `std::Vector<T>` | a growable array |
 | `std::BasicStack<T, A>` | `std::Stack<T>` | last in, first out |
@@ -917,7 +917,7 @@ When the condition is false, the program calls the global `__assert_fail(file, l
 message)` (the condition as written, the message or ""); without one, an assert is an error.
 The program decides what a failed assert does, not its libraries: libcore and the SDK don't
 define it.
-- A DragonOS program gets it from the stdlib (`#import("stdlib")`): it prints the failure with
+- A DragonOS program gets it from the libstd (`#import("libstd")`): it prints the failure with
   the Print system call and ends the process (the Exit system call, code 134).
 - A program on the SDK (a BIOS, a boot loader, a kernel) writes its own; the SDK's
   `dr::assert_fail_halt` prints to the host's terminal with `debug_print` (no VGA needed), then
@@ -1705,8 +1705,8 @@ dsc prog.ds -L lib --dynamic -o prog.drx         // every library dynamic: a DRX
 #import("mylib", dynamic)                        // or one by one, in the source (also --dynamic=mylib, --static=...)
 ```
 
-DragonVM's own libraries (`extra/ds/<name>/src`, built by `ds_env` into `<name>.dlib`, copied to
-`extra/ds/<name>/lib`):
+DragonVM's own libraries (`extra/ds/libs/<name>/src`, the SDK in `extra/ds/machine/dragon-sdk/src`, built by `ds_env` into `<name>.dlib`, copied to
+`<that folder>/lib`):
 - `libcore`: freestanding utilities, in `std`: `itoa` / `utoa` / `ftoa`, `atou` / `atoi` / `atof`,
   `format_size`, `BitField32` / `16`, `memcpy` / `memset` / `memcmp`, strings, `VaList` and
   `format`, `U64` / `I64`, `std::math`, `RingBuffer`, the calendar (`std::time::DateTime`),
@@ -1714,7 +1714,7 @@ DragonVM's own libraries (`extra/ds/<name>/src`, built by `ds_env` into `<name>.
   can link it.
 - `dragon-sdk`: the hardware and the BIOS services, in `dr`, for programs in supervisor mode (the
   BIOS, Drake, the kernels). Imports libcore.
-- `stdlib`: the runtime of DragonOS programs (user mode): `std::syscall`, `std::rand`, the clock
+- `libstd`: the runtime of DragonOS programs (user mode): `std::syscall`, `std::rand`, the clock
   (`std::time::millis`, ...), `__assert_fail`. Imports libcore.
 
 
@@ -1743,7 +1743,7 @@ jump: its `main(argc, argv)` always gets `0, null`. `main`'s value is returned i
 `drun` and checks its return value (`// expect-rv:`), its output (`// expect-output:`, the BIOS
 runs first) or the compilation error (`// expect-error:`). `// expect-rom-rv:` compiles the
 test with `--rom` as the machine's BIOS, boots it and checks `main`'s return value;
-`// dsc-flags:` adds dsc options. The runner builds libcore, the SDK and the stdlib first. `DSCRIPT_TEST_CONFIG=<file.dvm>` runs the tests on another
+`// dsc-flags:` adds dsc options. The runner builds libcore, the SDK and the libstd first. `DSCRIPT_TEST_CONFIG=<file.dvm>` runs the tests on another
 machine config (e.g. one with a known-good BIOS); `DSCRIPT_TEST_DSC_FLAGS=<options>` adds dsc
 options to every compilation, the libraries' too (`DSCRIPT_TEST_DSC_FLAGS=-O`: the whole suite
 optimized).

@@ -15,24 +15,30 @@
 # compiled again when one of its sources, a library it links or dsc changes; a
 # library when one of its sources, a library it imports or dsc changes.
 #
-# The libraries (each in extra/ds/<name>/src, built into <name>.dlib):
+# extra/ds is organized as:
+#   machine/        what runs on the bare machine: bios, drake (the boot loader), dragon-sdk
+#   libs/           the libraries DragonOS programs use: libcore, libstd
+#   dragon-os/      the kernel
+#   user_programs/  DragonOS's programs (one folder each, see below)
+#
+# The libraries (each in extra/ds/<group>/<name>/src, built into <name>.dlib):
 #   libcore      freestanding utilities (std::itoa, std::BitField32, std::VaList, the calendar, ...):
 #                no system calls, no __assert_fail; everything links it
 #   dragon-sdk   the hardware and the BIOS services, for supervisor-mode programs (the BIOS,
 #                Drake, the kernels); imports libcore
-#   stdlib       the userland runtime of DragonOS programs (system calls, __assert_fail);
+#   libstd       the userland runtime of DragonOS programs (system calls, __assert_fail);
 #                imports libcore
 #
 # Every time a target runs (cheap, no compiling), the mode's results go where
 # the runtime and the debugger look for them:
-#   - the libraries: bin/ds/<name>/lib and extra/ds/<name>/lib
+#   - the libraries: bin/ds/<group>/<name>/lib and extra/ds/<group>/<name>/lib
 #   - the BIOS: bin/dragon/bios.bin
 #   - Drake: bin/dragon/drake.bin (a DRX, as /init/boot.img on partition 1 of bin/dragon/disk.drd)
 #   - DragonOS: bin/dragon/dragon-os.bin (installed as the kernel of partition 2)
-#   - the shared libraries of DragonOS programs (dsc --lib --shared: libcore.drl, stdlib.drl, see
+#   - the shared libraries of DragonOS programs (dsc --lib --shared: libcore.drl, libstd.drl, see
 #     other/info/dynamic-linking.md): next to the .dlib files, and on DragonOS's partition (2) as
 #     /lib/<name>.drl; their disassembly in bin/disassembly (ddb places it where they are loaded)
-#   - DragonOS's user programs (linking stdlib): every folder of extra/ds/user_programs with a
+#   - DragonOS's user programs (linking libstd): every folder of extra/ds/user_programs with a
 #     main.ds is one, named after the folder. Each is compiled to bin/dragon/<folder>.drx and put on
 #     DragonOS's partition (2) as /bin/<folder>, except dinit, which goes to /boot/dinit (the first
 #     process the kernel starts). A new program is a new folder: the glob below is checked on every
@@ -42,17 +48,17 @@
 #     so the debugger sees one copy of each program
 # ============================================================================
 
-option(DS_UPDATE_EXTRA_LIBS "ds_env*: copy the built libraries to extra/ds/<name>/lib too (libcore, dragon-sdk, stdlib)" ON)
+option(DS_UPDATE_EXTRA_LIBS "ds_env*: copy the built libraries to extra/ds/<group>/<name>/lib too (libcore, dragon-sdk, libstd)" ON)
 
 set(DS_SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/../extra/ds)
 get_filename_component(DS_SOURCE_DIR ${DS_SOURCE_DIR} ABSOLUTE)
 set(DS_RUN_DIR ${CMAKE_BINARY_DIR})
 
-file(GLOB_RECURSE DS_LIBCORE_SOURCES CONFIGURE_DEPENDS ${DS_SOURCE_DIR}/libcore/src/*.ds)
-file(GLOB_RECURSE DS_SDK_SOURCES CONFIGURE_DEPENDS ${DS_SOURCE_DIR}/dragon-sdk/src/*.ds)
-file(GLOB_RECURSE DS_STDLIB_SOURCES CONFIGURE_DEPENDS ${DS_SOURCE_DIR}/stdlib/src/*.ds)
-file(GLOB_RECURSE DS_BIOS_SOURCES CONFIGURE_DEPENDS ${DS_SOURCE_DIR}/bios/*.ds)
-file(GLOB_RECURSE DS_DRAKE_SOURCES CONFIGURE_DEPENDS ${DS_SOURCE_DIR}/drake/*.ds)
+file(GLOB_RECURSE DS_LIBCORE_SOURCES CONFIGURE_DEPENDS ${DS_SOURCE_DIR}/libs/libcore/src/*.ds)
+file(GLOB_RECURSE DS_SDK_SOURCES CONFIGURE_DEPENDS ${DS_SOURCE_DIR}/machine/dragon-sdk/src/*.ds)
+file(GLOB_RECURSE DS_LIBSTD_SOURCES CONFIGURE_DEPENDS ${DS_SOURCE_DIR}/libs/libstd/src/*.ds)
+file(GLOB_RECURSE DS_BIOS_SOURCES CONFIGURE_DEPENDS ${DS_SOURCE_DIR}/machine/bios/*.ds)
+file(GLOB_RECURSE DS_DRAKE_SOURCES CONFIGURE_DEPENDS ${DS_SOURCE_DIR}/machine/drake/*.ds)
 file(GLOB_RECURSE DS_DRAGON_OS_SOURCES CONFIGURE_DEPENDS ${DS_SOURCE_DIR}/dragon-os/*.ds)
 
 # The user programs: the folders of user_programs with a main.ds (DS_USER_PROGRAMS, their names),
@@ -75,7 +81,7 @@ string(MD5 DS_BIOS_DDS "dragon/bios.bin")
 string(MD5 DS_DRAKE_DDS "dragon/drake.bin")
 string(MD5 DS_DRAGON_OS_DDS "dragon/dragon-os.bin")
 string(MD5 DS_LIBCORE_DRL_DDS "lib/libcore.drl")
-string(MD5 DS_STDLIB_DRL_DDS "lib/stdlib.drl")
+string(MD5 DS_LIBSTD_DRL_DDS "lib/libstd.drl")
 
 # ds_add_env(<target> <mode folder> <assembler flags (comma separated, may be empty)>)
 function(ds_add_env TARGET MODE ASM_FLAGS)
@@ -85,20 +91,20 @@ function(ds_add_env TARGET MODE ASM_FLAGS)
 	set(WA "-Wa,${ASM_FLAGS}")
 	set(LIBCORE ${OUT}/lib/libcore.dlib)
 	set(SDK ${OUT}/lib/dragon-sdk.dlib)
-	set(STDLIB ${OUT}/lib/stdlib.dlib)
+	set(LIBSTD ${OUT}/lib/libstd.dlib)
 	set(LIBCORE_DRL ${OUT}/lib/libcore.drl)
-	set(STDLIB_DRL ${OUT}/lib/stdlib.drl)
+	set(LIBSTD_DRL ${OUT}/lib/libstd.drl)
 	# What a supervisor-mode program (the BIOS, Drake, the kernels) links.
 	set(SYSTEM_LIBS ${LIBCORE} ${SDK})
 	# What a DragonOS user program links.
-	set(USER_LIBS ${LIBCORE} ${STDLIB})
+	set(USER_LIBS ${LIBCORE} ${LIBSTD})
 	if(DS_UPDATE_EXTRA_LIBS)
 		set(LIBS_EXTRA_DIR ${DS_SOURCE_DIR})
 	else()
 		set(LIBS_EXTRA_DIR ${DS_RUN_DIR}/ds)
 	endif()
 
-	# libcore and stdlib (what DragonOS programs use) are also shared libraries: --shared writes
+	# libcore and libstd (what DragonOS programs use) are also shared libraries: --shared writes
 	# both the .dlib and the .drl (other/info/dynamic-linking.md).
 	add_custom_command(
 		OUTPUT ${LIBCORE} ${LIBCORE_DRL} ${OUT}/disassembly/${DS_LIBCORE_DRL_DDS}.dds
@@ -118,17 +124,17 @@ function(ds_add_env TARGET MODE ASM_FLAGS)
 		VERBATIM)
 
 	add_custom_command(
-		OUTPUT ${STDLIB} ${STDLIB_DRL} ${OUT}/disassembly/${DS_STDLIB_DRL_DDS}.dds
-		COMMAND ${DSC} --lib --shared ${DS_STDLIB_SOURCES} -o ${STDLIB} -L ${OUT}/lib -O --save-disassembly ${OUT}/disassembly/${DS_STDLIB_DRL_DDS}.dds ${WA}
-		DEPENDS ${DS_STDLIB_SOURCES} ${LIBCORE} ${COMPILER_TARGET}
+		OUTPUT ${LIBSTD} ${LIBSTD_DRL} ${OUT}/disassembly/${DS_LIBSTD_DRL_DDS}.dds
+		COMMAND ${DSC} --lib --shared ${DS_LIBSTD_SOURCES} -o ${LIBSTD} -L ${OUT}/lib -O --save-disassembly ${OUT}/disassembly/${DS_LIBSTD_DRL_DDS}.dds ${WA}
+		DEPENDS ${DS_LIBSTD_SOURCES} ${LIBCORE} ${COMPILER_TARGET}
 		WORKING_DIRECTORY ${DS_RUN_DIR}
-		COMMENT "DScript (${MODE}): stdlib"
+		COMMENT "DScript (${MODE}): libstd"
 		VERBATIM)
 
 
 	add_custom_command(
 		OUTPUT ${OUT}/bios.bin
-		COMMAND ${DSC} ${DS_SOURCE_DIR}/bios/entry.ds -L ${OUT}/lib -o ${OUT}/bios.bin
+		COMMAND ${DSC} ${DS_SOURCE_DIR}/machine/bios/entry.ds -L ${OUT}/lib -o ${OUT}/bios.bin
 	 																								-O --verbose --save-disassembly ${OUT}/disassembly/${DS_BIOS_DDS}.dds
 																									--raw --load 0x0 --fixed 16777216,0xFF --rom ${WA}
 		DEPENDS ${DS_BIOS_SOURCES} ${SYSTEM_LIBS} ${COMPILER_TARGET}
@@ -139,7 +145,7 @@ function(ds_add_env TARGET MODE ASM_FLAGS)
 	add_custom_command(
 		OUTPUT ${OUT}/drake.bin ${OUT}/disassembly/${DS_DRAKE_DDS}.dds
 		# A DRX: its disassembly is at offset 0, with its id; ddb moves it to where the BIOS loads it.
-		COMMAND ${DSC} ${DS_SOURCE_DIR}/drake/entry.ds -L ${OUT}/lib -o ${OUT}/drake.bin
+		COMMAND ${DSC} ${DS_SOURCE_DIR}/machine/drake/entry.ds -L ${OUT}/lib -o ${OUT}/drake.bin
 																									 -O --verbose --save-disassembly ${OUT}/disassembly/${DS_DRAKE_DDS}.dds ${WA}
 		DEPENDS ${DS_DRAKE_SOURCES} ${SYSTEM_LIBS} ${COMPILER_TARGET}
 		WORKING_DIRECTORY ${DS_RUN_DIR}
@@ -186,19 +192,19 @@ function(ds_add_env TARGET MODE ASM_FLAGS)
 
 	# Always: the results where the runtime and the debugger look for them.
 	add_custom_target(${TARGET}
-		COMMAND ${CMAKE_COMMAND} -E make_directory ${DS_RUN_DIR}/ds/libcore/lib ${DS_RUN_DIR}/ds/dragon-sdk/lib ${DS_RUN_DIR}/ds/stdlib/lib
-																									${LIBS_EXTRA_DIR}/libcore/lib ${LIBS_EXTRA_DIR}/dragon-sdk/lib ${LIBS_EXTRA_DIR}/stdlib/lib
+		COMMAND ${CMAKE_COMMAND} -E make_directory ${DS_RUN_DIR}/ds/libs/libcore/lib ${DS_RUN_DIR}/ds/machine/dragon-sdk/lib ${DS_RUN_DIR}/ds/libs/libstd/lib
+																									${LIBS_EXTRA_DIR}/libs/libcore/lib ${LIBS_EXTRA_DIR}/machine/dragon-sdk/lib ${LIBS_EXTRA_DIR}/libs/libstd/lib
 																									${DS_RUN_DIR}/dragon ${DS_RUN_DIR}/disassembly
-		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${LIBCORE} ${DS_RUN_DIR}/ds/libcore/lib/libcore.dlib
-		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${SDK} ${DS_RUN_DIR}/ds/dragon-sdk/lib/dragon-sdk.dlib
-		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${STDLIB} ${DS_RUN_DIR}/ds/stdlib/lib/stdlib.dlib
-		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${LIBCORE} ${LIBS_EXTRA_DIR}/libcore/lib/libcore.dlib
-		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${SDK} ${LIBS_EXTRA_DIR}/dragon-sdk/lib/dragon-sdk.dlib
-		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${STDLIB} ${LIBS_EXTRA_DIR}/stdlib/lib/stdlib.dlib
-		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${LIBCORE_DRL} ${DS_RUN_DIR}/ds/libcore/lib/libcore.drl
-		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${STDLIB_DRL} ${DS_RUN_DIR}/ds/stdlib/lib/stdlib.drl
-		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${LIBCORE_DRL} ${LIBS_EXTRA_DIR}/libcore/lib/libcore.drl
-		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${STDLIB_DRL} ${LIBS_EXTRA_DIR}/stdlib/lib/stdlib.drl
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${LIBCORE} ${DS_RUN_DIR}/ds/libs/libcore/lib/libcore.dlib
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${SDK} ${DS_RUN_DIR}/ds/machine/dragon-sdk/lib/dragon-sdk.dlib
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${LIBSTD} ${DS_RUN_DIR}/ds/libs/libstd/lib/libstd.dlib
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${LIBCORE} ${LIBS_EXTRA_DIR}/libs/libcore/lib/libcore.dlib
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${SDK} ${LIBS_EXTRA_DIR}/machine/dragon-sdk/lib/dragon-sdk.dlib
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${LIBSTD} ${LIBS_EXTRA_DIR}/libs/libstd/lib/libstd.dlib
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${LIBCORE_DRL} ${DS_RUN_DIR}/ds/libs/libcore/lib/libcore.drl
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${LIBSTD_DRL} ${DS_RUN_DIR}/ds/libs/libstd/lib/libstd.drl
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${LIBCORE_DRL} ${LIBS_EXTRA_DIR}/libs/libcore/lib/libcore.drl
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${LIBSTD_DRL} ${LIBS_EXTRA_DIR}/libs/libstd/lib/libstd.drl
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${OUT}/bios.bin ${DS_RUN_DIR}/dragon/bios.bin
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${OUT}/drake.bin ${DS_RUN_DIR}/dragon/drake.bin
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${OUT}/dragon-os.bin ${DS_RUN_DIR}/dragon/dragon-os.bin
@@ -206,7 +212,7 @@ function(ds_add_env TARGET MODE ASM_FLAGS)
 																									${OUT}/disassembly/${DS_DRAKE_DDS}.dds
 																									${OUT}/disassembly/${DS_DRAGON_OS_DDS}.dds
 																									${OUT}/disassembly/${DS_LIBCORE_DRL_DDS}.dds
-																									${OUT}/disassembly/${DS_STDLIB_DRL_DDS}.dds
+																									${OUT}/disassembly/${DS_LIBSTD_DRL_DDS}.dds
 																									${DS_RUN_DIR}/disassembly/
 		COMMAND ${DTOOLS} dfs dragon/disk.drd 1 mkdir -p /init
 		COMMAND ${DTOOLS} dfs dragon/disk.drd 1 put dragon/drake.bin /init/boot.img
@@ -214,10 +220,10 @@ function(ds_add_env TARGET MODE ASM_FLAGS)
 		COMMAND ${DTOOLS} dfs dragon/disk.drd 2 mkdir -p /boot
 		COMMAND ${DTOOLS} dfs dragon/disk.drd 2 mkdir -p /lib
 		COMMAND ${DTOOLS} dfs dragon/disk.drd 2 put ${LIBCORE_DRL} /lib/libcore.drl
-		COMMAND ${DTOOLS} dfs dragon/disk.drd 2 put ${STDLIB_DRL} /lib/stdlib.drl
+		COMMAND ${DTOOLS} dfs dragon/disk.drd 2 put ${LIBSTD_DRL} /lib/libstd.drl
 		COMMAND ${DTOOLS} dfs dragon/disk.drd 2 mkdir -p /bin
 		${USER_PROGRAM_STEPS}
-		DEPENDS ${LIBCORE} ${SDK} ${STDLIB} ${LIBCORE_DRL} ${STDLIB_DRL} ${OUT}/bios.bin ${OUT}/drake.bin ${OUT}/dragon-os.bin
+		DEPENDS ${LIBCORE} ${SDK} ${LIBSTD} ${LIBCORE_DRL} ${LIBSTD_DRL} ${OUT}/bios.bin ${OUT}/drake.bin ${OUT}/dragon-os.bin
 																									${USER_PROGRAM_DRXS} ${TOOLS_TARGET}
 		WORKING_DIRECTORY ${DS_RUN_DIR}
 		COMMENT "DScript (${MODE}): BIOS, Drake, DragonOS and its programs in place"

@@ -1,10 +1,10 @@
-// The stdlib's __assert_fail, in a user program: a false assert prints where it is and what
+// The libstd's __assert_fail, in a user program: a false assert prints where it is and what
 // failed with the Print system call (int 0x40, R9 0x11: R8 the text, R7 1 for a new line) and
 // ends the process with the Exit system call (R9 0x10: R8 the exit code, 134). A tiny kernel
 // here (main, in supervisor mode) answers the system calls and runs user_main in user mode.
-// expect-output: Assertion failed: n * 2 == 7 (stdlib_assert.ds:61): user maths\nexit 134\n
+// expect-output: Assertion failed: n * 2 == 7 (libstd_assert.ds:61): user maths\nexit 134\n
 #import("dragon-sdk")
-#import("stdlib")
+#import("libstd")
 
 var kernel_stack: u32[1024];
 var user_stack: u32[1024];

@@ -38,8 +38,8 @@ it (or on its own). Unsaved changes are used. The options come from `dsls.json` 
 workspace root (this repository has one):
 ```
 {
-    "args": ["-L", "extra/ds/dragon-sdk/lib"],          dsc options for every program
-    "files": { "extra/ds/bios/entry.ds": ["--rom"] }    more options for one program
+    "args": ["-L", "extra/ds/machine/dragon-sdk/lib"],          dsc options for every program
+    "files": { "extra/ds/machine/bios/entry.ds": ["--rom"] }    more options for one program
 }
 ```
 (`-I <dir>`, `-L <dir>` for the compiled libraries of `#import`, `-D NAME[=value]`, `--rom`,

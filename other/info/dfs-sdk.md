@@ -133,7 +133,7 @@ first block), offset 1152. The root (inode 1) is at offset 128 of the same block
 
 ## 3. The SDK: how the code is organised
 
-`#import("dragon-sdk")` gives you `dr::dfs`. The code is in `extra/ds/dragon-sdk/src/dfs.ds`. It is a copy, function
+`#import("dragon-sdk")` gives you `dr::dfs`. The code is in `extra/ds/machine/dragon-sdk/src/dfs.ds`. It is a copy, function
 for function, of the C++ core that `dtools` and the debugger use (`src/storage/dfs/DfsCore.cpp`). Both write exactly
 the same bytes, and `tests/dfs/vm_test.sh` checks that.
 
@@ -234,7 +234,7 @@ PC, has to swap the bytes. That is why it has `encode_inode`/`decode_inode` and 
 
 ## 4. `load_kernel0_dfs`, line by line
 
-This is Drake's code (`extra/ds/drake/entry.ds`). Its job: if the selected boot partition holds DFS, copy the file
+This is Drake's code (`extra/ds/machine/drake/entry.ds`). Its job: if the selected boot partition holds DFS, copy the file
 `/boot/kernel0` to address 0x01410000, where Drake then jumps. It returns `Ok`, or a negative error. Its caller,
 `load_kernel0`, treats `Unsupported` ("not DFS") as "use the old raw kernel block". It shows any other error on the
 screen and doesn't boot.
@@ -536,7 +536,7 @@ r = dr::dfs::mkfs(vol, &dev, &params);                                   // byte
 
 ## 8. `dr::fs`: the high level API
 
-`extra/ds/dragon-sdk/src/file.ds`. Everything in it is commented: this section is the overview.
+`extra/ds/machine/dragon-sdk/src/file.ds`. Everything in it is commented: this section is the overview.
 
 ### The three types
 

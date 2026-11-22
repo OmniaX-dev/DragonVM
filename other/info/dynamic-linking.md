@@ -1,7 +1,7 @@
 # Dynamic linking: shared libraries (DRL) and the programs that use them (DRX2)
 
 A program compiled normally carries a copy of every library it imports: `wing-shell` is 32 KB
-of which ~31 KB is libcore and stdlib, and every process has its own copy of that code. With
+of which ~31 KB is libcore and libstd, and every process has its own copy of that code. With
 dynamic linking, the program only says which libraries it needs; a loader (drun's now, the
 DragonOS kernel's later) loads each library **once**, and every process that needs it shares
 that one copy of its code. `wing-shell` compiled with `--dynamic` is 659 bytes.
@@ -42,14 +42,14 @@ drun machine.dvm prog.drx -L lib                 // drun loads lib/mylib.drl and
 A program chooses, for each library it imports, whether it is **static** (its `.dlib` code is
 copied into the program, as always) or **dynamic** (its `.drl` is loaded with the program):
 ```
-#import("stdlib", dynamic)       // in the source: this one dynamic
+#import("libstd", dynamic)       // in the source: this one dynamic
 #import("mylib", static)         // this one static (also when the command line says --dynamic)
 #import("other")                 // the command line decides (static by default)
 ```
 ```
 dsc prog.ds -L lib                          // every library static (a DRX, as before)
 dsc prog.ds -L lib --dynamic                // every library dynamic, unless #import(..., static)
-dsc prog.ds -L lib --dynamic=stdlib,mylib   // just these dynamic
+dsc prog.ds -L lib --dynamic=libstd,mylib   // just these dynamic
 dsc prog.ds -L lib --dynamic --static=mylib // everything dynamic but mylib
 ```
 - What decides, from strongest to weakest: `--static=<names>` / `--dynamic=<names>`, then the
@@ -65,9 +65,9 @@ dsc prog.ds -L lib --dynamic --static=mylib // everything dynamic but mylib
   table). A raw program (`--raw`, `--rom`) has no loader: its libraries are all static.
 - A shared library's own dependencies are always shared (a `.drl` can't contain a static copy
   of another library: its writable globals would be shared by every process).
-- `ds_env` (cmake) builds `libcore.drl` and `stdlib.drl` next to their `.dlib`
-  (`bin/ds/<name>/lib`, `extra/ds/<name>/lib`), puts them on DragonOS's partition (2) as
-  `/lib/libcore.drl` and `/lib/stdlib.drl`, and saves their disassembly (`bin/disassembly`).
+- `ds_env` (cmake) builds `libcore.drl` and `libstd.drl` next to their `.dlib`
+  (`bin/ds/libs/<name>/lib`, `extra/ds/libs/<name>/lib`), puts them on DragonOS's partition (2) as
+  `/lib/libcore.drl` and `/lib/libstd.drl`, and saves their disassembly (`bin/disassembly`).
   dinit and wing-shell are still built statically (until the kernel can load a DRX2): to build
   one dynamically, add `--dynamic` to its command in `cmake/DScript.cmake`.
 
@@ -107,7 +107,7 @@ mapped into every process, but its **writable globals** can't be shared: two pro
   holds the address of the running process's table. The kernel writes it at every context
   switch. (One CPU: only one process runs at a time.)
 
-A library without writable globals (libcore, today's stdlib) has `rwSize` 0: no copy, its table
+A library without writable globals (libcore, today's libstd) has `rwSize` 0: no copy, its table
 entry is unused (0).
 
 
@@ -345,8 +345,8 @@ regions: `as_destroy` frees them).
 ### 4. Spawn
 
 Nothing changes: `sys_spawn` calls `process_start`, which now accepts both DRX1 and DRX2. Build
-a program with `--dynamic` (and put `libcore.drl` / `stdlib.drl` in `/lib`: ds_env does) to
-test it. Two processes using stdlib with a writable global (add one to test, e.g. a call
+a program with `--dynamic` (and put `libcore.drl` / `libstd.drl` in `/lib`: ds_env does) to
+test it. Two processes using libstd with a writable global (add one to test, e.g. a call
 counter) show the isolation: each sees its own count.
 
 ### 5. Errors
@@ -366,7 +366,7 @@ counter) show the isolation: each sees its own count.
 
 ## The SDK readers (`dr::dyn`)
 
-[extra/ds/dragon-sdk/src/dyn.ds](../../extra/ds/dragon-sdk/src/dyn.ds): the files read in place,
+[extra/ds/machine/dragon-sdk/src/dyn.ds](../../extra/ds/machine/dragon-sdk/src/dyn.ds): the files read in place,
 nothing allocated. The headers are checked against the file when read (tables inside the file,
 the string table ending with a 0); entries are checked when taken.
 ```

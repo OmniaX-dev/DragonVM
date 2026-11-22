@@ -2,7 +2,7 @@
 //
 // assert(condition[, message]) calls the global ::__assert_fail when the condition is false. The
 // libraries don't define it (neither libcore nor the SDK): each program decides what a failed
-// assert does. DragonOS programs get it from the stdlib (#import("stdlib")); a program on the SDK
+// assert does. DragonOS programs get it from the libstd (#import("libstd")); a program on the SDK
 // writes its own, which can be just this:
 //
 //     sub __assert_fail(var file: string, var line: u32, var condition: string, var message: string) {

@@ -19,7 +19,7 @@
 // Configuration: dsls.json in the workspace root (optional):
 //   {
 //     "args": ["-I", "extra/ds/sdk"],                      dsc options for every root
-//     "files": { "extra/ds/bios/entry.ds": ["--rom"] }     more options for one root
+//     "files": { "extra/ds/machine/bios/entry.ds": ["--rom"] }     more options for one root
 //   }
 // Options: -I <dir>, -L <dir>, -D NAME[=value], --rom, --raw. Paths are relative to the workspace root.
 
@@ -110,7 +110,7 @@ namespace
 		return std::regex_search(text, re);
 	}
 
-	// A library's sources: <name>/src with <name>/lib next to it (libcore, dragon-sdk, stdlib).
+	// A library's sources: <name>/src with <name>/lib next to it (libcore, dragon-sdk, libstd).
 	// dsc builds a library from every .ds file under src together (no file includes the others),
 	// so a file there is analyzed with all of them: the src folder is its root.
 	std::string librarySourceDir(const std::string& file)

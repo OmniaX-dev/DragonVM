@@ -36,11 +36,12 @@ OUT="$(mktemp -d)"
 trap 'rm -rf "$OUT"' EXIT
 
 # The libraries, built from their sources into one directory (the tests use them with
-# #import("libcore"), #import("dragon-sdk"), #import("stdlib")): libcore first, the others import it.
+# #import("libcore"), #import("dragon-sdk"), #import("libstd")): libcore first, the others import it.
 mkdir -p "$OUT/lib"
-for lib in libcore dragon-sdk stdlib; do
+for path in libs/libcore machine/dragon-sdk libs/libstd; do
+	lib="$(basename "$path")"
 	# (shared: a .dlib and a .drl, for the tests that link them dynamically)
-	if ! dsc --lib --shared "$ROOT"/extra/ds/$lib/src/*.ds -L "$OUT/lib" -o "$OUT/lib/$lib.dlib"; then
+	if ! dsc --lib --shared "$ROOT"/extra/ds/$path/src/*.ds -L "$OUT/lib" -o "$OUT/lib/$lib.dlib"; then
 		echo "cannot build the $lib library"
 		exit 1
 	fi

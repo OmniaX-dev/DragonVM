@@ -2,7 +2,7 @@
 
 ## Conventions (all of them)
 - `int 0x40`: R9 is the function, R8, R7, R6, R5 the arguments (in that order), RV the result.
-  In the stdlib: `std::syscall4(function, a, b, c, d)` (unused arguments are 0, pointers go as
+  In the libstd: `std::syscall4(function, a, b, c, d)` (unused arguments are 0, pointers go as
   `cast<u32>(p)`); each typed wrapper is one line on top of it.
 - The result: RV >= 0 success (an fd, a byte count, a pid, ...), RV < 0 an error code.
 - Error codes: libcore's `errors.ds`, shared by everything (`std::error_name` describes any of
@@ -24,7 +24,7 @@
 
 | # | Call | Parameters → result | What it does |
 |---|---|---|---|
-| 0x0010 | **Exit** | `code: i32` → doesn't return | Ends the calling process: `process_exit(code)`. *(in the stdlib, not handled by the kernel yet)* |
+| 0x0010 | **Exit** | `code: i32` → doesn't return | Ends the calling process: `process_exit(code)`. *(in the libstd, not handled by the kernel yet)* |
 | 0x0011 | **Print** | `text: string, newline: bool` → 0 | Prints to the console. *(exists: needs the `user_readable` check)* |
 | 0x0100 | **GetPid** | → `pid` | The caller's pid. |
 | 0x0101 | **GetParentPid** | → `pid` | The pid that spawned it (0 for the first process). |
@@ -42,7 +42,7 @@ Starting a new program directly (like `posix_spawn`) is the natural fit.
 
 | # | Call | Parameters → result | What it does |
 |---|---|---|---|
-| 0x0200 | **AllocPages** | `count: u32` → `address` | `count` zeroed pages from `g_pages`, mapped `ReadWrite` as a Heap region of the caller. The stdlib's heap (user `malloc`) is built on it. |
+| 0x0200 | **AllocPages** | `count: u32` → `address` | `count` zeroed pages from `g_pages`, mapped `ReadWrite` as a Heap region of the caller. The libstd's heap (user `malloc`) is built on it. |
 | 0x0201 | **FreePages** | `address: u32, count: u32` → 0 | Gives a region back (one the caller owns: `as_unmap`). |
 
 `AS_MAX_REGIONS` is 16: the user heap should ask for big chunks (e.g. 64 KiB), not single pages.
@@ -86,7 +86,7 @@ The kernel keeps a table per process, e.g. `files: OpenFile[16]` with `{ used, i
 | 0x0407 | **Stat** | `path: string, out: Info*` → 0 | The same by path: `exists`, `is_file`, `is_dir`, `size_of` in user space. |
 | 0x0408 | **Ioctl** | `fd: u32, command: u32, arg: u32` → the command's | A device's own commands (`std::video::Commands` for `/dev/video`); `NotSupported` on a disk file. |
 
-*(done: `fs/vfs.ds`, the fd table `Process.files` in `fs/file.ds`, `std::fs::*` in the stdlib; the
+*(done: `fs/vfs.ds`, the fd table `Process.files` in `fs/file.ds`, `std::fs::*` in the libstd; the
 structs `std::fs::FileInfo` / `OpenMode` / `SeekFrom` in libcore's `system.ds`.)*
 
 ### Devices: /dev/<name>
@@ -134,12 +134,12 @@ partition number as a third argument); other partitions later through a mount ta
 
 ## Suggested order
 1. [ ] **Process basics:**
-   - [ ] `Exit` in the kernel (the stdlib already calls it, also from `__assert_fail`)
+   - [ ] `Exit` in the kernel (the libstd already calls it, also from `__assert_fail`)
    - [ ] `Print` with its pointer check
    - [ ] `GetPid`, `Yield`
 
    The first real user program runs and ends properly.
-2. [ ] **`AllocPages` / `FreePages`**, then a user space heap in the stdlib.
+2. [ ] **`AllocPages` / `FreePages`**, then a user space heap in the libstd.
 3. [ ] **`Open`, `Close`, `Read`, `Stat`**: programs can read files (a `cat`).
 4. [ ] **`Spawn`, `Wait`, `ReadKey`**: enough for a shell. `Wait` and `ReadKey` are the first
    calls that block: the `Blocked` state and waking processes up.

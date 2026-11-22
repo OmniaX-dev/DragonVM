@@ -3,7 +3,7 @@
 // A is any struct with two static subs (no state: the kernel's heap, malloc, an arena of your own):
 //     static sub alloc(var size: u32) -> void*     (null: no memory)
 //     static sub free(var p: void*)
-// stdlib's std::Vector<T> is BasicVector<T, std::MallocAllocator>; the SDK has dr::SystemAllocator.
+// libstd's std::Vector<T> is BasicVector<T, std::MallocAllocator>; the SDK has dr::SystemAllocator.
 //
 //     var v: std::Vector<u32>;
 //     v.push(5);

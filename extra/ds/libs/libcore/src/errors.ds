@@ -5,7 +5,7 @@
 // fd, a pid, ...) and < 0 for an error. std::Ok (0) is "no error".
 //
 // Every error code is unique in the whole system, so an error can be passed up through any number
-// of layers unchanged (a file system error out of a system call, out of the stdlib, into a
+// of layers unchanged (a file system error out of a system call, out of the libstd, into a
 // program) and std::error_name always knows what it means. No layer needs its own name function,
 // and nobody needs to add offsets (r - 1000) to tell layers apart.
 //

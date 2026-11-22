@@ -3,9 +3,9 @@
 // system call) and ends the process with exit code 134 (the Exit system call).
 // Define NDEBUG (dsc -D NDEBUG, or #define(NDEBUG)) to compile the asserts out.
 //
-// It is global (the compiler looks for ::__assert_fail) and only the stdlib defines it: libcore
+// It is global (the compiler looks for ::__assert_fail) and only the libstd defines it: libcore
 // and the SDK don't, so that each program decides what a failed assert does. Programs without
-// the stdlib (a BIOS, a boot loader, a kernel) write their own, e.g. with the SDK's
+// the libstd (a BIOS, a boot loader, a kernel) write their own, e.g. with the SDK's
 // dr::assert_fail_halt (prints to the host's terminal and stops the machine):
 //
 //     sub __assert_fail(var file: string, var line: u32, var condition: string, var message: string) {

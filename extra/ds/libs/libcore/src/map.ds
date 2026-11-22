@@ -1,6 +1,6 @@
 // map.ds - std::BasicMap<K, V, A>: keys to values, kept in key order (a balanced binary tree: AVL),
 // in memory from the allocator A (static alloc(size) -> void* and free(p), as BasicVector's).
-// stdlib's std::Map<K, V> is BasicMap<K, V, std::MallocAllocator>.
+// libstd's std::Map<K, V> is BasicMap<K, V, std::MallocAllocator>.
 //
 //     var ages: std::Map<std::String, u32>;
 //     ages.set("bob", 31);

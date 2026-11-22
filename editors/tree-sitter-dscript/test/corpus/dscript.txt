@@ -923,7 +923,7 @@ Includes, imports and unsigned literals
 
 #include("file.ds")
 #include(file.ds)
-#import("stdlib")
+#import("libstd")
 #import("mylib", dynamic)
 #import(<oldstyle>)
 #define(LIMIT = 10)

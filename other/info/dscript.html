@@ -1988,9 +1988,9 @@ var root: absolute_base_type(Leaf*) = &leaf;    // a pointer to the first class 
 </script>
 
 <script type="text/x-dsdoc" data-id="containers" data-group="Library" data-title="Containers and String">
-libcore has growable containers written as templates over an allocator, so the same code works in a kernel, a user program or with an arena of your own. An allocator is any struct with `static sub alloc(var size: u32) -> void*` (null when there's no memory) and `static sub free(var p: void*)`. stdlib gives them short names that use `malloc` and `free`, and the SDK's `dr::SystemAllocator` uses the system heap.
+libcore has growable containers written as templates over an allocator, so the same code works in a kernel, a user program or with an arena of your own. An allocator is any struct with `static sub alloc(var size: u32) -> void*` (null when there's no memory) and `static sub free(var p: void*)`. libstd gives them short names that use `malloc` and `free`, and the SDK's `dr::SystemAllocator` uses the system heap.
 
-| libcore | stdlib | What it is |
+| libcore | libstd | What it is |
 |---|---|---|
 | `std::BasicVector<T, A>` | `std::Vector<T>` | a growable array |
 | `std::BasicStack<T, A>` | `std::Stack<T>` | last in, first out |
@@ -2081,7 +2081,7 @@ The handler gets four arguments: the source file, the line number, the condition
 :::
 
 ::: Who defines the handler
-The handler is an ordinary global sub, so it can be written in the program, or come from a library the program imports. A platform's runtime library is the natural place for it: it knows how to report an error and end a program on that platform. Freestanding libraries, which can run anywhere, should not define one, so that each program keeps the choice. The handler must be visible wherever `assert` is used: an `assert` with no `__assert_fail` in sight is a compile error, so a missing handler is never discovered at run time. On DragonVM, the DragonOS stdlib provides one; see [Assertions on DragonVM](#tc-dragonvm).
+The handler is an ordinary global sub, so it can be written in the program, or come from a library the program imports. A platform's runtime library is the natural place for it: it knows how to report an error and end a program on that platform. Freestanding libraries, which can run anywhere, should not define one, so that each program keeps the choice. The handler must be visible wherever `assert` is used: an `assert` with no `__assert_fail` in sight is a compile error, so a missing handler is never discovered at run time. On DragonVM, the DragonOS libstd provides one; see [Assertions on DragonVM](#tc-dragonvm).
 :::
 
 ::: Asserts in libraries
@@ -2207,7 +2207,7 @@ DScript programs are compiled by `dsc` and run on **DragonVM**, a virtual machin
 A typical session compiles a program and runs it:
 
 ```
-dsc hello.ds -L extra/ds/stdlib/lib -o hello.drx
+dsc hello.ds -L extra/ds/libs/libstd/lib -o hello.drx
 drun config/testMachine.dvm hello.drx --boot
 ```
 
@@ -2353,7 +2353,7 @@ Each library's globals are its own. Those that need code to set them up, includi
 DragonVM comes with three libraries, each built into `extra/ds/<name>/lib`:
 - **libcore**: freestanding utilities with no hardware access or system calls, usable by any program (see [libcore](#libcore)).
 - **dragon-sdk**: the hardware and the BIOS services, in the namespace `dr`, for programs running in supervisor mode: the BIOS, the boot loader, kernels. It imports libcore.
-- **stdlib**: the runtime of DragonOS programs, which run in user mode: system calls, random numbers, the clock, and the assertion handler. It imports libcore.
+- **libstd**: the runtime of DragonOS programs, which run in user mode: system calls, random numbers, the clock, and the assertion handler. It imports libcore.
 :::
 </script>
 
@@ -2370,7 +2370,7 @@ drun machine.dvm prog.drx -L lib                 // drun loads lib/mylib.drl and
 Each imported library is linked either statically or dynamically, and the choice can be made in the source or on the command line:
 
 ```
-#import("stdlib", dynamic)       // this one dynamic
+#import("libstd", dynamic)       // this one dynamic
 #import("mylib", static)         // this one static, even with --dynamic
 #import("other")                 // the command line decides (static by default)
 ```
@@ -2467,8 +2467,8 @@ Libraries are debugged like the program: a `.dlib` keeps its own disassembly, wi
 
 ```
 {
-    "args": ["-L", "extra/ds/dragon-sdk/lib"],
-    "files": { "extra/ds/bios/entry.ds": ["--rom"] }
+    "args": ["-L", "extra/ds/machine/dragon-sdk/lib"],
+    "files": { "extra/ds/machine/bios/entry.ds": ["--rom"] }
 }
 ```
 
@@ -2527,7 +2527,7 @@ atomic sub take_ticks() -> u32 {               // interrupts disabled inside
 :::
 
 ::: Assertions on DragonVM
-`assert` calls the global `__assert_fail` (see [The failure handler](#assert-handler)). DragonOS programs get one by importing the stdlib: it prints `Assertion failed: <condition> (<file>:<line>): <message>` and ends the process with exit code 134. libcore and the SDK deliberately don't define one. Programs without the stdlib, such as a BIOS, a boot loader or a kernel, write their own, for example by calling the SDK's `dr::assert_fail_halt`, which prints to the host's terminal and stops the machine (with `-g`, ddb stops first):
+`assert` calls the global `__assert_fail` (see [The failure handler](#assert-handler)). DragonOS programs get one by importing the libstd: it prints `Assertion failed: <condition> (<file>:<line>): <message>` and ends the process with exit code 134. libcore and the SDK deliberately don't define one. Programs without the libstd, such as a BIOS, a boot loader or a kernel, write their own, for example by calling the SDK's `dr::assert_fail_halt`, which prints to the host's terminal and stops the machine (with `-g`, ddb stops first):
 
 ```ds
 sub __assert_fail(var file: string, var line: u32, var condition: string, var message: string) {

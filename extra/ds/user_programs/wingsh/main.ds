@@ -1,4 +1,4 @@
-#import("stdlib")
+#import("libstd")
 
 sub main(var argc: u32, var argv: u8**) -> i32 {
 	std::Random::auto_seed();

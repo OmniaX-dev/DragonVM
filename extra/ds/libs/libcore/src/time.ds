@@ -1,6 +1,6 @@
 // std::time: the calendar and DateTime (no clock: they work with the Unix times they are
 // given; the clock is the SDK's dr::time_get_unix() in supervisor mode, std::time::unix_time()
-// from the stdlib in a DragonOS program).
+// from the libstd in a DragonOS program).
 
 namespace std::time {
 	// The calendar (proleptic Gregorian: today's rules for every year).

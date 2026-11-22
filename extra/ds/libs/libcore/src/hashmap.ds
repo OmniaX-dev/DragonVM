@@ -1,5 +1,5 @@
 // hashmap.ds - std::BasicHashMap<K, V, A>: keys to values in a hash table (no order), in memory from
-// the allocator A (static alloc(size) -> void* and free(p), as BasicVector's). stdlib's
+// the allocator A (static alloc(size) -> void* and free(p), as BasicVector's). libstd's
 // std::HashMap<K, V> is BasicHashMap<K, V, std::MallocAllocator>.
 //
 //     var ids: std::HashMap<std::String, u32>;

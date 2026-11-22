@@ -1,5 +1,5 @@
 // basic_string.ds - std::BasicString<A>: a growable text that owns its memory (from the allocator A:
-// a struct with static alloc(size) -> void* and free(p), as BasicVector's). stdlib's std::String is
+// a struct with static alloc(size) -> void* and free(p), as BasicVector's). libstd's std::String is
 // BasicString<std::MallocAllocator>.
 //
 //     var s: std::String = "Hello";      // from a string (implicit)

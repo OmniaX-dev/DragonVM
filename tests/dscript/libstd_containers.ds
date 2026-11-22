@@ -1,9 +1,9 @@
 // expect-rv: 0
-// stdlib's names for libcore's containers (std::Vector, Stack, Map, HashMap, String: malloc /
+// libstd's names for libcore's containers (std::Vector, Stack, Map, HashMap, String: malloc /
 // free): they compile, and are the Basic ones with std::MallocAllocator. (Used in a branch that
 // doesn't run: malloc asks a kernel for pages; the containers themselves are tested with an
 // allocator of their own in container_*.ds.)
-#import("stdlib")
+#import("libstd")
 var g_never: bool = false;
 sub main() -> i32 {
 	static_assert(is_type(std::Vector<u32>, std::BasicVector<u32, std::MallocAllocator>));
