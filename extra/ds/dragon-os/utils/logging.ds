@@ -1,6 +1,6 @@
 #import("dragon-sdk")
 
-#include(syscall.ds)
+#include(../core/syscall.ds)
 
 // TODO: These right now are wrappers for kenrel_print, but eventually they will be able to log to a file
 // 		 once the kernel switches logging to a file instead of the screen

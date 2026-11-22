@@ -46,7 +46,7 @@ sub main() -> i32 {
 	check(40, same(std::error_name(std::ProcessErrors.NoChild), "no such child"));
 	check(41, same(std::error_name(std::ProcessErrors.NoProcess), "no such process"));
 	check(42, same(std::error_group_name(std::ProcessErrors.NoChild), "process"));
-	check(43, all_named(std::ProcessErrors.NoChild, std::ProcessErrors.NoProcess));
+	check(43, all_named(std::ProcessErrors.NoChild, std::ProcessErrors.NotPermitted));
 
 	// Program loading (group 4).
 	check(50, same(std::error_name(std::ExecErrors.NotAFile), "not a file"));

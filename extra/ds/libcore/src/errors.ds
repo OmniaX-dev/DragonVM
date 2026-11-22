@@ -70,6 +70,7 @@ namespace std {
 	const ProcessErrors: struct {
 		var NoChild: i32 = -97;				// Wait: no such child (or no children at all)
 		var NoProcess: i32 = -98;			// no process with that pid
+		var NotPermitted: i32 = -99;		// the caller may not do that to that process (Kill: not its own descendant)
 	};
 
 	// Group 4: loading a program (a DRX file: dr::drx, the BIOS, Drake, the kernel's Spawn), and
@@ -136,7 +137,7 @@ namespace std {
 			"argument too long", "would block", "no such system call"
 		};
 		const ProcessErrorNames: string[] = {
-			"no such child", "no such process"
+			"no such child", "no such process", "not permitted"
 		};
 		const ExecErrorNames: string[] = {
 			"not a file", "empty file", "too big", "no room to load it", "too small for a DRX file",

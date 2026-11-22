@@ -1,0 +1,32 @@
+
+namespace std {
+	const PROCESS_NAME_MAX: u32 = 32;               // a ProcessInfo's name, with its 0
+
+    // SysInfo(out): the machine and the kernel's memory.
+    struct SysInfo {
+        var page_size: u32;                             // bytes
+        var total_pages: u32;                           // all of the RAM (the kernel's own pages are used ones)
+        var free_pages: u32;
+        var clock_speed: u32;                           // the CPU's, Hz
+        var uptime_ms: u32;                             // since the machine started (wraps after ~49.7 days)
+        var processes: u32;                             // running, waiting or ended (zombies), not the idle loop
+        var max_processes: u32;
+    };
+
+    // A ProcessInfo's state (the kernel's proc::ProcessState: the same values).
+    enum ProcessStates: u8 { New = 1, Ready = 2, Running = 3, Blocked = 4, Zombie = 5 };
+    // What a Blocked process waits for (the kernel's proc::BlockReason).
+    enum BlockReasons: u8 { None = 0, Sleep = 1, Wait = 2, Key = 3 };
+
+    // ProcessList(out, capacity): one per process.
+    struct ProcessInfo {
+        var pid: u32;
+        var parent: u32;                                        // 0: none (init)
+        var state: u8;                                          // ProcessStates
+        var block: u8;                                          // BlockReasons (Blocked)
+        var reserved: u16;
+        var exit_code: i32;                                     // a Zombie's
+        var pages: u32;                                         // the memory it holds: image, stack, heap, permission map, kernel stack
+        var name: u8[PROCESS_NAME_MAX];         				// its program's file name
+    };
+}

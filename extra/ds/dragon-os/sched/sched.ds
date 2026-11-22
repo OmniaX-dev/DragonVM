@@ -1,4 +1,4 @@
-#include(process.ds)
+#include(../sched/process.ds)
 
 namespace proc {
 	const TICK_MS: u32 = 10;                 		// dr::set_interrupt_interval(TICK_MS)
@@ -32,6 +32,8 @@ namespace proc {
     sub wake(var p: Process*, var rv: u32) {
     	if (p->block == BlockReason.Sleep)
             g_sleepers--;
+        else if (p->block == BlockReason.Key)
+            input::g_reader = null;
         p->rv = rv;
         p->block = BlockReason.None;
         p->state = ProcessState.Ready;
@@ -51,6 +53,7 @@ namespace proc {
     sub schedule() {
     	reap_dead();
         wake_sleepers();
+        input::wake_reader();
         g_slice_left = SLICE_TICKS;
         var next: Process* = pick_next();
         kernel_assert(next != null, "Nothing to run (Idle process missing?).");
@@ -101,6 +104,8 @@ namespace proc {
         }
         if (p->state == ProcessState.Blocked and p->block == BlockReason.Sleep)
             g_sleepers--;
+        if (p->state == ProcessState.Blocked and p->block == BlockReason.Key)
+            input::g_reader = null;
         // TODO: (later: close its files)
         as_destroy(&p->as);                 // its pages and map (supervisor mode doesn't use the map)
         p->exit_code = code;
@@ -127,6 +132,19 @@ namespace proc {
             schedule();
     }
 
+    // Is p started by ancestor (its child, grandchild, ...)? Up the parent chain (an orphan's
+    // parent is init: process_exit gives it the children of the processes that end).
+    sub descends_from(var p: Process*, var ancestor: u32) -> bool {
+	    var steps: u32 = 0;
+	    while (p != null and p->parent != 0 and steps < MAX_PROCESSES) {        // (steps: a cycle can't hang the kernel)
+            if (p->parent == ancestor)
+                return true;
+            p = find_process(p->parent);
+            steps++;
+	    }
+	    return false;
+    }
+
     // At the start of schedule(): the kernel stacks of ended processes and the slots of collected
     // ones. Never g_current's: schedule() is running on that stack.
     sub reap_dead() {
@@ -146,6 +164,22 @@ namespace proc {
             if (p->state == ProcessState.Dead)
                 free_slot(p);
         }
+    }
+
+    // The pages p holds: its owned regions (image, stack, heap), its permission map, its kernel stack.
+    sub process_pages(var p: Process*) -> u32 {
+        if (p->state == ProcessState.Zombie or p->state == ProcessState.Dead)
+            return KSTACK_PAGES;                                                            // (process_exit freed its address space)
+        var pages: u32 = dr::cpu::PermissionMapSize / PAGE_SIZE + KSTACK_PAGES;
+        for (var i: u32 = 0; i < p->as.count; i++) {
+            if (p->as.regions[i].owned)
+                pages += p->as.regions[i].pages;
+        }
+        return pages;
+    }
+
+    inline sub is_listed(var p: Process*) -> bool {
+        return p->state != ProcessState.Free and p->state != ProcessState.Dead;
     }
 
 	namespace __internal {

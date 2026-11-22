@@ -20,21 +20,16 @@ class Test {
 };
 
 sub main() -> i32 {
-	var buff4: u8[20];
-	var str: Str;
-	var ptr: const Test* = null;
-	std::strcpy(str.data, "Hello World!");
-	{
-		const p = std::new<Test>(42u, str);
-		ptr = p.get();
-		auto ptr2 = p.get();
-		std::print(p->get().data);
-		std::print(std::itoa(p->get_num(), buff4));
-		ptr2->set_num(56);
-		std::print(std::itoa(p->get_num(), buff4));
+	var str: std::String;
+	while(true) {
+		auto r = std::read_char();
+		if (r > 0)
+		{
+			str.clear();
+		 	str += cast<u8>(r);
+			std::print(str, false);
+		}
 	}
-	std::print(ptr->get().data);
-	while(true);
 
 
 	std::Random::auto_seed();

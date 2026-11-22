@@ -98,12 +98,11 @@ namespace std {
 		return true;
 	}
 
-	inline sub print(var path: string, var nl: bool = true) -> i32 {
-    	return syscall4(SystemCalls.Print, cast<u32>(path), (nl ? 1 : 0));
+	inline sub print(var path: const ref std::String, var nl: bool = true) -> i32 {
+    	return syscall4(SystemCalls.Print, cast<u32>(path.c_str()), (nl ? 1 : 0));
 	}
 
 	inline sub random_entropy() -> u32 {
 		return cast<u32>(syscall4(SystemCalls.RandomEntropy));
 	}
-
 }

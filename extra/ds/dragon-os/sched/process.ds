@@ -1,6 +1,6 @@
 #import("dragon-sdk")
 
-#include(memory.ds)
+#include(../memory/memory.ds)
 
 namespace proc {
 	const AS_MAX_REGIONS: u32 = 256;               // heap regions merge when adjacent: this is for scattered ones
@@ -8,7 +8,7 @@ namespace proc {
 	const KSTACK_PAGES: u32 = 2;                    // 8 KiB: traps and syscalls only
 	const USTACK_PAGES: u32 = 16;                   // 64 KiB
 	const FRAME_WORDS: u32 = 34;
-	const PROC_NAME_MAX_LEN: u32 = 32;
+	const PROC_NAME_MAX_LEN: u32 = std::PROCESS_NAME_MAX;
 
 	enum RegionKind: u8 { Image, Stack, Heap, Shared }
 	struct Region {
@@ -17,6 +17,30 @@ namespace proc {
 		var permissions: u8;    		// dr::cpu::Permissions
 		var kind: RegionKind;
 		var owned: bool;                // its pages are the process's: freed with it (false: shared, e.g. the trampoline)
+	};
+
+	// A process's own random numbers (xoshiro128**, as libcore's std::rand::engine::Xoshiro128ss, but
+	// a plain struct: Process slots are cleared with memset, which a class's table pointer wouldn't
+	// survive). Seeded from the Random device's entropy when the process starts; SeedRandom
+	// reseeds only the caller's, so no process can change (or predict) another's numbers.
+	struct ProcessRandom {
+		var s: u32[4];
+		sub seed(var seed: u32) {
+			var sm: std::rand::__internal::SplitMix32 = { seed };
+			for (var i: u32 = 0; i < 4; i++)
+				this->s[i] = sm.next();
+		}
+		sub next() -> u32 {
+			var r: u32 = std::rand::__internal::rotl32(this->s[1] * 5, 7) * 9;
+			var t: u32 = this->s[1] << 9;
+			this->s[2] ^= this->s[0];
+			this->s[3] ^= this->s[1];
+			this->s[1] ^= this->s[2];
+			this->s[0] ^= this->s[3];
+			this->s[2] ^= t;
+			this->s[3] = std::rand::__internal::rotl32(this->s[3], 11);
+			return r;
+		}
 	};
 
 	struct AddressSpace {
@@ -57,6 +81,8 @@ namespace proc {
 		var wake_time: u32;
 		var wait_pid: i32;
 		var wait_out: u32;
+		var key_kinds: u32;                     // blocked in ReadKey: the events it wants (input::WANT_*)
+		var random: ProcessRandom;              // Random / RandomF32 / SeedRandom: its own generator
 	};
 
 	var g_processes: Process[MAX_PROCESSES];
@@ -140,7 +166,7 @@ namespace proc {
         }
         return as_map(as, start, pages, dr::cpu::Permissions.ReadWrite, RegionKind.Heap, true);
 	}
-	
+
 	inline sub user_readable(var as: proc::AddressSpace*, var ptr: u32, var size: u32) -> bool { return __internal::as_check_user_permission(as, ptr, size, dr::cpu::Permissions.Read); }
 	inline sub user_writable(var as: proc::AddressSpace*, var ptr: u32, var size: u32) -> bool { return __internal::as_check_user_permission(as, ptr, size, dr::cpu::Permissions.Write); }
 
@@ -293,6 +319,7 @@ namespace proc {
 		__internal::path_basename(path, p->name, PROC_NAME_MAX_LEN);
 		p->parent = parent;
 		p->entry = entry_addr;
+		p->random.seed(*cast<u32*>(dr::RandomRegisters.Entropy));
 		if (not proc::as_create(&p->as)) {
 			*out_err = std::SystemErrors.NoMemory;
 			g_pages.free(cast<u32>(image), image_pages);

@@ -7,8 +7,8 @@ namespace std {
 	inline sub wait(var pid: i32 = -1, var out_code: i32* = null) -> i32 {
 		return syscall4(SystemCalls.Wait, cast<u32>(pid), cast<u32>(out_code));
 	}
-	inline sub spawn(var path: string, var argc: u32 = 0, var argv: string* = null) -> i32 {
-        return syscall4(SystemCalls.Spawn, cast<u32>(path), argc, cast<u32>(argv));
+	inline sub spawn(var path: const ref std::String, var argc: u32 = 0, var argv: string* = null) -> i32 {
+        return syscall4(SystemCalls.Spawn, cast<u32>(path.c_str()), argc, cast<u32>(argv));
 	}
 	inline sub yield() -> i32 {
         return syscall4(SystemCalls.Yield);
@@ -19,4 +19,16 @@ namespace std {
 	inline sub get_parent_pid() -> i32 {
         return syscall4(SystemCalls.GetParentPid);
 	}
+    inline sub kill(var pid: u32, var code: i32 = -1) -> i32 {
+        return syscall4(SystemCalls.Kill, pid, cast<u32>(code));
+    }
+    // The machine's memory, uptime, process count (std::SysInfo). 0, or BadAddress.
+    inline sub sys_info(var out: ref SysInfo) -> i32 {
+        return syscall4(SystemCalls.SysInfo, cast<u32>(&out));
+    }
+    // The processes (std::ProcessInfo), at most capacity of them in out: how many there are (more
+    // than capacity: some weren't written), or BadAddress.
+    inline sub process_list(var out: ref ProcessInfo, var capacity: u32) -> i32 {
+    	return syscall4(SystemCalls.ProcessList, cast<u32>(&out), capacity);
+    }
 }

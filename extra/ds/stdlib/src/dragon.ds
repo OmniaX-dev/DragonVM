@@ -1,2 +1,3 @@
 #include(os/syscall.ds)
 #include(os/process.ds)
+#include(os/input.ds)

@@ -1,7 +1,7 @@
 #import("dragon-sdk")
 
-#include(fault.ds)
-#include(args.ds)
+#include(../core/fault.ds)
+#include(../utils/args.ds)
 
 var g_root_fs: dr::fs::FileSystem;
 

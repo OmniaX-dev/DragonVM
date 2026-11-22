@@ -1,6 +1,6 @@
 #import("dragon-sdk")
 
-#include(video.ds)
+#include(../dev/video.ds)
 
 var g_panicking: bool = false;
 
@@ -8,7 +8,7 @@ sub panic_begin(var title: string) {
 	dr::disable_interrupts();
 	if (g_panicking)
 		halt_forever();
-	vga::init_video();
+	// vga::init_video();
 	g_panicking = true;
 	kernel_log("", true);
 	kernel_log("*** KERNEL PANIC: ", false);

@@ -1,0 +1,67 @@
+// input.ds - the keyboard for processes. ReadKey takes events from the keyboard device's buffer
+// (polled, no keyboard interrupts): the device keeps the last 48 presses, releases and text
+// characters. One process reads at a time (later: the foreground one).
+//
+// An event (the device's word, positive as an i32): bits 0-15 the key code (a text event: the
+// character), 16-26 the modifiers, 27-28 the kind (dr::KeyboardEventKinds: 1 pressed,
+// 2 released, 3 text).
+#include(../sched/sched.ds)
+
+namespace input {
+	// ReadKey's flags
+	const READ_WAIT: u32 = 1;						// block until there is one (otherwise: WouldBlock)
+	// ReadKey's kinds: the events it wants, bit (1 << kind); the others are dropped.
+	const WANT_PRESSED: u32 = 1 << 1;
+	const WANT_RELEASED: u32 = 1 << 2;
+	const WANT_TEXT: u32 = 1 << 3;
+	const WANT_ALL: u32 = WANT_PRESSED | WANT_RELEASED | WANT_TEXT;
+	const WANT_DEFAULT: u32 = WANT_PRESSED | WANT_TEXT;	// (kinds 0)
+
+	var g_reader: proc::Process* = null;			// the process blocked in ReadKey (null: none)
+
+	// At boot: what was typed before (the BIOS, the boot loader) isn't for the processes.
+	sub init_keyboard() {
+		*cast<u32*>(dr::KeyboardRegisters.BufferControl) = 1;
+	}
+
+	inline sub kind_of(var event: u32) -> u32 { return (event >> 27) & 3; }
+
+	// The oldest event of these kinds (those before it are dropped: they had no reader), or 0.
+	sub next_event(var kinds: u32) -> u32 {
+		while (true) {
+			var e: u32 = *cast<u32*>(dr::KeyboardRegisters.BufferPop);
+			if (e == 0 or (kinds & (1u << kind_of(e))) != 0)
+				return e;
+		}
+	}
+
+	// ReadKey(flags, kinds): the next event of these kinds. READ_WAIT: the process blocks until
+	// one comes; otherwise WouldBlock when there is none.
+	sub sys_read_key(var flags: u32, var kinds: u32) -> i32 {
+		if (kinds == 0)
+			kinds = WANT_DEFAULT;
+		if ((kinds & ~WANT_ALL) != 0 or (flags & ~READ_WAIT) != 0)
+			return std::SystemErrors.InvalidArgument;
+		var e: u32 = next_event(kinds);
+		if (e != 0)
+			return cast<i32>(e);
+		if ((flags & READ_WAIT) == 0)
+			return std::SystemErrors.WouldBlock;
+		if (g_reader != null)
+			return std::SystemErrors.TooMany;			// (one reader at a time)
+		proc::g_current->key_kinds = kinds;
+		g_reader = proc::g_current;
+		proc::block_current(proc::BlockReason.Key);		// doesn't return: wake_reader sets its rv
+		return 0;
+	}
+
+	// From schedule() (every tick while the idle process runs, at the end of each turn
+	// otherwise): the blocked reader gets the next event it wants.
+	sub wake_reader() {
+		if (g_reader == null or *cast<u32*>(dr::KeyboardRegisters.BufferCount) == 0)
+			return;
+		var e: u32 = next_event(g_reader->key_kinds);
+		if (e != 0)
+			proc::wake(g_reader, e);					// (wake clears g_reader)
+	}
+}

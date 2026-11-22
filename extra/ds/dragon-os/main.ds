@@ -1,13 +1,13 @@
 #import("dragon-sdk")
 
-#include(syscall.ds)
-#include(video.ds)
-#include(logging.ds)
-#include(args.ds)
-#include(memory.ds)
-#include(kernel0.ds)
-#include(panic.ds)
-#include(process.ds)
+#include(core/syscall.ds)
+#include(core/kernel.ds)
+#include(core/panic.ds)
+#include(utils/logging.ds)
+#include(utils/args.ds)
+#include(dev/video.ds)
+#include(memory/memory.ds)
+#include(sched/process.ds)
 
 
 sub init_stack_and_switch(var __kernel_main: sub()) {

@@ -1,0 +1,235 @@
+#include(sched.ds)
+
+namespace proc {
+	// sys_wait(pid, out_code): pid -1 = any child. The child's pid; out_code (if not 0) gets its code.
+	sub sys_wait(var pid: i32, var out_code: u32) -> i32 {
+        if (out_code != 0 and not proc::user_writable(&proc::g_current->as, out_code, 4))
+            return std::SystemErrors.BadAddress;
+        var has_child: bool = false;
+        for (var i: u32 = 0; i < proc::MAX_PROCESSES; i++) {
+            var c: proc::Process* = &proc::g_processes[i];
+            if (c->state == proc::ProcessState.Free or c->state == proc::ProcessState.Dead or c->parent != proc::g_current->pid)
+                continue;
+            if (pid != -1 and c->pid != cast<u32>(pid))
+                continue;
+            has_child = true;
+            if (c->state == proc::ProcessState.Zombie) {          // already ended: no need to block
+                if (out_code != 0)
+                    *cast<i32*>(out_code) = c->exit_code;
+                c->state = proc::ProcessState.Dead;                // reap_dead frees it
+                g_reap_pending = true;
+                return cast<i32>(c->pid);
+            }
+        }
+        if (not has_child)
+            return std::ProcessErrors.NoChild;
+        proc::g_current->wait_pid = pid;
+        proc::g_current->wait_out = out_code;
+        proc::block_current(proc::BlockReason.Wait);                    // doesn't return: deliver() sets its rv
+        return 0;
+	}
+
+	// Spawn(path: string, argc, argv: string*): the new process's pid. The caller keeps running.
+	sub sys_spawn(var path: u32, var argc: u32, var argv: u32) -> i32 {
+        var as: AddressSpace* = &g_current->as;
+        var r: i32 = __internal::copy_user_string(as, path, g_spawn_path, MAX_PATH);
+        if (r == std::SystemErrors.TooLong) return std::FileErrors.PathTooLong;
+        if (r < 0)
+            return r;
+        if (argc > MAX_ARGS)
+            return std::SystemErrors.TooMany;
+        if (argc > 0 and not user_readable(as, argv, argc * 4))
+            return std::SystemErrors.BadAddress;
+        var used: u32 = 0;
+        for (var i: u32 = 0; i < argc; i++) {
+            r = __internal::copy_user_string(as, *cast<u32*>(argv + i * 4), &g_spawn_strings[used], ARGS_BYTES - used);
+            if (r < 0)
+                return r;
+            g_spawn_argv[i] = &g_spawn_strings[used];
+            used += cast<u32>(r) + 1;
+        }
+        var err: i32 = 0;
+        var child: Process* = process_start(g_spawn_path, argc, g_spawn_argv, g_current->pid, &err);
+        if (not child)
+            return err;
+        return cast<i32>(child->pid);
+	}
+
+	// Sleep(ms): the process waits at least ms milliseconds. 0 when it wakes.
+	sub sys_sleep(var ms: u32) -> i32 {
+	    if (ms == 0)
+	        return std::Ok;                                   // nothing to wait for (later: a yield)
+	    if (ms > 0x7FFFFFFF)
+	        ms = 0x7FFFFFFF;                                  // ~24.8 days: wake_sleepers compares the times signed
+	    g_current->wake_time = dr::time_get_millis() + ms;
+	    g_sleepers++;
+	    block_current(BlockReason.Sleep);                     // doesn't return: wake() sets its rv
+	    return std::Ok;
+	}
+
+	sub sys_alloc_pages(var count: u32) -> i32 {
+	    var as: AddressSpace* = &g_current->as;
+	    if (count == 0 or count > g_pages.total_pages())  return std::SystemErrors.InvalidArgument;   // (also keeps count * PAGE_SIZE from wrapping)
+	    var addr: u32 = g_pages.alloc(count);
+	    if (addr == 0) return std::SystemErrors.NoMemory;
+	    std::memset(cast<void*>(addr), 0, count * PAGE_SIZE);    // these pages may have held another process's data
+	    if (not as_map_heap(as, addr, count)) {
+	        g_pages.free(addr, count);
+	        return std::SystemErrors.TooMany;
+	    }
+	    return cast<i32>(addr);
+	}
+
+	// Gives back [start, start + count * PAGE_SIZE): it has to lie entirely inside the process's own Heap
+	// regions (it may span several of them, or only part of one). All or nothing: a failed call changes nothing.
+	sub sys_free_pages(var start: u32, var count: u32) -> i32 {
+        var as: AddressSpace* = &g_current->as;
+        if ((start & (PAGE_SIZE - 1)) != 0 or start == 0 or count == 0)
+            return std::SystemErrors.InvalidArgument;
+        if (count >= (0u - start) / PAGE_SIZE)                  // the range would wrap past the top of memory
+            return std::SystemErrors.BadAddress;
+        var end: u32 = start + count * PAGE_SIZE;
+
+        // 1. Check: the Heap regions overlapping the range have to cover all of it. Regions never overlap
+        //    each other, so "the overlaps add up to the whole range" means no gaps, and no Image, Stack or
+        //    Shared pages inside it. A region that sticks out on both sides has to be split, which needs a slot.
+        var covered: u32 = 0;
+        var split: bool = false;
+        for (var i: u32 = 0; i < as->count; i++) {
+            var r: Region* = &as->regions[i];
+            if (r->kind != RegionKind.Heap or not r->owned)
+                continue;
+            var r_end: u32 = r->start + r->pages * PAGE_SIZE;
+            var lo: u32 = r->start > start ? r->start : start;
+            var hi: u32 = r_end < end ? r_end : end;
+            if (lo < hi) {
+                covered += hi - lo;
+                split = split or (r->start < start and r_end > end);
+            }
+        }
+        if (covered != end - start)
+            return std::SystemErrors.BadAddress;
+        if (split and as->count == AS_MAX_REGIONS)
+            return std::SystemErrors.TooMany;
+
+        // 2. Apply: each overlapping region is removed, shortened at one end, or split in two.
+        var i: u32 = 0;
+        while (i < as->count) {
+            var r: Region* = &as->regions[i];
+            var r_end: u32 = r->start + r->pages * PAGE_SIZE;
+            if (r->kind != RegionKind.Heap or not r->owned or r_end <= start or r->start >= end) {
+                i++;
+                continue;
+            }
+            if (r->start >= start and r_end <= end) {               // all of it: remove
+                as->regions[i] = as->regions[as->count - 1];        // the last one moves in: look at slot i again
+                as->count--;
+                continue;
+            }
+            if (r->start < start and r_end > end) {                  // the middle: split, the tail gets a new slot
+                var tail: Region* = &as->regions[as->count];
+                *tail = *r;
+                tail->start = end;
+                tail->pages = (r_end - end) / PAGE_SIZE;
+                as->count++;
+                r->pages = (start - r->start) / PAGE_SIZE;
+            }
+            else if (r->start < start)                               // its end: shorten
+                r->pages = (start - r->start) / PAGE_SIZE;
+            else {                                                   // its beginning: move the start up
+                r->pages = (r_end - end) / PAGE_SIZE;
+                r->start = end;
+            }
+            i++;
+        }
+
+        // 3. The pages: no access for the process any more, then back to the allocator in one go.
+        dr::cpu::set_page_permissions(as->map, start, count * PAGE_SIZE, dr::cpu::Permissions.None);
+        g_pages.free(start, count);
+        return 0;
+	}
+
+	// Random: 0 .. 0x7FFFFFFF (as the device's Int), from the caller's own generator.
+	sub sys_random() -> i32 {
+		return cast<i32>(g_current->random.next() >> 1);
+	}
+
+	// RandomF32: [0, 1) (24 random bits: every f32 step of that range), its bits.
+	sub sys_random_f32() -> i32 {
+		var f: f32 = cast<f32>(g_current->random.next() >> 8) * (1.0 / 16777216.0);
+		return bitcast<i32>(f);
+	}
+
+	// SeedRandom(seed): the caller's generator starts again from seed (the same numbers for the same seed).
+	sub sys_seed_random(var seed: u32) -> i32 {
+		g_current->random.seed(seed);
+		return std::Ok;
+	}
+
+	// Kill(pid, code): ends the process pid as if it had called Exit(code). The caller itself
+    // (doesn't return), or a process it started, directly or not. Not init.
+    sub sys_kill(var pid: u32, var code: i32) -> i32 {
+        var p: Process* = find_process(pid);
+        if (p == null)
+            return std::ProcessErrors.NoProcess;
+        if (p->pid == 1)
+            return std::ProcessErrors.NotPermitted;                 // (init ending is a panic)
+        if (p != g_current and not descends_from(p, g_current->pid))
+            return std::ProcessErrors.NotPermitted;
+        if (p->state == ProcessState.Zombie)
+            return std::Ok;     // it ended already (its parent hasn't collected it)
+        // Ready, Blocked (Sleep, Wait, Key: process_exit undoes each), or the caller (Running:
+        // process_exit doesn't return then).
+        process_exit(p, code);
+        return std::Ok;
+    }
+
+    // SysInfo(out: std::SysInfo*) -> 0.
+    sub sys_sysinfo(var out: u32) -> i32 {
+        if (not user_writable(&g_current->as, out, sizeof(std::SysInfo)))
+            return std::SystemErrors.BadAddress;
+        var info: std::SysInfo* = cast<std::SysInfo*>(out);
+        info->page_size = PAGE_SIZE;
+        info->total_pages = g_pages.total_pages();
+        info->free_pages = g_pages.free_pages();
+        info->clock_speed = *cast<u32*>(dr::CMOSRegisters.ClockSpeed);
+        info->uptime_ms = *cast<u32*>(dr::TimerRegisters.Milliseconds);
+        info->processes = 0;
+        for (var i: u32 = 0; i < MAX_PROCESSES; i++) {
+            if (is_listed(&g_processes[i]))
+                info->processes++;
+        }
+        info->max_processes = MAX_PROCESSES;
+        return std::Ok;
+    }
+
+    // ProcessList(out: std::ProcessInfo*, capacity) -> how many processes there are: the first
+    // capacity of them are written (more than capacity: call again with a bigger array;
+    // capacity 0: only the count, out may be null).
+    sub sys_process_list(var out: u32, var capacity: u32) -> i32 {
+        if (capacity > MAX_PROCESSES)
+            capacity = MAX_PROCESSES;                                                       // (no more to write: and no overflow below)
+        if (not user_writable(&g_current->as, out, capacity * sizeof(std::ProcessInfo)))
+            return std::SystemErrors.BadAddress;
+        var list: std::ProcessInfo* = cast<std::ProcessInfo*>(out);
+        var count: u32 = 0;
+        for (var i: u32 = 0; i < MAX_PROCESSES; i++) {
+            var p: Process* = &g_processes[i];
+            if (not is_listed(p))
+                continue;
+            if (count < capacity) {
+                var e: std::ProcessInfo* = &list[count];
+                e->pid = p->pid;
+                e->parent = p->parent;
+                e->state = cast<u8>(p->state);
+                e->block = p->state == ProcessState.Blocked ? cast<u8>(p->block) : 0;
+                e->reserved = 0;
+                e->exit_code = p->state == ProcessState.Zombie ? p->exit_code : 0;
+                e->pages = process_pages(p);
+                std::memcpy(e->name, p->name, std::PROCESS_NAME_MAX);           // (0-terminated: path_basename)
+            }
+            count++;
+        }
+        return cast<i32>(count);
+    }
+}

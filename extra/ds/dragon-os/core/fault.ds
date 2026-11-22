@@ -1,6 +1,6 @@
 #import("dragon-sdk")
 
-#include(video.ds)
+#include(../dev/video.ds)
 #include(syscall.ds)
 #include(panic.ds)
 

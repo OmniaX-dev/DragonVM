@@ -1,8 +1,9 @@
 #import("dragon-sdk")
 
 #include(fault.ds)
-#include(sched.ds)
-#include(sched_sys.ds)
+#include(../sched/sched.ds)
+#include(../sched/sys.ds)
+#include(../dev/keyboard.ds)
 
 const MAX_PRINT_LEN = 512;
 const SYSCALL: u32 										= 0x40;
@@ -21,7 +22,7 @@ const SYSCALL_KILL: u32 								= 0x01_06;
 const SYSCALL_ALLOC_PAGES: u32							= 0x02_00;
 const SYSCALL_FREE_PAGES: u32							= 0x02_01;
 
-// const SYSCALL_READ_KEY: u32 							= 0x03_00;
+const SYSCALL_READ_KEY: u32 							= 0x03_00;
 // const SYSCALL_CONSOLE_CLEAR: u32						= 0x03_01;
 // const SYSCALL_CONSOLE_SET_COLOR: u32					= 0x03_02;
 // const SYSCALL_CONSOLE_SET_CURSOR: u32					= 0x03_03;
@@ -43,8 +44,8 @@ const SYSCALL_FREE_PAGES: u32							= 0x02_01;
 // const SYSCALL_LINK: u32 								= 0x05_05;
 // const SYSCALL_STAT_FS: u32 								= 0x05_06;
 
-// const SYSCALL_SYS_INFO: u32 							= 0x06_00;
-// const SYSCALL_PROCESS_LIST: u32 						= 0x06_01;
+const SYSCALL_SYS_INFO: u32 							= 0x06_00;
+const SYSCALL_PROCESS_LIST: u32 						= 0x06_01;
 
 const SYSCALL_RANDOM: u32 								= 0x10_00;
 const SYSCALL_RANDOM_F32: u32 							= 0x10_01;
@@ -112,28 +113,29 @@ namespace __internal {
 		var f: SyscallFrame* = current_syscall_frame();
 		var function: u32 = f->regs.R(9);
 		var rv: i32 = std::Ok;
-
 		switch(function) {
 			is SYSCALL_EXIT 							{ proc::process_exit(proc::g_current, cast<i32>(f->regs.R(8))); }
 			is SYSCALL_PRINT 							{ rv = vga::sys_print(cast<string>(f->regs.R(8)), f->regs.R(7) != 0); }
 // ===========================================================================
-			is SYSCALL_GET_PID 							{ rv = proc::sys_get_pid(); }
-			is SYSCALL_GET_PARENT_PID 					{ rv = proc::sys_get_parent_pid(); }
+			is SYSCALL_GET_PID 							{ rv = proc::g_current->pid; }
+			is SYSCALL_GET_PARENT_PID 					{ rv = proc::g_current->parent; }
 			is SYSCALL_YIELD 							{ rv = 0; }
 			is SYSCALL_SPAWN 							{ rv = proc::sys_spawn(f->regs.R(8), f->regs.R(7), f->regs.R(6)); }
 			is SYSCALL_WAIT 							{ rv = proc::sys_wait(cast<i32>(f->regs.R(8)), f->regs.R(7)); }
 			is SYSCALL_SLEEP 							{ rv = proc::sys_sleep(f->regs.R(8)); }
-			is SYSCALL_KILL 							{  }
+			is SYSCALL_KILL 							{ rv = proc::sys_kill(f->regs.R(8), cast<i32>(f->regs.R(7))); }
 // ===========================================================================
 			is SYSCALL_ALLOC_PAGES 						{ rv = proc::sys_alloc_pages(f->regs.R(8)); }
 			is SYSCALL_FREE_PAGES 						{ rv = proc::sys_free_pages(f->regs.R(8), f->regs.R(7)); }
 // ===========================================================================
-			is SYSCALL_RANDOM 							{ rv = *cast<u32*>(dr::RandomRegisters.Int); }
-			is SYSCALL_RANDOM_F32 						{ rv = *cast<u32*>(dr::RandomRegisters.Float); }
-			// TODO: lets any process reseed the one shared random generator, which changes every other process’s numbers
-			// and makes them predictable. That’s fine for now. Eventually the seed should be kernel-only, or each process
-			// should get its own generator state.
-			is SYSCALL_SEED_RANDOM 						{ *cast<u32*>(dr::RandomRegisters.Seed) = f->regs.R(8); }
+			is SYSCALL_READ_KEY 						{ rv = input::sys_read_key(f->regs.R(8), f->regs.R(7)); }
+// ===========================================================================
+			is SYSCALL_SYS_INFO 						{ rv = proc::sys_sysinfo(f->regs.R(8)); }
+			is SYSCALL_PROCESS_LIST 					{ rv = proc::sys_process_list(f->regs.R(8), f->regs.R(7)); }
+// ===========================================================================
+			is SYSCALL_RANDOM 							{ rv = proc::sys_random(); }				// (the caller's own generator)
+			is SYSCALL_RANDOM_F32 						{ rv = proc::sys_random_f32(); }
+			is SYSCALL_SEED_RANDOM 						{ rv = proc::sys_seed_random(f->regs.R(8)); }
 			is SYSCALL_RANDOM_ENTROPY 					{ rv = *cast<u32*>(dr::RandomRegisters.Entropy); }
 // ===========================================================================
 			is SYSCALL_TIME_MILLIS 						{ rv = *cast<u32*>(dr::TimerRegisters.Milliseconds); }

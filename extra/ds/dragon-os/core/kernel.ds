@@ -1,15 +1,22 @@
 #import("dragon-sdk")
 
-#include(memory.ds)
-#include(process.ds)
-#include(filesystem.ds)
+#include(../memory/memory.ds)
+#include(../sched/process.ds)
+#include(../dev/filesystem.ds)
 
 sub kernel_main() {
+	kernel_log(" ** Initializing Memory...");
 	init_heap();
+	kernel_log(" ** Initializing process trampoline page...");
 	proc::init_trampoline();
+	kernel_log(" ** Initializing idle process...");
 	proc::init_idle();
+	kernel_log(" ** Initializing root filesystem...");
 	init_root_filesystem();
+	kernel_log(" ** Initializing keyboard...");
+	input::init_keyboard();
 	var err: i32 = 0;
+	kernel_log(" ** Starting init process...");
 	if (not proc::process_start("/boot/dinit", 0, null, 0, &err))
 	{
 		kernel_log(std::error_group_name(err), false); kernel_log(": ", false); kernel_log(std::error_name(err));
