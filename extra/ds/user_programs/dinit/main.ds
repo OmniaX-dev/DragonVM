@@ -1,0 +1,41 @@
+#import("stdlib")
+
+struct Str { var data: u8[20]; };
+
+sub main() -> i32 {
+	var video_device: i32 = std::fs::open("/dev/video", std::fs::OpenMode.Write);   // the card is dinit's now
+	std::video::set_mode(video_device, std::video::Modes.Text16);
+	var pid: i32 = std::spawn("/bin/snake", std::Vector<std::String>.new(), true);
+
+	while(true) {
+		if (std::wait(pid) != std::ProcessErrors.NoChild)
+			std::print("Snake game finished.");
+	}
+
+
+	// std::Random::auto_seed();
+	// var args: std::Vector<std::String>;
+	// args.push("42");
+	// var arg: u8[12];
+	// std::spawn("/bin/wingsh", args);
+	// std::spawn("/bin/wingsh", args);
+	// var buff: u8[12];
+	// var child_count: u32 = 2;
+ //    while (true) {
+ //        var code: i32;
+ //        var pid: i32 = std::wait(-1, code);     // any child
+ //        if (child_count > 0) child_count--;
+ //        if (pid > 0)
+ //        {
+	//         std::print("Process ", false); std::print(std::itoa(pid, buff), false);
+	//         std::print(" exited with code ", false); std::print(std::itoa(code, buff));
+ //        }
+ //        var j: i32 = std::Random::get_i32(0, 32 - child_count);
+ //        for (var i: i32 = 0; i < j; i++)
+ //        {
+	//         args[0] = std::itoa(std::Random::get_i32(0, 100), arg);
+	//         var rv: i32 = std::spawn("/bin/wingsh", args);
+	// 		if (rv > 0) child_count++;
+ //        }
+ //    }
+}

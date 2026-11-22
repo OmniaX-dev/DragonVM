@@ -1,41 +1,18 @@
-#import("dragon-sdk")
-#import("libcore")
+#import("stdlib")
 
-#define(KEY_BUFF_SIZE = 128)
-
-// A failed assert: print it to the host's terminal and stop (the libraries don't decide this).
-sub __assert_fail(var file: string, var line: u32, var condition: string, var message: string) {
-	dr::assert_fail_halt(file, line, condition, message);
-}
-
-var keyBuff: u32[KEY_BUFF_SIZE];
-var keyRingBuff: std::RingBuffer;
-var pressedKey: u32 = 0;
 
 sub main() {
-	dr::vga_set_video_mode(dr::VGAVideoModes.Text16Color);
-	dr::vga_enable_double_buffering(false);
-	dr::set_interrupt_vector_entry(dr::HardwareInterrupts.KeyPressed, &key_pressed_handler);
-	dr::Text16.clear_screen(dr::DefaultPaletteText16.Black);
-
-	keyRingBuff.init(keyBuff, sizeof(u32), KEY_BUFF_SIZE);
-	var console: dr::Text16Console();
-	var game: SnakeGame(&console, dr::DefaultPaletteText16.DarkGreen);
+	var video_device: i32 = std::fs::open("/dev/video", std::fs::OpenMode.Read);
+	var console: std::video::Console(video_device);
+	console.clear(std::video::Colors.Black);
+	var game: SnakeGame(console, std::video::Colors.DarkGreen);
 	game.mainLoop();
-}
-
-interrupt sub key_pressed_handler() {
-	pressedKey = *cast<u32*>(dr::KeyboardRegisters.KeyCode);
-	if (not keyRingBuff.push(&pressedKey))
-	{
-		//TODO: Handle missed key presses
-	}
 }
 
 struct SnakeGame {
 	priv enum Cell: u8 { Empty = 0, Snake, Food };
 
-	priv var m_console: dr::Text16Console* = null;
+	priv var m_console: std::video::Console* = null;
 	priv var m_board: u8* = null;
 	priv var m_body: i32* = null;
 	priv var m_board_w: u16 = 0;
@@ -53,27 +30,26 @@ struct SnakeGame {
 	priv var m_speedup: u32 = 12;
 	priv var m_score: u32 = 0;
 	priv var m_lastTime: u32 = 0;
-	priv var m_backgroundColor: u8 = dr::DefaultPaletteText16.Black;
+	priv var m_backgroundColor: u8 = std::video::Colors.Black;
 	priv var m_offset_x: u16 = 1;
 	priv var m_offset_y: u16 = 2;
 	priv var m_horizontalLine: u8* = null;
 
-	sub new(var console: dr::Text16Console*, var bgcol: u8) {
-		if (not console) return;
-		this->m_console = console;
-		this->m_board_w = (console->get_console_width() - this->m_offset_x - 1) / 2;
-		this->m_board_h = console->get_console_height() - this->m_offset_y - 1;
+	sub new(var console: ref std::video::Console, var bgcol: u8) {
+		this->m_console = &console;
+		this->m_board_w = (console.get_console_width() - this->m_offset_x - 1) / 2;
+		this->m_board_h = console.get_console_height() - this->m_offset_y - 1;
 		this->m_capacity = this->m_board_w * this->m_board_h;
-		this->m_board = dr::bios_alloc(this->m_capacity);
-		if (not this->m_board) return;
+		this->m_board = std::malloc(this->m_capacity);
+		assert(this->m_board, "Failed to allocate m_board");
 		std::memset(this->m_board, Cell.Empty, this->m_capacity);
-		this->m_body = dr::bios_alloc(this->m_capacity * sizeof(i32));
-		if (not this->m_body) return;
+		this->m_body = std::malloc(this->m_capacity * sizeof(i32));
+		assert(this->m_body, "Failed to allocate m_body");
 		this->m_console->clear(bgcol);
 		this->m_backgroundColor = bgcol;
 
-		this->m_horizontalLine = dr::bios_alloc((this->m_board_w * 2) + 1);
-		if (not this->m_horizontalLine) return;
+		this->m_horizontalLine = std::malloc((this->m_board_w * 2) + 1);
+		assert(this->m_horizontalLine, "Failed to allocate m_horizontalLine");
 		for (var i: u16 = 0; i < this->m_board_w * 2; i++)
 			this->m_horizontalLine[i] = std::data::ASCII.BoxDoubleHorizontal;
 		this->m_horizontalLine[this->m_board_w * 2] = '\0';
@@ -83,7 +59,7 @@ struct SnakeGame {
 		this->m_tail_index = 0;
 		this->m_body[0] = (this->m_board_h / 2) * this->m_board_w + this->m_board_w / 2;
 		this->m_board[this->m_body[0]] = Cell.Snake;
-		this->draw_cell(this->m_body[0], std::data::ASCII.FullBlock, dr::DefaultPaletteText16.Yellow);
+		this->draw_cell(this->m_body[0], std::data::ASCII.FullBlock, std::video::Colors.Yellow);
 		this->m_growth = 3;
 		this->place_food();
 
@@ -91,10 +67,10 @@ struct SnakeGame {
 	}
 	sub mainLoop() {
 		while(true) {
-			if (dr::time_get_millis() - this->m_lastTime < this->m_tick_delay)
+			if (std::time::millis() - this->m_lastTime < this->m_tick_delay)
 				continue;
 			this->draw_top_bar();
-			this->m_lastTime = dr::time_get_millis();
+			this->m_lastTime = std::time::millis();
 			if (!this->read_input())
 				break;
 			if (!this->game_tick())
@@ -124,39 +100,39 @@ struct SnakeGame {
 	priv sub draw_cell(var pos: i32, var symbol: u8, var col: u8) {
 		var column: i32 = pos % this->m_board_w;
 		var row: i32    = pos / this->m_board_w;
-		this->m_console->store_colors()->bg(this->m_backgroundColor)->fg(col);
-		this->m_console->xy(this->m_offset_x + column * 2, this->m_offset_y + row)->print(symbol)->print(symbol);
+		this->m_console->store_colors().bg(this->m_backgroundColor).fg(col);
+		this->m_console->xy(this->m_offset_x + column * 2, this->m_offset_y + row).print(symbol).print(symbol);
 		this->m_console->restore_colors();
 	}
 	priv sub draw_top_bar() {
 		for (var i: i32 = 0; i < this->m_console->get_console_width(); i++)
-			this->m_console->xy(i, 0)->bg(dr::DefaultPaletteText16.DarkGreen)->fg(dr::DefaultPaletteText16.Yellow)->print(' ');
+			this->m_console->xy(i, 0).bg(std::video::Colors.DarkGreen).fg(std::video::Colors.Yellow).print(' ');
 		this->m_console->xy(0, 0);
-		this->m_console->print("Score: ")->print(this->m_score)->x(20)->print("Level: ")->print(this->m_level)->x(40)->print("Length: ")->print(this->snake_len());
+		this->m_console->print("Score: ").print(this->m_score).x(20).print("Level: ").print(this->m_level).x(40).print("Length: ").print(this->snake_len());
 	}
 	priv sub draw_border() {
 		var left: u16 = this->m_offset_x - 1;
 		var right: u16 = this->m_offset_x + this->m_board_w * 2;
 		var top: u16 = this->m_offset_y - 1;
 		var bottom: u16 = this->m_offset_y + this->m_board_h;
-		this->m_console->store_colors()->bg(dr::DefaultPaletteText16.DarkGreen)->fg(dr::DefaultPaletteText16.Lime);
-		this->m_console->xy(left, top)->print(std::data::ASCII.BoxDoubleDownRight)->print(this->m_horizontalLine)->print(std::data::ASCII.BoxDoubleDownLeft);
+		this->m_console->store_colors().bg(std::video::Colors.DarkGreen).fg(std::video::Colors.Lime);
+		this->m_console->xy(left, top).print(std::data::ASCII.BoxDoubleDownRight).print(this->m_horizontalLine).print(std::data::ASCII.BoxDoubleDownLeft);
 		for (var y: u16 = top + 1; y < bottom; y++)
 		{
-			this->m_console->xy(left, y)->print(std::data::ASCII.BoxDoubleVertical);
-			this->m_console->xy(right, y)->print(std::data::ASCII.BoxDoubleVertical);
+			this->m_console->xy(left, y).print(std::data::ASCII.BoxDoubleVertical);
+			this->m_console->xy(right, y).print(std::data::ASCII.BoxDoubleVertical);
 		}
-		this->m_console->xy(left, bottom)->print(std::data::ASCII.BoxDoubleUpRight)->print(this->m_horizontalLine)->print(std::data::ASCII.BoxDoubleUpLeft);
+		this->m_console->xy(left, bottom).print(std::data::ASCII.BoxDoubleUpRight).print(this->m_horizontalLine).print(std::data::ASCII.BoxDoubleUpLeft);
 		this->m_console->restore_colors();
 	}
 	priv sub place_food() {
 		var position: i32 = 0;
 		do {
-			position = dr::random_get_next_int() % this->m_capacity;
+			position = std::Random::get_i32(0, this->m_capacity - 1);
 		} while (this->m_board[position] != Cell.Empty);
 
 		this->m_board[position] = Cell.Food;
-		this->draw_cell(position, std::data::ASCII.FullBlock, dr::DefaultPaletteText16.Lime);
+		this->draw_cell(position, std::data::ASCII.FullBlock, std::video::Colors.Lime);
 	}
 	priv sub game_tick() -> i32 {
 		this->m_score += this->m_level * this->snake_len();
@@ -177,7 +153,7 @@ struct SnakeGame {
 		if (this->m_growth == 0) {
 			var tail_position: i32 = this->m_body[this->m_tail_index];
 			this->m_board[tail_position] = Cell.Empty;
-			this->draw_cell(tail_position, ' ', dr::DefaultPaletteText16.Green);
+			this->draw_cell(tail_position, ' ', std::video::Colors.Green);
 			this->m_tail_index = this->next_slot(this->m_tail_index);
 		}
 		else
@@ -190,9 +166,9 @@ struct SnakeGame {
 		this->m_head_index = this->next_slot(this->m_head_index);
 		this->m_body[this->m_head_index] = new_head_position;
 		this->m_board[new_head_position] = Cell.Snake;
-		this->draw_cell(new_head_position, std::data::ASCII.FullBlock, dr::DefaultPaletteText16.Yellow);
+		this->draw_cell(new_head_position, std::data::ASCII.FullBlock, std::video::Colors.Yellow);
 		if (this->snake_len() > 1)
-			this->draw_cell(this->m_body[this->prev_slot(this->m_head_index)], std::data::ASCII.FullBlock, dr::DefaultPaletteText16.Green);
+			this->draw_cell(this->m_body[this->prev_slot(this->m_head_index)], std::data::ASCII.FullBlock, std::video::Colors.Green);
 		if (ate_food)
 		{
 			this->m_growth += 1;
@@ -205,7 +181,9 @@ struct SnakeGame {
 		var chosen_y: i32 = this->m_direction_y;
 
 		var key: u32 = 0;
-		while (keyRingBuff.pop(&key)) {
+		var evt: std::KeyEvent;
+		while (std::read_key(evt, false, std::KeyKinds.Pressed) == 0) {
+        	var key: u32 = evt.code;
 			var key_x: i32 = 0;
 			var key_y: i32 = 0;
 			if (key == std::data::KeyCodes.UpArrow)
