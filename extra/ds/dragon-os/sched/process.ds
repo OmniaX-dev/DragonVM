@@ -1,6 +1,7 @@
 #import("dragon-sdk")
 
 #include(../memory/memory.ds)
+#include(../fs/file.ds)
 
 namespace proc {
 	const AS_MAX_REGIONS: u32 = 256;               // heap regions merge when adjacent: this is for scattered ones
@@ -83,6 +84,7 @@ namespace proc {
 		var wait_out: u32;
 		var key_kinds: u32;                     // blocked in ReadKey: the events it wants (input::WANT_*)
 		var random: ProcessRandom;              // Random / RandomF32 / SeedRandom: its own generator
+		var files: vfs::OpenFile[vfs::MAX_FILES];	// its fd table (vfs: Open, Read, ...)
 	};
 
 	var g_processes: Process[MAX_PROCESSES];

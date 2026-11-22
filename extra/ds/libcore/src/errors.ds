@@ -52,6 +52,8 @@ namespace std {
 		var NotWritable: i32 = -38;			// writing a File opened without OpenMode.Write
 		var PathTooLong: i32 = -39;			// longer than dr::fs::MaxPath - 1
 		var BadMode: i32 = -40;				// an OpenMode combination that makes no sense
+		var Busy: i32 = -41;				// a device another process controls (/dev/video opened for writing)
+		var NotSupported: i32 = -42;		// not something this file does (Ioctl on a disk file, Seek on a device, a mode it isn't in)
 	};
 
 	// Group 2: general errors (any layer; the system calls' argument checks).
@@ -70,7 +72,7 @@ namespace std {
 	const ProcessErrors: struct {
 		var NoChild: i32 = -97;				// Wait: no such child (or no children at all)
 		var NoProcess: i32 = -98;			// no process with that pid
-		var NotPermitted: i32 = -99;		// the caller may not do that to that process (Kill: not its own descendant)
+		var NotPermitted: i32 = -99;		// the caller may not do that (Kill: not its own descendant; a device it doesn't control)
 	};
 
 	// Group 4: loading a program (a DRX file: dr::drx, the BIOS, Drake, the kernel's Spawn), and
@@ -130,7 +132,7 @@ namespace std {
 		};
 		const FileErrorNames: string[] = {
 			"not mounted", "already mounted", "no such partition", "not open", "not open for reading",
-			"not open for writing", "path too long", "invalid open mode"
+			"not open for writing", "path too long", "invalid open mode", "device busy", "not supported"
 		};
 		const SystemErrorNames: string[] = {
 			"out of memory", "invalid argument", "bad address", "bad handle", "too many",

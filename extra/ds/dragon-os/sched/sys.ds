@@ -29,8 +29,14 @@ namespace proc {
         return 0;
 	}
 
-	// Spawn(path: string, argc, argv: string*): the new process's pid. The caller keeps running.
-	sub sys_spawn(var path: u32, var argc: u32, var argv: u32) -> i32 {
+	// Spawn(path: string, argc, argv: string*, flags): the new process's pid. The caller keeps
+	// running. flags: std::SpawnFlags (Foreground: the child is the foreground process before it runs).
+	sub sys_spawn(var path: u32, var argc: u32, var argv: u32, var flags: u32) -> i32 {
+        if ((flags & ~std::SpawnFlags.Foreground) != 0)
+            return std::SystemErrors.InvalidArgument;
+        var foreground: bool = (flags & std::SpawnFlags.Foreground) != 0;
+        if (foreground and not video::may_give_foreground(g_current))
+            return std::ProcessErrors.NotPermitted;			// (checked first: nothing is started)
         var as: AddressSpace* = &g_current->as;
         var r: i32 = __internal::copy_user_string(as, path, g_spawn_path, MAX_PATH);
         if (r == std::SystemErrors.TooLong) return std::FileErrors.PathTooLong;
@@ -52,6 +58,8 @@ namespace proc {
         var child: Process* = process_start(g_spawn_path, argc, g_spawn_argv, g_current->pid, &err);
         if (not child)
             return err;
+        if (foreground)
+            video::give_foreground(child);
         return cast<i32>(child->pid);
 	}
 

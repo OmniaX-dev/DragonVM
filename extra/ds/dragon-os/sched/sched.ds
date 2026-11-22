@@ -106,7 +106,8 @@ namespace proc {
             g_sleepers--;
         if (p->state == ProcessState.Blocked and p->block == BlockReason.Key)
             input::g_reader = null;
-        // TODO: (later: close its files)
+        vfs::close_all(p);                  // (a controlling /dev/video fd gives the card back)
+        video::process_ended(p);            // (the foreground process: its parent's again)
         as_destroy(&p->as);                 // its pages and map (supervisor mode doesn't use the map)
         p->exit_code = code;
         p->state = ProcessState.Zombie;

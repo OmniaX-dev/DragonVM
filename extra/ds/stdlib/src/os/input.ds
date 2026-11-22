@@ -52,7 +52,8 @@ namespace std {
 	};
 
 	// The next key event of these kinds (KeyKinds; 0: Pressed and Text) into out. wait: blocks
-	// until one comes; otherwise SystemErrors.WouldBlock when there is none. 0, or an error.
+	// until one comes; otherwise SystemErrors.WouldBlock when there is none. 0, or an error
+	// (NotPermitted: the process isn't the foreground one, see std::video::set_foreground).
 	sub read_key(var out: ref KeyEvent, var wait: bool = true, var kinds: u32 = 0) -> i32 {
 		var r: i32 = syscall4(SystemCalls.ReadKey, wait ? 1 : 0, kinds);
 		if (r < 0)

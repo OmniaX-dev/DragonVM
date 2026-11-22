@@ -1,0 +1,17 @@
+// A process's open files: its fd table (Process.files), an fd is the index. A plain struct (Process
+// slots are cleared with memset: a cleared OpenFile is a free one).
+#import("dragon-sdk")
+
+namespace vfs {
+	const MAX_FILES: u32 = 16;
+
+	enum FileKind: u8 { None, Disk, Device }
+	enum Devices: u8 { None, Video }			// /dev/<name>
+
+	struct OpenFile {
+		var kind: FileKind;
+		var device: Devices;					// Device: which one
+		var mode: u32;							// std::fs::OpenMode
+		var file: dr::fs::File;					// Disk: the file on the root file system, and the position
+	};
+}

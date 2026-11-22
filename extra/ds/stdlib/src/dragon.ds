@@ -1,3 +1,6 @@
 #include(os/syscall.ds)
 #include(os/process.ds)
 #include(os/input.ds)
+#include(os/file.ds)
+#include(os/video.ds)
+#include(os/console.ds)

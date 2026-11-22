@@ -1,11 +1,13 @@
 // input.ds - the keyboard for processes. ReadKey takes events from the keyboard device's buffer
 // (polled, no keyboard interrupts): the device keeps the last 48 presses, releases and text
-// characters. One process reads at a time (later: the foreground one).
+// characters. Only the foreground process reads (std::video's SetForeground; anyone while no
+// process controls /dev/video), one at a time.
 //
 // An event (the device's word, positive as an i32): bits 0-15 the key code (a text event: the
 // character), 16-26 the modifiers, 27-28 the kind (dr::KeyboardEventKinds: 1 pressed,
 // 2 released, 3 text).
 #include(../sched/sched.ds)
+#include(video_dev.ds)
 
 namespace input {
 	// ReadKey's flags
@@ -42,6 +44,8 @@ namespace input {
 			kinds = WANT_DEFAULT;
 		if ((kinds & ~WANT_ALL) != 0 or (flags & ~READ_WAIT) != 0)
 			return std::SystemErrors.InvalidArgument;
+		if (not video::may_read_keys(proc::g_current))
+			return std::ProcessErrors.NotPermitted;		// (the keys are the foreground process's: dev/video_dev.ds)
 		var e: u32 = next_event(kinds);
 		if (e != 0)
 			return cast<i32>(e);

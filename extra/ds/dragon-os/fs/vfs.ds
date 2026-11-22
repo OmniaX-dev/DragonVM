@@ -1,0 +1,207 @@
+// The file system calls: Open, Close, Read, Write, Seek, Truncate, FStat, Stat, Ioctl.
+//
+// A path is a device (/dev/<name>: the kernel's drivers, not on the disk) or a file on the root
+// file system (g_root_fs, through dr::fs: its errors are passed on as they are). Each fd is the
+// process's own, closed when it ends (process_exit: close_all).
+//
+// Disk files are read and written straight from / into the process's memory, once the whole
+// range has passed its check (user_writable / user_readable): the kernel isn't preempted, so the
+// memory can't change hands meanwhile.
+#include(file.ds)
+#include(../sched/sched.ds)
+#include(../dev/filesystem.ds)
+#include(../dev/video_dev.ds)
+
+namespace vfs {
+	var g_path: u8[dr::fs::MaxPath];			// the path of the call being handled (one at a time)
+
+	// The process's open file fd (null: not open).
+	sub get_file(var p: proc::Process*, var fd: u32) -> OpenFile* {
+		if (fd >= MAX_FILES or p->files[fd].kind == FileKind.None)
+			return null;
+		return &p->files[fd];
+	}
+
+	// The path from the process, into g_path: its length, or an error.
+	sub copy_path(var path: u32) -> i32 {
+		var r: i32 = proc::__internal::copy_user_string(&proc::g_current->as, path, &g_path[0], dr::fs::MaxPath);
+		if (r == std::SystemErrors.TooLong)
+			return std::FileErrors.PathTooLong;
+		return r;
+	}
+
+	// /dev/<name>: its device (Devices.None: not a device).
+	sub device_of(var path: string) -> Devices {
+		if (std::strcmp(path, "/dev/video") == 0)
+			return Devices.Video;
+		return Devices.None;
+	}
+
+	sub info_from(var src: dr::fs::Info*, var out: std::fs::FileInfo*) {
+		std::memset(out, 0, sizeof(std::fs::FileInfo));
+		out->inode = src->inode;
+		out->type = cast<u8>(src->type);			// (the same values: None, File, Directory, Other = Device)
+		out->size = src->size;
+		out->links = src->links;
+		out->permissions = src->permissions;
+		out->uid = src->uid;
+		out->gid = src->gid;
+		out->created = src->created;
+		out->modified = src->modified;
+		out->changed = src->changed;
+	}
+
+	sub close_file(var p: proc::Process*, var f: OpenFile*) {
+		if (f->kind == FileKind.Disk)
+			f->file.close();
+		else if (f->kind == FileKind.Device and f->device == Devices.Video)
+			video::close(p, f->mode);
+		f->kind = FileKind.None;
+		f->device = Devices.None;
+		f->mode = 0;
+	}
+
+	// Every file of p closed (process_exit).
+	sub close_all(var p: proc::Process*) {
+		for (var fd: u32 = 0; fd < MAX_FILES; fd++) {
+			if (p->files[fd].kind != FileKind.None)
+				close_file(p, &p->files[fd]);
+		}
+	}
+
+	// Open(path, mode) -> fd.
+	sub sys_open(var path: u32, var mode: u32) -> i32 {
+		var r: i32 = copy_path(path);
+		if (r < 0)
+			return r;
+		var p: proc::Process* = proc::g_current;
+		var fd: u32 = 0;
+		while (fd < MAX_FILES and p->files[fd].kind != FileKind.None)
+			fd++;
+		if (fd == MAX_FILES)
+			return std::SystemErrors.TooMany;
+		var f: OpenFile* = &p->files[fd];
+		var device: Devices = device_of(&g_path[0]);
+		if (device != Devices.None) {
+			r = video::open(p, mode);				// (the only device so far)
+			if (r < 0)
+				return r;
+			f->kind = FileKind.Device;
+			f->device = device;
+		}
+		else {
+			if (not g_root_fs.open(&g_path[0], mode, &f->file))
+				return g_root_fs.last_error();
+			f->kind = FileKind.Disk;
+		}
+		f->mode = mode;
+		return cast<i32>(fd);
+	}
+
+	// Close(fd) -> 0.
+	sub sys_close(var fd: u32) -> i32 {
+		var f: OpenFile* = get_file(proc::g_current, fd);
+		if (f == null)
+			return std::SystemErrors.BadHandle;
+		close_file(proc::g_current, f);
+		return std::Ok;
+	}
+
+	// Read(fd, buffer, size) -> the bytes read (0: the end).
+	sub sys_read(var fd: u32, var buffer: u32, var size: u32) -> i32 {
+		var f: OpenFile* = get_file(proc::g_current, fd);
+		if (f == null)
+			return std::SystemErrors.BadHandle;
+		if (size > 0x7FFFFFFF or not proc::user_writable(&proc::g_current->as, buffer, size))
+			return std::SystemErrors.BadAddress;
+		if (f->kind == FileKind.Device)
+			return std::FileErrors.NotSupported;	// (/dev/video has nothing to read)
+		var n: i32 = f->file.read(cast<void*>(buffer), size);
+		return n < 0 ? f->file.last_error() : n;
+	}
+
+	// Write(fd, data, size) -> the bytes written.
+	sub sys_write(var fd: u32, var data: u32, var size: u32) -> i32 {
+		var f: OpenFile* = get_file(proc::g_current, fd);
+		if (f == null)
+			return std::SystemErrors.BadHandle;
+		if (size > 0x7FFFFFFF or not proc::user_readable(&proc::g_current->as, data, size))
+			return std::SystemErrors.BadAddress;
+		if (f->kind == FileKind.Device)
+			return video::write(proc::g_current, f->mode, data, size);
+		var n: i32 = f->file.write(cast<const void*>(data), size);
+		return n < 0 ? f->file.last_error() : n;
+	}
+
+	// Seek(fd, offset, from) -> the new position.
+	sub sys_seek(var fd: u32, var offset: i32, var from: u32) -> i32 {
+		var f: OpenFile* = get_file(proc::g_current, fd);
+		if (f == null)
+			return std::SystemErrors.BadHandle;
+		if (f->kind == FileKind.Device)
+			return std::FileErrors.NotSupported;
+		if (from > std::fs::SeekFrom.End)
+			return std::SystemErrors.InvalidArgument;
+		if (not f->file.seek(offset, cast<dr::fs::SeekFrom>(from)))
+			return f->file.last_error();
+		return cast<i32>(f->file.tell());
+	}
+
+	// Truncate(fd, size) -> 0.
+	sub sys_truncate(var fd: u32, var size: u32) -> i32 {
+		var f: OpenFile* = get_file(proc::g_current, fd);
+		if (f == null)
+			return std::SystemErrors.BadHandle;
+		if (f->kind == FileKind.Device)
+			return std::FileErrors.NotSupported;
+		if (not f->file.resize(size))
+			return f->file.last_error();
+		return std::Ok;
+	}
+
+	// FStat(fd, out: FileInfo*) -> 0.
+	sub sys_fstat(var fd: u32, var out: u32) -> i32 {
+		var f: OpenFile* = get_file(proc::g_current, fd);
+		if (f == null)
+			return std::SystemErrors.BadHandle;
+		if (not proc::user_writable(&proc::g_current->as, out, sizeof(std::fs::FileInfo)))
+			return std::SystemErrors.BadAddress;
+		if (f->kind == FileKind.Device) {
+			video::info(cast<std::fs::FileInfo*>(out));
+			return std::Ok;
+		}
+		var info: dr::fs::Info;
+		if (not f->file.info(&info))
+			return f->file.last_error();
+		info_from(&info, cast<std::fs::FileInfo*>(out));
+		return std::Ok;
+	}
+
+	// Stat(path, out: FileInfo*) -> 0.
+	sub sys_stat(var path: u32, var out: u32) -> i32 {
+		var r: i32 = copy_path(path);
+		if (r < 0)
+			return r;
+		if (not proc::user_writable(&proc::g_current->as, out, sizeof(std::fs::FileInfo)))
+			return std::SystemErrors.BadAddress;
+		if (device_of(&g_path[0]) != Devices.None) {
+			video::info(cast<std::fs::FileInfo*>(out));
+			return std::Ok;
+		}
+		var info: dr::fs::Info;
+		if (not g_root_fs.info(&g_path[0], &info))
+			return g_root_fs.last_error();
+		info_from(&info, cast<std::fs::FileInfo*>(out));
+		return std::Ok;
+	}
+
+	// Ioctl(fd, command, arg) -> the command's result (a device's; NotSupported for a disk file).
+	sub sys_ioctl(var fd: u32, var command: u32, var arg: u32) -> i32 {
+		var f: OpenFile* = get_file(proc::g_current, fd);
+		if (f == null)
+			return std::SystemErrors.BadHandle;
+		if (f->kind != FileKind.Device)
+			return std::FileErrors.NotSupported;
+		return video::ioctl(proc::g_current, f->mode, command, arg);
+	}
+}

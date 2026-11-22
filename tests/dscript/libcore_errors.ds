@@ -33,7 +33,7 @@ sub main() -> i32 {
 	check(20, same(std::error_name(std::FileErrors.NotMounted), "not mounted"));
 	check(21, same(std::error_name(std::FileErrors.BadMode), "invalid open mode"));
 	check(22, same(std::error_group_name(std::FileErrors.NotOpen), "files"));
-	check(23, all_named(std::FileErrors.NotMounted, std::FileErrors.BadMode));
+	check(23, all_named(std::FileErrors.NotMounted, std::FileErrors.NotSupported));
 
 	// System (group 2).
 	check(30, same(std::error_name(std::SystemErrors.NoMemory), "out of memory"));

@@ -1,0 +1,391 @@
+// console.ds - std::video::Console: the SDK's dr::Text16Console, for DragonOS programs, on top of
+// /dev/video (the commands: std::video in libcore's system.ds; the wrappers: os/video.ds).
+//
+//     var video: i32 = std::fs::open("/dev/video", std::fs::OpenMode.Write);   // control of the card
+//     std::video::set_mode(video, std::video::Modes.Text16);
+//     var con: std::video::Console(video);
+//     con.set_vertical_overflow_policy(std::video::Console::VOverflowPolicy.Scroll);
+//     con.fg(std::video::Colors.Green).println("Hello").print("x = ").print(42).nl();
+//     con.present();                       // the screen shows the buffer now
+//
+// How it differs from the SDK's (and why):
+//   - The SDK's console has the card do the printing: ConsolePrintString makes the card write
+//     the text into the console's buffer and update its fields, in memory. That is exactly the
+//     kind of signal a process can't be given (the card would write wherever the address points),
+//     so /dev/video doesn't offer it. Here the printing is done in DScript, into a buffer in the
+//     program's own memory (std::malloc); the card only ever *reads* it, through the
+//     PresentFrame command, after the kernel has checked the whole range is the program's.
+//   - Nothing reaches the screen until present() (as with the SDK's: print fills the buffer,
+//     present() shows it). Printing costs no system calls; present() costs one.
+//   - The screen's size comes from the GetInfo command (the CMOS isn't readable from a
+//     process), and the mode is checked by the driver when presenting (WrongVideoMode).
+//   - clear(col, present) clears the buffer (and shows it); the card isn't asked to clear.
+//   - One more error: DeviceError, when a command fails for another reason: device_result()
+//     says why (e.g. NotPermitted: the fd isn't the controlling one).
+//
+// The buffer is the card's own cell format: 4 bytes a cell (character, foreground, background, 0),
+// row after row. Its rows are a ring: m_y_offset is the row shown at the top of the screen, so
+// scrolling moves m_y_offset and clears one row instead of copying all the others; PresentFrame's
+// y_offset is that same ring (the card copies from row y_offset to the end, then from the start).
+#include(video.ds)
+#include(../memory.ds)
+
+namespace std::video {
+	struct Console {
+		enum Errors: u8 {
+			NoError						= 0x00,
+			ScreenBufferAllocFail		= 0x01,
+			Uninitialized				= 0x02,
+			WrongVideoMode				= 0x03,
+			VerticalOverflow			= 0x04,
+			HorizontalOverflow			= 0x05,
+			InvalidOverflowPolicy		= 0x06,
+			InvalidState				= 0x07,
+			DeviceError					= 0x08		// a /dev/video command failed: device_result()
+		};
+		enum VOverflowPolicy: u8 {
+			Ignore						= 0x00,		// past the last row: the text is dropped
+			Scroll						= 0x01,		// everything moves up a row
+			Error						= 0x02		// VerticalOverflow
+		};
+		enum HOverflowPolicy: u8 {
+			Ignore						= 0x00,		// past the right edge: dropped until the next '\n'
+			Wrap						= 0x01,		// goes on in the next row
+			Error						= 0x02		// HorizontalOverflow
+		};
+
+		priv var m_fd: i32 = -1;					// the /dev/video fd (the controlling one, to present)
+		priv var m_cursor_x: u16 = 0;
+		priv var m_cursor_y: u16 = 0;
+		priv var m_stored_cursor_x: u16 = 0;
+		priv var m_stored_cursor_y: u16 = 0;
+		priv var m_bg_col: u8 = Colors.Black;		// as the SDK's
+		priv var m_fg_col: u8 = Colors.Green;
+		priv var m_stored_bg_col: u8 = Colors.Black;
+		priv var m_stored_fg_col: u8 = Colors.Green;
+		priv var m_screen_x: u32 = 0;
+		priv var m_screen_y: u32 = 0;
+		priv var m_buffer_size: u32 = 0;
+		priv var m_buffer: u8* = null;
+		priv var m_y_offset: u32 = 0;				// the ring's top row
+		priv var m_scroll_offset: u32 = 0;			// rows scrolled so far
+		priv var m_initialized: bool = false;
+		priv var m_error: u8 = 0;
+		priv var m_overflow_h: u8 = 0;
+		priv var m_overflow_v: u8 = 0;
+		priv var m_device_result: i32 = 0;			// the last failed command's error code
+
+		// A console for the card behind fd (opened from /dev/video; a read only fd can build one,
+		// but only the controlling fd can present it).
+		sub new(var fd: i32) {
+			this->init(fd);
+		}
+		// (A copy has its own buffer, with the same text.)
+		sub new(var o: const ref Console) {
+			this->init(o.m_fd);
+			if (this->m_initialized and o.m_initialized)
+				std::memcpy(this->m_buffer, o.m_buffer, this->m_buffer_size);
+			this->m_cursor_x = o.m_cursor_x;
+			this->m_cursor_y = o.m_cursor_y;
+			this->m_fg_col = o.m_fg_col;
+			this->m_bg_col = o.m_bg_col;
+			this->m_y_offset = o.m_y_offset;
+			this->m_overflow_h = o.m_overflow_h;
+			this->m_overflow_v = o.m_overflow_v;
+		}
+		sub del() { this->destroy(); }
+
+		sub destroy() {
+			if (this->m_buffer)
+				std::free(this->m_buffer);
+			this->m_buffer = null;
+			this->m_initialized = false;
+			this->set_error(Errors.NoError);
+		}
+		inline sub is_valid() -> bool {
+			if (not this->m_initialized)
+				return this->set_error(Errors.Uninitialized, false);
+			return true;
+		}
+
+		// The buffer onto the screen: one PresentFrame command. The driver checks that fd
+		// controls the card (NotPermitted), that it is in Text16 (NotSupported: WrongVideoMode),
+		// and that the whole buffer is this process's memory, before the card copies it.
+		sub present() -> ref Console {
+			if (not this->is_valid())
+				return *this;
+			var frame: Frame = { cast<u32>(this->m_buffer), this->m_buffer_size, this->m_y_offset };
+			this->device(present_frame(this->m_fd, frame));
+			return *this;
+		}
+
+		// ---- Printing: into the buffer, at the cursor, with the colors ----
+		sub print(var text: const ref std::String) -> ref Console { return this->print_text(text.c_str()); }
+		sub print(var c: u8) -> ref Console {
+			var buff: u8[2] = " \0";
+			buff[0] = c;
+			return this->print_text(buff);
+		}
+		sub print(var n: u32) -> ref Console {
+			var buff: u8[12];
+			return this->print_text(std::utoa(n, buff));
+		}
+		sub print(var n: i32) -> ref Console {
+			var buff: u8[12];
+			return this->print_text(std::itoa(n, buff));
+		}
+		sub print(var n: const ref std::U64) -> ref Console {
+			var buff: u8[24];
+			return this->print_text(n.str(buff));
+		}
+		sub print(var n: const ref std::I64) -> ref Console {
+			var buff: u8[24];
+			return this->print_text(n.str(buff));
+		}
+		sub print(var f: f32, var decimals: u32 = 6) -> ref Console {
+			var buff: u8[24];
+			std::ftoa(f, buff, decimals);
+			return this->print_text(buff);
+		}
+		sub println(var text: const ref std::String) -> ref Console {
+			return this->print(text).nl();
+		}
+
+		// The cursor at the start of the next row (the last row: scroll, by the vertical policy).
+		sub nl() -> ref Console {
+			if (not this->is_valid() or this->has_error())
+				return *this;
+			if (not this->check_new_line()) {
+				if (this->m_overflow_v != VOverflowPolicy.Ignore)
+					this->set_error(Errors.VerticalOverflow);
+				return *this;
+			}
+			if (this->m_cursor_y < this->m_screen_y - 1)
+				this->m_cursor_y++;
+			else if (this->m_cursor_y == this->m_screen_y - 1)
+				this->scroll(false);
+			else {
+				this->set_error(Errors.InvalidState);
+				return *this;
+			}
+			this->m_cursor_x = 0;
+			return *this;
+		}
+
+		// Everything up a row: the ring's top moves down one, and the row that comes in at the
+		// bottom (the old top) is cleared with the colors. No row is copied.
+		sub scroll(var present: bool = true) -> ref Console {
+			if (not this->is_valid() or this->has_error())
+				return *this;
+			this->m_y_offset = (this->m_y_offset + 1) % this->m_screen_y;
+			this->fill_row(this->row_at(cast<u16>(this->m_screen_y - 1)), this->m_fg_col, this->m_bg_col);
+			this->m_scroll_offset++;
+			if (present)
+				this->present();
+			return *this;
+		}
+
+		// The whole buffer blank with col (the cursor stays), and shown when present.
+		sub clear(var col: u8, var present: bool = true) -> ref Console {
+			if (not this->is_valid() or this->has_error())
+				return *this;
+			for (var y: u32 = 0; y < this->m_screen_y; y++)
+				this->fill_row(this->m_buffer + y * this->m_screen_x * 4, col, col);
+			if (present)
+				this->present();
+			return *this;
+		}
+
+		// ---- The cursor and the colors (as the SDK's) ----
+		sub xy(var x: u16, var y: u16) -> ref Console { return this->x(x).y(y); }
+		sub x(var x: u16) -> ref Console {
+			var stop: bool = false;
+			var new_x: u16 = this->check_horizontal_overflow(x, &stop);
+			if (not stop and not this->has_error())
+				this->m_cursor_x = new_x;
+			return *this;
+		}
+		sub y(var y: u16) -> ref Console {
+			var stop: bool = false;
+			var new_y: u16 = this->check_vertical_overflow(y, &stop);
+			if (not stop and not this->has_error())
+				this->m_cursor_y = new_y;
+			return *this;
+		}
+		sub fg(var col: u8) -> ref Console {
+			if (col < 16)
+				this->m_fg_col = col;
+			return *this;
+		}
+		sub bg(var col: u8) -> ref Console {
+			if (col < 16)
+				this->m_bg_col = col;
+			return *this;
+		}
+		sub store_fg() -> ref Console { this->m_stored_fg_col = this->m_fg_col; return *this; }
+		sub store_bg() -> ref Console { this->m_stored_bg_col = this->m_bg_col; return *this; }
+		sub store_colors() -> ref Console { return this->store_fg().store_bg(); }
+		sub store_x() -> ref Console { this->m_stored_cursor_x = this->m_cursor_x; return *this; }
+		sub store_y() -> ref Console { this->m_stored_cursor_y = this->m_cursor_y; return *this; }
+		sub store_xy() -> ref Console { return this->store_x().store_y(); }
+		sub restore_fg() -> ref Console { this->m_fg_col = this->m_stored_fg_col; return *this; }
+		sub restore_bg() -> ref Console { this->m_bg_col = this->m_stored_bg_col; return *this; }
+		sub restore_colors() -> ref Console { return this->restore_fg().restore_bg(); }
+		sub restore_x() -> ref Console { this->m_cursor_x = this->m_stored_cursor_x; return *this; }
+		sub restore_y() -> ref Console { this->m_cursor_y = this->m_stored_cursor_y; return *this; }
+		sub restore_xy() -> ref Console { return this->restore_x().restore_y(); }
+
+		inline sub set_vertical_overflow_policy(var policy: u8) -> ref Console { this->m_overflow_v = policy; return *this; }
+		inline sub set_horizontal_overflow_policy(var policy: u8) -> ref Console { this->m_overflow_h = policy; return *this; }
+
+		inline sub get_console_width() -> u16 { return cast<u16>(this->m_screen_x); }
+		inline sub get_console_height() -> u16 { return cast<u16>(this->m_screen_y); }
+		inline sub get_cursor_x() -> u16 { return this->m_cursor_x; }
+		inline sub get_cursor_y() -> u16 { return this->m_cursor_y; }
+		inline sub get_scroll_offset() -> u32 { return this->m_scroll_offset; }
+		inline sub get_vertical_overflow_policy() -> u8 { return this->m_overflow_v; }
+		inline sub get_horizontal_overflow_policy() -> u8 { return this->m_overflow_h; }
+		inline sub get_fd() -> i32 { return this->m_fd; }
+		inline sub get_error() -> u8 { return this->m_error; }
+		inline sub has_error() -> bool { return this->m_error != Errors.NoError; }
+		inline sub clear_error() { this->set_error(Errors.NoError); }
+		// DeviceError's reason: the command's error code (std::error_name describes it).
+		inline sub device_result() -> i32 { return this->m_device_result; }
+
+		// ---- Inside ----
+		// The text into the buffer (the overloads' common part; the card's own rules, as
+		// text16console::print in the emulator: '\n', the horizontal and vertical policies).
+		priv sub print_text(var text: string) -> ref Console {
+			if (not this->is_valid() or this->has_error() or text == null)
+				return *this;
+			var x: u32 = this->m_cursor_x;
+			var row: u8* = this->row_at(this->m_cursor_y);
+			var skip: bool = false;					// HOverflowPolicy.Ignore: past the edge until '\n'
+			for (var i: u32 = 0; text[i] != 0; i++) {
+				var c: u8 = text[i];
+				if (c == '\n' or (x >= this->m_screen_x and not skip)) {
+					if (c != '\n' and this->m_overflow_h != HOverflowPolicy.Wrap) {
+						if (this->m_overflow_h == HOverflowPolicy.Error) {
+							this->set_error(Errors.HorizontalOverflow);
+							break;
+						}
+						skip = true;
+					}
+					else {
+						this->m_cursor_x = cast<u16>(x);
+						var y0: u16 = this->m_cursor_y;
+						var s0: u32 = this->m_scroll_offset;
+						this->nl();
+						// An error, or no new row (vertical Ignore on the last row): the rest is dropped.
+						if (this->has_error() or (this->m_cursor_y == y0 and this->m_scroll_offset == s0))
+							break;
+						x = 0;
+						skip = false;
+						row = this->row_at(this->m_cursor_y);
+						if (c == '\n')
+							continue;
+					}
+				}
+				if (not skip) {
+					var cell: u8* = row + x * 4;
+					cell[0] = c;
+					cell[1] = this->m_fg_col;
+					cell[2] = this->m_bg_col;
+					cell[3] = 0;
+					x++;
+				}
+			}
+			this->m_cursor_x = cast<u16>(x);
+			return *this;
+		}
+
+		// The screen's size from the driver (GetInfo works on any /dev/video fd), and a blank buffer.
+		priv sub init(var fd: i32) {
+			this->m_fd = fd;
+			this->m_initialized = false;
+			this->m_buffer = null;
+			this->m_overflow_v = VOverflowPolicy.Ignore;
+			this->m_overflow_h = HOverflowPolicy.Ignore;
+			var info: Info;
+			if (not this->device(get_info(fd, info)))
+				return;
+			this->m_screen_x = info.columns;
+			this->m_screen_y = info.rows;
+			this->m_buffer_size = this->m_screen_x * this->m_screen_y * 4;
+			this->m_buffer = cast<u8*>(std::malloc(this->m_buffer_size));
+			if (not this->m_buffer) {
+				this->set_error(Errors.ScreenBufferAllocFail);
+				return;
+			}
+			this->m_initialized = true;
+			this->set_error(Errors.NoError);
+			this->clear(this->m_bg_col, false);
+		}
+		// A command's result: false (and the error) when it failed.
+		priv sub device(var r: i32) -> bool {
+			if (r >= 0)
+				return true;
+			this->m_device_result = r;
+			this->set_error(r == std::FileErrors.NotSupported ? Errors.WrongVideoMode : Errors.DeviceError);
+			return false;
+		}
+		// Screen row y's cells in the buffer (the ring: y rows below the top one).
+		priv inline sub row_at(var y: u16) -> u8* {
+			return this->m_buffer + ((y + this->m_y_offset) % this->m_screen_y) * this->m_screen_x * 4;
+		}
+		priv sub fill_row(var row: u8*, var fg: u8, var bg: u8) {
+			for (var x: u32 = 0; x < this->m_screen_x; x++) {
+				row[x * 4 + 0] = ' ';
+				row[x * 4 + 1] = fg;
+				row[x * 4 + 2] = bg;
+				row[x * 4 + 3] = 0;
+			}
+		}
+		priv sub check_new_line() -> bool {
+			return this->m_overflow_v == VOverflowPolicy.Scroll or this->m_cursor_y < this->m_screen_y - 1;
+		}
+		priv sub check_horizontal_overflow(var x: u16, var out_stop: bool*) -> u16 {
+			if (x < this->m_screen_x)
+				return x;
+			if (this->m_overflow_h == HOverflowPolicy.Error)
+				this->set_error(Errors.HorizontalOverflow);
+			else if (this->m_overflow_h == HOverflowPolicy.Ignore)
+				*out_stop = true;
+			else if (this->m_overflow_h == HOverflowPolicy.Wrap) {
+				if (this->check_new_line()) {
+					this->nl();
+					return 0;
+				}
+				this->set_error(Errors.VerticalOverflow);
+			}
+			else
+				this->set_error(Errors.InvalidOverflowPolicy);
+			return x;
+		}
+		priv sub check_vertical_overflow(var y: u16, var out_stop: bool*) -> u16 {
+			if (y < this->m_screen_y)
+				return y;
+			if (this->m_overflow_v == VOverflowPolicy.Error)
+				this->set_error(Errors.VerticalOverflow);
+			else if (this->m_overflow_v == VOverflowPolicy.Ignore)
+				*out_stop = true;
+			else if (this->m_overflow_v == VOverflowPolicy.Scroll) {
+				if (y - this->m_screen_y > this->m_screen_y) {		// (more than a screen: just clear)
+					this->clear(this->m_bg_col, false);
+					return cast<u16>(y % this->m_screen_y);
+				}
+				while (y >= this->m_screen_y) {
+					this->scroll(false);
+					y--;
+				}
+			}
+			else
+				this->set_error(Errors.InvalidOverflowPolicy);
+			return y;
+		}
+		priv inline sub set_error(var err: u8, var passthrough: bool = true) -> bool {
+			this->m_error = err;
+			return passthrough;
+		}
+	};
+}

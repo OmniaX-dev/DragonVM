@@ -1,7 +1,25 @@
 #import("dragon-sdk")
 #import("libcore")
 
+// The kernel's console: Print (any process), kernel_log, and the bytes written to /dev/video's
+// controlling fd go here, in the mode the card is in.
+//   - TextSingle: the card keeps the lines and scrolls by itself.
+//   - Text16: the kernel keeps a cursor and the colors, writes runs of characters with the card's
+//     PrintString, and scrolls with its Scroll signal. Double buffering stays off, so what is
+//     written is on the screen (the driver's PresentFrame copies straight to it too).
+// The card handles a signal on the next CPU cycle: still inside the system call, before the
+// process runs again, so the text, cells and frames it reads can't change under it.
 namespace vga {
+	var g_x: u32 = 0;							// Text16: where the next character goes
+	var g_y: u32 = 0;
+	var g_fg: u8 = std::video::Colors.White;
+	var g_bg: u8 = std::video::Colors.Black;
+	var g_cell: dr::VGAText16Cell;				// PrintString's position and colors (the card reads it)
+	var g_run: u8[128];							// PrintString's text
+
+	inline sub columns() -> u32 { return *cast<u32*>(dr::CMOSRegisters.ScreenColumns); }
+	inline sub rows() -> u32 { return *cast<u32*>(dr::CMOSRegisters.ScreenRows); }
+
 	sub init_video() {
 		dr::vga_enable_double_buffering(false);
 		dr::vga_set_video_mode(dr::VGAVideoModes.TextSingleColor);
@@ -9,8 +27,102 @@ namespace vga {
 		device->signal = dr::VGATextSingleColorSignals.ClearScreen;
 	}
 
+	// The screen cleared (Text16: with the colors), the cursor at 0, 0.
+	sub clear() {
+		var device = dr::vga_get_device();
+		if (dr::vga_is_text16()) {
+			device->text16MemoryController.character = ' ';
+			device->text16MemoryController.foreground = g_fg;
+			device->text16MemoryController.background = g_bg;
+			device->text16ColorClearSoftwareBufferAddr = 0;		// (no program buffer to clear)
+			device->signal = dr::VGAText16ColorSignals.ForceClearScreen;
+		}
+		else
+			device->signal = dr::VGATextSingleColorSignals.ClearScreen;
+		g_x = 0;
+		g_y = 0;
+	}
+
+	// The card in mode (dr::VGAVideoModes, valid), the screen cleared.
+	sub set_mode(var mode: u8) {
+		dr::vga_set_video_mode(mode);
+		dr::vga_enable_double_buffering(false);					// (Text16 only: nothing in TextSingle)
+		clear();
+	}
+
+	// Text16: the run of n characters in g_run at the cursor (all on its row), the cursor after it.
+	sub __flush_run(var n: u32) {
+		if (n == 0)
+			return;
+		g_run[n] = 0;
+		g_cell.x = cast<u8>(g_x);
+		g_cell.y = cast<u8>(g_y);
+		g_cell.foreground = g_fg;
+		g_cell.background = g_bg;
+		var device = dr::vga_get_device();
+		device->text16ColorBufferStringAddr = cast<u32>(&g_run[0]);
+		device->text16ColorBufferStringCellAddr = cast<u32>(&g_cell);
+		device->signal = dr::VGAText16ColorSignals.PrintString;
+		g_x += n;
+	}
+
+	// Text16: the cursor at the start of the next row (the last row: everything scrolls up).
+	sub __new_line() {
+		g_x = 0;
+		if (g_y + 1 < rows()) {
+			g_y++;
+			return;
+		}
+		dr::vga_get_device()->signal = dr::VGAText16ColorSignals.Scroll;
+	}
+
+	// len bytes of text (no 0 needed). Text16: '\n' a new row, '\r' the row's start, a full row
+	// goes on in the next one.
+	sub write(var text: const u8*, var len: u32) {
+		var device = dr::vga_get_device();
+		if (not dr::vga_is_text16()) {
+			for (var i: u32 = 0; i < len; i++) {
+				device->textSingleColorChar = text[i];
+				device->signal = dr::VGATextSingleColorSignals.PrintChar;
+			}
+			return;
+		}
+		var cols: u32 = columns();
+		var n: u32 = 0;
+		for (var i: u32 = 0; i < len; i++) {
+			var c: u8 = text[i];
+			if (c == '\n' or c == '\r') {
+				__flush_run(n);
+				n = 0;
+				if (c == '\n')
+					__new_line();
+				else
+					g_x = 0;
+				continue;
+			}
+			if (g_x + n >= cols) {
+				__flush_run(n);
+				n = 0;
+				__new_line();
+			}
+			g_run[n] = c == 0 ? ' ' : c;			// (a 0 would end PrintString's text)
+			n++;
+			if (n == sizeof(g_run) - 1) {
+				__flush_run(n);
+				n = 0;
+			}
+		}
+		__flush_run(n);
+	}
+
 	sub kernel_print(var str: string, var nl: bool = true) {
 		if (not str) return;
+		if (dr::vga_is_text16()) {
+			write(str, std::strlen(str));
+			if (nl)
+				__new_line();
+			return;
+		}
 		var device = dr::vga_get_device();
 		device->textSingleColorBufferStringAddr = cast<u32>(str);
 		device->signal = dr::VGATextSingleColorSignals.PrintString;
@@ -32,14 +144,16 @@ namespace vga {
 	}
 
 	sub sys_print(var str: string, var nl: bool) -> i32 {
-		if (dr::vga_is_textSingle())
-		{
-			var buff: u8[MAX_PRINT_LEN];
-			var err: std::ErrCode = proc::__internal::copy_user_string(&proc::g_current->as, cast<u32>(str), buff, MAX_PRINT_LEN);
-			if (err < 0) return err;
-			dr::TextSingle.print(cast<u8*>(buff));
-			if (nl) dr::TextSingle.new_line();
+		var buff: u8[MAX_PRINT_LEN];
+		var len: std::ErrCode = proc::__internal::copy_user_string(&proc::g_current->as, cast<u32>(str), buff, MAX_PRINT_LEN);
+		if (len < 0) return len;
+		if (dr::vga_is_text16()) {
+			write(buff, cast<u32>(len));
+			if (nl) __new_line();
+			return std::Ok;
 		}
-		return std::Ok; //TODO: This right now returns Ok even if the mode is not textSingle...will be fixed once the other modes are implemented
+		dr::TextSingle.print(cast<u8*>(buff));
+		if (nl) dr::TextSingle.new_line();
+		return std::Ok;
 	}
 }

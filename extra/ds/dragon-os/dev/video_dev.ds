@@ -1,0 +1,226 @@
+// /dev/video: the video card for processes (the commands: std::video in libcore's system.ds).
+//
+// Who may do what:
+//   - Opened for writing, the fd controls the card. There is one such fd at a time: another
+//     open for writing is Busy until it is closed (or its process ends: process_exit closes its
+//     files). fds aren't inherited by Spawn, so control never leaks to a child. dinit opens it
+//     first, so the card is dinit's for as long as it runs (later: it can close it and let a
+//     compositor open it).
+//   - Opened for reading only, an fd can GetInfo and GetVSyncCount.
+//   - The foreground process (see std::video in system.ds) may also draw, from any fd: Clear,
+//     SetColors, SetCursor, PutCell, PresentFrame. So a program the shell runs opens the card for
+//     reading, builds a std::video::Console, and presents it while it is in the foreground. The
+//     card's settings (SetMode, SetPalette, SelectPalette) and write() stay the owner's.
+//     The same foreground process is the one ReadKey serves (dev/keyboard.ds).
+//   - The processes never touch the card's registers themselves (their permission maps don't
+//     have its page). That matters: the registers hold addresses the card reads and writes
+//     (frames, a palette, the Text16Console struct ConsolePrintString updates), so a process
+//     with the registers could make the card write into the kernel. Here every address a
+//     process gives is checked (user_readable) for the bytes the card will read, and the
+//     signals that write memory (ConsolePrintString, a clear with a program buffer) aren't
+//     offered at all.
+#include(video.ds)
+#include(../sched/process.ds)
+
+namespace video {
+	var g_owner: u32 = 0;						// the pid whose fd controls the card (0: none)
+	var g_palette: std::video::Palette;			// SetPalette's colors (copied: the card reads them here)
+	var g_vsync_count: u32 = 0;					// VSync interrupts so far (on_vsync)
+	var g_foreground: u32 = 0;					// named by SetForeground (0: nobody named: the owner is)
+
+	// The foreground process's pid: the one named, or the owner (0: no one controls the card).
+	inline sub foreground() -> u32 { return g_foreground != 0 ? g_foreground : g_owner; }
+
+	// ReadKey's rule: p may read the keyboard (the foreground process; anyone while no one has the card).
+	sub may_read_keys(var p: proc::Process*) -> bool {
+		var fg: u32 = foreground();
+		return fg == 0 or fg == p->pid;
+	}
+
+	// The foreground changed: a blocked reader that isn't the foreground any more wakes with NotPermitted.
+	sub foreground_changed() {
+		if (input::g_reader != null and not may_read_keys(input::g_reader))
+			proc::wake(input::g_reader, cast<u32>(std::ProcessErrors.NotPermitted));	// (wake clears g_reader)
+	}
+
+	// p ended (process_exit): if it was the foreground process, its parent is now (a shell
+	// gets the screen back from the program it ran), or the owner when it has none left.
+	sub process_ended(var p: proc::Process*) {
+		if (g_foreground == 0 or p->pid != g_foreground)
+			return;
+		var parent: proc::Process* = proc::find_process(p->parent);
+		g_foreground = (parent != null and parent->state != proc::ProcessState.Zombie) ? parent->pid : 0;
+		foreground_changed();
+	}
+
+	// Spawn's Foreground flag (SetForeground's rule, for a child: the owner, or the foreground process).
+	inline sub may_give_foreground(var p: proc::Process*) -> bool {
+		return p->pid == g_owner or p->pid == foreground();
+	}
+	sub give_foreground(var p: proc::Process*) {
+		g_foreground = p->pid;
+		foreground_changed();
+	}
+
+	// SetForeground(pid): the owner names any process (or 0: itself again); the foreground
+	// process may name one of its own descendants.
+	sub set_foreground(var p: proc::Process*, var owner: bool, var pid: u32) -> i32 {
+		if (pid == 0) {
+			if (not owner)
+				return std::ProcessErrors.NotPermitted;
+			g_foreground = 0;
+			foreground_changed();
+			return std::Ok;
+		}
+		var target: proc::Process* = proc::find_process(pid);
+		if (target == null or target->state == proc::ProcessState.Zombie)
+			return std::ProcessErrors.NoProcess;
+		var from_foreground: bool = p->pid == foreground() and (target == p or proc::descends_from(target, p->pid));
+		if (not owner and not from_foreground)
+			return std::ProcessErrors.NotPermitted;
+		g_foreground = pid;
+		foreground_changed();
+		return std::Ok;
+	}
+
+	// Open's check (the fd is the vfs's): mode Read and / or Write (control), nothing else.
+	sub open(var p: proc::Process*, var mode: u32) -> i32 {
+		const OPEN_FLAGS: u32 = std::fs::OpenMode.Create | std::fs::OpenMode.Truncate | std::fs::OpenMode.Exclusive;
+		if ((mode & std::fs::OpenMode.ReadWrite) == 0 or (mode & OPEN_FLAGS) != 0)
+			return std::FileErrors.BadMode;
+		if ((mode & std::fs::OpenMode.Write) != 0) {
+			if (g_owner != 0)
+				return std::FileErrors.Busy;
+			g_owner = p->pid;
+		}
+		return std::Ok;
+	}
+
+	// The fd closed: the controlling one gives the card back. (The mode stays as it is.)
+	sub close(var p: proc::Process*, var mode: u32) {
+		if ((mode & std::fs::OpenMode.Write) != 0 and g_owner == p->pid)
+			g_owner = 0;
+	}
+
+	// write(): the bytes printed (as Print, without its 512 limit or the 0). The controlling fd only.
+	sub write(var p: proc::Process*, var mode: u32, var data: u32, var size: u32) -> i32 {
+		if ((mode & std::fs::OpenMode.Write) == 0)
+			return std::FileErrors.NotWritable;
+		if (not proc::user_readable(&p->as, data, size))
+			return std::SystemErrors.BadAddress;
+		vga::write(cast<const u8*>(data), size);
+		return cast<i32>(size);
+	}
+
+	sub info(var out: std::fs::FileInfo*) {
+		std::memset(out, 0, sizeof(std::fs::FileInfo));
+		out->type = std::fs::FileTypes.Device;
+		out->links = 1;
+		out->permissions = 0x1B6;				// 0666
+	}
+
+	sub ioctl(var p: proc::Process*, var mode: u32, var command: u32, var arg: u32) -> i32 {
+		var as: proc::AddressSpace* = &p->as;
+		if (command == std::video::Commands.GetInfo) {
+			if (not proc::user_writable(as, arg, sizeof(std::video::Info)))
+				return std::SystemErrors.BadAddress;
+			var info: std::video::Info* = cast<std::video::Info*>(arg);
+			info->mode = dr::vga_get_video_mode();
+			info->foreground = vga::g_fg;
+			info->background = vga::g_bg;
+			info->reserved = 0;
+			info->columns = vga::columns();
+			info->rows = vga::rows();
+			info->cursor_x = vga::g_x;
+			info->cursor_y = vga::g_y;
+			info->owner = g_owner;
+			info->foreground_pid = foreground();
+			return std::Ok;
+		}
+		if (command == std::video::Commands.GetVSyncCount)
+			return cast<i32>(g_vsync_count & 0x7FFFFFFF);	// (31 bits: never mistaken for an error)
+
+		// Who is asking: the owner (its controlling fd), the foreground process (drawing only), or neither.
+		var owner: bool = (mode & std::fs::OpenMode.Write) != 0;
+		var drawer: bool = owner or (g_foreground != 0 and g_foreground == p->pid);
+		if (command == std::video::Commands.SetForeground)
+			return set_foreground(p, owner, arg);
+		var settings: bool = command == std::video::Commands.SetMode or command == std::video::Commands.SetPalette or command == std::video::Commands.SelectPalette;
+		if (not (settings ? owner : drawer))
+			return std::ProcessErrors.NotPermitted;
+
+		var device = dr::vga_get_device();
+		var text16: bool = dr::vga_is_text16();
+		if (command == std::video::Commands.SetMode) {
+			if (arg != std::video::Modes.TextSingle and arg != std::video::Modes.Text16)
+				return std::SystemErrors.InvalidArgument;
+			vga::set_mode(cast<u8>(arg));
+			return std::Ok;
+		}
+		if (command == std::video::Commands.Clear) {
+			vga::clear();
+			return std::Ok;
+		}
+		if (command == std::video::Commands.SetColors) {
+			vga::g_fg = cast<u8>(arg);					// (any index: the card's palettes have 256)
+			vga::g_bg = cast<u8>(arg >> 8);
+			return std::Ok;
+		}
+		// The rest are Text16's.
+		if (command < std::video::Commands.SetCursor or command > std::video::Commands.SelectPalette)
+			return std::FileErrors.NotSupported;
+		if (not text16)
+			return std::FileErrors.NotSupported;
+
+		if (command == std::video::Commands.SetCursor) {
+			var x: u32 = arg & 0xFFFF;
+			var y: u32 = arg >> 16;
+			if (x >= vga::columns() or y >= vga::rows())
+				return std::SystemErrors.InvalidArgument;
+			vga::g_x = x;
+			vga::g_y = y;
+			return std::Ok;
+		}
+		if (command == std::video::Commands.PutCell) {
+			if (not proc::user_readable(as, arg, sizeof(std::video::Cell)))
+				return std::SystemErrors.BadAddress;
+			var cell: std::video::Cell* = cast<std::video::Cell*>(arg);
+			if (cell->x >= vga::columns() or cell->y >= vga::rows())
+				return std::SystemErrors.InvalidArgument;
+			device->text16MemoryController.x = cell->x;
+			device->text16MemoryController.y = cell->y;
+			device->text16MemoryController.character = cell->character;
+			device->text16MemoryController.foreground = cell->foreground;
+			device->text16MemoryController.background = cell->background;
+			device->signal = dr::VGAText16ColorSignals.WriteVRAM;
+			return std::Ok;
+		}
+		if (command == std::video::Commands.PresentFrame) {
+			if (not proc::user_readable(as, arg, sizeof(std::video::Frame)))
+				return std::SystemErrors.BadAddress;
+			var frame: std::video::Frame = *cast<std::video::Frame*>(arg);		// (a copy: checked as it is used)
+			var row_bytes: u32 = vga::columns() * 4;
+			if (frame.size == 0 or frame.size % row_bytes != 0 or frame.size > row_bytes * vga::rows() or frame.y_offset >= frame.size / row_bytes)
+				return std::SystemErrors.InvalidArgument;
+			if (not proc::user_readable(as, frame.cells, frame.size))
+				return std::SystemErrors.BadAddress;
+			device->text16ColorFrameAddr = frame.cells;
+			device->text16ColorFrameSize = frame.size;
+			device->text16ColorFrameYOffset = frame.y_offset;
+			device->signal = dr::VGAText16ColorSignals.CopyFrame;	// (double buffering is off: onto the screen)
+			return std::Ok;
+		}
+		if (command == std::video::Commands.SetPalette) {
+			if (not proc::user_readable(as, arg, sizeof(std::video::Palette)))
+				return std::SystemErrors.BadAddress;
+			std::memcpy(&g_palette, cast<void*>(arg), sizeof(std::video::Palette));
+			device->text16ColorCustomPaletteAddr = cast<u32>(&g_palette);
+			device->signal = dr::VGAText16ColorSignals.SetCustomPalette;
+			return std::Ok;
+		}
+		// SelectPalette
+		device->palette = cast<u8>(arg);
+		device->signal = dr::VGAText16ColorSignals.SelectPalette;
+		return std::Ok;
+	}
+}

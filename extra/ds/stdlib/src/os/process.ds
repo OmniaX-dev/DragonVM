@@ -1,34 +1,69 @@
 #include(syscall.ds)
+#include(../containers.ds)
 
 namespace std {
+	// Waits at least ms milliseconds (the process blocks: others run). 0 when it wakes.
 	inline sub sleep(var ms: u32) -> i32 {
 		return syscall4(SystemCalls.Sleep, ms);
 	}
-	inline sub wait(var pid: i32 = -1, var out_code: i32* = null) -> i32 {
-		return syscall4(SystemCalls.Wait, cast<u32>(pid), cast<u32>(out_code));
+	// Waits for a child to end (pid -1: any child): its pid, or NoChild.
+	inline sub wait(var pid: i32 = -1) -> i32 {
+		return syscall4(SystemCalls.Wait, cast<u32>(pid), 0);
 	}
-	inline sub spawn(var path: const ref std::String, var argc: u32 = 0, var argv: string* = null) -> i32 {
-        return syscall4(SystemCalls.Spawn, cast<u32>(path.c_str()), argc, cast<u32>(argv));
+	// The same, and its exit code in out_code.
+	inline sub wait(var pid: i32, var out_code: ref i32) -> i32 {
+		return syscall4(SystemCalls.Wait, cast<u32>(pid), cast<u32>(&out_code));
+	}
+	// Starts the program at path as a new process (the caller goes on): its pid, or an error.
+	// foreground: it starts as the foreground process, on the screen and at the keyboard (the
+	// caller must be /dev/video's owner or the foreground process: NotPermitted otherwise); it
+	// gives it back to the caller when it ends. A shell runs a program with it, then waits.
+	inline sub spawn(var path: const ref std::String, var foreground: bool = false) -> i32 {
+		return syscall4(SystemCalls.Spawn, cast<u32>(path.c_str()), 0, 0, foreground ? SpawnFlags.Foreground : 0);
+	}
+	// The same with arguments (its main's argv; the kernel copies them, at most 128).
+	sub spawn(var path: const ref std::String, var args: const ref std::Vector<std::String>, var foreground: bool = false) -> i32 {
+		const MAX_ARGS: u32 = 128;			// (the kernel's)
+		var n: u32 = args.size();
+		if (n > MAX_ARGS)
+			return std::SystemErrors.TooMany;
+		var argv: string[MAX_ARGS];			// (pointers to the Strings' texts: alive until the call returns)
+		for (var i: u32 = 0; i < n; i++)
+			argv[i] = args[i].c_str();
+		return syscall4(SystemCalls.Spawn, cast<u32>(path.c_str()), n, cast<u32>(&argv[0]), foreground ? SpawnFlags.Foreground : 0);
 	}
 	inline sub yield() -> i32 {
-        return syscall4(SystemCalls.Yield);
+		return syscall4(SystemCalls.Yield);
 	}
 	inline sub get_pid() -> i32 {
-        return syscall4(SystemCalls.GetPid);
+		return syscall4(SystemCalls.GetPid);
 	}
 	inline sub get_parent_pid() -> i32 {
-        return syscall4(SystemCalls.GetParentPid);
+		return syscall4(SystemCalls.GetParentPid);
 	}
-    inline sub kill(var pid: u32, var code: i32 = -1) -> i32 {
-        return syscall4(SystemCalls.Kill, pid, cast<u32>(code));
-    }
-    // The machine's memory, uptime, process count (std::SysInfo). 0, or BadAddress.
-    inline sub sys_info(var out: ref SysInfo) -> i32 {
-        return syscall4(SystemCalls.SysInfo, cast<u32>(&out));
-    }
-    // The processes (std::ProcessInfo), at most capacity of them in out: how many there are (more
-    // than capacity: some weren't written), or BadAddress.
-    inline sub process_list(var out: ref ProcessInfo, var capacity: u32) -> i32 {
-    	return syscall4(SystemCalls.ProcessList, cast<u32>(&out), capacity);
-    }
+	// Ends pid (the caller, or a process it started, directly or not) as if it called exit(code).
+	inline sub kill(var pid: u32, var code: i32 = -1) -> i32 {
+		return syscall4(SystemCalls.Kill, pid, cast<u32>(code));
+	}
+	// The machine's memory, uptime, process count (std::SysInfo). 0, or an error.
+	inline sub sys_info(var out: ref SysInfo) -> i32 {
+		return syscall4(SystemCalls.SysInfo, cast<u32>(&out));
+	}
+	// Every process (std::ProcessInfo) into out (its old contents replaced): how many, or an error.
+	sub process_list(var out: ref std::Vector<ProcessInfo>) -> i32 {
+		var n: i32 = syscall4(SystemCalls.ProcessList, 0, 0);		// (the count only)
+		while (n >= 0) {
+			if (not out.resize(cast<u32>(n) + 4))						// (room for a few started meanwhile)
+				return std::SystemErrors.NoMemory;
+			var got: i32 = syscall4(SystemCalls.ProcessList, cast<u32>(out.data()), out.size());
+			if (got < 0)
+				return got;
+			if (cast<u32>(got) <= out.size()) {
+				out.resize(cast<u32>(got));
+				return got;
+			}
+			n = got;													// more than the room: again
+		}
+		return n;
+	}
 }

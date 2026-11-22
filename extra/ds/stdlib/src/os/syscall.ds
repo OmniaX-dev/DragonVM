@@ -31,6 +31,7 @@ namespace std {
 		Truncate = 0x0405,
 		FStat = 0x0406,
 		Stat = 0x0407,
+		Ioctl = 0x0408,
 
 		OpenDir = 0x0500,
 		ReadDir = 0x0501,

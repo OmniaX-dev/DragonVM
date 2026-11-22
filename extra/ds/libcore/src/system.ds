@@ -18,6 +18,13 @@ namespace std {
     // What a Blocked process waits for (the kernel's proc::BlockReason).
     enum BlockReasons: u8 { None = 0, Sleep = 1, Wait = 2, Key = 3 };
 
+	// Spawn's flags (its 4th argument).
+	const SpawnFlags: struct {
+		var Foreground: u32 = 0x01;			// the child starts as the foreground process (before it runs:
+											// no race with SetForeground); the caller must be the owner
+											// of /dev/video or the foreground process
+	};
+
     // ProcessList(out, capacity): one per process.
     struct ProcessInfo {
         var pid: u32;
@@ -29,4 +36,147 @@ namespace std {
         var pages: u32;                                         // the memory it holds: image, stack, heap, permission map, kernel stack
         var name: u8[PROCESS_NAME_MAX];         				// its program's file name
     };
+}
+
+// Files (Open, Read, Write, Seek, ..., Stat): the same values as the SDK's dr::fs (the kernel opens
+// disk files with dr::fs::FileSystem, and passes the modes on unchanged).
+namespace std::fs {
+	// Open's mode: OR them together, or use the combinations at the end.
+	const OpenMode: struct {
+		var Read: u32 = 0x01;				// read() allowed
+		var Write: u32 = 0x02;				// write() and truncate() allowed (a device: control of it)
+		var Create: u32 = 0x04;				// create the file if it doesn't exist (needs Write)
+		var Truncate: u32 = 0x08;			// empty the file when opening it (needs Write)
+		var Append: u32 = 0x10;				// every write() goes to the end (needs Write)
+		var Exclusive: u32 = 0x20;			// with Create: fail (Exists) if the file already exists
+
+		var ReadWrite: u32 = 0x03;			// an existing file, read and write
+		var NewFile: u32 = 0x0E;			// Write | Create | Truncate: a new, empty file (replaces one)
+		var AppendFile: u32 = 0x16;			// Write | Create | Append: add to the end (creates it)
+	};
+
+	// Where Seek counts from.
+	enum SeekFrom: u32 { Start = 0, Current = 1, End = 2 };
+
+	// A FileInfo's type.
+	enum FileTypes: u8 { None = 0, File = 1, Directory = 2, Device = 3 };
+
+	// Stat(path, out) / FStat(fd, out).
+	struct FileInfo {
+		var inode: u32;						// its number in the file system (0: a device)
+		var type: u8;						// FileTypes
+		var reserved: u8[3];
+		var size: u32;						// bytes
+		var links: u16;
+		var permissions: u16;				// Unix style, e.g. 0x1ED = 0755 (stored, not enforced)
+		var uid: u16;
+		var gid: u16;
+		var created: u32;					// seconds (Unix time)
+		var modified: u32;
+		var changed: u32;
+	};
+}
+
+// /dev/video: the video card, through Ioctl(fd, command, arg).
+//
+// Opened for writing (OpenMode.Write), the fd controls the card: one at a time (another open for
+// writing is Busy until it is closed, or its process ends). dinit opens it first, so it has it
+// for as long as it runs. Opened for reading only, an fd can ask (GetInfo), not change anything
+// (NotPermitted). Writing to the controlling fd prints the bytes, as Print does.
+namespace std::video {
+	enum Modes: u8 { TextSingle = 0, Text16 = 1 };	// (dr::VGAVideoModes)
+
+	// Text16's colors in the default palette (the SDK's dr::DefaultPaletteText16): a cell's
+	// foreground / background, SetColors, std::video::Console's fg / bg. With a custom palette
+	// (SetPalette) the numbers are the custom palette's 16 colors instead.
+	const Colors: struct {
+		var Black: u8					= 0x00;
+		var Gray: u8					= 0x01;
+		var White: u8					= 0x02;
+		var Red: u8						= 0x03;
+		var Pink: u8					= 0x04;
+		var Brown: u8					= 0x05;
+		var DarkOrange: u8				= 0x06;
+		var Orange: u8					= 0x07;
+		var Yellow: u8					= 0x08;
+		var DarkGreen: u8				= 0x09;
+		var Green: u8					= 0x0A;
+		var Lime: u8					= 0x0B;
+		var DarkBlue: u8				= 0x0C;
+		var Blue: u8					= 0x0D;
+		var LightBlue: u8				= 0x0E;
+		var Sky: u8						= 0x0F;
+	};
+
+	// SelectPalette's palettes.
+	const Palettes: struct {
+		var Custom: u8					= 0x00;		// the one SetPalette set
+		var Default: u8					= 0x01;		// the card's own (the colors above)
+	};
+
+	enum Commands: u32 {
+		GetInfo = 0x01,						// arg: Info* (any fd)
+		SetMode = 0x02,						// arg: a Modes value. The screen is cleared, the cursor at 0, 0
+		Clear = 0x03,						// with the colors (Text16): the cursor at 0, 0
+		SetColors = 0x04,					// arg: fg | (bg << 8), Text16 palette indices: what Print uses
+		SetCursor = 0x05,					// arg: x | (y << 16): where Print goes on (Text16)
+		PutCell = 0x06,						// arg: Cell*: one character cell (Text16)
+		PresentFrame = 0x07,				// arg: Frame*: whole rows of cells copied to the screen (Text16)
+		SetPalette = 0x08,					// arg: Palette*: 16 colors; selects it (Text16)
+		SelectPalette = 0x09,				// arg: a built in palette's number (0: the custom one) (Text16)
+		GetVSyncCount = 0x0A,				// the screen redraws so far, 31 bits (any fd): see below
+		SetForeground = 0x0B				// arg: a pid (0: back to the owner): see below
+	};
+
+	// The foreground process: the one on the screen and at the keyboard. The owner names it with
+	// SetForeground(pid) (any process); the foreground process may pass it to one of its own
+	// descendants (a shell to the program it runs). When the foreground process ends, its parent
+	// is the foreground again (the shell gets the screen back), or the owner when there is none.
+	// SetForeground(0): the owner only. Nobody named: the owner is the foreground process.
+	//   - It may draw from any /dev/video fd (a read only one: it can't open the card for writing,
+	//     the owner has that): Clear, SetColors, SetCursor, PutCell, PresentFrame. The card's
+	//     settings (SetMode, SetPalette, SelectPalette) stay the owner's.
+	//   - ReadKey: only the foreground process gets keys (the others: NotPermitted; one blocked in
+	//     ReadKey when the foreground changes wakes up with NotPermitted). No owner at all: anyone.
+
+	// GetVSyncCount: the card's VSync interrupt comes after each screen redraw (the machine's
+	// screen_redraw_rate times a second); the kernel counts them. A program that runs uncapped
+	// draws when the count changes, so it presents once per redraw and nothing is wasted:
+	//     if (vsync_count(fd) != last) { last = ...; draw(); con.present(); }
+	// (31 bits: it wraps to 0 after 2^31 redraws, about a year at 60 a second; compare with !=.)
+
+	struct Rgb { var r: u8; var g: u8; var b: u8; };
+	// SetPalette's argument: the 16 colors of the custom palette (48 bytes, as the card reads them).
+	struct Palette { var colors: Rgb[16]; };
+
+	struct Info {
+		var mode: u8;						// Modes
+		var foreground: u8;					// the colors Print uses (Text16)
+		var background: u8;
+		var reserved: u8;
+		var columns: u32;
+		var rows: u32;
+		var cursor_x: u32;					// where Print goes on (Text16)
+		var cursor_y: u32;
+		var owner: u32;						// the pid that controls the card (0: none)
+		var foreground_pid: u32;			// the foreground process (0: none)
+	};
+
+	// PutCell's argument (the card's VGAText16Cell).
+	struct Cell {
+		var character: u8;
+		var foreground: u8;
+		var background: u8;
+		var x: u8;
+		var y: u8;
+	};
+
+	// PresentFrame's argument: cells is the program's frame, 4 bytes a cell (character,
+	// foreground, background, 0), row by row; size: a whole number of rows, at most the screen.
+	// The rows are a ring: y_offset is the one shown at the top (0: as they are).
+	struct Frame {
+		var cells: u32;						// the address of the first cell
+		var size: u32;						// bytes
+		var y_offset: u32;
+	};
 }

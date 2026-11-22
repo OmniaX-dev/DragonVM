@@ -4,6 +4,7 @@
 #include(../sched/sched.ds)
 #include(../sched/sys.ds)
 #include(../dev/keyboard.ds)
+#include(../fs/vfs.ds)
 
 const MAX_PRINT_LEN = 512;
 const SYSCALL: u32 										= 0x40;
@@ -27,14 +28,15 @@ const SYSCALL_READ_KEY: u32 							= 0x03_00;
 // const SYSCALL_CONSOLE_SET_COLOR: u32					= 0x03_02;
 // const SYSCALL_CONSOLE_SET_CURSOR: u32					= 0x03_03;
 
-// const SYSCALL_OPEN: u32 								= 0x04_00;
-// const SYSCALL_CLOSE: u32 								= 0x04_01;
-// const SYSCALL_READ: u32 								= 0x04_02;
-// const SYSCALL_WRITE: u32 								= 0x04_03;
-// const SYSCALL_SEEK: u32 								= 0x04_04;
-// const SYSCALL_TRUNCATE: u32 							= 0x04_05;
-// const SYSCALL_FSTAT: u32 								= 0x04_06;
-// const SYSCALL_STAT: u32 								= 0x04_07;
+const SYSCALL_OPEN: u32 									= 0x04_00;
+const SYSCALL_CLOSE: u32 								= 0x04_01;
+const SYSCALL_READ: u32 									= 0x04_02;
+const SYSCALL_WRITE: u32 								= 0x04_03;
+const SYSCALL_SEEK: u32 									= 0x04_04;
+const SYSCALL_TRUNCATE: u32 								= 0x04_05;
+const SYSCALL_FSTAT: u32 								= 0x04_06;
+const SYSCALL_STAT: u32 									= 0x04_07;
+const SYSCALL_IOCTL: u32 								= 0x04_08;
 
 // const SYSCALL_OPEN_DIR: u32 							= 0x05_00;
 // const SYSCALL_READ_DIR: u32 							= 0x05_01;
@@ -108,6 +110,10 @@ namespace __internal {
         proc::schedule();
 	}
 
+	// After each screen redraw (the machine's screen_redraw_rate a second): only counted, for
+	// /dev/video's GetVSyncCount. From user or kernel mode alike (nothing else to do).
+	interrupt sub on_vsync() { video::g_vsync_count++; }
+
 	interrupt sub on_syscall() {
 		proc::g_current->frame = dr::cpu::trap_frame();
 		var f: SyscallFrame* = current_syscall_frame();
@@ -120,7 +126,7 @@ namespace __internal {
 			is SYSCALL_GET_PID 							{ rv = proc::g_current->pid; }
 			is SYSCALL_GET_PARENT_PID 					{ rv = proc::g_current->parent; }
 			is SYSCALL_YIELD 							{ rv = 0; }
-			is SYSCALL_SPAWN 							{ rv = proc::sys_spawn(f->regs.R(8), f->regs.R(7), f->regs.R(6)); }
+			is SYSCALL_SPAWN 							{ rv = proc::sys_spawn(f->regs.R(8), f->regs.R(7), f->regs.R(6), f->regs.R(5)); }	// path, argc, argv, flags
 			is SYSCALL_WAIT 							{ rv = proc::sys_wait(cast<i32>(f->regs.R(8)), f->regs.R(7)); }
 			is SYSCALL_SLEEP 							{ rv = proc::sys_sleep(f->regs.R(8)); }
 			is SYSCALL_KILL 							{ rv = proc::sys_kill(f->regs.R(8), cast<i32>(f->regs.R(7))); }
@@ -129,6 +135,16 @@ namespace __internal {
 			is SYSCALL_FREE_PAGES 						{ rv = proc::sys_free_pages(f->regs.R(8), f->regs.R(7)); }
 // ===========================================================================
 			is SYSCALL_READ_KEY 						{ rv = input::sys_read_key(f->regs.R(8), f->regs.R(7)); }
+// ===========================================================================
+			is SYSCALL_OPEN 							{ rv = vfs::sys_open(f->regs.R(8), f->regs.R(7)); }							// path, mode
+			is SYSCALL_CLOSE 							{ rv = vfs::sys_close(f->regs.R(8)); }										// fd
+			is SYSCALL_READ 							{ rv = vfs::sys_read(f->regs.R(8), f->regs.R(7), f->regs.R(6)); }			// fd, buffer, size
+			is SYSCALL_WRITE 							{ rv = vfs::sys_write(f->regs.R(8), f->regs.R(7), f->regs.R(6)); }			// fd, data, size
+			is SYSCALL_SEEK 							{ rv = vfs::sys_seek(f->regs.R(8), cast<i32>(f->regs.R(7)), f->regs.R(6)); }	// fd, offset, from
+			is SYSCALL_TRUNCATE 						{ rv = vfs::sys_truncate(f->regs.R(8), f->regs.R(7)); }						// fd, size
+			is SYSCALL_FSTAT 							{ rv = vfs::sys_fstat(f->regs.R(8), f->regs.R(7)); }						// fd, out
+			is SYSCALL_STAT 							{ rv = vfs::sys_stat(f->regs.R(8), f->regs.R(7)); }							// path, out
+			is SYSCALL_IOCTL 							{ rv = vfs::sys_ioctl(f->regs.R(8), f->regs.R(7), f->regs.R(6)); }			// fd, command, arg
 // ===========================================================================
 			is SYSCALL_SYS_INFO 						{ rv = proc::sys_sysinfo(f->regs.R(8)); }
 			is SYSCALL_PROCESS_LIST 					{ rv = proc::sys_process_list(f->regs.R(8), f->regs.R(7)); }
@@ -158,4 +174,5 @@ sub init_interrupt_vector() {
 		dr::set_interrupt_vector_entry(v, &__internal::on_fault);
 	dr::set_interrupt_vector_entry(SYSCALL, &__internal::on_syscall, true);
 	dr::set_interrupt_vector_entry(dr::HardwareInterrupts.Timer, &__internal::on_timer);
+	dr::set_interrupt_vector_entry(dr::HardwareInterrupts.VSync, &__internal::on_vsync);
 }

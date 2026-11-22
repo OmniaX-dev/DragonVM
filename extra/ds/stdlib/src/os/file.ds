@@ -1,0 +1,56 @@
+// Files: open, read, write, ... a disk file (a path on the root file system), or a device
+// (/dev/video). An fd is a small number, the process's own (closed when it ends):
+//
+//     var fd: i32 = std::fs::open("/home/notes.txt", std::fs::OpenMode.NewFile);
+//     if (fd < 0) return fd;                      // the error (std::error_name(fd))
+//     std::fs::write(fd, "hello");
+//     std::fs::seek(fd, 0);
+//     var n: i32 = std::fs::read(fd, &buffer[0], 64);
+//     var info: std::fs::FileInfo;
+//     std::fs::fstat(fd, info);
+//     std::fs::close(fd);
+//
+// Every call returns >= 0 for success (an fd, a byte count, a position) or an error < 0.
+#include(syscall.ds)
+
+namespace std::fs {
+	// The new fd (OpenMode: how). Errors: the file system's (NotFound, ...), TooMany (16 open),
+	// Busy (a device someone else controls), BadMode.
+	inline sub open(var path: const ref std::String, var mode: u32 = OpenMode.Read) -> i32 {
+		return syscall4(SystemCalls.Open, cast<u32>(path.c_str()), mode);
+	}
+	inline sub close(var fd: i32) -> i32 {
+		return syscall4(SystemCalls.Close, cast<u32>(fd));
+	}
+	// Up to size bytes at the position into buffer: the bytes read (0: the end of the file).
+	inline sub read(var fd: i32, var buffer: void*, var size: u32) -> i32 {
+		return syscall4(SystemCalls.Read, cast<u32>(fd), cast<u32>(buffer), size);
+	}
+	// size bytes at the position (at the end with OpenMode.Append): the bytes written.
+	inline sub write(var fd: i32, var data: const void*, var size: u32) -> i32 {
+		return syscall4(SystemCalls.Write, cast<u32>(fd), cast<u32>(data), size);
+	}
+	// The text, without its 0.
+	inline sub write(var fd: i32, var text: const ref std::String) -> i32 {
+		return write(fd, text.c_str(), text.len());
+	}
+	// Moves the position: the new one (seek(fd, 0, SeekFrom.Current) is the position now).
+	inline sub seek(var fd: i32, var offset: i32, var from: SeekFrom = SeekFrom.Start) -> i32 {
+		return syscall4(SystemCalls.Seek, cast<u32>(fd), cast<u32>(offset), cast<u32>(from));
+	}
+	// Cuts or grows the file to size bytes (the position stays). Needs OpenMode.Write.
+	inline sub truncate(var fd: i32, var size: u32) -> i32 {
+		return syscall4(SystemCalls.Truncate, cast<u32>(fd), size);
+	}
+	inline sub fstat(var fd: i32, var out: ref FileInfo) -> i32 {
+		return syscall4(SystemCalls.FStat, cast<u32>(fd), cast<u32>(&out));
+	}
+	inline sub stat(var path: const ref std::String, var out: ref FileInfo) -> i32 {
+		return syscall4(SystemCalls.Stat, cast<u32>(path.c_str()), cast<u32>(&out));
+	}
+	// A device's own commands (std::video::Commands for /dev/video): NotSupported on a disk file.
+	// arg: a number, or a struct's address (the typed wrappers, as std::video's, pass refs).
+	inline sub ioctl(var fd: i32, var command: u32, var arg: u32 = 0) -> i32 {
+		return syscall4(SystemCalls.Ioctl, cast<u32>(fd), command, arg);
+	}
+}

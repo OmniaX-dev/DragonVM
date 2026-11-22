@@ -84,6 +84,30 @@ The kernel keeps a table per process, e.g. `files: OpenFile[16]` with `{ used, i
 | 0x0405 | **Truncate** | `fd: u32, size: u32` → 0 | Resizes the file (needs Write). |
 | 0x0406 | **FStat** | `fd: u32, out: Info*` → 0 | An open file's `Info` (size, type, times). |
 | 0x0407 | **Stat** | `path: string, out: Info*` → 0 | The same by path: `exists`, `is_file`, `is_dir`, `size_of` in user space. |
+| 0x0408 | **Ioctl** | `fd: u32, command: u32, arg: u32` → the command's | A device's own commands (`std::video::Commands` for `/dev/video`); `NotSupported` on a disk file. |
+
+*(done: `fs/vfs.ds`, the fd table `Process.files` in `fs/file.ds`, `std::fs::*` in the stdlib; the
+structs `std::fs::FileInfo` / `OpenMode` / `SeekFrom` in libcore's `system.ds`.)*
+
+### Devices: /dev/<name>
+Not on the disk: `vfs::device_of` maps the path to a kernel driver (`dev/video_dev.ds`).
+- **/dev/video**: opened with `Write`, the fd *controls* the card, one at a time (`Busy` for the
+  others until it is closed or its process ends; fds aren't inherited). dinit opens it first.
+  Read-only fds can only `GetInfo` (`NotPermitted` otherwise). `write()` on the controlling fd
+  prints, like `Print`. The commands: `SetMode`, `Clear`, `SetColors`, `SetCursor`, `PutCell`,
+  `PresentFrame`, `SetPalette`, `SelectPalette`, `GetVSyncCount` (`std::video` in libcore; the
+  kernel counts the card's VSync interrupts, so an uncapped program can draw once per redraw).
+- Processes never get the card's registers: they take addresses the card reads *and writes*
+  (ConsolePrintString updates a Text16Console struct), so the driver checks every address it is
+  given and doesn't offer the signals that write memory.
+- **The foreground process** (`SetForeground`, or `Spawn` with `std::SpawnFlags.Foreground`): the
+  one on the screen and at the keyboard. The owner names any process; the foreground process may
+  pass it to its own descendants; when it ends, its parent gets it back (a shell, after the
+  program it ran). It may draw from a read-only fd (not change the mode or palette), and only it
+  gets keys from `ReadKey` (others: `NotPermitted`). Use the Spawn flag rather than
+  SetForeground after Spawn: the child could run before it.
+- `Print` follows the card's mode (the kernel console in `dev/video.ds`: Text16 has a cursor,
+  colors and scrolling).
 
 ## Directories and file systems (0x05xx)
 

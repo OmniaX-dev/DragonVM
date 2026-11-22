@@ -1,0 +1,45 @@
+// /dev/video: the video card (see std::video in libcore's system.ds for the commands and who may
+// use them). In dinit, at the start:
+//
+//     var video: i32 = std::fs::open("/dev/video", std::fs::OpenMode.Write);   // the card is dinit's
+//     std::video::set_mode(video, std::video::Modes.Text16);
+//     std::print("now in 16 colors");          // Print follows the mode
+//
+// For drawing a whole screen, std::video::Console (console.ds) builds on these.
+#include(file.ds)
+
+namespace std::video {
+	inline sub get_info(var fd: i32, var out: ref Info) -> i32 { return std::fs::ioctl(fd, Commands.GetInfo, cast<u32>(&out)); }
+	inline sub set_mode(var fd: i32, var mode: u8) -> i32 { return std::fs::ioctl(fd, Commands.SetMode, mode); }
+	inline sub clear(var fd: i32) -> i32 { return std::fs::ioctl(fd, Commands.Clear); }
+	// The colors Print uses (std::video::Colors).
+	inline sub set_colors(var fd: i32, var fg: u8, var bg: u8) -> i32 {
+		return std::fs::ioctl(fd, Commands.SetColors, cast<u32>(fg) | (cast<u32>(bg) << 8));
+	}
+	// Where Print goes on.
+	inline sub set_cursor(var fd: i32, var x: u32, var y: u32) -> i32 {
+		return std::fs::ioctl(fd, Commands.SetCursor, (x & 0xFFFF) | (y << 16));
+	}
+	inline sub put_cell(var fd: i32, var cell: const ref Cell) -> i32 { return std::fs::ioctl(fd, Commands.PutCell, cast<u32>(&cell)); }
+	inline sub present_frame(var fd: i32, var frame: const ref Frame) -> i32 { return std::fs::ioctl(fd, Commands.PresentFrame, cast<u32>(&frame)); }
+	inline sub set_palette(var fd: i32, var palette: const ref Palette) -> i32 { return std::fs::ioctl(fd, Commands.SetPalette, cast<u32>(&palette)); }
+	inline sub select_palette(var fd: i32, var id: u8) -> i32 { return std::fs::ioctl(fd, Commands.SelectPalette, id); }
+
+	// The process on the screen and at the keyboard (see system.ds): the owner names any process
+	// (0: itself again), the foreground process one of its own descendants. A shell, before
+	// waiting for the program it runs, starts it in the foreground instead (set_foreground after
+	// spawn would race: the program can run, draw or read a key before it):
+	//     var pid: i32 = std::spawn(path, args, true);
+	//     std::wait(pid, code);                   // back in the foreground when it ends
+	inline sub set_foreground(var fd: i32, var pid: u32) -> i32 { return std::fs::ioctl(fd, Commands.SetForeground, pid); }
+
+	// The screen redraws so far (31 bits; any /dev/video fd). Draw when it changes:
+	//     var last: u32 = std::video::vsync_count(video);
+	//     while (running) {
+	//         update();                                   // uncapped
+	//         var now: u32 = std::video::vsync_count(video);
+	//         if (now != last) { last = now; draw(con); con.present(); }
+	//     }
+	// An error (a bad fd) comes back as a negative number cast to u32: check the fd once, at the start.
+	inline sub vsync_count(var fd: i32) -> u32 { return cast<u32>(std::fs::ioctl(fd, Commands.GetVSyncCount)); }
+}
