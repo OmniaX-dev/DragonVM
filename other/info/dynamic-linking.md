@@ -7,8 +7,9 @@ DragonOS kernel's later) loads each library **once**, and every process that nee
 that one copy of its code. `wing-shell` compiled with `--dynamic` is 659 bytes.
 
 This document has everything a loader needs. The compiler side, the file formats, drun's
-loader and the SDK readers (`dr::dyn`) exist and are tested; what is left is the kernel's
-loader, described step by step in [Writing the kernel's loader](#writing-the-kernels-loader).
+loader, the SDK readers (`dr::dyn`) and DragonOS's loader
+([extra/ds/dragon-os/sched/dynlink.ds](../../extra/ds/dragon-os/sched/dynlink.ds), built as
+[Writing the kernel's loader](#writing-the-kernels-loader) describes) exist and are tested.
 
 Contents:
 1. [Building](#building)
@@ -68,8 +69,9 @@ dsc prog.ds -L lib --dynamic --static=mylib // everything dynamic but mylib
 - `ds_env` (cmake) builds `libcore.drl` and `libstd.drl` next to their `.dlib`
   (`bin/ds/libs/<name>/lib`, `extra/ds/libs/<name>/lib`), puts them on DragonOS's partition (2) as
   `/lib/libcore.drl` and `/lib/libstd.drl`, and saves their disassembly (`bin/disassembly`).
-  dinit and wing-shell are still built statically (until the kernel can load a DRX2): to build
-  one dynamically, add `--dynamic` to its command in `cmake/DScript.cmake`.
+  DragonOS's user programs are built with `--dynamic` (DRX2s using `/lib/libstd.drl` and
+  `/lib/libcore.drl`): the kernel loads each library once and maps its text into every process
+  that uses it. A program in `/bin` can still be a DRX1 (static): the kernel loads both.
 
 
 ## The memory model
@@ -245,8 +247,21 @@ the reference.
 
 ## Writing the kernel's loader
 
-What follows is a plan for DragonOS (`extra/ds/dragon-os`), with sketches. Names are
-suggestions.
+What follows was the plan for DragonOS's loader, now `extra/ds/dragon-os/sched/dynlink.ds`
+(`lib_load`, `link_process`, `copy_rw`; the LibTable word at the trampoline page's
+`PAGE_SIZE - 16`, written by `switch_to`; the table and the copies are `RegionKind.Library`
+regions, which `FreePages` can't free). The sketches below are kept as the explanation; the
+code follows them closely, with these differences:
+- **256 slots** (`proc::MAX_LIBS`), the library table allocated at boot (not in the kernel
+  image). A process doesn't keep its copies' addresses (`lib_data`): its copy of a library's
+  writable globals is `table[slot] + rw_start`. Which libraries it uses is a bitmap
+  (`Process.libs`, 32 bytes).
+- **Slots are reused** (see "6. Later" below), so a lower slot isn't always a dependency: the rw
+  copies are made by walking the dependencies (`map_library`), not in slot order.
+- At most 32 libraries per program or library (`dynlink::MAX_DEPS`, dependencies included), and
+  dependency chains at most 8 deep while loading (`MAX_DEPTH`: `lib_load` recurses on the
+  8 KiB kernel stack).
+- `SysInfo` has `libraries` (loaded) and `libraries_in_use`.
 
 ### 1. The LibTable word
 
@@ -356,10 +371,19 @@ counter) show the isolation: each sees its own count.
 `FileTooSmall`, `InvalidMagic`, `TruncatedFile`, `RelocationOutOfRange`, `EntryOutOfRange`).
 `sys_spawn` passes them to the program unchanged, `std::error_name` describes them.
 
-### 6. Later
+### 6. Unloading: the cache
 
-- Unloading: a library with `users == 0` can be freed (text pages, file) and its slot reused.
-  Keep loaded libraries for a while (a cache) instead: the next spawn is then cheaper.
+Done this way: a library with `users == 0` stays loaded (the next program that needs it starts
+without reading it again). It is unloaded only when its room is needed: no free slot for a new
+library, or no free pages for anything the kernel allocates for processes (`dynlink::alloc_pages`,
+which `AllocPages`, the stacks, the images and the permission maps use). The least recently used
+library that can go is unloaded first: `users == 0` and `dependents == 0` (no loaded library
+depends on it: their text has its addresses). A library being loaded, or just found for a
+process, is pinned until it is counted (its dependencies' `dependents++`, a program's libraries'
+`users++`, both as soon as each is found), so nothing about to be used is unloaded.
+
+Note: memory is reclaimed one library at a time until the allocation succeeds. A request for a
+long run of contiguous pages that the freed pages can't form empties the cache and still fails.
 - Spawn cost: with shared text, a spawn copies only the program and the rw parts; most of
   today's ~87,000 cycles (reading, copying and relocating 32 KB) disappear.
 

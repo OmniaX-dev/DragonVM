@@ -78,7 +78,7 @@ namespace proc {
 	sub sys_alloc_pages(var count: u32) -> i32 {
 	    var as: AddressSpace* = &g_current->as;
 	    if (count == 0 or count > g_pages.total_pages())  return std::SystemErrors.InvalidArgument;   // (also keeps count * PAGE_SIZE from wrapping)
-	    var addr: u32 = g_pages.alloc(count);
+	    var addr: u32 = dynlink::alloc_pages(count);          // (unused libraries unloaded if needed)
 	    if (addr == 0) return std::SystemErrors.NoMemory;
 	    std::memset(cast<void*>(addr), 0, count * PAGE_SIZE);    // these pages may have held another process's data
 	    if (not as_map_heap(as, addr, count)) {
@@ -208,6 +208,7 @@ namespace proc {
                 info->processes++;
         }
         info->max_processes = MAX_PROCESSES;
+        info->libraries = dynlink::count_loaded(&info->libraries_in_use);
         return std::Ok;
     }
 

@@ -38,7 +38,9 @@
 #   - the shared libraries of DragonOS programs (dsc --lib --shared: libcore.drl, libstd.drl, see
 #     other/info/dynamic-linking.md): next to the .dlib files, and on DragonOS's partition (2) as
 #     /lib/<name>.drl; their disassembly in bin/disassembly (ddb places it where they are loaded)
-#   - DragonOS's user programs (linking libstd): every folder of extra/ds/user_programs with a
+#   - DragonOS's user programs (linking libstd and libcore dynamically: dsc --dynamic, a DRX2 that
+#     uses /lib/libstd.drl and /lib/libcore.drl, loaded once and shared by every process; the
+#     kernel's loader is dragon-os/sched/dynlink.ds): every folder of extra/ds/user_programs with a
 #     main.ds is one, named after the folder. Each is compiled to bin/dragon/<folder>.drx and put on
 #     DragonOS's partition (2) as /bin/<folder>, except dinit, which goes to /boot/dinit (the first
 #     process the kernel starts). A new program is a new folder: the glob below is checked on every
@@ -96,8 +98,9 @@ function(ds_add_env TARGET MODE ASM_FLAGS)
 	set(LIBSTD_DRL ${OUT}/lib/libstd.drl)
 	# What a supervisor-mode program (the BIOS, Drake, the kernels) links.
 	set(SYSTEM_LIBS ${LIBCORE} ${SDK})
-	# What a DragonOS user program links.
-	set(USER_LIBS ${LIBCORE} ${LIBSTD})
+	# What a DragonOS user program links (dynamically: it compiles against the .dlib, the kernel
+	# loads the .drl; a library's interface (ABI) changing rebuilds the programs).
+	set(USER_LIBS ${LIBCORE} ${LIBSTD} ${LIBCORE_DRL} ${LIBSTD_DRL})
 	if(DS_UPDATE_EXTRA_LIBS)
 		set(LIBS_EXTRA_DIR ${DS_SOURCE_DIR})
 	else()
@@ -177,7 +180,7 @@ function(ds_add_env TARGET MODE ASM_FLAGS)
 		add_custom_command(
 			OUTPUT ${DRX} ${OUT}/disassembly/${DDS}.dds
 			COMMAND ${CMAKE_COMMAND} -E make_directory ${OUT}/programs ${OUT}/disassembly
-			COMMAND ${DSC} ${DS_SOURCE_DIR}/user_programs/${NAME}/main.ds -L ${OUT}/lib -o ${DRX}
+			COMMAND ${DSC} ${DS_SOURCE_DIR}/user_programs/${NAME}/main.ds -L ${OUT}/lib --dynamic -o ${DRX}
 																									-O --verbose --save-disassembly ${OUT}/disassembly/${DDS}.dds ${WA}
 			DEPENDS ${DS_USER_PROGRAM_SOURCES_${NAME}} ${USER_LIBS} ${COMPILER_TARGET}
 			WORKING_DIRECTORY ${DS_RUN_DIR}

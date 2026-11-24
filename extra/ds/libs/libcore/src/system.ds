@@ -11,6 +11,8 @@ namespace std {
         var uptime_ms: u32;                             // since the machine started (wraps after ~49.7 days)
         var processes: u32;                             // running, waiting or ended (zombies), not the idle loop
         var max_processes: u32;
+        var libraries: u32;                             // shared libraries loaded (in use, or kept: unloaded when their room is needed)
+        var libraries_in_use: u32;                      // of them, the ones some process uses
     };
 
     // A ProcessInfo's state (the kernel's proc::ProcessState: the same values).

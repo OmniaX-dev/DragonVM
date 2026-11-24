@@ -10,8 +10,9 @@ namespace proc {
 	const USTACK_PAGES: u32 = 16;                   // 64 KiB
 	const FRAME_WORDS: u32 = 34;
 	const PROC_NAME_MAX_LEN: u32 = std::PROCESS_NAME_MAX;
+	const MAX_LIBS: u32 = 256;                      // shared libraries loaded at once (dynlink.ds: the slots; a multiple of 32)
 
-	enum RegionKind: u8 { Image, Stack, Heap, Shared }
+	enum RegionKind: u8 { Image, Stack, Heap, Shared, Library }   // (Library: its table and its copies of the libraries' globals: not FreePages')
 	struct Region {
 		var start: u32;                 // page-aligned
 		var pages: u32;
@@ -85,6 +86,8 @@ namespace proc {
 		var key_kinds: u32;                     // blocked in ReadKey: the events it wants (input::WANT_*)
 		var random: ProcessRandom;              // Random / RandomF32 / SeedRandom: its own generator
 		var files: vfs::OpenFile[vfs::MAX_FILES];	// its fd table (vfs: Open, Read, ...)
+		var lib_table: u32;                     // its shared libraries' table (dynlink.ds; 0: a DRX1, none): table[slot] = its copy's bias
+		var libs: u32[MAX_LIBS / 32];           // the libraries it uses: a bit per slot
 	};
 
 	var g_processes: Process[MAX_PROCESSES];
@@ -97,7 +100,7 @@ namespace proc {
 
 	// false: no memory for the map
 	sub as_create(var as: AddressSpace*) -> bool {
-		var map: u32 = g_pages.alloc(dr::cpu::PermissionMapSize / PAGE_SIZE);   // 4 pages
+		var map: u32 = dynlink::alloc_pages(dr::cpu::PermissionMapSize / PAGE_SIZE);   // 4 pages (unused libraries unloaded if needed)
 		if (map == 0)
 			return false;
 		as->map = cast<u8*>(map);
@@ -180,6 +183,7 @@ namespace proc {
 		dr::cpu::set_user_stack(p->user_stack_top, p->user_stack_size);
 		var frame: u32 = p->frame;
 		var rv: u32 = p->rv;
+		*dynlink::g_libtable_word = p->lib_table;  // its shared libraries' table (dynlink.ds: the whole "context switch" of dynamic linking)
 		dr::cpu::set_kernel_stack(p->kernel_top, KSTACK_PAGES * PAGE_SIZE);     // last: see below
 		low {
 			mov R1, $frame
@@ -195,11 +199,13 @@ namespace proc {
 		var start: u32 = 0;
 		var end: u32 = 0;
 		__internal::trampoline_code(&start, &end);
-		kernel_assert(end > start and end - start <= PAGE_SIZE, "The trampoline doesn't fit a page.");
+		kernel_assert(end > start and end - start <= PAGE_SIZE - 16, "The trampoline doesn't fit a page.");
 		g_trampoline = g_pages.alloc(1);
 		kernel_assert(g_trampoline != 0, "No page for the trampoline.");
 		std::memset(cast<void*>(g_trampoline), 0, PAGE_SIZE);
 		std::memcpy(cast<void*>(g_trampoline), cast<void*>(start), end - start);
+		// The LibTable word (dynlink.ds): Read for every process, written by switch_to.
+		dynlink::g_libtable_word = cast<u32*>(g_trampoline + PAGE_SIZE - 16);
 
 		// The idle loop: one instruction at the end of the page, "jmp <its own address>"
 		// (opcode 0x7C, then the address, big endian).
@@ -290,30 +296,54 @@ namespace proc {
 			return null;
 		}
 
-		var image_pages: u32 = PageAllocator::pages_for(info.size);
-		if (image_pages == 0) {
+		// 1. The file, read into pages (a DRX1 is loaded in place in them).
+		var file_pages: u32 = PageAllocator::pages_for(info.size);
+		if (file_pages == 0) {
 			*out_err = std::ExecErrors.Empty;
 			proc::free_slot(p);
 			return null;
 		}
-		var image: u8* = cast<u8*>(g_pages.alloc(image_pages));
-		if (not image) {
+		var file: u8* = cast<u8*>(dynlink::alloc_pages(file_pages));
+		if (not file) {
 			*out_err = std::SystemErrors.NoMemory;
 			proc::free_slot(p);
 			return null;
 		}
-		var r: i32 = g_root_fs.read_all(path, image, info.size);
+		var r: i32 = g_root_fs.read_all(path, file, info.size);
 		if (r < 0) {
 			*out_err = g_root_fs.last_error();
-			g_pages.free(cast<u32>(image), image_pages);
+			g_pages.free(cast<u32>(file), file_pages);
 			proc::free_slot(p);
 			return null;
 		}
+		if (not proc::as_create(&p->as)) {
+			*out_err = std::SystemErrors.NoMemory;
+			g_pages.free(cast<u32>(file), file_pages);
+			proc::free_slot(p);
+			return null;
+		}
+
+		// 2. The image: a DRX2 (shared libraries) is linked by dynlink into new pages (the file
+		//    is dropped); a DRX1 is relocated where it was read. The rest of the last page is
+		//    zeroed (the pages held whatever was there before), then the process may read, write
+		//    and run it.
+		var image: u8* = file;
+		var image_pages: u32 = file_pages;
+		var image_size: u32 = info.size;
 		var entry_addr: u32 = 0;
-		r = dr::drx::load(image, info.size, image, image_pages * PAGE_SIZE, &entry_addr);
+		var dynamic: bool = dr::dyn::is_program(file, info.size);
+		if (dynamic) {
+			r = dynlink::link_process(p, file, info.size, &image, &image_pages, &image_size, &entry_addr);
+			g_pages.free(cast<u32>(file), file_pages);
+		}
+		else
+			r = dr::drx::load(file, info.size, file, file_pages * PAGE_SIZE, &entry_addr);
 		if (r != std::Ok) {
 			*out_err = r;
-			g_pages.free(cast<u32>(image), image_pages);
+			if (not dynamic)
+				g_pages.free(cast<u32>(file), file_pages);		// (a DRX2's: freed already)
+			dynlink::process_ended(p);							// (the libraries counted for it)
+			proc::as_destroy(&p->as);
 			proc::free_slot(p);
 			return null;
 		}
@@ -322,18 +352,11 @@ namespace proc {
 		p->parent = parent;
 		p->entry = entry_addr;
 		p->random.seed(*cast<u32*>(dr::RandomRegisters.Entropy));
-		if (not proc::as_create(&p->as)) {
-			*out_err = std::SystemErrors.NoMemory;
-			g_pages.free(cast<u32>(image), image_pages);
-			proc::free_slot(p);
-			return null;
-		}
 
-		// 2. The image: zero the rest of the last page (the pages held whatever was there before),
-		//    then let the process read, write and run it.
-		std::memset(image + info.size, 0, image_pages * PAGE_SIZE - info.size);
+		std::memset(image + image_size, 0, image_pages * PAGE_SIZE - image_size);
 		if (not proc::as_map(&p->as, cast<u32>(image), image_pages, dr::cpu::Permissions.ReadWrite, proc::RegionKind.Image, true)) {
 			*out_err = std::SystemErrors.NoMemory;
+			dynlink::process_ended(p);
 			proc::as_destroy(&p->as);
 			g_pages.free(cast<u32>(image), image_pages);
 			proc::free_slot(p);
@@ -342,7 +365,7 @@ namespace proc {
 
 		// 3. The user stack: a guard page (stays None: running off the stack is an access
 		//    violation) and USTACK_PAGES under it.
-		var stack: u32 = g_pages.alloc(1 + proc::USTACK_PAGES);
+		var stack: u32 = dynlink::alloc_pages(1 + proc::USTACK_PAGES);
 		if (stack == 0) {
 			*out_err = std::SystemErrors.NoMemory;
 			proc::as_destroy(&p->as);
@@ -363,7 +386,7 @@ namespace proc {
 		p->user_stack_size = proc::USTACK_PAGES * PAGE_SIZE;
 
 		// 4. The kernel stack: the process's traps land here. Not in its map: None for it.
-		p->kernel_stack = g_pages.alloc(proc::KSTACK_PAGES);
+		p->kernel_stack = dynlink::alloc_pages(proc::KSTACK_PAGES);
 		if (p->kernel_stack == 0) {
 			*out_err = std::SystemErrors.NoMemory;
 			proc::as_destroy(&p->as);

@@ -9,6 +9,7 @@ sub kernel_main() {
 	init_heap();
 	kernel_log(" ** Initializing process trampoline page...");
 	proc::init_trampoline();
+	dynlink::init();
 	kernel_log(" ** Initializing idle process...");
 	proc::init_idle();
 	kernel_log(" ** Initializing root filesystem...");

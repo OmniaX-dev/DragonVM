@@ -1,0 +1,477 @@
+// dynlink.ds - the kernel's loader for programs that use shared libraries (DRX2, dsc --dynamic)
+// and the libraries themselves (DRL, /lib/<name>.drl). other/info/dynamic-linking.md has the file
+// formats and the memory model; this follows its "Writing the kernel's loader" (and drun's
+// dyn::Linker, src/tools/DynamicLinking.hpp, which does the same for one process).
+//
+// In short (one address space, no address translation):
+//   - A library is loaded once for the whole system (the first time a process needs it): its file
+//     is read and kept, its image copied to text pages, relocated and its text imports filled in.
+//     It gets a slot (any free one: up to proc::MAX_LIBS libraries at once).
+//   - Every process using it maps that text Read (shared: nobody frees it with a process), and
+//     gets its own copy of the library's writable globals (its rw part), made from the template.
+//   - Each process has a table, one word per slot: table[slot] = its copy - rw_start (the bias).
+//     Shared code reaches its globals through it: [LibTable word] -> table, + 4 * slot -> bias.
+//   - The LibTable word (one for the system, in the trampoline page) points at the running
+//     process's table: switch_to writes it. That's all the context switch needs.
+//
+// The cache: a library no process uses any more stays loaded (users 0), so the next program that
+// needs it costs nothing to start. It is unloaded only when its slot or its memory is needed:
+//   - no free slot for a new library (lib_load), or
+//   - no free pages for something (alloc_pages: everything the kernel allocates for processes,
+//     AllocPages included, goes through it).
+// Then the least recently used library that can go is unloaded: no process uses it (users 0) and
+// no loaded library depends on it (dependents 0: a library's text has its dependencies' addresses
+// in it). Unloading one can free its own dependencies the same way.
+//
+// A library being loaded, or just found for a process, is pinned until it is counted: its
+// dependencies get dependents++ as soon as each is found, a program's libraries users++ as soon as
+// each is found (and both are undone on errors), so nothing that is about to be used is unloaded.
+#include(process.ds)
+
+namespace dynlink {
+	const MAX_DEPS: u32 = 32;					// a library's dependencies (direct and indirect: the DRL lists them all)
+	const MAX_DEPTH: u32 = 8;					// libraries loading each other's dependencies at once (lib_load recurses on the 8 KiB kernel stack)
+
+	struct SharedLib {
+		var used: bool;							// the slot holds a library
+		var name: u8[32];
+		var file: u8*;							// the .drl, kept: its tables are read for every process
+		var file_pages: u32;
+		var h: dr::dyn::LibraryHeader;			// (its strings point into file)
+		var text: u32;							// its image, relocated: shared by every process
+		var text_pages: u32;
+		var deps: u8[MAX_DEPS];					// its dependencies (h.dependencies.count), as slots
+		var users: u32;							// processes using it (directly or through another library)
+		var dependents: u32;					// loaded libraries that have it as a dependency
+		var last_used: u32;						// g_clock when a process last started with it (LRU)
+	};
+
+	var g_libs: SharedLib* = null;				// proc::MAX_LIBS of them (init: from pages, not in the kernel image); the index is the slot
+	var g_libtable_word: u32* = null;			// in the trampoline page (init_trampoline)
+	var g_loading: string[MAX_DEPTH];			// the libraries being loaded (their dependencies first): cycles
+	var g_loading_count: u32 = 0;
+	var g_clock: u32 = 0;						// counts process starts (last_used)
+
+	inline sub word(var addr: u32) -> u32* { return cast<u32*>(addr); }	// (big endian like the files; unaligned is fine)
+
+	// At boot, after the page allocator: the library table (cleared: no library loaded).
+	sub init() {
+		var bytes: u32 = proc::MAX_LIBS * sizeof(SharedLib);
+		g_libs = cast<SharedLib*>(g_pages.alloc(PageAllocator::pages_for(bytes)));
+		kernel_assert(g_libs != null, "No memory for the shared library table.");
+		std::memset(g_libs, 0, bytes);
+	}
+
+	// ---- The cache ----
+
+	// n pages, unloading unused libraries while there aren't enough (0: none even then).
+	sub alloc_pages(var n: u32) -> u32 {
+		while (true) {
+			var addr: u32 = g_pages.alloc(n);
+			if (addr != 0 or not evict_one())
+				return addr;
+		}
+		return 0;
+	}
+
+	// The least recently used library that can go, unloaded. false: none can.
+	sub evict_one() -> bool {
+		if (g_libs == null)
+			return false;
+		var best: u32 = proc::MAX_LIBS;
+		for (var s: u32 = 0; s < proc::MAX_LIBS; s++) {
+			var l: SharedLib* = &g_libs[s];
+			if (not l->used or l->users != 0 or l->dependents != 0)
+				continue;
+			if (best == proc::MAX_LIBS or l->last_used < g_libs[best].last_used)
+				best = s;
+		}
+		if (best == proc::MAX_LIBS)
+			return false;
+		unload(best);
+		return true;
+	}
+
+	// The library in slot s gone (users and dependents 0): its pages freed, its slot free, its
+	// dependencies one dependent less.
+	sub unload(var s: u32) {
+		var l: SharedLib* = &g_libs[s];
+		for (var i: u32 = 0; i < l->h.dependencies.count; i++)
+			g_libs[l->deps[i]].dependents--;
+		dr::drx::notify_unloaded(l->text);				// (the debugger: its disassembly isn't there any more)
+		g_pages.free(l->text, l->text_pages);
+		g_pages.free(cast<u32>(l->file), l->file_pages);
+		std::memset(l, 0, sizeof(SharedLib));
+	}
+
+	// A free slot (unloading an unused library if there is none): its index, or MAX_LIBS.
+	sub free_lib_slot() -> u32 {
+		while (true) {
+			for (var s: u32 = 0; s < proc::MAX_LIBS; s++) {
+				if (not g_libs[s].used)
+					return s;
+			}
+			if (not evict_one())
+				return proc::MAX_LIBS;
+		}
+		return proc::MAX_LIBS;
+	}
+
+	// ---- Once per library ----
+
+	// The loaded library name, or MAX_LIBS.
+	sub find(var name: string) -> u32 {
+		for (var s: u32 = 0; s < proc::MAX_LIBS; s++) {
+			if (g_libs[s].used and std::strcmp(&g_libs[s].name[0], name) == 0)
+				return s;
+		}
+		return proc::MAX_LIBS;
+	}
+
+	// The library name (with the ABI a program or a library recorded) loaded: its slot in out_slot.
+	// (Not pinned: the caller counts it right away, as a dependency or a user.)
+	sub lib_load(var name: string, var abi: u32, var out_slot: u32*) -> i32 {
+		var found: u32 = find(name);
+		if (found != proc::MAX_LIBS) {
+			if (g_libs[found].h.abi != abi)
+				return std::ExecErrors.AbiMismatch;
+			*out_slot = found;
+			return std::Ok;
+		}
+		for (var i: u32 = 0; i < g_loading_count; i++) {
+			if (std::strcmp(g_loading[i], name) == 0)
+				return std::ExecErrors.CircularDependency;
+		}
+		var n: u32 = std::strlen(name);
+		if (n == 0 or n >= 32)
+			return std::ExecErrors.BadImport;
+		if (g_loading_count == MAX_DEPTH)
+			return std::ExecErrors.TooManyLibraries;		// (a dependency chain deeper than MAX_DEPTH)
+
+		// The file: /lib/<name>.drl, read into pages it keeps.
+		var path: u8[48];
+		std::strcpy(&path[0], "/lib/");
+		std::strcpy(&path[5], name);
+		std::strcpy(&path[5 + n], ".drl");
+		var info: dr::fs::Info;
+		if (not g_root_fs.info(&path[0], &info))
+			return g_root_fs.last_error() == std::FsErrors.NotFound ? std::ExecErrors.LibraryNotFound : g_root_fs.last_error();
+		var file_pages: u32 = PageAllocator::pages_for(info.size);
+		if (file_pages == 0)
+			return std::ExecErrors.Empty;
+		var file: u8* = cast<u8*>(alloc_pages(file_pages));
+		if (not file)
+			return std::SystemErrors.NoMemory;
+		var l: SharedLib;
+		std::memset(&l, 0, sizeof(SharedLib));
+		var r: i32 = g_root_fs.read_all(&path[0], file, info.size);
+		if (r >= 0)
+			r = dr::dyn::read_library_header(file, info.size, &l.h);
+		if (r >= 0 and l.h.abi != abi)
+			r = std::ExecErrors.AbiMismatch;
+		if (r >= 0 and l.h.dependencies.count > MAX_DEPS)
+			r = std::ExecErrors.TooManyLibraries;
+
+		// Its dependencies first, each pinned as soon as it is found (dependents++).
+		var pinned: u32 = 0;
+		if (r >= 0) {
+			g_loading[g_loading_count] = name;
+			g_loading_count++;
+			for (var i: u32 = 0; i < l.h.dependencies.count and r >= 0; i++) {
+				var ref: dr::dyn::LibraryRef;
+				r = dr::dyn::library_dependency(file, &l.h, i, &ref);
+				var slot: u32 = 0;
+				if (r >= 0)
+					r = lib_load(ref.name, ref.abi, &slot);
+				if (r >= 0) {
+					l.deps[i] = cast<u8>(slot);
+					g_libs[slot].dependents++;
+					pinned++;
+				}
+			}
+			g_loading_count--;
+		}
+
+		// A slot, and the text: the image, relocated, its text imports filled in (once, for everyone).
+		var slot: u32 = proc::MAX_LIBS;
+		if (r >= 0) {
+			slot = free_lib_slot();
+			if (slot == proc::MAX_LIBS)
+				r = std::ExecErrors.TooManyLibraries;		// (every loaded library is in use)
+		}
+		if (r >= 0) {
+			l.text_pages = PageAllocator::pages_for(l.h.image_size);
+			l.text = l.text_pages == 0 ? 0 : alloc_pages(l.text_pages);
+			if (l.text == 0)
+				r = std::SystemErrors.NoMemory;
+		}
+		if (r >= 0) {
+			std::memcpy(cast<void*>(l.text), &file[l.h.header_size], l.h.image_size);
+			std::memset(cast<void*>(l.text + l.h.image_size), 0, l.text_pages * PAGE_SIZE - l.h.image_size);
+		}
+		for (var i: u32 = 0; r >= 0 and i < l.h.text_relocations.count; i++) {
+			var off: u32 = 0;
+			r = dr::dyn::library_relocation(file, &l.h, &l.h.text_relocations, i, &off);
+			if (r >= 0)
+				*word(l.text + off) += l.text;
+		}
+		for (var i: u32 = 0; r >= 0 and i < l.h.imports.count; i++) {
+			var imp: dr::dyn::Import;
+			r = dr::dyn::library_import(file, &l.h, i, &imp);
+			if (r < 0 or dr::dyn::in_rw(&l.h, imp.offset))
+				continue;									// (in rw: per process, in copy_rw)
+			var value: u32 = 0;
+			r = text_import(&l, slot, &imp, &value);
+			if (r >= 0)
+				*word(l.text + imp.offset) = value;
+		}
+		if (r < 0) {
+			for (var i: u32 = 0; i < pinned; i++)
+				g_libs[l.deps[i]].dependents--;				// (unpinned: unloadable again)
+			if (l.text != 0)
+				g_pages.free(l.text, l.text_pages);
+			g_pages.free(cast<u32>(file), file_pages);
+			return r;
+		}
+		l.used = true;
+		std::strcpy(&l.name[0], name);
+		l.file = file;
+		l.file_pages = file_pages;
+		l.last_used = g_clock;
+		g_libs[slot] = l;
+		dr::drx::notify_loaded(l.text, l.h.image_size, l.h.id_hi, l.h.id_lo);	// (the debugger: its disassembly)
+		*out_slot = slot;
+		return std::Ok;
+	}
+
+	// What a text import of l (slot) gets (the import kinds' table in dynamic-linking.md).
+	sub text_import(var l: SharedLib*, var slot: u32, var imp: dr::dyn::Import*, var out: u32*) -> i32 {
+		if (imp->kind == dr::dyn::ImportKinds.SelfSlot) { *out = 4 * slot; return std::Ok; }
+		if (imp->kind == dr::dyn::ImportKinds.LibTable) { *out = cast<u32>(g_libtable_word); return std::Ok; }
+		if (imp->library >= l->h.dependencies.count)
+			return std::ExecErrors.BadImport;
+		var dep: u32 = l->deps[imp->library];
+		var from: SharedLib* = &g_libs[dep];
+		var off: u32 = 0;
+		if (dr::dyn::find_export(from->file, &from->h, imp->symbol, &off) < 0)
+			return std::ExecErrors.SymbolNotFound;
+		if (imp->kind == dr::dyn::ImportKinds.SlotOf) { *out = 4 * dep; return std::Ok; }
+		if (imp->kind == dr::dyn::ImportKinds.OffsetOf) { *out = off; return std::Ok; }
+		if (imp->kind == dr::dyn::ImportKinds.Absolute) {
+			if (dr::dyn::in_rw(&from->h, off))
+				return std::ExecErrors.NotShareable;		// (shared code can't hold a per-process address)
+			*out = from->text + off;
+			return std::Ok;
+		}
+		return std::ExecErrors.BadImport;
+	}
+
+	// ---- For each process ----
+
+	// Process p uses library slot (Process.libs: a bit per slot).
+	inline sub uses(var p: proc::Process*, var slot: u32) -> bool { return (p->libs[slot >> 5] & (cast<u32>(1) << (slot & 31))) != 0; }
+
+	// The address of symbol in library slot, for process p: in its text, or (a writable global) in
+	// p's own copy of its rw part (table[slot] + offset: the bias).
+	sub absolute(var p: proc::Process*, var slot: u32, var symbol: string, var out: u32*) -> i32 {
+		var from: SharedLib* = &g_libs[slot];
+		var off: u32 = 0;
+		if (dr::dyn::find_export(from->file, &from->h, symbol, &off) < 0)
+			return std::ExecErrors.SymbolNotFound;
+		*out = dr::dyn::in_rw(&from->h, off) ? *word(p->lib_table + 4 * slot) + off : from->text + off;
+		return std::Ok;
+	}
+
+	// slot and everything it depends on: p's (users++: pinned from now on, until process_ended).
+	sub use(var p: proc::Process*, var slot: u32) {
+		if (uses(p, slot))
+			return;
+		p->libs[slot >> 5] |= cast<u32>(1) << (slot & 31);
+		g_libs[slot].users++;
+		g_libs[slot].last_used = g_clock;
+		for (var i: u32 = 0; i < g_libs[slot].h.dependencies.count; i++)
+			use(p, g_libs[slot].deps[i]);
+	}
+
+	// A DRX2 program (file, size bytes) for p, whose address space exists: its libraries loaded
+	// (and their dependencies), mapped and linked for p (its table, its copies), and the program's
+	// own image in new pages (out_image: out_pages pages, out_image_size bytes; the caller maps
+	// it), relocated and linked. On errors, what was mapped is in p's address space (as_destroy
+	// frees it) and the libraries counted are p's (process_ended uncounts them); the image's pages
+	// are freed here.
+	sub link_process(var p: proc::Process*, var file: u8*, var size: u32, var out_image: u8**, var out_pages: u32*, var out_image_size: u32*, var out_entry: u32*) -> i32 {
+		var h: dr::dyn::ProgramHeader;
+		var r: i32 = dr::dyn::read_program_header(file, size, &h);
+		if (r < 0)
+			return r;
+		if (h.libraries.count > MAX_DEPS)
+			return std::ExecErrors.TooManyLibraries;
+		g_clock++;
+		// 1. Its libraries (loaded once, for everyone), and everything they need: p's from now on.
+		var slots: u32[MAX_DEPS];
+		for (var i: u32 = 0; i < h.libraries.count; i++) {
+			var ref: dr::dyn::LibraryRef;
+			r = dr::dyn::program_library(file, &h, i, &ref);
+			if (r >= 0)
+				r = lib_load(ref.name, ref.abi, &slots[i]);
+			if (r < 0)
+				return r;
+			use(p, slots[i]);
+		}
+		// 2. Its table: a page (MAX_LIBS words), Read for it (only the kernel writes it).
+		var table: u32 = alloc_pages(1);
+		if (table == 0)
+			return std::SystemErrors.NoMemory;
+		std::memset(cast<void*>(table), 0, PAGE_SIZE);
+		if (not proc::as_map(&p->as, table, 1, dr::cpu::Permissions.Read, proc::RegionKind.Library, true)) {
+			g_pages.free(table, 1);
+			return std::SystemErrors.NoMemory;
+		}
+		p->lib_table = table;
+		// 3. Each library it uses: its rw copy (a library's dependencies' first: an import of a
+		//    dependency's writable global needs this process's copy of it), its text.
+		var done: u32[proc::MAX_LIBS / 32];
+		std::memset(&done[0], 0, sizeof(done));
+		for (var s: u32 = 0; s < proc::MAX_LIBS; s++) {
+			if (uses(p, s)) {
+				r = map_library(p, s, &done[0]);
+				if (r < 0)
+					return r;
+			}
+		}
+		// 4. The program: its image copied, relocated (+ its base), its imports filled in.
+		var pages: u32 = PageAllocator::pages_for(h.image_size);
+		var image: u8* = pages == 0 ? null : cast<u8*>(alloc_pages(pages));
+		if (not image)
+			return std::SystemErrors.NoMemory;
+		std::memcpy(image, &file[h.header_size], h.image_size);
+		var base: u32 = cast<u32>(image);
+		for (var i: u32 = 0; i < h.relocations.count and r >= 0; i++) {
+			var off: u32 = 0;
+			r = dr::dyn::program_relocation(file, &h, i, &off);
+			if (r >= 0)
+				*word(base + off) += base;
+		}
+		for (var i: u32 = 0; i < h.imports.count and r >= 0; i++) {
+			var imp: dr::dyn::Import;
+			r = dr::dyn::program_import(file, &h, i, &imp);
+			if (r < 0)
+				break;
+			var slot: u32 = slots[imp.library];
+			var value: u32 = 0;
+			if (imp.kind == dr::dyn::ImportKinds.Init)
+				value = g_libs[slot].text + g_libs[slot].h.init;
+			else
+				r = absolute(p, slot, imp.symbol, &value);
+			if (r >= 0)
+				*word(base + imp.offset) = value;
+		}
+		if (r < 0) {
+			g_pages.free(base, pages);
+			return r;
+		}
+		dr::drx::notify_loaded(base, h.image_size, h.id_hi, h.id_lo);
+		*out_image = image;
+		*out_pages = pages;
+		*out_image_size = h.image_size;
+		*out_entry = base + h.entry;
+		return std::Ok;
+	}
+
+	// Library s for p, its dependencies first (done: a bit per slot already mapped): its copy of
+	// the rw part (if it has one), its text mapped Read (shared, not p's to free).
+	sub map_library(var p: proc::Process*, var s: u32, var done: u32*) -> i32 {
+		if ((done[s >> 5] & (cast<u32>(1) << (s & 31))) != 0)
+			return std::Ok;
+		done[s >> 5] |= cast<u32>(1) << (s & 31);
+		var l: SharedLib* = &g_libs[s];
+		for (var i: u32 = 0; i < l->h.dependencies.count; i++) {
+			var r: i32 = map_library(p, l->deps[i], done);
+			if (r < 0)
+				return r;
+		}
+		if (l->h.rw_size > 0) {
+			var r: i32 = copy_rw(p, s);
+			if (r < 0)
+				return r;
+		}
+		if (not proc::as_map(&p->as, l->text, l->text_pages, dr::cpu::Permissions.Read, proc::RegionKind.Shared, false))
+			return std::SystemErrors.NoMemory;
+		return std::Ok;
+	}
+
+	// p's copy of library s's writable globals: the template, its data relocations and rw imports
+	// applied for this copy, mapped ReadWrite; table[s] = the bias.
+	sub copy_rw(var p: proc::Process*, var s: u32) -> i32 {
+		var l: SharedLib* = &g_libs[s];
+		var pages: u32 = PageAllocator::pages_for(l->h.rw_size);
+		var copy: u32 = alloc_pages(pages);
+		if (copy == 0)
+			return std::SystemErrors.NoMemory;
+		std::memcpy(cast<void*>(copy), cast<void*>(l->text + l->h.rw_start), l->h.rw_size);	// (the text's rw part: the template, untouched)
+		std::memset(cast<void*>(copy + l->h.rw_size), 0, pages * PAGE_SIZE - l->h.rw_size);
+		var bias: u32 = copy - l->h.rw_start;
+		var r: i32 = std::Ok;
+		for (var i: u32 = 0; i < l->h.data_text_relocations.count and r >= 0; i++) {
+			var off: u32 = 0;
+			r = dr::dyn::library_relocation(l->file, &l->h, &l->h.data_text_relocations, i, &off);
+			if (r >= 0)
+				*word(bias + off) += l->text;
+		}
+		for (var i: u32 = 0; i < l->h.data_data_relocations.count and r >= 0; i++) {
+			var off: u32 = 0;
+			r = dr::dyn::library_relocation(l->file, &l->h, &l->h.data_data_relocations, i, &off);
+			if (r >= 0)
+				*word(bias + off) += bias;
+		}
+		for (var i: u32 = 0; i < l->h.imports.count and r >= 0; i++) {
+			var imp: dr::dyn::Import;
+			r = dr::dyn::library_import(l->file, &l->h, i, &imp);
+			if (r < 0 or not dr::dyn::in_rw(&l->h, imp.offset))
+				continue;
+			if (imp.kind != dr::dyn::ImportKinds.Absolute or imp.library >= l->h.dependencies.count) {
+				r = std::ExecErrors.BadImport;
+				break;
+			}
+			var value: u32 = 0;
+			r = absolute(p, l->deps[imp.library], imp.symbol, &value);
+			if (r >= 0)
+				*word(bias + imp.offset) = value;
+		}
+		if (r >= 0 and not proc::as_map(&p->as, copy, pages, dr::cpu::Permissions.ReadWrite, proc::RegionKind.Library, true))
+			r = std::SystemErrors.NoMemory;
+		if (r < 0) {
+			g_pages.free(copy, pages);
+			return r;
+		}
+		*word(p->lib_table + 4 * s) = bias;
+		return std::Ok;
+	}
+
+	// p ended (process_exit), or its start failed: its libraries have one user less (unused ones
+	// stay loaded: the cache). Its table and copies are owned regions: as_destroy frees them.
+	sub process_ended(var p: proc::Process*) {
+		if (g_libs == null)
+			return;
+		for (var s: u32 = 0; s < proc::MAX_LIBS; s++) {
+			if (uses(p, s) and g_libs[s].users > 0)
+				g_libs[s].users--;
+		}
+		std::memset(&p->libs[0], 0, sizeof(p->libs));
+	}
+
+	// For tests and a future `lsmod`: the libraries loaded, and those of them in use.
+	sub count_loaded(var out_in_use: u32*) -> u32 {
+		var n: u32 = 0;
+		var used: u32 = 0;
+		for (var s: u32 = 0; s < proc::MAX_LIBS; s++) {
+			if (not g_libs[s].used)
+				continue;
+			n++;
+			if (g_libs[s].users > 0)
+				used++;
+		}
+		*out_in_use = used;
+		return n;
+	}
+}
