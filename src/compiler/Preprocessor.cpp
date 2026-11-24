@@ -35,6 +35,40 @@ namespace dscript
 		return true;
 	}
 
+	// Where a library's source is: recorded relative to where dsc wrote the library, which is
+	// right as long as the library and its sources haven't moved apart. A copied library (the
+	// build writes it in its output folder and copies it next to its sources, e.g. into
+	// extra/ds/libs/libstd/lib) may sit at another depth: then the recorded path's tail (what
+	// follows its leading ".."s) is looked for from each folder above the library.
+	static std::string locateLibrarySource(const std::string& libDir, const std::string& recorded)
+	{
+		namespace fs = std::filesystem;
+		std::error_code ec;
+		const fs::path direct = (fs::path(libDir) / recorded).lexically_normal();
+		if (fs::path(recorded).is_absolute() || fs::exists(direct, ec))
+			return direct.string();
+		fs::path tail;
+		bool leading = true;
+		for (const fs::path& part : fs::path(recorded).lexically_normal())
+		{
+			if (leading && (part == ".." || part == "."))
+				continue;
+			leading = false;
+			tail /= part;
+		}
+		if (tail.empty() || tail == fs::path(recorded))
+			return direct.string();
+		for (fs::path d = fs::path(libDir); ; d = d.parent_path())
+		{
+			const fs::path candidate = d / tail;
+			if (fs::exists(candidate, ec))
+				return candidate.lexically_normal().string();
+			if (d.empty() || d == d.root_path() || d == d.parent_path())
+				break;
+		}
+		return direct.string();
+	}
+
 	static std::string trim(const std::string& s)
 	{
 		size_t a = 0, b = s.size();
@@ -464,11 +498,17 @@ namespace dscript
 		// program's defines.
 		const int index = (int)m_imports.size();
 		std::map<uint32_t, const dragon::dlib::LineInfo*> lines;
+		std::map<std::string, std::string> located;		// recorded path -> where the source is
 		for (auto& l : imp.library.lines)
 		{
 			// Recorded relative to the library.
 			if (!l.file.empty() && l.file[0] != '<')
-				l.file = (std::filesystem::path(canonical).parent_path() / l.file).lexically_normal().string();
+			{
+				auto it = located.find(l.file);
+				if (it == located.end())
+					it = located.emplace(l.file, locateLibrarySource(libDir, l.file)).first;
+				l.file = it->second;
+			}
 			lines[l.line] = &l;
 		}
 		Lexer lexer(imp.library.interface, canonical);
