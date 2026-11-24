@@ -255,8 +255,7 @@ module.exports = grammar({
 			),
 			// auto x = value: the type comes from the value (no ': type')
 			seq('auto', field('name', $.identifier), '=', field('value', $._expression)),
-			// ref x = variable / const ref x = value: a reference local, its type from the value. (ref
-			// is matched as a name: it is one elsewhere, e.g. ref[i] = 0 starting a statement.)
+			// ref x = variable / const ref x = value: a reference local, its type from the value.
 			seq(optional('const'), $.ref_word, field('name', $.identifier), '=', field('value', $._expression)),
 			// constinit x: T = value: a global whose value is known when compiling
 			seq(
@@ -394,7 +393,10 @@ module.exports = grammar({
 		parenthesized_type: $ => seq('(', $._type, ')'),
 		// const T*: what the pointer points at is constant (const u8* groups as const (u8*))
 		const_type: $ => prec(1, seq('const', field('type', $._type))),
-		ref_word: $ => alias($.identifier, 'ref'),
+		// ref: a keyword only where one can be (ref x = v, for (ref x in r), var x: ref T); a name
+		// elsewhere (var ref: T, ref[i] = 0: _expression's alias). (Not an alias of identifier: an
+		// identifier being typed would then be taken for it, and highlighted as a keyword.)
+		ref_word: _ => 'ref',
 		// ref T / const ref T: a reference (parameters, results, locals: ref is a name elsewhere)
 		ref_type: $ => prec.right(seq(optional('const'), 'ref', field('type', $._type))),
 		// value_type(N): the type of a value (of a template parameter given one)
@@ -524,6 +526,7 @@ module.exports = grammar({
 			$.parenthesized_expression,
 			$.scoped_identifier,
 			$.identifier,
+			alias('ref', $.identifier),		// (a variable named ref: ref[i] = 0)
 			$.number_literal,
 			$.char_literal,
 			$.string_literal,

@@ -3586,12 +3586,7 @@
       }
     },
     "ref_word": {
-      "type": "ALIAS",
-      "content": {
-        "type": "SYMBOL",
-        "name": "identifier"
-      },
-      "named": false,
+      "type": "STRING",
       "value": "ref"
     },
     "ref_type": {
@@ -4779,6 +4774,15 @@
         {
           "type": "SYMBOL",
           "name": "identifier"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "STRING",
+            "value": "ref"
+          },
+          "named": true,
+          "value": "identifier"
         },
         {
           "type": "SYMBOL",

@@ -1637,6 +1637,8 @@ sub f(var v: Vec*) {
 	for (ref x in v) { }
 	for (const ref y in v) { }
 	ref[0] = 1;
+	var ref: u8 = 0;
+	ref.x = 1;
 }
 
 --------------------------------------------------------------------------------
@@ -1680,4 +1682,14 @@ sub f(var v: Vec*) {
           (index_expression
             (identifier)
             (number_literal))
+          (number_literal)))
+      (variable_declaration
+        (identifier)
+        (primitive_type)
+        (number_literal))
+      (expression_statement
+        (assignment_expression
+          (member_expression
+            (identifier)
+            (field_identifier))
           (number_literal))))))
