@@ -462,7 +462,8 @@ namespace
 			json workspaceSymbols(const json& params);
 			json completion(const json& params);
 			// The program as it would be without the line being typed (it rarely parses).
-			std::shared_ptr<CompletionModel> completionWithoutLine(const std::string& root, const std::string& file, int line);
+			// The line (1-based) replaced by `replacement` (empty: blanked, only its braces kept).
+			std::shared_ptr<CompletionModel> completionWithoutLine(const std::string& root, const std::string& file, int line, const std::string& replacement = "");
 			json symbolInformation(const Symbol& s);
 
 		private:
@@ -474,8 +475,8 @@ namespace
 			std::set<std::string> m_roots;
 			std::map<std::string, Analysis> m_analyses;
 			std::set<std::string> m_pending;							// roots to analyze and publish when idle
-			std::string m_lineModelKey;									// completionWithoutLine(): the last one
-			std::shared_ptr<CompletionModel> m_lineModel;
+			// completionWithoutLine(): the last few (one keystroke tries two versions of the line).
+			std::vector<std::pair<std::string, std::shared_ptr<CompletionModel>>> m_lineModels;
 			bool m_shutdown { false };
 	};
 
@@ -1276,7 +1277,7 @@ namespace
 		return c.start.file == file && before(c.start, line, column) && !before(c.end, line, column - 1);
 	}
 
-	std::shared_ptr<CompletionModel> Server::completionWithoutLine(const std::string& root, const std::string& file, int line)
+	std::shared_ptr<CompletionModel> Server::completionWithoutLine(const std::string& root, const std::string& file, int line, const std::string& replacement)
 	{
 		std::map<std::string, std::string> docs = m_docs;
 		std::string text;
@@ -1296,28 +1297,38 @@ namespace
 		size_t end = text.find('\n', start);
 		if (end == std::string::npos)
 			end = text.size();
-		// Without the line, but with its braces (if (p.x) { -> {): the blocks stay balanced.
-		for (size_t i = start; i < end; i++)
+		if (!replacement.empty())
+			text.replace(start, end - start, replacement);
+		else
 		{
-			if (text[i] != '{' && text[i] != '}' && text[i] != '\t' && text[i] != '\r')
-				text[i] = ' ';
+			// Without the line, but with its braces (if (p.x) { -> {): the blocks stay balanced.
+			for (size_t i = start; i < end; i++)
+			{
+				if (text[i] != '{' && text[i] != '}' && text[i] != '\t' && text[i] != '\r')
+					text[i] = ' ';
+			}
 		}
 		docs[file] = text;
 		std::string key = root;
 		for (const auto& d : docs)
 			key += "\n" + std::to_string(d.first.size()) + d.first + std::to_string(d.second.size()) + d.second;
-		if (key == m_lineModelKey)
-			return m_lineModel;
-		m_lineModelKey = key;
-		m_lineModel = nullptr;
+		for (const auto& m : m_lineModels)
+		{
+			if (m.first == key)
+				return m.second;
+		}
+		std::shared_ptr<CompletionModel> model;
 		json r;
 		std::string why;
 		if (runAnalysis(root, docs, r, why) && r.value("parsed", false) && r.contains("completion"))
 		{
-			m_lineModel = std::make_shared<CompletionModel>();
-			m_lineModel->load(r["completion"]);
+			model = std::make_shared<CompletionModel>();
+			model->load(r["completion"]);
 		}
-		return m_lineModel;
+		m_lineModels.insert(m_lineModels.begin(), { key, model });
+		if (m_lineModels.size() > 4)
+			m_lineModels.pop_back();
+		return model;
 	}
 
 	json Server::completion(const json& params)
@@ -1370,7 +1381,33 @@ namespace
 			return none;	// ':' / '>' not after a name
 
 		Analysis& a = fresh(file);
-		std::shared_ptr<CompletionModel> model = a.parsed ? a.completion : completionWithoutLine(chooseRoot(file), file, line + 1);
+		std::shared_ptr<CompletionModel> model = a.parsed ? a.completion : nullptr;
+		if (!model)
+		{
+			// The line as far as the name's chain (its '.' / '->' / '::' and the name being
+			// typed: blanks), closed as a statement: for (auto e in v) e.| -> for (auto e in v) e ;
+			// keeps what the line declares. Its braces stay (the blocks stay balanced); the
+			// statement ends at the cursor (a local declared on the line is still in scope there).
+			const size_t cut = where == General || where == TypeName ? start : rest.size() - (where == Dot ? 1 : 2);
+			std::string kept = head.substr(0, cut) + std::string(cursor - cut, ' ');
+			int parens = 0;
+			for (char ch : kept)
+				parens += ch == '(' ? 1 : ch == ')' ? -1 : 0;
+			const std::string tail = lineStr.substr(cursor);
+			std::string braces;
+			for (char ch : tail)
+			{
+				if (ch == '{' || ch == '}')
+					braces += ch;
+			}
+			if (where != TypeName && rtrim(kept).size() > 0 && rtrim(kept).back() != '{' && rtrim(kept).back() != '}' && rtrim(kept).back() != ';')
+			{
+				kept += std::string(std::max(0, parens), ')') + ";" + braces;
+				model = completionWithoutLine(chooseRoot(file), file, line + 1, kept);
+			}
+		}
+		if (!model)
+			model = a.parsed ? a.completion : completionWithoutLine(chooseRoot(file), file, line + 1);
 		if (!model)
 			model = a.completion;	// the last one that parsed
 		if (!model)
@@ -1498,6 +1535,22 @@ namespace
 			}
 			return nullptr;
 		};
+		// A name without this-> in a struct's sub (after the locals, before the globals, like the
+		// compiler): a field or method of this; in a static sub, a static sub of its struct.
+		auto l_ownMember = [&](const std::string& name) -> const CS* {
+			auto self = locals.find("this");
+			if (self != locals.end() && self->second->type.rfind("p:s:", 0) == 0)
+			{
+				const CS* m = l_member(self->second->type.substr(4), name);
+				return m != nullptr && m->kind != CS::EnumMember ? m : nullptr;
+			}
+			if (sub != nullptr && l_kindOf(sub->scope) == CS::Struct)
+			{
+				const CS* m = l_member(sub->scope, name);
+				return m != nullptr && m->kind == CS::StaticSub ? m : nullptr;
+			}
+			return nullptr;
+		};
 		auto l_evaluate = [&](const std::vector<Segment>& chain, bool global) -> Value {
 			Value v;
 			size_t k = 1;
@@ -1514,6 +1567,8 @@ namespace
 				auto local = locals.find(q);
 				if (!global && local != locals.end())
 					v = { Value::Typed, local->second->type };
+				else if (const CS* m = global || q.find("::") != std::string::npos ? nullptr : l_ownMember(q))
+					v = l_symbolValue(m);
 				else
 					v = l_symbolValue(l_lookup(q, global));
 			}
@@ -1523,7 +1578,18 @@ namespace
 				if (seg.kind == Segment::Call)
 					v = (v.kind == Value::Typed && v.s.rfind("f:", 0) == 0) ? Value { Value::Typed, v.s.substr(2) } : Value {};
 				else if (seg.kind == Segment::Index)
-					v = (v.kind == Value::Typed && (v.s.rfind("a:", 0) == 0 || v.s.rfind("p:", 0) == 0)) ? Value { Value::Typed, v.s.substr(2) } : Value {};
+				{
+					if (v.kind == Value::Typed && (v.s.rfind("a:", 0) == 0 || v.s.rfind("p:", 0) == 0))
+						v = { Value::Typed, v.s.substr(2) };
+					else if (v.kind == Value::Typed && v.s.rfind("s:", 0) == 0)
+					{
+						// A struct's operator[]: what it returns.
+						const CS* op = l_member(v.s.substr(2), "operator[]");
+						v = (op != nullptr && op->type.rfind("f:", 0) == 0) ? Value { Value::Typed, op->type.substr(2) } : Value {};
+					}
+					else
+						v = {};
+				}
 				else if (k + 1 < chain.size() && chain[k + 1].kind == Segment::Name)
 				{
 					const std::string& name = chain[++k].text;

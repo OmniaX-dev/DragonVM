@@ -9386,7 +9386,11 @@ namespace dscript
 			case NodeKind::Block:
 			{
 				m_scopes.push_back({});
-				m_scopeEnds.push_back(s->endPos);
+				// (endPos == pos: a for-in's own block around a body that isn't a block. Its
+				// variable's scope, for the language server, ends with the enclosing one's, as a
+				// for's does.)
+				const bool generated = s->endPos.line == s->pos.line && s->endPos.column == s->pos.column && s->endPos.file == s->pos.file;
+				m_scopeEnds.push_back(generated && !m_scopeEnds.empty() ? m_scopeEnds.back() : s->endPos);
 				m_defers.emplace_back();
 				if (s->atomic)
 					m_atomic++;
@@ -9569,8 +9573,9 @@ namespace dscript
 			case NodeKind::For:
 			{
 				m_scopes.push_back({});
-				m_scopeEnds.push_back(s->d != nullptr && s->d->kind == NodeKind::Block ? s->d->endPos
-					: (m_scopeEnds.empty() ? SourcePos {} : m_scopeEnds.back()));
+				// (a for-in's own body block, endPos == pos: as a body that isn't a block)
+				const bool block = s->d != nullptr && s->d->kind == NodeKind::Block && !(s->d->endPos.line == s->d->pos.line && s->d->endPos.column == s->d->pos.column);
+				m_scopeEnds.push_back(block ? s->d->endPos : (m_scopeEnds.empty() ? SourcePos {} : m_scopeEnds.back()));
 				m_defers.emplace_back();		// (its variable's destructor: when the loop ends)
 				if (s->a)
 					genStatement(s->a);
@@ -12576,6 +12581,8 @@ namespace dscript
 	{
 		// Not the expansions of inline subs (their own body is analyzed too).
 		if (m_options.index == nullptr || v == nullptr || !m_inline.empty() || m_scopeEnds.empty())
+			return;
+		if (v->name.rfind("__forin", 0) == 0)		// (a for-in's own variables: the range, its end, the cursor)
 			return;
 		CompletionSymbol c;
 		c.name = v->name;

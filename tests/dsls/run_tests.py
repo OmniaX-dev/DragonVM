@@ -256,6 +256,27 @@ c.notify("textDocument/didChange", {"textDocument": {"uri": uri(MAIN), "version"
 c.sync()
 version += 2
 
+bag_text = main_text.rstrip("\n") + """
+struct Bag {
+	var first: Point;
+	var pts: Point[4];
+	sub operator[](var i: u32) -> ref Point { return pts[i]; }
+	sub fill() {
+		var n: i32 = 0;
+	}
+};
+"""
+bag_line = bag_text.split("\n").index("\t\tvar n: i32 = 0;")
+completes("a field without this-> (a chain)", MAIN, bag_text, bag_line, "\t\tfirst.|", ["x", "y", "sum"])
+completes("a struct's operator[] (what it returns)", MAIN, bag_text, bag_line, "\t\tvar o: Bag; o[0].|", ["x", "y", "sum"])
+completes("an array field without this->, indexed", MAIN, bag_text, bag_line, "\t\tpts[1].|", ["x", "y", "sum"])
+completes("a for-in variable on the line being typed", MAIN, bag_text, bag_line, "\t\tfor (ref e in pts) e.|", ["x", "y", "sum"])
+completes("... in a call", MAIN, bag_text, bag_line, "\t\tfor (const ref e in pts) area(e.|", ["x", "y", "sum"])
+items = complete(MAIN, bag_text, bag_line, "\t\tfor (auto e in 0..3) |", version)
+version += 2
+labels = [i["label"] for i in items]
+check("a for-in's own variables aren't offered", "e" in labels and not any(l.startswith("__forin") for l in labels), str(labels))
+
 print("editing (unsaved buffers)")
 broken = main_text.replace("p->x + p->y", "p->x + p->zz")
 c.notify("textDocument/didChange", {"textDocument": {"uri": uri(MAIN), "version": 2}, "contentChanges": [{"text": broken}]})
