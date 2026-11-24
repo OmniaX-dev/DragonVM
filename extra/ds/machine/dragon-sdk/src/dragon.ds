@@ -59,6 +59,7 @@ namespace dr {
 		var StackSize: u32						= MemoryLayout.CMOS + 0x0014;
 		var ScreenRedrawRate: u32				= MemoryLayout.CMOS + 0x0018;
 		var BootDisk: u32						= MemoryLayout.CMOS + 0x0019;
+		var MachineFlags: u32					= MemoryLayout.CMOS + 0x001A;	// MachineFlags (1 byte, supervisor writes)
 		var SystemSignals: u32					= MemoryLayout.CMOS + 0x0072;
 		var HeapStart: u32						= MemoryLayout.CMOS + 0x0074;
 		var HeapEnd: u32						= MemoryLayout.CMOS + 0x0078;
@@ -66,6 +67,10 @@ namespace dr {
 	};
 	const SystemSignals: struct {
 		var Reboot: u16							= 0b00000000_00000001;
+	};
+	// CMOS MachineFlags: set by the machine at start and on reset.
+	const MachineFlags: struct {
+		var EscapeQuits: u8						= 0b00000001;	// ESC closes the VM (DragonOS clears it before starting dinit)
 	};
 	const CPUFlags: struct {
 		var InterruptsEnabled: u32				= 0;

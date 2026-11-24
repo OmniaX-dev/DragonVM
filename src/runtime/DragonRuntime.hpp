@@ -56,6 +56,8 @@ namespace dragon
 			static void resetMachine(void);
 			// Incremented by every resetMachine(): lets the views (the window's display) notice.
 			inline static u32 getResetCount(void) { return s_resetCount; }
+			// The CMOS MachineFlags' EscapeQuits: whether ESC closes the window (the windows' handleSignal).
+			inline static bool escapeQuits(void) { return ((cast<u8>(vCMOS.read8(data::CMOSRegisters::MachineFlags)) >> data::MachineFlags::EscapeQuits) & 1) != 0; }
 
 			// A clock rate for people: "850 Hz", "12.3 kHz", "280.4 kHz", "4.02 MHz", "1.20 GHz" (the
 			// unit chosen by the size; 2 decimals under 10, 1 above).

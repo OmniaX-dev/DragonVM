@@ -323,6 +323,7 @@ namespace dragon
 		vCMOS.write32(data::CMOSRegisters::ScreenWidth, static_cast<i32>(hw::VirtualDisplay::Columns));
 		vCMOS.write32(data::CMOSRegisters::ScreenHeight, static_cast<i32>(hw::VirtualDisplay::Rows));
 		vCMOS.write16(data::CMOSRegisters::SystemSignals, 0);	// (2 bytes: HeapStart follows)
+		vCMOS.write8(data::CMOSRegisters::MachineFlags, data::MachineFlags::Default);
 		vCMOS.write32(data::CMOSRegisters::StackSize, cast<i32>(std::min<u32>(data::DefaultValues::DefaultStackSize, ram_size / 2)));
 		vDiskInterface.writeBlockSize();
 		ostd::BitField_32 disk_list_bitfield;
@@ -352,6 +353,7 @@ namespace dragon
 		vCPUControl.reset();
 		vDiskInterface.reset();
 		vCMOS.write16(data::CMOSRegisters::SystemSignals, 0);
+		vCMOS.write8(data::CMOSRegisters::MachineFlags, data::MachineFlags::Default);
 		// (a kernel may have given the boot stack away: dr::cpu::release_boot_stack)
 		vCMOS.write32(data::CMOSRegisters::StackSize, cast<i32>(std::min<u32>(data::DefaultValues::DefaultStackSize, cast<u32>(ram.getSize()) / 2)));
 		s_resetCount++;

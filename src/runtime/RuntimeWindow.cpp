@@ -24,6 +24,18 @@ namespace dragon
 		m_display.enableBloomEffect(DragonRuntime::machine_config.bloom_effect);
 	}
 
+	void RuntimeWindow::handleSignal(ostd::Signal& signal)
+	{
+		// (gui::Window closes on ESC released: the machine still gets the key, through vKeyboard's
+		// own listener.)
+		if (signal.ID == ostd::BuiltinSignals::KeyReleased && signal.userData != nullptr && !DragonRuntime::escapeQuits())
+		{
+			if (cast<ogfx::KeyEventData*>(signal.userData)->keyCode == ogfx::KeyCode::Escape)
+				return;
+		}
+		ogfx::gui::Window::handleSignal(signal);
+	}
+
 	void RuntimeWindow::__main_loop(void)
 	{
 		m_display.processSignal();

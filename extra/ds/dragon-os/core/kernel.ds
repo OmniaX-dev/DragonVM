@@ -17,6 +17,9 @@ sub kernel_main() {
 	kernel_log(" ** Initializing keyboard...");
 	input::init_keyboard();
 	var err: i32 = 0;
+	// From here ESC is the system's key: it no longer closes the VM.
+	var machine_flags: u8* = cast<u8*>(dr::CMOSRegisters.MachineFlags);
+	*machine_flags = *machine_flags & ~dr::MachineFlags.EscapeQuits;
 	kernel_log(" ** Starting init process...");
 	if (not proc::process_start("/boot/dinit", 0, null, 0, &err))
 	{

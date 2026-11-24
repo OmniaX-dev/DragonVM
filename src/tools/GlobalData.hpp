@@ -382,6 +382,17 @@ namespace dragon
 				inline static constexpr u8 Reboot                = 0x00;
 		};
 
+		// CMOS MachineFlags: properties of the machine itself, set by the runtime at every start
+		// and reset, changed by supervisor code.
+		class MachineFlags
+		{
+			public:
+				// ESC (released) closes the VM's window. Set at start and on reset; a kernel clears it
+				// when the system should get ESC like any other key (DragonOS: before starting dinit).
+				inline static constexpr u8 EscapeQuits           = 0x00;
+				inline static constexpr u8 Default               = (1 << EscapeQuits);
+		};
+
 		class CMOSRegisters
 		{
 			public:
@@ -393,6 +404,7 @@ namespace dragon
 				inline static constexpr u8 StackSize              = 0x14;
 				inline static constexpr u8 ScreenRedrawRate       = 0x18;
 				inline static constexpr u8 BootDisk               = 0x19;
+				inline static constexpr u8 MachineFlags           = 0x1A;
 				inline static constexpr u8 SystemSignals          = 0x72;
 				inline static constexpr u8 HeapStart              = 0x74;
 				inline static constexpr u8 HeapEnd                = 0x78;
@@ -419,6 +431,7 @@ namespace dragon
 					{ StackSize,        4, "StackSize",            true,    "Stack size (bytes)" },
 					{ ScreenRedrawRate,    1, "ScreenRedrawRate",    true,    "Screen redraws per second" },
 					{ BootDisk,            1, "BootDisk",            false,    "Disk the BIOS boots from" },
+					{ MachineFlags,        1, "MachineFlags",        true,    "Machine properties (bit 0: ESC closes the VM)" },
 					{ SystemSignals,            2, "SystemSignals",            false,    "Bitfield for system-wide signals" },
 					{ HeapStart,            4, "HeapStart",            false,    "BIOS Heap start address" },
 					{ HeapEnd,            4, "HeapEnd",            false,    "BIOS Heap end address" },

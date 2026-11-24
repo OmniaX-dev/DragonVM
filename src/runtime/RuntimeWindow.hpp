@@ -22,6 +22,8 @@ namespace dragon
 			inline hw::VirtualDisplay& getDisplay(void) { return m_display; }
 
 			void onInitialize(void) override;
+			// ESC closes the window only while the CMOS MachineFlags' EscapeQuits is set.
+			void handleSignal(ostd::Signal& signal) override;
 
 		protected:
 			// One step per call: handles the video signal, while events and drawing run at the

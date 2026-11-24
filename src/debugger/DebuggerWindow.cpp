@@ -583,6 +583,16 @@ namespace dragon
 		refresh_status();
 	}
 
+	void DebuggerWindow::handleSignal(ostd::Signal& signal)
+	{
+		if (signal.ID == ostd::BuiltinSignals::KeyReleased && signal.userData != nullptr && getModalSubWindow() == nullptr && !DragonRuntime::escapeQuits())
+		{
+			if (cast<ogfx::KeyEventData*>(signal.userData)->keyCode == ogfx::KeyCode::Escape)
+				return;
+		}
+		ogfx::gui::Window::handleSignal(signal);
+	}
+
 	void DebuggerWindow::onSDLEvent(SDL_Event& event)
 	{
 		if (event.type != SDL_EVENT_KEY_DOWN)

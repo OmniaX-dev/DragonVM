@@ -82,6 +82,9 @@ namespace dragon
 			void onInitialize(void) override;
 			void onUpdate(f64 delta) override;
 			void onSDLEvent(SDL_Event& event) override;
+			// ESC closes the debugger only while the machine's CMOS MachineFlags' EscapeQuits is set
+			// (a modal window still closes with it).
+			void handleSignal(ostd::Signal& signal) override;
 
 		protected:
 			void __main_loop(void) override;

@@ -88,6 +88,8 @@
         StackSize: (4 bytes) 0x14
         DisplayRedrawRate: (1 byte) 0x18
         BootDisk: (1 byte) 0x19
+        MachineFlags: (1 byte) 0x1A   (set at start and on reset)
+        	0b00000001: EscapeQuits (ESC closes the VM; DragonOS clears it before starting dinit)
 
         SystemSignals: (2 bytes) 0x72
         	0b00000000_00000001: Reboot
