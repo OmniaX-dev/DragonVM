@@ -3928,6 +3928,10 @@
             "named": true
           },
           {
+            "type": "ref_type",
+            "named": true
+          },
+          {
             "type": "scoped_type_identifier",
             "named": true
           },
@@ -3945,6 +3949,16 @@
           }
         ]
       }
+    },
+    "children": {
+      "multiple": false,
+      "required": false,
+      "types": [
+        {
+          "type": "ref_word",
+          "named": true
+        }
+      ]
     }
   },
   {
@@ -6505,6 +6519,11 @@
         ]
       }
     }
+  },
+  {
+    "type": "ref_word",
+    "named": true,
+    "fields": {}
   },
   {
     "type": "return_statement",
@@ -9480,6 +9499,10 @@
             "named": true
           },
           {
+            "type": "ref_type",
+            "named": true
+          },
+          {
             "type": "scoped_type_identifier",
             "named": true
           },
@@ -9603,6 +9626,16 @@
           }
         ]
       }
+    },
+    "children": {
+      "multiple": false,
+      "required": false,
+      "types": [
+        {
+          "type": "ref_word",
+          "named": true
+        }
+      ]
     }
   },
   {

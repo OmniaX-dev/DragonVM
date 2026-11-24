@@ -1625,3 +1625,59 @@ sub f(var s: string) -> u32 throws E {
             (identifier)
             (argument_list
               (identifier))))))))
+
+================================================================================
+Reference locals (ref is still a name elsewhere)
+================================================================================
+
+sub f(var v: Vec*) {
+	ref r = v->first;
+	const ref k = 5;
+	var s: ref i32 = r;
+	for (ref x in v) { }
+	for (const ref y in v) { }
+	ref[0] = 1;
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    (identifier)
+    (parameter_list
+      (parameter
+        (identifier)
+        (pointer_type
+          (type_identifier))))
+    (block
+      (variable_declaration
+        (ref_word)
+        (identifier)
+        (member_expression
+          (identifier)
+          (field_identifier)))
+      (variable_declaration
+        (ref_word)
+        (identifier)
+        (number_literal))
+      (variable_declaration
+        (identifier)
+        (ref_type
+          (primitive_type))
+        (identifier))
+      (for_in_statement
+        (ref_word)
+        (identifier)
+        (identifier)
+        (block))
+      (for_in_statement
+        (ref_word)
+        (identifier)
+        (identifier)
+        (block))
+      (expression_statement
+        (assignment_expression
+          (index_expression
+            (identifier)
+            (number_literal))
+          (number_literal))))))

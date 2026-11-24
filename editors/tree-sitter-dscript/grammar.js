@@ -248,13 +248,16 @@ module.exports = grammar({
 			seq(
 				'var',
 				field('name', $.identifier),
-				optional(seq(':', field('type', $._type),
+				optional(seq(':', field('type', choice($._type, $.ref_type)),
 					// var p: Point(1, 2): the struct's constructor (sub new)
 					optional(field('arguments', $.argument_list)))),
 				optional(seq('=', field('value', choice($._expression, $.initializer_list)))),
 			),
 			// auto x = value: the type comes from the value (no ': type')
 			seq('auto', field('name', $.identifier), '=', field('value', $._expression)),
+			// ref x = variable / const ref x = value: a reference local, its type from the value. (ref
+			// is matched as a name: it is one elsewhere, e.g. ref[i] = 0 starting a statement.)
+			seq(optional('const'), $.ref_word, field('name', $.identifier), '=', field('value', $._expression)),
 			// constinit x: T = value: a global whose value is known when compiling
 			seq(
 				'constinit',
@@ -391,7 +394,8 @@ module.exports = grammar({
 		parenthesized_type: $ => seq('(', $._type, ')'),
 		// const T*: what the pointer points at is constant (const u8* groups as const (u8*))
 		const_type: $ => prec(1, seq('const', field('type', $._type))),
-		// ref T / const ref T: a reference (parameters, results only: ref is a name elsewhere)
+		ref_word: $ => alias($.identifier, 'ref'),
+		// ref T / const ref T: a reference (parameters, results, locals: ref is a name elsewhere)
 		ref_type: $ => prec.right(seq(optional('const'), 'ref', field('type', $._type))),
 		// value_type(N): the type of a value (of a template parameter given one)
 		value_type: $ => seq('value_type', '(', field('value', $._expression), ')'),
@@ -456,12 +460,14 @@ module.exports = grammar({
 			')',
 			field('body', $._statement),
 		),
-		// for (auto x in range) / for (auto& x in range) / for (var x: T in range) / ... in a..b
+		// for (auto x in range) / for (auto& x in range) / for (ref x in range) / for (const ref x
+		// in range) / for (var x: T in range) / ... in a..b
 		for_in_statement: $ => seq(
 			'for', '(',
 			choice(
 				seq('auto', optional(field('reference', '&')), field('name', $.identifier)),
-				seq('var', field('name', $.identifier), ':', field('type', $._type)),
+				seq(optional('const'), $.ref_word, field('name', $.identifier)),
+				seq('var', field('name', $.identifier), ':', field('type', choice($._type, $.ref_type))),
 			),
 			'in',
 			field('range', choice($.range_expression, $._expression)),
