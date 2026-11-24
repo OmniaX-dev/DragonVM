@@ -1,0 +1,7 @@
+// expect-error: readonly
+// Without this->, a readonly sub still can't change the fields.
+struct S {
+	var count: i32;
+	readonly sub bump() { count++; }
+}
+sub main() -> i32 { var s: S; s.bump(); return 0; }

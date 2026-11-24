@@ -1,0 +1,7 @@
+// expect-error: unknown name: secret
+// A sub outside the struct has no implicit this: its fields are not names there.
+struct S {
+	var secret: i32;
+}
+sub peek() -> i32 { return secret; }
+sub main() -> i32 { return peek(); }

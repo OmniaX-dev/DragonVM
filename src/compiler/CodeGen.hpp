@@ -34,6 +34,7 @@ namespace dscript
 		bool hasDropFlag { false };	// a drop flag at FP + dropFlag: 1 while it is to be destroyed (forget(v) clears it)
 		int32_t dropFlag { 0 };
 		bool isStatic { false };	// a static variable / constant array of a sub (<sub>::<name>)
+		bool refFrame { false };	// a reference local to something of its sub's frame (a local, a value parameter): not returned as a ref
 		bool external { false };	// in a library (#import): only declared here
 		const Node* decl { nullptr };	// globals: the declaration
 		// -O: a local / parameter kept in a register (its memory slot is not used), or "".
@@ -230,6 +231,7 @@ namespace dscript
 			Type* varArgType(Type* t);
 			uint32_t varArgTypeCode(Type* t);
 			void rewriteMethodCall(Node* e);
+			bool implicitMember(Node* e, bool call);
 			bool userOperator(Node* e, const std::string& op, const std::vector<Node*>& operands, bool membersOnly = false);
 			void binaryOperator(Node* e);
 			void arrowOperator(Node*& obj);
@@ -238,6 +240,7 @@ namespace dscript
 			void checkSubAccess(FuncInfo* f, const SourcePos& pos);
 			void resolveSubDefaults(void);
 			void checkMember(Node* e, bool placeWanted = false);
+			bool m_memberBody { false };	// resolveNames: in the body of a struct's sub
 			bool m_placeWanted { false };	// the next check is of what & takes the address of
 			Type* decay(Type* t);
 			Type* promote(Type* t);
@@ -249,6 +252,7 @@ namespace dscript
 			FuncInfo* bestOverload(const std::vector<FuncInfo*>& funcs, const std::vector<Node*>& args, bool& ambiguous);
 			FuncInfo* functionForType(const std::vector<FuncInfo*>& funcs, Type* fnType);
 			VarInfo* lookupVar(const std::string& name);
+			VarInfo* lookupLocal(const std::string& name);	// (the sub's own: its locals, its parameters)
 			bool isTypeName(const std::string& name);
 			Type* aliasType(const std::string& name, const SourcePos& pos);
 			bool inPlace(Node* e, Node* obj);
@@ -436,6 +440,8 @@ namespace dscript
 			int referenceCost(Node* from, Type* to);
 			void dereferenceResult(Node* e);
 			void rejectReference(Type* t, const SourcePos& pos, const std::string& what);
+			bool refersToFrame(const Node* n);
+			Type* bindLocalReference(Node* s, Type* declared);
 
 			// ===== User conversions =====
 			struct UserConv { FuncInfo* f { nullptr }; bool ctor { false }; int cost { 0 }; };

@@ -1,0 +1,105 @@
+// expect-rv: 0
+// A struct's members without this-> in its subs: fields, methods, static subs, inherited
+// members, virtual subs, method templates, sub pointer fields; locals and parameters first, then
+// the struct's members, then the globals (as in C++).
+#include(check.ds)
+
+var count: i32 = 1000;						// a global the member of the same name hides
+sub twice(var x: i32) -> i32 { return x * 2000; }
+sub outside() -> i32 { return 7; }
+
+struct Counter {
+	var count: i32;
+	var step: i32 = 1;
+	var hook: sub(i32) -> i32 = null;
+	priv var hidden: i32 = 5;
+
+	sub add() -> i32 { count += step; return count; }			// fields, read and written
+	sub add_twice() -> i32 { add(); return add(); }				// a method
+	sub twice(var x: i32) -> i32 { return x * 2; }				// hides the global twice
+	sub doubled() -> i32 { return twice(count); }
+	sub shadow(var step: i32) -> i32 { return step; }			// the parameter, not the field
+	sub local() -> i32 { var count: i32 = 42; return count; }	// the local, not the field
+	sub explicit_global() -> i32 { return ::count; }			// ::name: the global
+	sub bump() { count++; step *= 3; hidden -= 1; }			// ++, compound assignments, priv
+	sub address() -> i32* { return &count; }					// &field
+	sub with_this() -> i32 { return this->count + count; }		// both ways
+	sub call_hook() -> i32 { return hook(count); }				// a sub pointer field
+	sub secret() -> i32 { return hidden; }
+	sub global_sub() -> i32 { return outside(); }				// no member of that name: the global
+	sub in_lambda() -> i32 {
+		var f = sub() -> i32 { return count; };	// a lambda has no this: the global
+		return f();
+	}
+
+	static sub make(var start: i32) -> Counter { var c: Counter; c.count = start; return c; }
+	static sub from_static() -> i32 { return make(3).count; }	// a static sub from a static sub
+	sub from_method() -> i32 { return make(9).count; }			// ... and from a method
+	static sub ten() -> i32 { return 10; }
+	sub static_address() -> i32 { var f: sub() -> i32 = ten; return f(); }	// a static sub's address
+
+	template(T) {
+		sub as(var v: T) -> T { return v + cast<T>(count); }
+	}
+	sub use_template() -> u8 { return as<u8>(cast<u8>(1)); }	// a method template
+	readonly sub read_only() -> i32 { return count + step; }	// a readonly sub reads them
+};
+
+sub hook_impl(var x: i32) -> i32 { return x + 1; }
+
+// Classes: inherited fields and subs, virtual subs called through the table.
+class Animal {
+	prot var legs: i32 = 4;
+	virt sub sound() -> i32 { return 1; }
+	sub describe() -> i32 { return sound() * 100 + legs; }		// virtual: the object's class's sound
+	sub legs_of() -> i32 { return legs; }
+}
+class Bird ex Animal {
+	sub land() { legs = 2; }									// an inherited prot field
+	override sub sound() -> i32 { return 2; }
+	sub both() -> i32 { return describe() + legs_of(); }		// inherited subs
+}
+
+// A template struct: its members by name in each instance.
+template(T) {
+	struct Box {
+		var value: T;
+		sub set(var v: T) { value = v; }
+		sub get() -> T { return value; }
+		sub swap_with(var other: Box<T>*) { var t: T = value; value = other->value; other->set(t); }
+	};
+}
+
+sub main() -> i32 {
+	var c: Counter;
+	check(1, c.add() == 1 and c.add_twice() == 3 and c.count == 3);
+	check(2, c.doubled() == 6 and twice(1) == 2000);
+	check(3, c.shadow(77) == 77 and c.local() == 42 and c.count == 3);
+	check(4, c.explicit_global() == 1000);
+	c.bump();
+	check(5, c.count == 4 and c.step == 3 and c.secret() == 4);
+	*c.address() = 11;
+	check(6, c.count == 11 and c.with_this() == 22);
+	c.hook = hook_impl;
+	check(7, c.call_hook() == 12);
+	check(8, c.global_sub() == 7 and c.in_lambda() == 1000);
+	check(9, Counter.from_static() == 3 and c.from_method() == 9 and c.static_address() == 10);
+	check(10, c.use_template() == 12);
+	check(11, c.read_only() == 14);
+
+	var b: Bird;
+	var a: Animal;
+	var p: Animal* = &b;
+	check(19, b.both() == 208);
+	b.land();
+	check(20, p->describe() == 202 and a.describe() == 104 and b.both() == 204);
+
+	var x: Box<u32>;
+	var y: Box<u32>;
+	x.set(5);
+	y.set(9);
+	x.swap_with(&y);
+	check(30, x.get() == 9 and y.get() == 5);
+	check(31, count == 1000);
+	return result();
+}

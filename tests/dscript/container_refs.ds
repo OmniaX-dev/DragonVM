@@ -1,0 +1,96 @@
+// expect-rv: 0
+// The containers' elements as references: BasicVector's [i] / at / front / back, BasicStack's
+// top, BasicString's [i] (ref T; const ref T on a constant container), for-in with ref x / const
+// ref x (get() -> ref T), and the maps' entries; lookups that may find nothing stay pointers.
+#import("libcore")
+#include(check.ds)
+#include(libs/test_alloc.ds)
+
+alias Vec = std::BasicVector<u32, TestAlloc>;
+alias Str = std::BasicString<TestAlloc>;
+
+struct Pt { var x: i32; var y: i32; };
+
+sub total(var v: const ref Vec) -> u32 {
+	var sum: u32 = 0;
+	for (const ref x in v)						// a constant vector: its readonly get (const ref)
+		sum += x;
+	return sum + v[0] + v.front() + v.back() + v.at(1);	// the readonly overloads
+}
+
+sub main() -> i32 {
+	{
+		var v: Vec;
+		for (var i: u32 = 0; i < 4; i++)
+			v.push(i + 1);						// 1 2 3 4
+		v[0] = 10;								// the element itself
+		v.at(1) += 10;
+		v.back()++;
+		ref f = v.front();						// a reference to it
+		f += 5;
+		auto copy = v.front();					// a copy
+		copy = 0;
+		check(1, v[0] == 15 and v[1] == 12 and v[3] == 5 and copy == 0);
+		for (ref x in v)
+			x *= 2;								// 30 24 6 10
+		check(2, v[0] == 30 and v[2] == 6 and v[3] == 10);
+		check(3, total(v) == 70 + 30 + 30 + 10 + 24);
+		var sum: u32 = 0;
+		for (auto& p in v)						// auto&: still a pointer
+			sum += *p;
+		check(4, sum == 70);
+
+		var pts: std::BasicVector<Pt, TestAlloc>;
+		var a: Pt = { 1, 2 };
+		var b: Pt = { 3, 4 };
+		pts.push(a);
+		pts.push(b);
+		pts[1].x = 30;							// a field of the element
+		for (ref p in pts)
+			p.y += 100;
+		check(5, pts[0].y == 102 and pts.back().x == 30 and pts.back().y == 104);
+	}
+	{
+		var st: std::BasicStack<u32, TestAlloc>;
+		st.push(1);
+		st.push(2);
+		st.top() = 20;
+		ref t = st.top();
+		t++;
+		check(10, st.pop() == 21 and st.top() == 1);
+		for (ref x in st)
+			x = 7;
+		check(11, st.top() == 7);
+	}
+	{
+		var s: Str = "hello";
+		s[0] = 'j';
+		ref c = s[4];
+		c = 'y';
+		check(20, s == "jelly" and s[1] == 'e');
+	}
+	{
+		var m: std::BasicMap<u32, u32, TestAlloc>;
+		m.set(1, 10);
+		m.set(2, 20);
+		for (ref e in m)
+			e.value += e.key;					// the entry itself
+		check(30, *m.get(1u) == 11 and *m.get(2u) == 22 and m.get(3u) == null);	// (get: a pointer, maybe null)
+		var keys: u32 = 0;
+		for (const ref e in m)
+			keys += e.key;
+		check(31, keys == 3);
+		var h: std::BasicHashMap<u32, u32, TestAlloc>;
+		h.set(5, 50);
+		h.set(6, 60);
+		for (ref e in h)
+			e.value = e.value / 10;
+		check(32, *h.get(5u) == 5 and *h.get(6u) == 6);
+		var count: u32 = 0;
+		for (auto& e in h)						// auto&: a pointer to the entry
+			count += e->key;
+		check(33, count == 11);
+	}
+	check(40, TestAlloc.live() == 0);
+	return result();
+}

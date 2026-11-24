@@ -48,7 +48,7 @@ sub main() -> i32 {
 		g_dels = 0;
 		for (var i: i32 = 0; i < 10; i++)
 			check(20, st.push(Tracked.new(i)));
-		check(21, st.size() == 10 and st.top()->v == 9 and g_copies == 0);
+		check(21, st.size() == 10 and st.top().v == 9 and g_copies == 0);
 		{
 			var t = st.pop();
 			check(22, t.v == 9 and st.size() == 9 and g_dels == 0);
@@ -60,7 +60,7 @@ sub main() -> i32 {
 		var strs: std::BasicStack<Str, TestAlloc>;
 		strs.push("one");
 		strs.push(make_str("two"));
-		check(24, strs.pop() == "two" and *strs.top() == "one");
+		check(24, strs.pop() == "two" and strs.top() == "one");
 	}
 	check(25, g_dels == 10 and TestAlloc.live() == 0);
 	return result();

@@ -1,0 +1,21 @@
+// A library whose structs use their members without this-> (implicit_this_library.ds): a sub
+// compiled in the library, an inline sub and a template (both in its interface, as source).
+namespace mem {
+	var total: i32 = 500;					// hidden by the field in Acc's subs
+	struct Acc {
+		var total: i32;
+		var factor: i32 = 2;
+		sub add(var n: i32) { total += n * factor; }			// compiled in the library
+		inline sub get() -> i32 { return total; }				// in the interface
+		static sub make(var f: i32) -> Acc { var a: Acc; a.factor = f; return a; }
+		sub reset() { total = make(1).total; }
+	};
+	template(T) {
+		struct Pair {
+			var a: T;
+			var b: T;
+			sub sum() -> T { return a + b; }
+			sub set(var x: T, var y: T) { a = x; b = y; }
+		};
+	}
+}

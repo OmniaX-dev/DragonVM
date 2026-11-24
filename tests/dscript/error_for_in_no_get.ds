@@ -1,5 +1,5 @@
 // A cursor that is an index needs next(c) and get(c).
-// expect-error: needs get(c: u32) -> T* for for-in
+// expect-error: needs get(c: u32) -> T* (or ref T) for for-in
 struct R {
 	sub begin() -> u32 { return 0; }
 	sub end() -> u32 { return 3; }

@@ -5,8 +5,8 @@
 //     var ages: std::Map<std::String, u32>;
 //     ages.set("bob", 31);
 //     ages.set("alice", 29);
-//     var a: u32* = ages.get("alice");    // null when it isn't there
-//     for (auto& e in ages) { ... e->key ... e->value ... }      // alice, then bob
+//     var a: u32* = ages.get("alice");    // null when it isn't there (a pointer: it may be nothing)
+//     for (ref e in ages) { ... e.key ... e.value ... }          // alice, then bob
 //
 // The keys are ordered by std::less (a < b; strings: strcmp; a struct: its operator<), and two
 // keys are the same when neither is less. set, get, remove: O(log n); a for-in step is O(log n)
@@ -65,14 +65,20 @@ namespace std {
 				return true;
 			}
 
-			// key's value (null: no entry). It stays valid until that entry is removed.
+			// key's value (null: no entry). It stays valid until that entry is removed. (A pointer, not a
+			// reference: there may be none.)
 			inline sub get(var key: const ref K) -> V* {
 				var n: BasicMapNode<K, V, A>* = this->find_node(key);
+				return n != null ? &n->entry.value : null;
+			}
+			readonly inline sub get(var key: const ref K) -> const V* {
+				var n: const BasicMapNode<K, V, A>* = this->find_node(key);
 				return n != null ? &n->entry.value : null;
 			}
 			readonly inline sub contains(var key: const ref K) -> bool { return this->find_node(key) != null; }
 			// key's entry (null: none).
 			inline sub find(var key: const ref K) -> MapEntry<K, V>* { return &this->find_node(key)->entry; }
+			readonly inline sub find(var key: const ref K) -> const MapEntry<K, V>* { return &this->find_node(key)->entry; }
 
 			// key's entry destroyed. false: there was none.
 			sub remove(var key: const ref K) -> bool {
@@ -108,7 +114,7 @@ namespace std {
 				return true;
 			}
 
-			// The entries with the smallest and the largest key (null: empty).
+			// The entries with the smallest and the largest key (null: empty; pointers for that).
 			inline sub first() -> MapEntry<K, V>* { return &this->leftmost(this->m_root)->entry; }
 			sub last() -> MapEntry<K, V>* {
 				var n: BasicMapNode<K, V, A>* = this->m_root;
@@ -117,7 +123,7 @@ namespace std {
 				return &n->entry;
 			}
 
-			// for (auto& e in map): in key order.
+			// for (ref e in map) / for (auto& e in map): in key order.
 			readonly inline sub begin() -> BasicMapNode<K, V, A>* { return this->leftmost(this->m_root); }
 			readonly inline sub end() -> BasicMapNode<K, V, A>* { return null; }
 			readonly sub next(var c: BasicMapNode<K, V, A>*) -> BasicMapNode<K, V, A>* {
@@ -135,7 +141,8 @@ namespace std {
 				}
 				return after;
 			}
-			inline sub get(var c: BasicMapNode<K, V, A>*) -> MapEntry<K, V>* { return &c->entry; }
+			inline sub get(var c: BasicMapNode<K, V, A>*) -> ref MapEntry<K, V> { return c->entry; }
+			readonly inline sub get(var c: BasicMapNode<K, V, A>*) -> const ref MapEntry<K, V> { return c->entry; }
 
 			priv readonly sub find_node(var key: const ref K) -> BasicMapNode<K, V, A>* {
 				var n: BasicMapNode<K, V, A>* = this->m_root;

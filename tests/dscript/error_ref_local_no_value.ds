@@ -1,0 +1,2 @@
+// expect-error: 'r' is a reference: it needs what it refers to
+sub main() -> i32 { var r: ref i32; return 0; }

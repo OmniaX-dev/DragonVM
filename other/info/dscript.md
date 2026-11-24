@@ -284,12 +284,14 @@ kernel's).
 ```
 var v: std::Vector<u32>;
 v.push(5);                                  // false: no memory
-for (auto x in v) { ... }                   // auto& x: a pointer to the element
+v[0] = 6;                                   // [i], at, front, back: the element itself (ref T)
+ref first = v.front();                      // a reference to it (auto first = ...: a copy)
+for (ref x in v) { x *= 2; }                // auto x: a copy; auto& x: a pointer
 var last = v.pop();                         // moved out
 var ages: std::Map<std::String, u32>;
 ages.set("bob", 31);                        // a new entry, or its value replaced
 var a: u32* = ages.get("bob");              // null: not there
-for (auto& e in ages) { ... e->key ... e->value ... }   // in key order (a HashMap: none)
+for (ref e in ages) { ... e.key ... e.value ... }       // in key order (a HashMap: none)
 var s: std::String = "Hello";
 s += ", ";
 s.appendf("{} times", 3);
@@ -300,6 +302,10 @@ std::print(s);                              // a String is a string where one is
   container destroys what it still has. Growing moves elements by their bytes. A type that can't
   be copied works (only copying the container needs copies of its elements).
 - When the allocator has no memory, the subs returning `bool` return false and change nothing.
+- What always exists is a reference (`ref T`; `const ref T` on a constant container): a vector's
+  `[i]`, `at`, `front`, `back`, a stack's `top`, a string's `[i]`, and every element of a for-in
+  (`get` returns `ref T`). What may not exist is a pointer (null: none): a map's `get(key)` and
+  `find(key)`, a Map's `first()` / `last()` (empty). A constant map's give const pointers.
 - `BasicVector`: `size`, `capacity`, `empty`, `[i]`, `at`, `front`, `back`, `data`, `push`, `pop`,
   `insert(i, v)`, `remove(i)` (moved out), `erase(i)` (destroyed), `swap_remove(i)`, `resize`,
   `reserve`, `shrink`, `clear`, `find(v)` / `contains(v)` (std::equals), `copy_from`.
@@ -307,7 +313,8 @@ std::print(s);                              // a String is a string where one is
 - `BasicMap` / `BasicHashMap`: `set(key, value)`, `get(key) -> V*`, `find(key) -> MapEntry<K, V>*`,
   `contains`, `remove`, `size`, `empty`, `clear`, `copy_from`; a Map also `first()` / `last()`, a
   HashMap `reserve(n)` and `capacity()`. Elements of a for-in: `std::MapEntry<K, V>` (`key`,
-  `value`: don't change the key). HashMap entry pointers stay valid until a new key is set.
+  `value`: don't change the key). HashMap entry pointers (and references) stay valid until a new
+  key is set.
 - Keys: `std::less` (Map), `std::equals` and `std::hash_of` (HashMap): numbers, pointers and
   enums as they are; a `string` (`const u8*`) by its text (the map keeps the pointer, not a copy:
   `std::String` keys own their text); a struct by its `operator<`, `operator==` and
@@ -321,8 +328,8 @@ std::print(s);                              // a String is a string where one is
 ### Text formatting (libcore)
 
 `va.ds`: `std::VaList` (the extra arguments of a variadic sub: `count`, `get_i32(i)`, `get_u32`,
-`get_f32`, `get_bool`, `get_ptr`, `get_string`, `word(i)`; `typed()`, `type_of(i)`), and
-formatting with it:
+`get_f32`, `get_bool`, `get_ptr`, `get_string`, `word(i)`; `typed()`, `type_of(i)`; a for-in
+range of `std::VaArg`: `index`, `type`, `word` and the same `get_*()`), and formatting with it:
 ```
 var n: u32 = std::format(buffer, capacity, "x = {}, hex {:08x}, %-6s|%.2f", x, x, name, f);
 std::vformat(buffer, capacity, fmt, &args);       // another variadic sub's arguments
@@ -443,8 +450,8 @@ and layout stay the same).
 struct Counter {
     var value: i32;
     var step: i32 = 1;
-    sub add(var n: i32) -> i32 { this->value += n; return this->value; }
-    sub add() -> i32 { return this->add(this->step); }     // overloads, default values, inline sub
+    sub add(var n: i32) -> i32 { value += n; return value; }    // this->value, without this->
+    sub add() -> i32 { return add(step); }                  // overloads, default values, inline sub
 };
 
 var c: Counter;
@@ -453,9 +460,15 @@ var p: Counter* = &c;
 p->add();
 var f: sub(Counter*, i32) -> i32 = Counter::add; // the method as a sub: this comes first
 ```
-- The fields are used through `this->` (`this->value`); the struct's fields and methods cannot
-  have the same name. A method is defined in the struct (no declaration without a body), and
-  only named structs have methods.
+- In the struct's subs, its fields and methods (with those of the classes it extends) are used
+  by name, or through `this->` (`value` is `this->value`, `add(1)` is `this->add(1)`: a virtual
+  sub through the object's table); its static subs by name too (`make()` is `Counter.make()`, also
+  in its static subs). A name is looked up as in C++: the sub's locals and parameters first, then
+  the struct's members, then the globals, namespaces' names and subs: a member hides a global of
+  the same name (`::name` is the global). A static sub has no `this`: a field or method there is an
+  error. Lambdas written in a sub have no `this` either (their names are the globals). The
+  struct's fields and methods cannot have the same name. A method is defined in the struct (no
+  declaration without a body), and only named structs have methods.
 - For dynamic dispatch, use a class's virtual subs (see "Classes"), or sub pointer fields (their
   default value can be a sub: `var area: sub(Shape*) -> u32 = square_area;`, called as `s->area(s)`).
 - `priv` before a field or a sub (`priv var balance: i32;`, `priv sub add(...)`, `priv static
@@ -835,8 +848,8 @@ sub operator*(var k: i32, var v: Vec) -> Vec { ... }     // 2 * v
   (`(*shape)()` calls the object's own), in templates and libraries; not `static`.
 
 ### References
-`ref T` (parameters and results) refers to a `T` somewhere else: no copy is made, and the
-parameter is used as the `T` itself.
+`ref T` (parameters, results and locals) refers to a `T` somewhere else: no copy is made, and the
+parameter (or local) is used as the `T` itself.
 ```
 sub bump(var x: ref i32) { x++; }                   // the caller's variable changes
 sub area(var r: const ref Rect) -> u32 { ... }      // no copy, and r cannot change
@@ -860,8 +873,31 @@ at(4) = 7;                  // the call is what it refers to
   from a `ref T` parameter's argument.
 - Copy constructors and operators can take `const ref T` (`sub new(var o: const ref T)`,
   `sub operator==(var o: const ref T)`).
-- Only parameters and results: no reference variables, fields or arrays (use pointers), no
-  default values for reference parameters, no `ref void` / references to references.
+- Only parameters, results and locals: no reference globals, static variables, fields or arrays
+  (use pointers), no default values for reference parameters, no `ref void` / references to
+  references.
+
+**Reference locals** refer to a variable for as long as they are in scope, like a C++ `T&`:
+```
+var r: ref i32 = a;             // r is a: r = 5 changes a, &r == &a
+ref e = v[3];                   // the type from what it refers to (a ref result: the element)
+const ref k = v[3];             // can't change it
+const ref t = make_point(1, 2); // a value: kept as long as t (a constant Point)
+auto c = v[3];                  // auto: a copy (as in C++, auto drops the reference)
+```
+- `ref x = v` takes a variable (something in memory: a variable, a field, an element, `*p`, a
+  `ref` result, another reference), and is a `const ref` when `v` is constant. `var x: ref T = v`
+  takes a `T` (or a class derived from it), as a `ref T` parameter does.
+- `const ref x = v` also takes values (literals, call results, what converts to `T` with
+  `var x: const ref T`): the value is kept as a constant for as long as `x` (destroyed when its
+  scope ends, once).
+- A reference is bound once, when it is declared: assigning it assigns what it refers to (there
+  is no null reference, and none that refers to something else later: that is what pointers are
+  for). It never destroys what it refers to.
+- A sub returning `ref T` can return a reference local to something that lives on; one that
+  refers to a local or a value parameter of the sub is an error (as returning that local is).
+- Not in subs evaluated when compiling (`consteval`, constant expressions): use a pointer there.
+- `ref` is still a name elsewhere (`var ref: u32` works): only `ref <name> =` declares one.
 
 ### Variadic subs
 A sub whose parameters end with `...` takes more arguments, of any scalar type; with
@@ -871,7 +907,7 @@ sub sum(var count: u32, ...) -> i32 {
     var args: std::VaList(va_start(), va_count());    // (libcore's va.ds)
     var total: i32 = 0;
     for (var i: u32 = 0; i < args.count; i++)
-        total += args.get_i32(i);
+        total += args.get_i32(i);       // or: for (auto a in args) total += a.get_i32();
     return total;
 }
 sum(3, 10, 20, 30);
@@ -1279,12 +1315,15 @@ template(K, optional V) {
 
 ### for-in loops
 `for (auto x in range) body` runs the body for every element of the range, `x` being a copy of
-it; `for (auto& x in range)` makes `x` a pointer to the element (to change it: `*x = ...`,
-`x->field`). `for (var x: T in range)` / `for (var x: T* in range)` say the type.
+it; `for (ref x in range)` makes `x` a reference to the element (`x = ...`, `x.field`; a `const
+ref` when the elements are constant), `for (const ref x in range)` one that can't change it; and
+`for (auto& x in range)` makes `x` a pointer to the element (`*x = ...`, `x->field`).
+`for (var x: T in range)` / `for (var x: ref T in range)` / `for (var x: T* in range)` say the type.
 ```
 for (auto i in 0..10) { }            // numbers: 0 to 9 (the end is excluded); i: i32
 for (auto i in 0..count) { }         // i: count's type (u32 here); a..b: both evaluated once
 for (auto v in values) { }           // an array (T[N]): v: T
+for (ref v in values) v *= 2;        // v: ref T
 for (auto& v in values) *v *= 2;     // v: T*
 for (auto item in list) { }          // a struct that is a range (below), or a pointer to one
 ```
@@ -1294,7 +1333,7 @@ index, a node pointer, ...; `T` is the element's type, which gives `auto` its ty
 sub begin() -> C            // the cursor of the first element
 sub end() -> C              // the cursor one past the last (compared with !=)
 sub next(var c: C) -> C     // the cursor after c
-sub get(var c: C) -> T*     // the element at c
+sub get(var c: C) -> T*     // the element at c (or -> ref T / const ref T: the element itself)
 ```
 ```
 struct IntList {

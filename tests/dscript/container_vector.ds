@@ -12,7 +12,7 @@ sub main() -> i32 {
 		check(1, v.empty() and v.size() == 0 and v.capacity() == 0);
 		for (var i: u32 = 0; i < 100; i++)
 			check(2, v.push(i * 3));
-		check(3, v.size() == 100 and v[50] == 150 and *v.back() == 297 and *v.front() == 0);
+		check(3, v.size() == 100 and v[50] == 150 and v.back() == 297 and v.front() == 0);
 		var sum: u32 = 0;
 		for (auto x in v)
 			sum += x;

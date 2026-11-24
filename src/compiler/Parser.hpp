@@ -59,6 +59,8 @@ namespace dscript
 			Node* parseForIn(const SourcePos& pos);
 			int m_forInCount { 0 };
 			Node* parseVarDecl(bool allowNoType = true);
+			bool isRefDecl(size_t k = 0);		// ref x = / const ref x = (k: where it would start)
+			Node* parseRefDecl(void);
 			Node* parseFunction(int flags, const Node* owner = nullptr);
 			std::string parseOperatorName(void);
 			bool acceptVariadicTyped(void);

@@ -3,7 +3,7 @@
 //     var s: std::Stack<u32>;
 //     s.push(1); s.push(2);
 //     s.pop();        // 2
-//     s.top();        // a pointer to 1
+//     s.top();        // 1 (the element itself: s.top() = 3 changes it)
 namespace std {
 	template(T, A) {
 		struct BasicStack {
@@ -17,8 +17,9 @@ namespace std {
 			}
 			// The top value, moved out (the stack must not be empty).
 			inline sub pop() -> T { return this->m_items.pop(); }
-			// The top value (the stack must not be empty).
-			inline sub top() -> T* { return this->m_items.back(); }
+			// The top value, itself (the stack must not be empty).
+			inline sub top() -> ref T { return this->m_items.back(); }
+			readonly inline sub top() -> const ref T { return this->m_items.back(); }
 			readonly inline sub size() -> u32 { return this->m_items.size(); }
 			readonly inline sub empty() -> bool { return this->m_items.empty(); }
 			inline sub clear() { this->m_items.clear(); }
@@ -27,7 +28,8 @@ namespace std {
 			readonly inline sub begin() -> u32 { return 0; }
 			readonly inline sub end() -> u32 { return this->m_items.size(); }
 			readonly inline sub next(var i: u32) -> u32 { return i + 1; }
-			inline sub get(var i: u32) -> T* { return this->m_items.at(i); }
+			inline sub get(var i: u32) -> ref T { return this->m_items.at(i); }
+			readonly inline sub get(var i: u32) -> const ref T { return this->m_items.at(i); }
 		};
 	}
 }

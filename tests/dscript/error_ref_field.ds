@@ -1,3 +1,3 @@
-// expect-error: a reference (ref i32) is for parameters and results, not fields
+// expect-error: a reference (ref i32) is for parameters, results and locals, not fields
 struct S { var r: ref i32; }
 sub main() -> i32 { var s: S; return 0; }

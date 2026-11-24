@@ -551,10 +551,26 @@ namespace dscript
 				n->name = full;
 			}
 			n->resolved = true;
+			n->memberBody = m_memberBody;
 			checkTypeAccess(n->name, scope, n->pos);
 		}
 		if (n->kind == NodeKind::LowBlock)
 			return;		// ($names: when it is generated)
+		if (n->kind == NodeKind::FuncDecl)
+		{
+			// A struct's sub: the names in its body may be its struct's members (implicitMember);
+			// not those of its parameters' default values, nor of the lambdas in it (no this).
+			const bool outer = m_memberBody;
+			m_memberBody = false;
+			for (Node* c : { n->b, n->c })
+				resolveNames(c, scope);
+			for (Node* c : n->list)
+				resolveNames(c, scope);
+			m_memberBody = n->owner != nullptr && n->owner->kind == NodeKind::StructDecl;
+			resolveNames(n->a, scope);
+			m_memberBody = outer;
+			return;
+		}
 		// (a lambda's d is the sub it is written in: not part of it)
 		for (Node* c : { n->a, n->b, n->c, n->kind == NodeKind::FuncDecl ? nullptr : n->d })
 			resolveNames(c, scope);
@@ -1581,6 +1597,96 @@ namespace dscript
 		return nullptr;
 	}
 
+	VarInfo* CodeGen::lookupLocal(const std::string& name)
+	{
+		for (int i = (int)m_scopes.size() - 1; i >= 0; i--)
+		{
+			auto it = m_scopes[i].find(name);
+			if (it != m_scopes[i].end())
+				return it->second;
+		}
+		return nullptr;
+	}
+
+	// A name written in the body of a struct's sub (memberBody) that is none of the sub's locals or
+	// parameters: the struct's member of that name, if it has one (with what it inherits), before
+	// any global, namespace's name or sub of that name (as in C++):
+	//   - a field, or a method (call: e is the Call, its callee the name): this->name, checked as if
+	//     written so (virtual subs called through the table, priv / readonly / const as usual);
+	//   - a static sub: Struct::name (also in the struct's static subs, which have no this).
+	// (Static fields and constants: already found from the struct's scope by resolveNames.)
+	// true: e (or its callee) is now a Member; false: nothing to do, or a static sub renamed.
+	bool CodeGen::implicitMember(Node* e, bool call)
+	{
+		Node* id = call ? e->a : e;
+		if (id->kind != NodeKind::Ident || !id->memberBody)
+			return false;
+		id->memberBody = false;		// (decided once)
+		const std::string written = id->text.empty() ? id->name : id->text;
+		if (written.empty() || written[0] == ' ' || written == "this" || written.find(':') != std::string::npos || written.find('.') != std::string::npos
+			|| (!call && !id->templateArgs.empty()))
+			return false;
+		if (lookupLocal(id->name) != nullptr || lookupLocal(written) != nullptr)
+			return false;
+		VarInfo* self = lookupLocal("this");
+		StructInfo* info = nullptr;
+		if (self != nullptr && self->type != nullptr && self->type->kind == Type::Kind::Pointer && self->type->base->kind == Type::Kind::Struct)
+			info = self->type->base->structInfo;
+		else
+		{
+			self = nullptr;
+			info = structOfMethod(m_func);		// (a static sub)
+		}
+		if (info == nullptr)
+			return false;
+		resolveStruct(info, id->pos);
+		const bool field = info->field(written) != nullptr;
+		const std::vector<FuncInfo*> subs = field ? std::vector<FuncInfo*>() : methodsOf(info, written);
+		const bool methodTemplate = !field && subs.empty() && m_templates.count(info->name + "::" + written) > 0;
+		if (!field && subs.empty() && !methodTemplate)
+			return false;
+		for (FuncInfo* f : subs)
+		{
+			if ((f->decl->value & 8) != 0)
+			{
+				// A static sub: as Struct::name (its overloads, those it inherits, resolved as usual).
+				if (id->text.empty())
+					id->text = written;
+				id->name = f->decl->name;
+				id->resolved = true;
+				return false;
+			}
+		}
+		if (self == nullptr)
+		{
+			if (methodTemplate)
+				return false;
+			error(id->pos, "'" + written + "' is a " + (field ? "field" : "method") + " of " + info->name + ": a static sub has no this (it can't use it)");
+		}
+		Node* thisNode = new Node();
+		thisNode->kind = NodeKind::Ident;
+		thisNode->name = "this";
+		thisNode->pos = id->pos;
+		thisNode->resolved = true;
+		Node* m = call ? new Node() : e;
+		const SourcePos pos = id->pos;
+		const std::vector<TypeSyntax*> templateArgs = id->templateArgs;
+		const bool isPrivate = id->isPrivate;
+		if (!call)
+			*e = Node();
+		m->kind = NodeKind::Member;
+		m->pos = pos;
+		m->namePos = pos;
+		m->name = written;
+		m->value = 1;						// (->)
+		m->a = thisNode;
+		m->templateArgs = templateArgs;
+		m->isPrivate = isPrivate;
+		if (call)
+			e->a = m;
+		return true;
+	}
+
 	Type* CodeGen::decay(Type* t)
 	{
 		if (t != nullptr && t->kind == Type::Kind::Array)
@@ -1857,6 +1963,8 @@ namespace dscript
 			break;
 			case NodeKind::Ident: checkIdent(e, expected); break;
 			case NodeKind::Unary:
+				if (e->name == "&" && e->a->kind == NodeKind::Ident)
+					implicitMember(e->a, false);		// (&field: this->field's address; &static_sub)
 				if (e->name == "&" && e->a->kind == NodeKind::Ident && lookupVar(e->a->name) == nullptr && m_funcs.count(e->a->name) > 0)
 				{
 					checkIdent(e->a, expected);	// &sub: the sub's address (overloads: picked by the expected type)
@@ -2252,6 +2360,11 @@ namespace dscript
 	{
 		e->var = nullptr;
 		e->func = nullptr;
+		if (implicitMember(e, false))
+		{
+			checkMember(e, false);			// (this->name)
+			return;
+		}
 		resolveTemplateIdent(e);
 		if (VarInfo* v = lookupVar(e->name))
 		{
@@ -4273,11 +4386,71 @@ namespace dscript
 		check(e);
 	}
 
-	// References are parameters and results only.
+	// References are parameters, results and locals only.
 	void CodeGen::rejectReference(Type* t, const SourcePos& pos, const std::string& what)
 	{
 		if (t != nullptr && t->isReference())
-			error(pos, "a reference (" + t->name() + ") is for parameters and results, not " + what + " (use a pointer)");
+			error(pos, "a reference (" + t->name() + ") is for parameters, results and locals, not " + what + " (use a pointer)");
+	}
+
+	// n (something in memory) is in the sub's frame: a local or a value parameter (its fields,
+	// its array's elements), or what a reference local to one refers to. A reference to it ends
+	// when the sub returns.
+	bool CodeGen::refersToFrame(const Node* n)
+	{
+		const Node* root = n;
+		while ((root->kind == NodeKind::Member && root->value == 0) || (root->kind == NodeKind::Index && root->a->type != nullptr && root->a->type->kind == Type::Kind::Array))
+			root = root->a;
+		if (root->kind == NodeKind::Unary && root->name == "*" && root->a->kind == NodeKind::Ident && root->a->var != nullptr && root->a->var->type != nullptr
+			&& root->a->var->type->isReference())
+			return root->a->var->refFrame;		// (a reference: what it refers to)
+		return root->kind == NodeKind::Ident && root->var != nullptr && (root->var->storage == VarInfo::Storage::Local || root->var->storage == VarInfo::Storage::Param)
+			&& (root->var->type == nullptr || !root->var->type->isReference());
+	}
+
+	// A reference local's declaration (var x: ref T = v; ref x = v; const ref x = v;): s->a bound
+	// (its address), and the variable's type. declared: var x: ref T's type (nullptr: ref x / const
+	// ref x: T is v's type, const when v is constant). A const ref to a value (a literal, a call's
+	// result, what converts to T) keeps the value itself: x is then a constant T (as C++ keeps the
+	// temporary as long as the reference), and the result is T.
+	Type* CodeGen::bindLocalReference(Node* s, Type* declared)
+	{
+		const std::string what = "'" + s->name + "'";
+		if (s->c != nullptr)
+			error(s->c->pos, what + " is a reference: it refers to a variable, it has no constructor");
+		if (s->a == nullptr)
+			error(s->pos, what + " is a reference: it needs what it refers to (" + s->name + " = <variable>)");
+		if (s->a->kind == NodeKind::InitList)
+			error(s->a->pos, what + " is a reference: it refers to a variable, not to { ... }");
+		check(s->a, declared != nullptr ? declared->base : nullptr);
+		if (boundReference(s->a) && s->a->type != nullptr && s->a->type->kind == Type::Kind::Pointer)
+			return declared != nullptr ? declared : m_types.pointer(s->a->type->base, s->a->type->constTarget, true);	// (bound by an earlier pass)
+		Type* to = declared;
+		if (to == nullptr)
+		{
+			Type* t = s->a->type;
+			if (t == nullptr || t->kind == Type::Kind::Null || t->kind == Type::Kind::Void || t->kind == Type::Kind::Function)
+				error(s->pos, "cannot tell what " + what + " refers to (var " + s->name + ": ref <type> = ...)");
+			if (t->kind == Type::Kind::Array)
+				error(s->a->pos, what + ": a reference to an array is not supported (use a pointer to its first element)");
+			if (s->refKind == 1 && !s->a->lvalue)
+				error(s->a->pos, "ref " + s->name + " refers to a variable (something in memory), not a value (auto " + s->name + " = ... copies it, const ref " +
+					s->name + " = ... keeps it)");
+			to = m_types.pointer(t, s->refKind == 2 || s->a->readOnly, true);
+		}
+		Type* t = to->base;
+		Type* ft = s->a->type;
+		const bool related = ft == t || (ft != nullptr && ft->kind == Type::Kind::Struct && t->kind == Type::Kind::Struct && derives(ft->structInfo, t->structInfo));
+		const bool structTemp = (s->a->kind == NodeKind::Call || s->a->kind == NodeKind::Construct) && ft != nullptr && ft->kind == Type::Kind::Struct;
+		if (to->constTarget && (!related || !s->a->lvalue || structTemp))
+		{
+			// const ref to a value: the value, kept as a constant T.
+			requireConvertible(s->a, t, "for " + what);
+			s->constKind = 1;
+			return t;
+		}
+		requireConvertible(s->a, to, "for " + what);		// (its address: bindReference)
+		return to;
 	}
 
 	// ================================== User conversions ==================================
@@ -5110,6 +5283,7 @@ namespace dscript
 
 	void CodeGen::checkCall(Node* e)
 	{
+		implicitMember(e, true);			// name(...) in a struct's sub: maybe this->name(...)
 		if (e->a->kind == NodeKind::Member)
 			rewriteMethodCall(e);
 		if (e->kind == NodeKind::Construct || e->kind == NodeKind::InPlace)
@@ -5759,15 +5933,18 @@ namespace dscript
 			b->list = { first, s->c };
 			return b;
 		};
-		// x from the element's address: its value, or the address (auto&, var x: T*).
+		// x from the element's address: its value, the address (auto&, var x: T*), or a reference
+		// to the element (ref x, const ref x, var x: ref T).
 		auto l_element = [&](Node* address, Type* element) {
 			bool pointer = (s->value == 1);
 			if (var->typeSyntax != nullptr)
 			{
 				Type* t = resolveType(var->typeSyntax);
-				pointer = (t->kind == Type::Kind::Pointer && t->base == element && element->kind != Type::Kind::Void);
+				pointer = (t->kind == Type::Kind::Pointer && !t->isReference() && t->base == element && element->kind != Type::Kind::Void);
 			}
-			return l_decl(var->name, var->typeSyntax, pointer ? address : l_unary("*", address));
+			Node* d = l_decl(var->name, var->typeSyntax, pointer ? address : l_unary("*", address));
+			d->refKind = var->refKind;
+			return d;
 		};
 		Node* outer = l_node(NodeKind::Block);
 		outer->endPos = (s->c->kind == NodeKind::Block) ? s->c->endPos : pos;
@@ -5835,20 +6012,34 @@ namespace dscript
 				FuncInfo* fGet = l_find("get");
 				if (fBegin == nullptr || fEnd == nullptr)
 					error(s->b->pos, who + " is not a range for for-in: it needs begin() -> C and end() -> C (the cursors of the first element and of one past "
-						"the last), and next(c: C) -> C and get(c: C) -> T* (unless C points at the elements)");
+						"the last), and next(c: C) -> C and get(c: C) -> T* or ref T (unless C points at the elements)");
 				Type* cursor = fBegin->type->base;
 				if (cursor == nullptr || !cursor->isScalar() || cursor->kind == Type::Kind::Void)
 					error(s->b->pos, who + "::begin() must return a cursor (an integer or a pointer), not " + (cursor ? cursor->name() : "void"));
+				if (fGet != nullptr)
+				{
+					// get(c): the overload taking the cursor (a map's get(key) is another).
+					for (FuncInfo* g : methodsOf(info, "get"))
+					{
+						const size_t self = (g->decl->value & 8) != 0 ? 0 : 1;
+						if (g->type != nullptr && g->type->params.size() == self + 1 && g->type->params[self] == cursor)
+						{
+							fGet = g;
+							break;
+						}
+					}
+				}
 				if (fEnd->type->base != cursor)
 					error(s->b->pos, who + "::end() must return the cursor type of begin() (" + cursor->name() + "), not " + fEnd->type->base->name());
 				if ((fNext == nullptr || fGet == nullptr) && cursor->kind != Type::Kind::Pointer)
 					error(s->b->pos, who + " needs " + std::string(fNext == nullptr ? "next(c: " : "get(c: ") + cursor->name() + ")" +
-						(fNext == nullptr ? " -> " + cursor->name() : " -> T*") + " for for-in (only a cursor that points at the elements can do without)");
+						(fNext == nullptr ? " -> " + cursor->name() : " -> T* (or ref T)") + " for for-in (only a cursor that points at the elements can do without)");
 				if (fNext != nullptr && fNext->type->base != cursor)
 					error(s->b->pos, who + "::next() must return the cursor type of begin() (" + cursor->name() + ")");
 				Type* element = (fGet != nullptr) ? fGet->type->base : cursor;
 				if (element == nullptr || element->kind != Type::Kind::Pointer)
-					error(s->b->pos, who + "::get() must return a pointer to the element (T*), not " + (element ? element->name() : "void"));
+					error(s->b->pos, who + "::get() must return the element: a pointer to it (T*) or a reference (ref T, const ref T), not " + (element ? element->name() : "void"));
+				const bool refGet = fGet != nullptr && element->isReference();		// (get(c) is the element: &get(c) its address)
 				if (!viaPointer && !s->b->lvalue)
 					error(s->b->pos, "the range of a for-in must be a variable (or a pointer to one)");
 				outer->list.push_back(l_decl(tag + "r", nullptr, viaPointer ? s->b : l_unary("&", s->b)));
@@ -5868,6 +6059,8 @@ namespace dscript
 				}
 				loop->c = step;
 				Node* address = (fGet != nullptr) ? l_method(l_ident(tag + "r"), "get", { l_ident(tag + "c") }) : l_ident(tag + "c");
+				if (refGet)
+					address = l_unary("&", address);
 				loop->d = l_body(l_element(address, element->base));
 			}
 		}
@@ -8955,10 +9148,11 @@ namespace dscript
 		if (m_scopes.back().count(s->name) > 0)
 			error(s->pos, "'" + s->name + "' is already declared in this block");
 		Type* t = nullptr;
+		bool refFrame = false;
 		inferArraySize(s->typeSyntax, s->a, s->pos);
 		if (s->typeSyntax)
 			t = resolveType(s->typeSyntax);
-		else
+		else if (s->refKind == 0)
 		{
 			check(s->a);
 			t = decay(s->a->type);
@@ -8967,15 +9161,22 @@ namespace dscript
 			if (t->isInteger() && s->a->kind == NodeKind::IntLit && s->a->name != "u")	// (var x = 5u: a u32)
 				t = m_types.i32();
 		}
+		if (s->refKind != 0 || t->isReference())
+		{
+			// A reference local: a pointer to what it refers to (used as that: see checkIdent).
+			t = bindLocalReference(s, s->refKind != 0 ? nullptr : t);
+			if (t->isReference())
+				refFrame = refersToFrame(s->a->a);
+		}
 		if (t->kind == Type::Kind::Void)
 			error(s->pos, "variables cannot be void");
-		rejectReference(t, s->pos, "variables");
 		if (t->kind == Type::Kind::Struct)
 		{
 			resolveStruct(t->structInfo, s->pos);
 			requireValueType(t, s->pos, "a variable");
 		}
 		VarInfo* v = new VarInfo();
+		v->refFrame = refFrame;
 		v->name = s->name;
 		v->type = t;
 		v->storage = VarInfo::Storage::Local;
@@ -9460,6 +9661,9 @@ namespace dscript
 						if (root->kind == NodeKind::Ident && root->var != nullptr && (root->var->storage == VarInfo::Storage::Local || root->var->storage == VarInfo::Storage::Param))
 							error(s->a->pos, fn->name + " returns a reference to '" + (root->text.empty() ? root->name : root->text) + "', which ends when it returns " +
 								"(a local or a parameter: return a value, or a reference to something that lives on)");
+						if (root->kind == NodeKind::Unary && root->name == "*" && root->a->kind == NodeKind::Ident && root->a->var != nullptr && root->a->var->refFrame)
+							error(s->a->pos, fn->name + " returns what '" + (root->a->text.empty() ? root->a->name : root->a->text) + "' refers to, which ends when it returns " +
+								"(a local or a parameter of " + fn->name + ")");
 					}
 					check(s->a, ret);
 					requireConvertible(s->a, ret, "in the return value");
@@ -10938,6 +11142,8 @@ namespace dscript
 		Type* t = nullptr;
 		if (!v->external)
 			inferArraySize(d->typeSyntax, d->a, d->pos);
+		if (d->refKind != 0)
+			error(d->pos, "a reference is for parameters, results and locals, not globals or static variables (use a pointer)");
 		if (d->typeSyntax)
 			t = resolveType(d->typeSyntax);
 		else
@@ -10951,7 +11157,7 @@ namespace dscript
 		}
 		if (t->kind == Type::Kind::Void)
 			error(d->pos, "variables cannot be void");
-		rejectReference(t, d->pos, "variables");
+		rejectReference(t, d->pos, "globals or static variables");
 		if (t->kind == Type::Kind::Struct)
 		{
 			resolveStruct(t->structInfo, d->pos);
@@ -11694,7 +11900,8 @@ namespace dscript
 		}
 		if (t->kind == Type::Kind::Void)
 			error(s->pos, "variables cannot be void");
-		rejectReference(t, s->pos, "variables");
+		if (s->refKind != 0 || t->isReference())
+			ctFail(s->pos, "reference locals are not evaluated when compiling (use a pointer)");
 		if (t->kind == Type::Kind::Struct)
 		{
 			resolveStruct(t->structInfo, s->pos);

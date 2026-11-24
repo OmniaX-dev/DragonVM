@@ -1,0 +1,6 @@
+// expect-error: const
+// ref x over a constant vector is a const ref (its readonly get).
+#import("libcore")
+#include(libs/test_alloc.ds)
+sub bad(var v: const ref std::BasicVector<u32, TestAlloc>) { for (ref x in v) x = 1; }
+sub main() -> i32 { var v: std::BasicVector<u32, TestAlloc>; v.push(1); bad(v); return 0; }

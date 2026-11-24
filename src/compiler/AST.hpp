@@ -142,6 +142,9 @@ namespace dscript
 		// local constant (const in a sub: per call if it is not a compile-time constant), 2 static.
 		// VarDecl in a block with hoisted set: the place of that local constant (hoisted points at it).
 		int hoistKind { 0 };
+		// VarDecl: ref x = value; (1) / const ref x = value; (2): a reference local whose type
+		// comes from what it refers to (var x: ref T = ...: typeSyntax says it).
+		int refKind { 0 };
 		Node* hoisted { nullptr };
 		// Declarations in an if constexpr (at the top level, in a namespace or a struct): the DeclIf
 		// (its condition) and the branch they are in (guardElse: its else). A DeclIf has its own.
@@ -166,6 +169,9 @@ namespace dscript
 		// Ident: name is already final (a local, a parameter, a renamed local constant / static,
 		// ::global); the others are looked up from the scope by the code generator.
 		bool resolved { false };
+		// Ident: written in the body of a struct's sub (resolveNames): a name that is none of its
+		// locals may be the struct's field or method (this->name) or static sub (Struct::name).
+		bool memberBody { false };
 		// Declared in a library's interface (#import): 1 + the library's index. Its subs (but the
 		// inline ones) and globals are in the library: only declared here.
 		int external { 0 };

@@ -8,7 +8,9 @@
 //     var v: std::Vector<u32>;
 //     v.push(5);
 //     v.push(7);
-//     for (auto x in v) { ... }          // (auto& x: a pointer to the element)
+//     v[0] = 6;                           // [i], at, front, back: the element itself (a ref T)
+//     ref first = v.front();              // a reference to it (auto first = ...: a copy)
+//     for (auto x in v) { ... }          // (ref x: a reference to the element; auto& x: a pointer)
 //     var last = v.pop();
 //
 // Elements are values: push takes its own (a call's result is moved in, a variable copied), pop
@@ -47,11 +49,16 @@ namespace std {
 			inline sub data() -> T* { return this->m_data; }
 			readonly inline sub data() -> const T* { return this->m_data; }
 
-			inline sub operator[](var i: u32) -> T* { return &this->m_data[i]; }
-			readonly inline sub operator[](var i: u32) -> const T* { return &this->m_data[i]; }
-			inline sub at(var i: u32) -> T* { return &this->m_data[i]; }
-			inline sub front() -> T* { return &this->m_data[0]; }
-			inline sub back() -> T* { return &this->m_data[this->m_size - 1]; }
+			// Element i, the first, the last (the element itself: v[i] = x changes it; a constant
+			// vector's can't change). The vector must have it.
+			inline sub operator[](var i: u32) -> ref T { return this->m_data[i]; }
+			readonly inline sub operator[](var i: u32) -> const ref T { return this->m_data[i]; }
+			inline sub at(var i: u32) -> ref T { return this->m_data[i]; }
+			readonly inline sub at(var i: u32) -> const ref T { return this->m_data[i]; }
+			inline sub front() -> ref T { return this->m_data[0]; }
+			readonly inline sub front() -> const ref T { return this->m_data[0]; }
+			inline sub back() -> ref T { return this->m_data[this->m_size - 1]; }
+			readonly inline sub back() -> const ref T { return this->m_data[this->m_size - 1]; }
 
 			// Room for n elements (no element changes). false: no memory.
 			sub reserve(var n: u32) -> bool {
@@ -191,11 +198,12 @@ namespace std {
 			}
 			readonly inline sub contains(var v: const ref T) -> bool { return this->find(v) >= 0; }
 
-			// for (auto x in v) / for (auto& x in v)
+			// for (auto x in v) / for (ref x in v) / for (auto& x in v)
 			readonly inline sub begin() -> u32 { return 0; }
 			readonly inline sub end() -> u32 { return this->m_size; }
 			readonly inline sub next(var i: u32) -> u32 { return i + 1; }
-			inline sub get(var i: u32) -> T* { return &this->m_data[i]; }
+			priv inline sub get(var i: u32) -> ref T { return this->m_data[i]; }
+			priv readonly inline sub get(var i: u32) -> const ref T { return this->m_data[i]; }
 
 			// Room for n more: the capacity doubles (at least 4).
 			priv sub grow_for(var n: u32) -> bool {

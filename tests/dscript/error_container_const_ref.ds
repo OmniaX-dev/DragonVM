@@ -1,0 +1,6 @@
+// expect-error: const
+// A constant vector's [i] is a const ref T: the element can't change through it.
+#import("libcore")
+#include(libs/test_alloc.ds)
+sub bad(var v: const ref std::BasicVector<u32, TestAlloc>) { v[0] = 1; }
+sub main() -> i32 { var v: std::BasicVector<u32, TestAlloc>; v.push(1); bad(v); return 0; }

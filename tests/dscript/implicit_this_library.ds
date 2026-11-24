@@ -1,0 +1,18 @@
+// Members without this-> through a library (libs/members.ds): a compiled sub, an inline sub, a
+// static sub and a template's instance made here.
+// dsc-lib: libs/members.ds
+// expect-rv: 0
+#import("members")
+sub main() -> i32 {
+	var acc = mem::Acc.make(3);
+	acc.add(2);
+	acc.add(1);
+	if (acc.get() != 9 or acc.total != 9) return 1;
+	acc.reset();
+	if (acc.get() != 0) return 2;
+	if (mem::total != 500) return 3;
+	var p: mem::Pair<u16>;
+	p.set(40, 2);
+	if (p.sum() != 42) return 4;
+	return 0;
+}

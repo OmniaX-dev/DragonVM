@@ -1,0 +1,10 @@
+// expect-error: const
+// ref x over a range whose get() returns const ref T: x is a const ref.
+struct R {
+	var items: i32[2];
+	sub begin() -> u32 { return 0; }
+	sub end() -> u32 { return 2; }
+	sub next(var i: u32) -> u32 { return i + 1; }
+	sub get(var i: u32) -> const ref i32 { return this->items[i]; }
+};
+sub main() -> i32 { var r: R; for (ref x in r) x = 1; return 0; }

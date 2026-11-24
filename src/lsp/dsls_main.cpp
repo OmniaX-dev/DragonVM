@@ -1702,6 +1702,16 @@ namespace
 			{
 				for (const auto& l : locals)
 					l_add(l.first, l.second->kind, l.second->hover, 0);
+				// In a struct's sub: its members without this-> (after the locals, which hide
+				// them, and before the globals, which they hide). A static sub: its static subs.
+				auto self = locals.find("this");
+				if (self != locals.end() && self->second->type.rfind("p:s:", 0) == 0)
+				{
+					l_addMembers(self->second->type.substr(4), { CS::Field, CS::Method });
+					l_addMembers(self->second->type.substr(4), { CS::StaticSub });
+				}
+				else if (sub != nullptr && l_kindOf(sub->scope) == CS::Struct)
+					l_addMembers(sub->scope, { CS::StaticSub });
 			}
 			l_addScopes(where == TypeName);
 			for (int i = 0; builtinTypes[i] != nullptr; i++)

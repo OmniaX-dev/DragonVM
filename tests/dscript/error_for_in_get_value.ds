@@ -1,5 +1,5 @@
-// get() gives the element by its address.
-// expect-error: ::get() must return a pointer to the element
+// get() gives the element: its address or a reference to it.
+// expect-error: ::get() must return the element: a pointer to it (T*) or a reference
 struct R {
 	sub begin() -> u32 { return 0; }
 	sub end() -> u32 { return 3; }

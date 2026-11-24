@@ -1,0 +1,3 @@
+// expect-error: ref r refers to a variable (something in memory), not a value
+// ref x = ... takes a variable; a value needs const ref (or a copy: auto).
+sub main() -> i32 { ref r = 5; return 0; }

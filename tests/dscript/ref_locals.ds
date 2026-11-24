@@ -1,0 +1,149 @@
+// expect-rv: 0
+// Reference locals: var x: ref T = v; ref x = v; const ref x = v; and for-in with ref x / const
+// ref x, and with a get() that returns ref T / const ref T.
+#include(check.ds)
+
+var g_cells: i32[4];
+sub at(var i: u32) -> ref i32 { return g_cells[i]; }
+sub bump(var x: ref i32) { x++; }
+sub cell(var i: u32) -> ref i32 { ref c = g_cells[i]; return c; }	// (refers to a global: returned)
+
+struct P { var x: i32; var y: i32; sub sum() -> i32 { return x + y; } };
+
+var g_destroyed: i32 = 0;
+struct Tracked {
+	var v: i32;
+	sub new(var v: i32) { this->v = v; }
+	sub del() { g_destroyed++; }
+};
+sub make_tracked(var v: i32) -> Tracked { var t: Tracked(v); return t; }
+
+class Base { virt sub kind() -> i32 { return 1; } };
+class Derived ex Base { override sub kind() -> i32 { return 2; } };
+
+struct Bag {
+	var items: i32[4];
+	var count: u32;
+	inline sub begin() -> u32 { return 0; }
+	inline sub end() -> u32 { return count; }
+	inline sub next(var i: u32) -> u32 { return i + 1; }
+	inline sub get(var i: u32) -> ref i32 { return items[i]; }		// a reference to the element
+};
+struct CBag {
+	var items: i32[3];
+	sub begin() -> u32 { return 0; }
+	sub end() -> u32 { return 3; }
+	sub next(var i: u32) -> u32 { return i + 1; }
+	sub get(var i: u32) -> const ref i32 { return items[i]; }
+};
+
+template(T) {
+	sub swap_refs(var a: ref T, var b: ref T) { var t: T = a; a = b; b = t; }
+	sub first_twice(var p: T*) -> T { ref f = *p; f = f + f; return f; }
+}
+
+inline sub add_to(var p: P*, var n: i32) { ref x = p->x; x += n; }
+
+sub main() -> i32 {
+	// The basics: reading, assigning, ++, compound assignment, the address.
+	var a: i32 = 5;
+	ref r = a;
+	r = 7;
+	r++;
+	var s: ref i32 = a;
+	s += 10;
+	var ptr: i32* = &r;
+	*ptr += 1;
+	check(1, a == 19 and r == 19 and s == 19 and &r == &a);
+	ref rr = r;									// a reference to what r refers to
+	rr = 20;
+	check(2, a == 20);
+	bump(r);									// to a ref parameter
+	check(3, a == 21);
+	auto copy = r;								// auto: a copy
+	copy = 0;
+	check(4, a == 21);
+
+	// To a sub's ref result, fields, structs.
+	ref c = at(2);
+	c = 40;
+	check(5, g_cells[2] == 40);
+	cell(3) = 9;
+	check(6, g_cells[3] == 9);
+	var p: P;
+	ref px = p.x;
+	px = 3;
+	ref pp = p;
+	pp.y = 4;
+	check(7, p.x == 3 and p.y == 4 and pp.sum() == 7);
+	add_to(&p, 10);
+	check(8, p.x == 13);
+
+	// const ref: to a variable (no change through it), or a value (kept as long as the reference).
+	const ref k = 9;
+	const ref ka = a;
+	check(9, k == 9 and ka == 21);
+	a = 22;
+	check(10, ka == 22);
+	{
+		const ref t = make_tracked(5);			// the value kept; destroyed once, at the block's end
+		check(11, t.v == 5 and g_destroyed == 0);
+	}
+	check(12, g_destroyed == 1);
+	{
+		var held: Tracked(6);
+		ref h = held;							// a reference doesn't destroy what it refers to
+		h.v = 7;
+		check(13, held.v == 7);
+	}
+	check(14, g_destroyed == 2);
+
+	// Classes: a reference to a base calls the object's own virtual subs.
+	var d: Derived;
+	var b: ref Base = d;
+	check(15, b.kind() == 2);
+
+	// Templates.
+	var x: i32 = 1;
+	var y: i32 = 2;
+	ref rx = x;
+	swap_refs(rx, y);
+	check(16, x == 2 and y == 1);
+	check(17, first_twice(&y) == 2 and y == 2);
+
+	// for-in: ref x changes the elements; auto copies; auto& points; a get() returning ref T.
+	var bag: Bag;
+	bag.count = 3;
+	bag.items[0] = 1; bag.items[1] = 2; bag.items[2] = 3;
+	for (ref e in bag)
+		e *= 10;
+	var sum: i32 = 0;
+	for (auto e in bag)
+		sum += e;
+	check(20, sum == 60);
+	for (auto& e in bag)
+		*e += 1;
+	for (const ref e in bag)
+		sum += e;
+	check(21, sum == 123);
+	for (var e: ref i32 in bag)
+		e += 100;
+	check(22, bag.items[0] == 111 and bag.items[2] == 131);
+	var arr: i32[3] = { 5, 6, 7 };
+	for (ref e in arr)
+		e = e * 2;
+	check(23, arr[0] == 10 and arr[2] == 14);
+	var cb: CBag;
+	cb.items[0] = 1; cb.items[1] = 2; cb.items[2] = 3;
+	var csum: i32 = 0;
+	for (ref e in cb)							// get() -> const ref: e is a const ref
+		csum += e;
+	check(24, csum == 6);
+	var pts: P[2];
+	for (ref q in pts) {
+		q.x = 1;
+		q.y = 2;
+	}
+	check(25, pts[1].sum() == 3);
+	return result();
+}

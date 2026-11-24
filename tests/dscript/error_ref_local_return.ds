@@ -1,0 +1,11 @@
+// expect-error: get returns what 'r' refers to, which ends when it returns
+// A reference local to a local: not returned as a reference (it would outlive the local).
+var g: i32 = 0;
+sub get(var pick: bool) -> ref i32 {
+	var mine: i32 = 5;
+	ref ok = g;
+	if (pick) return ok;					// (a global: fine)
+	ref r = mine;
+	return r;
+}
+sub main() -> i32 { return get(true); }

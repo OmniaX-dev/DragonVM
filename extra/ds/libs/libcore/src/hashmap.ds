@@ -4,8 +4,8 @@
 //
 //     var ids: std::HashMap<std::String, u32>;
 //     ids.set("eth0", 1);
-//     var id: u32* = ids.get("eth0");     // null when it isn't there
-//     for (auto& e in ids) { ... e->key ... e->value ... }      // in no particular order
+//     var id: u32* = ids.get("eth0");     // null when it isn't there (a pointer: it may be nothing)
+//     for (ref e in ids) { ... e.key ... e.value ... }          // in no particular order
 //
 // The keys are hashed by std::hash_of (numbers, pointers, enums; a string's text; a struct's
 // hash()) and compared by std::equals (==; strings: strcmp). set, get, remove: O(1) on average.
@@ -82,14 +82,22 @@ namespace std {
 				return true;
 			}
 
-			// key's value (null: no entry).
+			// key's value (null: no entry; a pointer, not a reference: there may be none).
 			inline sub get(var key: const ref K) -> V* {
+				var i: i32 = this->find_slot(key);
+				return i >= 0 ? &this->m_entries[i].value : null;
+			}
+			readonly inline sub get(var key: const ref K) -> const V* {
 				var i: i32 = this->find_slot(key);
 				return i >= 0 ? &this->m_entries[i].value : null;
 			}
 			readonly inline sub contains(var key: const ref K) -> bool { return this->find_slot(key) >= 0; }
 			// key's entry (null: none).
 			inline sub find(var key: const ref K) -> MapEntry<K, V>* {
+				var i: i32 = this->find_slot(key);
+				return i >= 0 ? &this->m_entries[i] : null;
+			}
+			readonly inline sub find(var key: const ref K) -> const MapEntry<K, V>* {
 				var i: i32 = this->find_slot(key);
 				return i >= 0 ? &this->m_entries[i] : null;
 			}
@@ -156,12 +164,13 @@ namespace std {
 				return true;
 			}
 
-			// for (auto& e in map): the full slots (the cursor: an entry pointer, so that get(key) with a
-			// number key is not get(cursor)).
+			// for (ref e in map) / for (auto& e in map): the full slots (the cursor: an entry pointer, so
+			// that get(key) with a number key is not get(cursor)).
 			readonly sub begin() -> MapEntry<K, V>* { return this->next_full(0); }
 			readonly inline sub end() -> MapEntry<K, V>* { return this->m_entries + this->m_capacity; }
 			readonly inline sub next(var e: MapEntry<K, V>*) -> MapEntry<K, V>* { return this->next_full(cast<u32>(e - this->m_entries) + 1); }
-			inline sub get(var e: MapEntry<K, V>*) -> MapEntry<K, V>* { return e; }
+			inline sub get(var e: MapEntry<K, V>*) -> ref MapEntry<K, V> { return *e; }
+			readonly inline sub get(var e: MapEntry<K, V>*) -> const ref MapEntry<K, V> { return *e; }
 
 			priv readonly sub next_full(var i: u32) -> MapEntry<K, V>* {
 				while (i < this->m_capacity and this->m_state[i] != 1)

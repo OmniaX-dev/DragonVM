@@ -1268,6 +1268,11 @@ namespace dscript
 		auto l_in = [&](size_t k) { return peek(k).kind == TokenKind::Identifier && peek(k).text == "in"; };
 		if (isKeyword("auto"))
 			return (peek(1).kind == TokenKind::Identifier && l_in(2)) || (isPunct("&", 1) && peek(2).kind == TokenKind::Identifier && l_in(3));
+		auto l_ref = [&](size_t k) { return peek(k).kind == TokenKind::Identifier && peek(k).text == "ref" && peek(k + 1).kind == TokenKind::Identifier; };
+		if (l_ref(0) && l_in(2))
+			return true;		// for (ref x in range)
+		if (isKeyword("const") && l_ref(1) && l_in(3))
+			return true;		// for (const ref x in range)
 		if (!isKeyword("var") || peek(1).kind != TokenKind::Identifier || !isPunct(":", 2))
 			return false;
 		// var x: <type> in: the type is parsed, then the parser goes back.
@@ -1293,6 +1298,13 @@ namespace dscript
 				n->value = 1;
 			v->name = expectIdentifier("after 'auto'");
 		}
+		else if (isKeyword("const") || (peek().kind == TokenKind::Identifier && peek().text == "ref"))
+		{
+			// ref x / const ref x: x refers to the element (const: it can't change it).
+			v->refKind = acceptKeyword("const") ? 2 : 1;
+			next();		// ref
+			v->name = expectIdentifier("after 'ref'");
+		}
 		else
 		{
 			expectKeyword("var", "");
@@ -1308,6 +1320,8 @@ namespace dscript
 			n->d = parseExpression();
 			if (n->value == 1)
 				error(v->namePos, "auto& points at the elements of a range: a range of numbers (a..b) has none (auto " + v->name + " in ...)");
+			if (v->refKind != 0)
+				error(v->namePos, "ref refers to the elements of a range: a range of numbers (a..b) has none (auto " + v->name + " in ...)");
 		}
 		expectPunct(")", "after the range");
 		n->a = v;
@@ -1315,6 +1329,30 @@ namespace dscript
 		n->text = std::to_string(++m_forInCount);
 		n->c = parseStatement();
 		requireBlockFor(n->c, "for");
+		return n;
+	}
+
+	// ref x = value; / const ref x = value;: a reference local, its type from what it refers to
+	// (ref is not a keyword: only this shape, a name and '=', makes it one).
+	bool Parser::isRefDecl(size_t k)
+	{
+		if (isKeyword("const", k))
+			k++;
+		return peek(k).kind == TokenKind::Identifier && peek(k).text == "ref" && peek(k).fixedType == nullptr
+			&& peek(k + 1).kind == TokenKind::Identifier && isPunct("=", k + 2);
+	}
+
+	Node* Parser::parseRefDecl(void)
+	{
+		Node* n = make(NodeKind::VarDecl, peek().pos);
+		n->refKind = acceptKeyword("const") ? 2 : 1;
+		next();		// ref
+		n->name = expectIdentifier("after 'ref'");
+		n->namePos = lastPos();
+		expectPunct("=", "(a reference needs what it refers to: ref " + n->name + " = <variable>;)");
+		if (isPunct("{"))
+			error(peek().pos, "a reference refers to a variable, not to { ... }");
+		n->a = parseAssignment();
 		return n;
 	}
 
@@ -2176,6 +2214,13 @@ namespace dscript
 		{
 			Node* v = parseVarDecl();
 			endStatement(v->a, "after the variable declaration");
+			declareLocal(v->name);
+			return v;
+		}
+		if (isRefDecl())
+		{
+			Node* v = parseRefDecl();
+			endStatement(v->a, "after the reference's declaration");
 			declareLocal(v->name);
 			return v;
 		}

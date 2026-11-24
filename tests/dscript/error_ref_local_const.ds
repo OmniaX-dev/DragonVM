@@ -1,0 +1,11 @@
+// expect-error: a constant
+// ref x to a constant is a const ref (deduced): it can't change it.
+sub main() -> i32 {
+	var n: i32 = 3;
+	const k: i32 = n;					// (a constant variable: computed when the program runs)
+	ref r = n;
+	ref c = k;
+	r = 1;
+	c = 2;
+	return 0;
+}

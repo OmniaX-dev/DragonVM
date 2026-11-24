@@ -20,6 +20,17 @@
 // signed, else a u32), an f32 as its bits. Without types (plain ...), the sub has to know what it
 // was given (a format string, a count, ...), as in C; with ...typed it can check.
 //
+// A VaList is also a range: a for-in gives each argument as a std::VaArg (its index, its type
+// with ...typed, its slot, and the same get_* readers):
+//
+//     sub sum(...) -> i32 {
+//         var args: std::VaList(va_start(), va_count());
+//         var total: i32 = 0;
+//         for (auto a in args)
+//             total += a.get_i32();
+//         return total;
+//     }
+//
 // A VaList can be passed on (by pointer) to another sub: that is how format and vformat share
 // the work.
 
@@ -43,10 +54,28 @@ namespace std {
 		var Sub: u8				= 11;	// a sub pointer
 	};
 
+	// One argument, as a for-in over a VaList gives it.
+	struct VaArg {
+		var index: u32;				// its place in the list (0: the first extra argument)
+		var type: u8;				// VaTypes (Unknown without types: plain ...)
+		var word: u32;				// its slot as it is
+
+		sub get_i32() -> i32 { return cast<i32>(this->word); }
+		sub get_u32() -> u32 { return this->word; }
+		sub get_bool() -> bool { return this->word != 0; }
+		sub get_ptr() -> void* { return cast<void*>(this->word); }
+		sub get_string() -> string { return cast<string>(this->word); }
+		sub get_f32() -> f32 {
+			var bits: u32 = this->word;
+			return *cast<f32*>(&bits);
+		}
+	};
+
 	struct VaList {
 		readonly var count: u32;
 		priv var start: u32;
 		priv var types: u32;
+		priv var current: VaArg;	// the element a for-in is on (get fills it)
 
 		// From va_start(), va_count() and (...typed) va_types().
 		sub new(var start: u32, var count: u32, var types: u32 = 0) {
@@ -80,6 +109,19 @@ namespace std {
 		sub get_f32(var i: u32) -> f32 {
 			var bits: u32 = this->word(i);
 			return *cast<f32*>(&bits);
+		}
+
+		// The range (for-in): the cursor is the argument's index; each element is a VaArg, a copy
+		// of the argument (filled when the loop gets to it: `auto& a` points at it, and changing it
+		// doesn't change the argument).
+		priv inline sub begin() -> u32 { return 0; }
+		priv inline sub end() -> u32 { return this->count; }
+		priv inline sub next(var i: u32) -> u32 { return i + 1; }
+		priv sub get(var i: u32) -> VaArg* {
+			this->current.index = i;
+			this->current.type = this->type_of(i);
+			this->current.word = this->word(i);
+			return &this->current;
 		}
 	};
 

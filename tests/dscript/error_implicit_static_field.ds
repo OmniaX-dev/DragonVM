@@ -1,0 +1,7 @@
+// expect-error: 'count' is a field of S: a static sub has no this
+// A static sub can't use the fields (nor the methods) without an object.
+struct S {
+	var count: i32;
+	static sub get() -> i32 { return count; }
+}
+sub main() -> i32 { return S.get(); }

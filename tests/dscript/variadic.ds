@@ -1,6 +1,6 @@
 // expect-rv: 0
-// Variadic subs: ... and ...typed, va_count / va_start / va_types, std::VaList, overloads, sub
-// pointers, methods, and std::format / vformat.
+// Variadic subs: ... and ...typed, va_count / va_start / va_types, std::VaList (also as a for-in
+// range: std::VaArg), overloads, sub pointers, methods, and std::format / vformat.
 #include(check.ds)
 #import("dragon-sdk")
 
@@ -46,6 +46,34 @@ sub vsum(var args: std::VaList*) -> i32 {
 sub sum2(...) -> i32 {
 	var args: std::VaList(va_start(), va_count());
 	return vsum(&args);
+}
+
+// A VaList as a range: each argument a VaArg.
+sub sum_in(...) -> i32 {
+	var args: std::VaList(va_start(), va_count());
+	var total: i32 = 0;
+	for (auto a in args)
+		total += a.get_i32();
+	return total;
+}
+// The indexes in order, the types (...typed), the readers, break, and through a pointer.
+sub describe(...typed) -> u32 {
+	var args: std::VaList(va_start(), va_count(), va_types());
+	var list: std::VaList* = &args;
+	var expected: u32 = 0;
+	var ok: u32 = 0;
+	for (auto& a in list) {
+		if (a->index != expected)
+			return 1000;
+		expected++;
+		if (a->type == std::VaTypes.I32 and a->get_i32() == -3) ok++;
+		if (a->type == std::VaTypes.F32 and a->get_f32() == 0.5) ok++;
+		if (a->type == std::VaTypes.String and std::strcmp(a->get_string(), "va") == 0) ok++;
+		if (a->type == std::VaTypes.Bool and a->get_bool()) ok++;
+		if (a->type == std::VaTypes.U32 and a->get_u32() == 99)
+			break;
+	}
+	return ok * 10 + expected;
 }
 
 struct Acc {
@@ -100,6 +128,9 @@ sub main() -> i32 {
 	acc.add();
 	acc.add(10);
 	check(23, acc.total == 16);
+	check(24, sum_in(1, 2, 3, -10) == -4 and sum_in() == 0);
+	check(25, describe(-3, 0.5, "va", true, cast<u32>(99), 7) == 45);	// (4 matched, the 5th breaks)
+	check(26, describe() == 0);
 
 	// format
 	var buff: u8[64];
