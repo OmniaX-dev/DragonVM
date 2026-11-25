@@ -1636,6 +1636,10 @@
             {
               "type": "SYMBOL",
               "name": "enum_declaration"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "alias_declaration"
             }
           ]
         }
@@ -3745,6 +3749,10 @@
         {
           "type": "SYMBOL",
           "name": "static_declaration"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "alias_declaration"
         },
         {
           "type": "SYMBOL",

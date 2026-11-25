@@ -1693,3 +1693,45 @@ sub f(var v: Vec*) {
             (identifier)
             (field_identifier))
           (number_literal))))))
+
+================================================================================
+Aliases in a struct and in a sub
+================================================================================
+
+struct Grid {
+	alias Cell = u16;
+	priv alias Raw = Cell*;
+}
+
+sub f() {
+	alias I = i32;
+	var x: I = 1;
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (struct_declaration
+    (type_identifier)
+    (field_list
+      (nested_type_declaration
+        (alias_declaration
+          (type_identifier)
+          (primitive_type)))
+      (nested_type_declaration
+        (priv_modifier)
+        (alias_declaration
+          (type_identifier)
+          (pointer_type
+            (type_identifier))))))
+  (function_declaration
+    (identifier)
+    (parameter_list)
+    (block
+      (alias_declaration
+        (type_identifier)
+        (primitive_type))
+      (variable_declaration
+        (identifier)
+        (type_identifier)
+        (number_literal)))))

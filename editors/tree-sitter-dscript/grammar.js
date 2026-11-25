@@ -194,9 +194,10 @@ module.exports = grammar({
 			field('arguments', alias($._shift_arguments, $.template_arguments)),
 		),
 		_shift_arguments: $ => seq('<', commaSep1($._type), '>>'),
+		// (and aliases: alias Name = type;, Outer::Name)
 		nested_type_declaration: $ => seq(
 			optional($.priv_modifier),		// (or for everyone)
-			choice($.struct_declaration, $.enum_declaration),
+			choice($.struct_declaration, $.enum_declaration, $.alias_declaration),
 		),
 		// const: set when the struct is built (its default, { ... }, in new), then never changed
 		field_declaration: $ => seq(
@@ -415,6 +416,7 @@ module.exports = grammar({
 			// Local constants and static variables: set once, visible in the block.
 			$.const_declaration,
 			$.static_declaration,
+			$.alias_declaration,		// (a type for the block, after it)
 			$.if_statement,
 			$.while_statement,
 			$.do_statement,

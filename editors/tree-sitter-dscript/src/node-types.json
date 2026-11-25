@@ -1222,6 +1222,10 @@
       "required": false,
       "types": [
         {
+          "type": "alias_declaration",
+          "named": true
+        },
+        {
           "type": "assert_statement",
           "named": true
         },
@@ -2748,6 +2752,10 @@
             "named": false
           },
           {
+            "type": "alias_declaration",
+            "named": true
+          },
+          {
             "type": "assert_statement",
             "named": true
           },
@@ -2850,6 +2858,10 @@
           {
             "type": ";",
             "named": false
+          },
+          {
+            "type": "alias_declaration",
+            "named": true
           },
           {
             "type": "assert_statement",
@@ -3676,6 +3688,10 @@
             "named": false
           },
           {
+            "type": "alias_declaration",
+            "named": true
+          },
+          {
             "type": "assert_statement",
             "named": true
           },
@@ -3972,6 +3988,10 @@
           {
             "type": ";",
             "named": false
+          },
+          {
+            "type": "alias_declaration",
+            "named": true
           },
           {
             "type": "assert_statement",
@@ -4766,6 +4786,10 @@
             "named": false
           },
           {
+            "type": "alias_declaration",
+            "named": true
+          },
+          {
             "type": "assert_statement",
             "named": true
           },
@@ -4964,6 +4988,10 @@
           {
             "type": ";",
             "named": false
+          },
+          {
+            "type": "alias_declaration",
+            "named": true
           },
           {
             "type": "assert_statement",
@@ -5753,6 +5781,10 @@
       "multiple": true,
       "required": true,
       "types": [
+        {
+          "type": "alias_declaration",
+          "named": true
+        },
         {
           "type": "enum_declaration",
           "named": true
@@ -9654,6 +9686,10 @@
           {
             "type": ";",
             "named": false
+          },
+          {
+            "type": "alias_declaration",
+            "named": true
           },
           {
             "type": "assert_statement",
