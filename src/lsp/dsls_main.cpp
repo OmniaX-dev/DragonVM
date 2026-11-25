@@ -1462,7 +1462,7 @@ namespace
 			{
 				if (global && !anc.empty())
 					continue;
-				if (l_kindOf(anc) == CS::Struct && l_kindOf(anc + "::" + first) != CS::Struct && l_kindOf(anc + "::" + first) != CS::Enum)
+				if (l_kindOf(anc) == CS::Struct && l_kindOf(anc + "::" + first) != CS::Struct && l_kindOf(anc + "::" + first) != CS::Enum && l_kindOf(anc + "::" + first) != CS::Alias)
 					continue;
 				auto it = model->byFullName.find(anc.empty() ? q : anc + "::" + q);
 				if (it != model->byFullName.end() && !it->second.empty())
@@ -1566,7 +1566,7 @@ namespace
 				}
 				auto local = locals.find(q);
 				if (!global && local != locals.end())
-					v = { Value::Typed, local->second->type };
+					v = local->second->kind == CS::Alias ? l_symbolValue(local->second) : Value { Value::Typed, local->second->type };
 				else if (const CS* m = global || q.find("::") != std::string::npos ? nullptr : l_ownMember(q))
 					v = l_symbolValue(m);
 				else
@@ -1691,7 +1691,7 @@ namespace
 				for (const CS* s : it->second)
 				{
 					const bool type = s->kind == CS::Struct || s->kind == CS::Enum || s->kind == CS::Alias || s->kind == CS::Namespace;
-					if ((inStruct && s->kind != CS::Struct && s->kind != CS::Enum) || (typesOnly && !type))
+					if ((inStruct && s->kind != CS::Struct && s->kind != CS::Enum && s->kind != CS::Alias) || (typesOnly && !type))
 						continue;
 					l_add(s->name, s->kind, s->hover, s->kind == CS::Define ? 3 : 2);
 				}
@@ -1778,6 +1778,14 @@ namespace
 				}
 				else if (sub != nullptr && l_kindOf(sub->scope) == CS::Struct)
 					l_addMembers(sub->scope, { CS::StaticSub });
+			}
+			else
+			{
+				for (const auto& l : locals)
+				{
+					if (l.second->kind == CS::Alias)		// (a sub's own aliases)
+						l_add(l.first, l.second->kind, l.second->hover, 0);
+				}
 			}
 			l_addScopes(where == TypeName);
 			for (int i = 0; builtinTypes[i] != nullptr; i++)

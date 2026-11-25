@@ -277,6 +277,26 @@ version += 2
 labels = [i["label"] for i in items]
 check("a for-in's own variables aren't offered", "e" in labels and not any(l.startswith("__forin") for l in labels), str(labels))
 
+alias_text = bag_text.replace("\tvar first: Point;", "\talias Pt = Point;\n\tpriv alias Raw = Point*;\n\tvar first: Point;").replace("\t\tvar n: i32 = 0;", "\t\talias Num = i32;\n\t\talias Shape = Geo;\n\t\tvar n: i32 = 0;")
+num_line = alias_text.split("\n").index("\t\tvar n: i32 = 0;")
+completes("a struct's aliases (Struct::)", MAIN, alias_text, 18, "\tvar q: Bag::|", ["Pt"])
+items = completes("a struct's aliases in its subs (types)", MAIN, alias_text, num_line, "\t\tvar q: |", ["Pt", "Raw", "Num", "Shape"], exact=False)
+completes("a local alias of a struct as a scope", MAIN, alias_text, num_line, "\t\tShape::|", ["twice"])
+keep_text = main_text.rstrip("\n") + """
+struct Keep {
+	priv var secret: i32;
+	priv sub hidden() {}
+	sub run() {
+		var f: sub(ref Keep) = sub(var k: ref Keep) {
+			k.secret = 1;
+		};
+	}
+};
+"""
+keep_line = keep_text.split("\n").index("\t\t\tk.secret = 1;")
+completes("priv members in a lambda of the struct's sub", MAIN, keep_text, keep_line, "\t\t\tk.|", ["secret", "hidden", "run"])
+completes("... not outside the struct", MAIN, keep_text, 18, "\tvar kk: Keep; kk.|", ["run"])
+
 print("editing (unsaved buffers)")
 broken = main_text.replace("p->x + p->y", "p->x + p->zz")
 c.notify("textDocument/didChange", {"textDocument": {"uri": uri(MAIN), "version": 2}, "contentChanges": [{"text": broken}]})

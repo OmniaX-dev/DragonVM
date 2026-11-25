@@ -1,0 +1,9 @@
+// A library struct's priv alias stays priv for its importers.
+// dsc-lib: libs/member_aliases.ds
+// expect-error: 'Raw' is private to mal::Grid (priv): only mal::Grid can use it
+#import("member_aliases")
+
+sub main() -> i32 {
+	var r: mal::Grid::Raw = null;
+	return 0;
+}

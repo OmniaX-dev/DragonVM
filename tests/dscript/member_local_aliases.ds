@@ -1,0 +1,78 @@
+// Aliases in a struct (Struct::Name; Name in its subs, priv: only there) and in a sub (in its
+// block, after the declaration).
+// expect-rv: 0
+#include(check.ds)
+
+struct Point { var x: i32; var y: i32; static sub make(var x: i32) -> Point { var p: Point; p.x = x; p.y = 0; return p; } };
+
+struct Grid {
+	alias Cell = u16;						// Grid::Cell
+	alias Pos = Point;
+	priv alias Raw = Cell*;					// only in Grid
+	enum Mode { A = 1, B = 2 };
+	alias M = Mode;
+	var cells: Cell[4];
+	var origin: Pos;
+	sub first() -> Cell { var r: Raw = &cells[0]; return *r; }		// without Grid::
+	sub mode() -> i32 { return M.B; }
+	static sub at(var x: i32) -> Pos { return Pos::make(x); }		// an alias as a scope
+};
+
+template(T) {
+	struct Box {
+		alias Value = T;
+		alias Ptr = T*;
+		var v: Value;
+		sub get() -> Value { var p: Ptr = &v; return *p; }
+	};
+}
+
+namespace Ns {
+	struct In { alias Id = u8; var id: Id; };
+}
+
+sub local_aliases() -> i32 {
+	alias I = i32;
+	alias P = Point;
+	alias IP = I*;							// an alias of a local alias
+	var n: I = 5;
+	var q: IP = &n;
+	var p: P = P::make(*q);					// as a scope
+	var r: P = P.make(2);
+	var total: I = p.x + r.x;				// 7
+	{
+		alias I = u8;						// hides the outer one in this block
+		var b: I = 255;
+		b++;								// u8: wraps to 0
+		total += b;
+	}
+	var after: I = 100000;					// the outer one again (i32)
+	return total + (after == 100000 ? 0 : 1000) + cast<i32>(sizeof(I));	// 7 + 0 + 4
+}
+
+sub other() -> i32 {
+	alias I = i16;							// the same name in another sub
+	var x: I = 1;
+	return cast<i32>(sizeof(I)) + x;		// 3
+}
+
+sub main() -> i32 {
+	var g: Grid;
+	g.cells[0] = 0x1234;
+	check(1, g.first() == 0x1234 and sizeof(Grid::Cell) == 2);
+	var c: Grid::Cell = 7;
+	check(2, c == 7 and g.mode() == 2 and Grid::M.A == 1);
+	var p: Grid::Pos = Grid::at(9);
+	check(3, p.x == 9);
+	var b: Box<u32>;
+	b.v = 42;
+	alias B8 = Box<u8>;
+	alias B32 = Box<u32>;
+	var bv: B32::Value = b.get();
+	check(4, bv == 42 and sizeof(B8::Value) == 1);
+	var id: Ns::In::Id = 200;
+	check(5, id == 200 and sizeof(Ns::In::Id) == 1);
+	check(6, local_aliases() == 11);
+	check(7, other() == 3);
+	return result();
+}

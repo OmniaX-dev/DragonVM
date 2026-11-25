@@ -1027,6 +1027,21 @@ namespace dscript
 			m_nested.push_back(nested);
 			return;
 		}
+		if (isKeyword("alias"))
+		{
+			// alias Name = type;: a type of the struct (Struct::Name; Name in its subs), a hidden
+			// top-level alias <Struct>::<name> (priv: only usable in the struct).
+			if (decl->value != 0)
+				error(peek().pos, "aliases in a struct need a named struct (struct Name { ... })");
+			if (prot)
+				error(peek().pos, "aliases are priv or for everyone (not prot)");
+			Node* a = parseAlias();
+			nameDeclaration(a);
+			a->owner = decl;
+			a->isPrivate = priv;
+			m_nested.push_back(a);
+			return;
+		}
 		if (isKeyword("template"))
 		{
 			// Method templates: hidden top-level template declarations, owned by the struct.
@@ -1827,6 +1842,8 @@ namespace dscript
 			t->name = parseQualifiedName("(type)", global);
 			t->written = (global ? "::" : "") + t->name;
 			t->resolved = global;
+			if (!global && !isPunct("<"))
+				renameLocalAlias(t->name);		// (its hidden name: found from any scope, also A::Nested)
 			if (isPunct("<") && isTemplateName(t->name))
 				parseTemplateArgs(t->args);
 		}
@@ -1977,6 +1994,26 @@ namespace dscript
 			return name;
 		}
 		return name;
+	}
+
+	// A qualified name (A or A::B...) whose first part is a local alias: with the alias's hidden
+	// name instead (true); false if it isn't one (a local variable / constant of that name hides
+	// the outer ones, so a type of that name is not looked up from the scopes either).
+	bool Parser::renameLocalAlias(std::string& name)
+	{
+		const size_t sep = name.find("::");
+		const std::string first = name.substr(0, sep);
+		for (int i = (int)m_scopes.size() - 1; i >= 0; i--)
+		{
+			auto it = m_scopes[i].find(first);
+			if (it == m_scopes[i].end())
+				continue;
+			if (m_localAliases.count(it->second) == 0)
+				return false;
+			name = it->second + (sep == std::string::npos ? "" : name.substr(sep));
+			return true;
+		}
+		return false;
 	}
 
 	// $name in a low block, for a local constant / static: its hidden name.
@@ -2226,6 +2263,24 @@ namespace dscript
 		}
 		if (isKeyword("const") || isKeyword("constexpr"))
 			return parseLocalStatic(pos, false);
+		if (isKeyword("alias"))
+		{
+			// alias Name = type;: a hidden top-level alias <sub>::<name> (as a local constant),
+			// the name renamed in its scope (in types, and as a scope: Name::x, Name.x).
+			Node* d = parseAlias();
+			const std::string base = m_currentFunc->name + "::" + d->name;
+			const int n = ++m_hoistedCount[base];
+			const std::string hidden = (n == 1 ? base : base + "::" + std::to_string(n));
+			d->text = d->name;
+			d->shortName = d->name;
+			d->scope = m_scope;
+			d->owner = m_currentFunc;
+			declareLocal(d->name, hidden);
+			m_localAliases.insert(hidden);
+			d->name = hidden;
+			m_hoisted.push_back(d);
+			return make(NodeKind::Block, pos);
+		}
 		if (isKeyword("constinit"))
 			error(peek().pos, "constinit is for globals (a local gets its value every time its declaration runs)");
 		if (acceptKeyword("static"))
@@ -2795,13 +2850,19 @@ namespace dscript
 				n->resolved = global;
 				if (global)
 					n->text = "::" + n->name;
+				else
+				{
+					const std::string written = n->name;
+					if (renameLocalAlias(n->name))
+						n->text = written;
+				}
 				if (isPunct("<") && isTemplateName(n->name))
 					parseTemplateArgs(n->templateArgs);
 				return n;
 			}
 			bool local = false;
 			n->name = localName(t.text, t.pos, &local);
-			n->resolved = local;
+			n->resolved = local && m_localAliases.count(n->name) == 0;		// (a local alias: looked up as the others, Alias.sub())
 			if (n->name != t.text)
 				n->text = t.text;
 			next();

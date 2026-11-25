@@ -98,6 +98,7 @@ namespace dscript
 			void declareLocal(const std::string& name, const std::string& hidden = "");
 			std::string localName(const std::string& name, const SourcePos& pos, bool* found = nullptr);
 			std::string renameLow(const std::string& text);
+			bool renameLocalAlias(std::string& name);
 
 			Node* parseExpression(void);
 			Node* parseAssignment(void);
@@ -128,6 +129,7 @@ namespace dscript
 			std::vector<Node*> m_hoisted;
 			std::map<std::string, int> m_hoistedCount;
 			std::vector<std::map<std::string, std::string>> m_scopes;
+			std::set<std::string> m_localAliases;	// the hidden names of the local aliases
 			int m_hoistScope { -1 };
 			// A local const's value being parsed: does it use the sub's variables (then it is a
 			// constant variable of the sub, not a hidden declaration)?

@@ -386,9 +386,9 @@ namespace dscript
 			bool found = isDeclared(candidate);
 			if (found && !s.empty() && m_structs.count(s) > 0)
 			{
-				// In a struct: only its nested types (and what is in them) and constants, not its subs.
+				// In a struct: only its nested types and aliases (and what is in them) and constants, not its subs.
 				const std::string first = s + "::" + written.substr(0, written.find("::"));
-				found = m_structs.count(first) > 0 || m_enums.count(first) > 0 || m_consts.count(first) > 0 || m_globals.count(first) > 0;	// (and static fields)
+				found = m_structs.count(first) > 0 || m_enums.count(first) > 0 || m_aliases.count(first) > 0 || m_consts.count(first) > 0 || m_globals.count(first) > 0;	// (and static fields)
 			}
 			if (found)
 				return candidate;
@@ -400,7 +400,7 @@ namespace dscript
 				{
 					const std::string base = d->typeSyntax->name;
 					const std::string first = base + "::" + written.substr(0, written.find("::"));
-					if (isDeclared(base + "::" + written) && (m_structs.count(first) > 0 || m_enums.count(first) > 0 || m_consts.count(first) > 0 || m_globals.count(first) > 0))
+					if (isDeclared(base + "::" + written) && (m_structs.count(first) > 0 || m_enums.count(first) > 0 || m_aliases.count(first) > 0 || m_consts.count(first) > 0 || m_globals.count(first) > 0))
 						return base + "::" + written;
 					d = m_structs.count(base) > 0 ? m_structs[base]->decl : nullptr;
 				}
@@ -657,6 +657,8 @@ namespace dscript
 					break;
 					case NodeKind::AliasDecl:
 						declareName(d->name, d->pos, "an alias");
+						if (d->isPrivate && d->owner != nullptr)
+							m_privTypes[d->name] = d->owner->name;
 						m_aliases[d->name].decl = d;
 					break;
 					case NodeKind::ConstDecl:
@@ -12638,6 +12640,12 @@ namespace dscript
 					c.type = m_consts[d->name].isString ? "p:i" : typeCode(m_consts[d->name].type);
 					c.hover = hoverConst(d->name);
 				}
+				else if (d->kind == NodeKind::AliasDecl && m_aliases.count(d->name) > 0)
+				{
+					c.kind = CompletionSymbol::Alias;
+					c.type = typeCode(m_aliases[d->name].type);
+					c.hover = hoverAlias(d->name);
+				}
 				else
 					continue;
 				out.locals.push_back(c);
@@ -12856,7 +12864,12 @@ namespace dscript
 			if (f->decl->a == nullptr)
 				continue;
 			CompletionContext ctx { f->decl->pos, f->decl->a->endPos, f->decl->scope, {} };
-			for (const Node* o = f->decl->owner; o != nullptr; o = o->owner)
+			// A lambda: the private members of the structs of the sub it is in (d), as the
+			// compiler allows.
+			const Node* around = f->decl;
+			for (int depth = 0; depth < 64 && around->name.rfind("__lambda_", 0) == 0 && around->d != nullptr; depth++)
+				around = around->d;
+			for (const Node* o = around->owner; o != nullptr; o = o->owner)
 			{
 				if (o->kind == NodeKind::StructDecl)
 					ctx.structs.push_back(o->name);
@@ -13177,6 +13190,11 @@ namespace dscript
 				}
 				else if (n->kind == NodeKind::TemplateDecl)
 					l_template(n, indent + "\t");		// (a method template)
+				else if (n->kind == NodeKind::AliasDecl && m_aliases.count(n->name) > 0)
+				{
+					const std::string h = indent + "\t" + (n->isPrivate ? "priv " : "") + "alias ";
+					l_line(h + n->shortName + " = " + (m_aliases[n->name].type ? interfaceType(m_aliases[n->name].type) : "i32") + ";", &n->namePos, h.size());
+				}
 				else if (n->kind == NodeKind::VarDecl || (n->kind == NodeKind::ConstDecl && m_globals.count(n->name) > 0))
 				{
 					// A static field (its data is in the library); a static const computed when the

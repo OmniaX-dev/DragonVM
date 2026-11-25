@@ -1,0 +1,15 @@
+// A library's struct aliases (libs/member_aliases.ds): in its interface, usable here.
+// dsc-lib: libs/member_aliases.ds
+// expect-rv: 0
+#import("member_aliases")
+#include(check.ds)
+
+sub main() -> i32 {
+	var g: mal::Grid;
+	g.cells[0] = 40000;
+	g.cells[1] = 30000;
+	var c: mal::Grid::Cell = g.first();
+	check(1, c == 40000 and sizeof(mal::Grid::Cell) == 2);
+	check(2, g.sum() == 70000);
+	return result();
+}

@@ -1,0 +1,11 @@
+// A priv alias of a struct is only usable in the struct.
+// expect-error: 'Raw' is private to Grid (priv): only Grid can use it
+struct Grid {
+	priv alias Raw = u16*;
+	var x: u16;
+};
+
+sub main() -> i32 {
+	var r: Grid::Raw = null;
+	return 0;
+}

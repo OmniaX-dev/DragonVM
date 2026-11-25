@@ -1,0 +1,15 @@
+// A library with aliases in its structs, and in its subs (member_aliases_library.ds).
+namespace mal {
+	struct Grid {
+		alias Cell = u16;
+		priv alias Raw = Cell*;
+		var cells: Cell[2];
+		sub first() -> Cell { var r: Raw = &cells[0]; return *r; }
+		sub sum() -> i32 {
+			alias Wide = i32;
+			var total: Wide = cells[0];
+			total += cells[1];
+			return total;
+		}
+	};
+}

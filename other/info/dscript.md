@@ -358,7 +358,7 @@ const Primes: u16[] = { 2, 3, 5, 7 };   // constant arrays: read-only data in th
 const START = read_clock();             // not a constant value: a variable that never changes
 constexpr SIZE = 4 * 1024;              // must be a compile-time constant (see "const, constexpr...")
 constinit g_count: u32 = SIZE;          // a variable whose value is known when compiling
-                                        // (all constants can also be declared in a sub, see below)
+                                        // (all constants, and aliases, can also be declared in a sub, see below)
 enum Color { Red, Green = 5, Blue }     // Color.Blue == 6
 enum Kind: u8 { Cmd, Data = 0x80 }      // a typed enum: 1 byte (in structs, arrays, sizeof); the
                                         // values must fit the type (an error otherwise)
@@ -441,6 +441,24 @@ sub size_text(var bytes: u32, var buff: u8*) -> u8* {
   places it is expanded. Lambdas can use the constants and statics of the sub around them.
 - Inner declarations hide outer ones (a local `var` hides a constant of the same name, and the
   other way around), `$name` in low blocks included. `--rom`: static variables are errors.
+
+### Local aliases
+`alias Name = type;` in a sub (or any block) names a type for the rest of that block, as a
+top-level alias does everywhere:
+```
+sub draw(var g: ref Grid) {
+    alias Cell = Grid::Cell;
+    alias Pos = Geo::Point;                     // an alias of a struct: a scope too
+    var p: Pos = Pos::make(1, 2);
+    for (var i: Cell = 0; i < 4; i++) { ... }
+    {
+        alias Cell = u8;                        // hides the outer one in this block
+    }
+}
+```
+- Like a local constant it is a hidden declaration (`<sub>::<name>`, in error messages); each
+  sub has its own, and it can name another local alias, or a template parameter in a template's
+  sub. A local variable of the same name hides it (and the other way around).
 
 ### Methods
 Subs written in a struct are its methods: they are called on a struct (`x.m()`) or a pointer to
@@ -558,23 +576,29 @@ sub main() -> i32 {
   `static` or return a value.
 - `--rom`: globals (and so global constructors) are errors, as before.
 
-### Nested structs and enums
-A struct can declare structs and enums: they are named `Outer::Inner`, and inside the struct
-(its fields, subs and the types nested in it) also just `Inner`.
+### Nested structs, enums and aliases
+A struct can declare structs, enums and aliases: they are named `Outer::Inner`, and inside the
+struct (its fields, subs and the types nested in it) also just `Inner`.
 ```
 struct List {
     struct Node { var value: i32; var next: Node*; }   // List::Node
     enum Kind: u8 { Empty, Some }                       // List::Kind (List::Kind.Some)
+    alias Link = Node*;                                 // List::Link
     priv struct Cursor { var at: Node*; }               // only usable in List
-    var head: Node*;
+    priv alias Raw = u8*;                               // only usable in List
+    var head: Link;
     sub kind() -> Kind { return this->head == null ? Kind.Empty : Kind.Some; }
 }
 var n: List::Node;
 ```
 - A nested struct is a struct of its own (not a field: `List` has only `head`); it can have
   fields, methods and nested types.
-- `priv struct` / `priv enum`: only the outer struct (and what is nested in it) can use the
-  type. The subs of a nested struct can use the private fields and subs of the structs around it.
+- `priv struct` / `priv enum` / `priv alias`: only the outer struct (and what is nested in it)
+  can use the type. The subs of a nested struct can use the private fields and subs of the
+  structs around it.
+- An alias works as in a namespace (an alias of a struct is also a scope: `List::Link`,
+  `Outer::Pos::make()`). In a template's struct it can name the parameters
+  (`template(T) { struct Box { alias Value = T; ... } }`); a library's interface keeps them.
 
 ### Nameless structs
 `struct { fields }` is a type: it can be used for variables (global and local), fields, arrays,

@@ -1,0 +1,10 @@
+// A local alias is only known in its block, after its declaration.
+// expect-error: unknown type: Num
+sub main() -> i32 {
+	{
+		alias Num = i32;
+		var a: Num = 1;
+	}
+	var b: Num = 2;
+	return 0;
+}
