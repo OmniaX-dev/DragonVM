@@ -123,7 +123,7 @@ namespace std {
 				return &n->entry;
 			}
 
-			// for (ref e in map) / for (auto& e in map): in key order.
+			// for (ref e in map) / for (const ref e in map): in key order.
 			readonly inline sub begin() -> BasicMapNode<K, V, A>* { return this->leftmost(this->m_root); }
 			readonly inline sub end() -> BasicMapNode<K, V, A>* { return null; }
 			readonly sub next(var c: BasicMapNode<K, V, A>*) -> BasicMapNode<K, V, A>* {

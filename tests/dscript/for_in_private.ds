@@ -22,7 +22,7 @@ sub main() -> i32 {
 	var total: u32 = 0;
 	for (auto v in b) total += v;
 	check(1, total == 60);
-	for (auto& v in b) *v += 1;
+	for (ref v in b) v += 1;
 	check(2, b.sum() == 63);
 	var p: Buffer* = &b;
 	total = 0;

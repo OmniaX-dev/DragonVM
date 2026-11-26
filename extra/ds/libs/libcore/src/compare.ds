@@ -53,7 +53,7 @@ namespace std {
 }
 
 namespace std {
-	// A Map's / HashMap's element: for (auto& e in map) { e->key ... e->value ... }. The key must
+	// A Map's / HashMap's element: for (ref e in map) { e.key ... e.value ... }. The key must
 	// not be changed (the container would no longer find it).
 	template(K, V) {
 		struct MapEntry {

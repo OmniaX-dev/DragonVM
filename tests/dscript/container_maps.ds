@@ -27,8 +27,8 @@ sub main() -> i32 {
 		check(3, m.set(5u, 55u) and *m.get(5u) == 55 and m.size() == 300);
 		var expect: u32 = 0;
 		var ordered: bool = true;
-		for (auto& e in m) {
-			ordered = ordered and e->key == expect;
+		for (const ref e in m) {
+			ordered = ordered and e.key == expect;
 			expect++;
 		}
 		check(4, ordered and expect == 300 and m.first()->key == 0 and m.last()->key == 299);
@@ -37,8 +37,8 @@ sub main() -> i32 {
 		check(6, not m.remove(0u) and m.size() == 150 and m.get(4u) == null and *m.get(7u) == 70);
 		expect = 1;
 		ordered = true;
-		for (auto& e in m) {
-			ordered = ordered and e->key == expect;
+		for (const ref e in m) {
+			ordered = ordered and e.key == expect;
 			expect += 2;
 		}
 		check(7, ordered and expect == 301);
@@ -57,9 +57,9 @@ sub main() -> i32 {
 		check(21, h.size() == 500 and *h.get(70u) == 10 and h.get(71u) == null and h.capacity() == 1024);
 		var count: u32 = 0;
 		var sum: i32 = 0;
-		for (auto& e in h) {
+		for (const ref e in h) {
 			count++;
-			sum += e->value;
+			sum += e.value;
 		}
 		check(22, count == 500 and sum == 124750);
 		for (var i: u32 = 0; i < 500; i++) {

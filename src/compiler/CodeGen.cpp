@@ -5935,10 +5935,10 @@ namespace dscript
 			b->list = { first, s->c };
 			return b;
 		};
-		// x from the element's address: its value, the address (auto&, var x: T*), or a reference
-		// to the element (ref x, const ref x, var x: ref T).
+		// x from the element's address: its value (auto x, const x: a copy), the address (var x:
+		// T*), or a reference to the element (ref x, const ref x, var x: ref T).
 		auto l_element = [&](Node* address, Type* element) {
-			bool pointer = (s->value == 1);
+			bool pointer = false;
 			if (var->typeSyntax != nullptr)
 			{
 				Type* t = resolveType(var->typeSyntax);
@@ -5946,6 +5946,7 @@ namespace dscript
 			}
 			Node* d = l_decl(var->name, var->typeSyntax, pointer ? address : l_unary("*", address));
 			d->refKind = var->refKind;
+			d->constKind = var->constKind;
 			return d;
 		};
 		Node* outer = l_node(NodeKind::Block);
@@ -5966,11 +5967,20 @@ namespace dscript
 			if (litA && litB)
 				t = m_types.i32();
 			outer->list.push_back(l_decl(tag + "end", l_named(t), s->d));
-			loop->a = l_decl(var->name, var->typeSyntax != nullptr ? var->typeSyntax : l_named(t), s->b);
-			loop->b = l_binary("<", l_ident(var->name), l_ident(tag + "end"));
+			// (const x: the loop counts with a hidden variable, x is a constant copy of it)
+			const std::string counter = var->constKind != 0 ? tag + "n" : var->name;
+			loop->a = l_decl(counter, var->typeSyntax != nullptr ? var->typeSyntax : l_named(t), s->b);
+			loop->b = l_binary("<", l_ident(counter), l_ident(tag + "end"));
 			loop->c = l_node(NodeKind::PostInc);
-			loop->c->a = l_ident(var->name);
-			loop->d = s->c;
+			loop->c->a = l_ident(counter);
+			if (var->constKind != 0)
+			{
+				Node* x = l_decl(var->name, var->typeSyntax != nullptr ? var->typeSyntax : l_named(t), l_ident(counter));
+				x->constKind = 1;
+				loop->d = l_body(x);
+			}
+			else
+				loop->d = s->c;
 		}
 		else
 		{

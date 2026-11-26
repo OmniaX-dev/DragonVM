@@ -54,8 +54,8 @@ sub main() -> i32 {
 			check(22, t.v == 9 and st.size() == 9 and g_dels == 0);
 		}
 		var sum: i32 = 0;
-		for (auto& t in st)
-			sum += t->v;
+		for (const ref t in st)
+			sum += t.v;
 		check(23, sum == 36 and g_dels == 1);
 		var strs: std::BasicStack<Str, TestAlloc>;
 		strs.push("one");

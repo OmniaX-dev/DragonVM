@@ -10,7 +10,7 @@
 //     v.push(7);
 //     v[0] = 6;                           // [i], at, front, back: the element itself (a ref T)
 //     ref first = v.front();              // a reference to it (auto first = ...: a copy)
-//     for (auto x in v) { ... }          // (ref x: a reference to the element; auto& x: a pointer)
+//     for (auto x in v) { ... }          // (ref x: a reference to the element; const x: a constant copy)
 //     var last = v.pop();
 //
 // Elements are values: push takes its own (a call's result is moved in, a variable copied), pop
@@ -198,7 +198,7 @@ namespace std {
 			}
 			readonly inline sub contains(var v: const ref T) -> bool { return this->find(v) >= 0; }
 
-			// for (auto x in v) / for (ref x in v) / for (auto& x in v)
+			// for (auto x in v) / for (ref x in v) / for (const ref x in v)
 			readonly inline sub begin() -> u32 { return 0; }
 			readonly inline sub end() -> u32 { return this->m_size; }
 			readonly inline sub next(var i: u32) -> u32 { return i + 1; }

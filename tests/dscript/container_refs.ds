@@ -36,9 +36,11 @@ sub main() -> i32 {
 		check(2, v[0] == 30 and v[2] == 6 and v[3] == 10);
 		check(3, total(v) == 70 + 30 + 30 + 10 + 24);
 		var sum: u32 = 0;
-		for (auto& p in v)						// auto&: still a pointer
+		for (var p: u32* in v)					// var x: T*: a pointer to the element
 			sum += *p;
-		check(4, sum == 70);
+		for (const c in v)						// const x: a copy it can't change
+			sum += c;
+		check(4, sum == 140);
 
 		var pts: std::BasicVector<Pt, TestAlloc>;
 		var a: Pt = { 1, 2 };
@@ -87,7 +89,7 @@ sub main() -> i32 {
 			e.value = e.value / 10;
 		check(32, *h.get(5u) == 5 and *h.get(6u) == 6);
 		var count: u32 = 0;
-		for (auto& e in h)						// auto&: a pointer to the entry
+		for (var e: std::MapEntry<u32, u32>* in h)		// a pointer to the entry
 			count += e->key;
 		check(33, count == 11);
 	}

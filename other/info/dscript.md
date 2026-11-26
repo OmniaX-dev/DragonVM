@@ -286,7 +286,7 @@ var v: std::Vector<u32>;
 v.push(5);                                  // false: no memory
 v[0] = 6;                                   // [i], at, front, back: the element itself (ref T)
 ref first = v.front();                      // a reference to it (auto first = ...: a copy)
-for (ref x in v) { x *= 2; }                // auto x: a copy; auto& x: a pointer
+for (ref x in v) { x *= 2; }                // auto x: a copy; const x: one it can't change
 var last = v.pop();                         // moved out
 var ages: std::Map<std::String, u32>;
 ages.set("bob", 31);                        // a new entry, or its value replaced
@@ -1338,17 +1338,22 @@ template(K, optional V) {
 ```
 
 ### for-in loops
-`for (auto x in range) body` runs the body for every element of the range, `x` being a copy of
-it; `for (ref x in range)` makes `x` a reference to the element (`x = ...`, `x.field`; a `const
-ref` when the elements are constant), `for (const ref x in range)` one that can't change it; and
-`for (auto& x in range)` makes `x` a pointer to the element (`*x = ...`, `x->field`).
-`for (var x: T in range)` / `for (var x: ref T in range)` / `for (var x: T* in range)` say the type.
+`for (auto x in range) body` runs the body for every element of the range. Its variable is
+declared as a local is:
+- `auto x`: a copy of the element; `const x` (or `const x: T`): a copy the body can't change;
+- `ref x`: a reference to the element (`x = ...`, `x.field`; a `const ref` when the elements are
+  constant); `const ref x`: one that can't change it;
+- `var x: T` / `var x: ref T` say the type; `var x: T*` is a pointer to the element (`*x = ...`,
+  `x->field`).
+
+(`auto& x`, a pointer before references existed, is an error that says to write `ref x`.)
 ```
 for (auto i in 0..10) { }            // numbers: 0 to 9 (the end is excluded); i: i32
 for (auto i in 0..count) { }         // i: count's type (u32 here); a..b: both evaluated once
 for (auto v in values) { }           // an array (T[N]): v: T
 for (ref v in values) v *= 2;        // v: ref T
-for (auto& v in values) *v *= 2;     // v: T*
+for (const v in values) { }          // v: a constant copy
+for (var v: i32* in values) *v *= 2; // v: T*
 for (auto item in list) { }          // a struct that is a range (below), or a pointer to one
 ```
 A struct is a range when it has these methods (a "cursor" `C` is any integer or pointer: an

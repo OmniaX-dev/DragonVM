@@ -1,0 +1,3 @@
+// auto& is gone from for-in: ref x (or var x: T* for the address).
+// expect-error: for (auto& x in ...) is gone: write ref x
+sub main() -> i32 { var a: i32[2]; for (auto& x in a) { } return 0; }

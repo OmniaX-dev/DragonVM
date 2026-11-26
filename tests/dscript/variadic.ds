@@ -62,15 +62,15 @@ sub describe(...typed) -> u32 {
 	var list: std::VaList* = &args;
 	var expected: u32 = 0;
 	var ok: u32 = 0;
-	for (auto& a in list) {
-		if (a->index != expected)
+	for (ref a in list) {
+		if (a.index != expected)
 			return 1000;
 		expected++;
-		if (a->type == std::VaTypes.I32 and a->get_i32() == -3) ok++;
-		if (a->type == std::VaTypes.F32 and a->get_f32() == 0.5) ok++;
-		if (a->type == std::VaTypes.String and std::strcmp(a->get_string(), "va") == 0) ok++;
-		if (a->type == std::VaTypes.Bool and a->get_bool()) ok++;
-		if (a->type == std::VaTypes.U32 and a->get_u32() == 99)
+		if (a.type == std::VaTypes.I32 and a.get_i32() == -3) ok++;
+		if (a.type == std::VaTypes.F32 and a.get_f32() == 0.5) ok++;
+		if (a.type == std::VaTypes.String and std::strcmp(a.get_string(), "va") == 0) ok++;
+		if (a.type == std::VaTypes.Bool and a.get_bool()) ok++;
+		if (a.type == std::VaTypes.U32 and a.get_u32() == 99)
 			break;
 	}
 	return ok * 10 + expected;

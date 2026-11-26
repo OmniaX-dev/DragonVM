@@ -164,7 +164,7 @@ namespace std {
 				return true;
 			}
 
-			// for (ref e in map) / for (auto& e in map): the full slots (the cursor: an entry pointer, so
+			// for (ref e in map) / for (const ref e in map): the full slots (the cursor: an entry pointer, so
 			// that get(key) with a number key is not get(cursor)).
 			readonly sub begin() -> MapEntry<K, V>* { return this->next_full(0); }
 			readonly inline sub end() -> MapEntry<K, V>* { return this->m_entries + this->m_capacity; }

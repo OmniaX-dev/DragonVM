@@ -1,4 +1,5 @@
-// for-in loops: for (auto x in range), auto& x (a pointer to the element), var x: T / T*, over
+// for-in loops: for (auto x in range), const x (a copy it can't change), var x: T / T* (a pointer
+// to the element), over
 // numbers (a..b: b excluded), arrays, and structs with begin() / end() / next(c) / get(c)
 // (a cursor that points at the elements needs no next / get); break, continue, nesting, a
 // range through a pointer, a for-in in an inline sub (expanded twice); in is still a name.
@@ -40,7 +41,11 @@ sub main() -> i32 {
 	sum = 0;
 	for (auto v in arr) sum += v;
 	if (sum != 10) return 4;
-	for (auto& v in arr) *v *= 10;
+	for (var v: i32* in arr) *v *= 10;
+	sum = 0;
+	for (const v in arr) sum += v;
+	for (const k: u32 in 0..3) sum += cast<i32>(k);		// a constant copy of the counter
+	if (sum != 100 + 3) return 9;
 	if (arr[3] != 40) return 5;
 	var list: IntList;
 	list.count = 3;

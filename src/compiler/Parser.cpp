@@ -1276,8 +1276,9 @@ namespace dscript
 		return n;
 	}
 
-	// A for-in loop (after 'for ('): auto x in, auto& x in, or var x: T in. 'in' is not a keyword:
-	// only there it means something.
+	// A for-in loop (after 'for ('): its variable is declared as a local is: auto x, const x
+	// [: T], ref x, const ref x, var x: T (and auto& x, gone: an error that says what to write).
+	// 'in' is not a keyword: only there it means something.
 	bool Parser::isForIn(void)
 	{
 		auto l_in = [&](size_t k) { return peek(k).kind == TokenKind::Identifier && peek(k).text == "in"; };
@@ -1288,9 +1289,12 @@ namespace dscript
 			return true;		// for (ref x in range)
 		if (isKeyword("const") && l_ref(1) && l_in(3))
 			return true;		// for (const ref x in range)
-		if (!isKeyword("var") || peek(1).kind != TokenKind::Identifier || !isPunct(":", 2))
+		if (isKeyword("const") && peek(1).kind == TokenKind::Identifier && l_in(2))
+			return true;		// for (const x in range)
+		const size_t k = isKeyword("const") ? 1 : isKeyword("var") ? 1 : 0;
+		if (k == 0 || peek(1).kind != TokenKind::Identifier || !isPunct(":", 2))
 			return false;
-		// var x: <type> in: the type is parsed, then the parser goes back.
+		// var x: <type> in / const x: <type> in: the type is parsed, then the parser goes back.
 		const size_t saved = m_pos;
 		next(); next(); next();
 		parseType();
@@ -1299,8 +1303,8 @@ namespace dscript
 		return in;
 	}
 
-	// for (auto x in range) body: value = 1 for auto& (x points at the element), a = the variable
-	// (a VarDecl: its type for var x: T), b = the range (or the start of a..b), d = the end of
+	// for (auto x in range) body: a = the variable (a VarDecl: its type for var x: T / const x: T,
+	// refKind for ref x / const ref x, constKind 1 for const x), b = the range (or the start of a..b), d = the end of
 	// a..b (nullptr: not a number range), c = the body, text = the loop's number (its hidden
 	// variables). The code generator turns it into a for loop (CodeGen::forInLoop).
 	Node* Parser::parseForIn(const SourcePos& pos)
@@ -1309,9 +1313,22 @@ namespace dscript
 		Node* v = make(NodeKind::VarDecl, peek().pos);
 		if (acceptKeyword("auto"))
 		{
-			if (acceptPunct("&"))
-				n->value = 1;
+			if (isPunct("&"))
+			{
+				const Token& amp = next();
+				error(amp.pos, "for (auto& " + peek().text + " in ...) is gone: write ref " + peek().text + " (a reference to the element; const ref: one that doesn't change it), "
+					"or var " + peek().text + ": T* for its address");
+			}
 			v->name = expectIdentifier("after 'auto'");
+		}
+		else if (isKeyword("const") && !(peek(1).kind == TokenKind::Identifier && peek(1).text == "ref" && peek(2).kind == TokenKind::Identifier))
+		{
+			// const x / const x: T: a copy of the element that the body can't change.
+			next();
+			v->constKind = 1;
+			v->name = expectIdentifier("after 'const'");
+			if (acceptPunct(":"))
+				v->typeSyntax = parseType();
 		}
 		else if (isKeyword("const") || (peek().kind == TokenKind::Identifier && peek().text == "ref"))
 		{
@@ -1333,8 +1350,6 @@ namespace dscript
 		if (acceptPunct(".."))
 		{
 			n->d = parseExpression();
-			if (n->value == 1)
-				error(v->namePos, "auto& points at the elements of a range: a range of numbers (a..b) has none (auto " + v->name + " in ...)");
 			if (v->refKind != 0)
 				error(v->namePos, "ref refers to the elements of a range: a range of numbers (a..b) has none (auto " + v->name + " in ...)");
 		}

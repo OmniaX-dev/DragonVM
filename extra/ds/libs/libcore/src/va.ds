@@ -112,7 +112,7 @@ namespace std {
 		}
 
 		// The range (for-in): the cursor is the argument's index; each element is a VaArg, a copy
-		// of the argument (filled when the loop gets to it: `auto& a` points at it, and changing it
+		// of the argument (filled when the loop gets to it: `ref a` refers to it, and changing it
 		// doesn't change the argument).
 		priv inline sub begin() -> u32 { return 0; }
 		priv inline sub end() -> u32 { return this->count; }

@@ -22,10 +22,10 @@ sub main() -> i32 {
 		m.get("a");
 		var h: std::HashMap<u32, std::String>;
 		h.set(1, "x");
-		for (auto& e in h)
-			std::print(e->value);
-		for (auto& e in m)
-			std::print(e->key);
+		for (const ref e in h)
+			std::print(e.value);
+		for (const ref e in m)
+			std::print(e.key);
 	}
 	return 0;
 }

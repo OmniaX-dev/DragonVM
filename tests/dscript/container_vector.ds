@@ -17,8 +17,8 @@ sub main() -> i32 {
 		for (auto x in v)
 			sum += x;
 		check(4, sum == 3 * 4950);
-		for (auto& x in v)
-			*x += 1;
+		for (ref x in v)
+			x += 1;
 		check(5, v[0] == 1 and v.pop() == 298 and v.size() == 99);
 		check(6, v.insert(0, 1000u) and v[0] == 1000 and v[1] == 1 and v.size() == 100);
 		check(7, v.remove(0) == 1000 and v[0] == 1 and v.size() == 99);

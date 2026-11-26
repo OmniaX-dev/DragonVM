@@ -111,7 +111,7 @@ sub main() -> i32 {
 	check(16, x == 2 and y == 1);
 	check(17, first_twice(&y) == 2 and y == 2);
 
-	// for-in: ref x changes the elements; auto copies; auto& points; a get() returning ref T.
+	// for-in: ref x changes the elements; auto copies; var x: T* points; a get() returning ref T.
 	var bag: Bag;
 	bag.count = 3;
 	bag.items[0] = 1; bag.items[1] = 2; bag.items[2] = 3;
@@ -121,7 +121,7 @@ sub main() -> i32 {
 	for (auto e in bag)
 		sum += e;
 	check(20, sum == 60);
-	for (auto& e in bag)
+	for (var e: i32* in bag)
 		*e += 1;
 	for (const ref e in bag)
 		sum += e;
