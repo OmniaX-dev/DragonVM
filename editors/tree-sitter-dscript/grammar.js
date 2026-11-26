@@ -464,12 +464,13 @@ module.exports = grammar({
 			')',
 			field('body', $._statement),
 		),
-		// for (auto x in range) / for (auto& x in range) / for (ref x in range) / for (const ref x
-		// in range) / for (var x: T in range) / ... in a..b
+		// for (auto x in range) / for (const x in range) / for (const x: T in range) / for (ref x
+		// in range) / for (const ref x in range) / for (var x: T in range) / ... in a..b
 		for_in_statement: $ => seq(
 			'for', '(',
 			choice(
-				seq('auto', optional(field('reference', '&')), field('name', $.identifier)),
+				seq('auto', field('name', $.identifier)),
+				seq('const', field('name', $.identifier), optional(seq(':', field('type', $._type)))),
 				seq(optional('const'), $.ref_word, field('name', $.identifier)),
 				seq('var', field('name', $.identifier), ':', field('type', choice($._type, $.ref_type))),
 			),
